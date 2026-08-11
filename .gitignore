@@ -1,0 +1,54 @@
+# ─── Dependencies ────────────────────────────────────────────────────────────
+node_modules/
+.pnpm-store/
+.npm-cache/
+.node-gyp/
+
+# ─── Next.js build output ────────────────────────────────────────────────────
+.next/
+out/
+
+# ─── TypeScript build cache ───────────────────────────────────────────────────
+*.tsbuildinfo
+tsconfig.tsbuildinfo
+
+# ─── Drizzle migrations (generated, not hand-authored) ────────────────────────
+# Remove this line if you want to commit migrations
+drizzle/
+
+# ─── Runtime data (SQLite databases, uploads, etc.) ──────────────────────────
+data/
+
+# ─── Environment / secrets ───────────────────────────────────────────────────
+.env
+.env.local
+.env.*.local
+# Keep .env.example committed (it has no secrets)
+!.env.example
+
+# ─── Logs ────────────────────────────────────────────────────────────────────
+*.log
+npm-debug.log*
+pnpm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+compose-watch*.log
+compose-watch-error*.log
+
+# ─── OS artifacts ────────────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ─── Editor / IDE ────────────────────────────────────────────────────────────
+.vscode/settings.json
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# ─── Test / coverage output ──────────────────────────────────────────────────
+coverage/
+.nyc_output/

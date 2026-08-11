@@ -1,0 +1,6 @@
+import Link from "next/link";
+import { ArrowLeft } from "lucide-react";
+import { requireModule } from "@/core/permissions/require-module";
+import { CustomerForm } from "@/modules/customers/customer-form";
+import { getCurrencySettings } from "@/modules/currency/exchange-rate";
+export default async function NewCustomerPage({ params }: { params: Promise<{ businessId: string }> }) { const { businessId } = await params; const { user } = await requireModule(businessId, "sales"); const settings = getCurrencySettings(businessId, user.id); return <div className="page-container max-w-[900px]"><Link href={`/b/${businessId}/customers`} className="mb-5 inline-flex items-center gap-1.5 text-[13px] text-muted-foreground hover:text-foreground"><ArrowLeft className="size-4" /> Customers</Link><div className="mb-7"><h1 className="page-title">New Customer</h1><p className="page-description">Add the essential details for invoicing and contact.</p></div><CustomerForm businessId={businessId} currencies={settings.currencies.filter((currency) => currency.is_active).map((currency) => ({ code: currency.code, name: currency.name }))} /></div>; }

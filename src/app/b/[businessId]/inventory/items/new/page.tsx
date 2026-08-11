@@ -1,0 +1,8 @@
+import Link from "next/link";
+import { ArrowLeft } from "lucide-react";
+import { requireModule } from "@/core/permissions/require-module";
+import { getAssetAccountOptions, getExpenseAccountOptions, getSalesAccountOptions } from "@/modules/accounting/services/account-service";
+import { getAccountingSettings } from "@/modules/accounting/services/accounting-settings-service";
+import { InventoryItemForm } from "@/modules/inventory/inventory-item-form";
+
+export default async function NewInventoryItemPage({ params }: { params: Promise<{ businessId: string }> }) { const { businessId } = await params; const { user } = await requireModule(businessId, "inventory"); const sales = getSalesAccountOptions(businessId, user.id); const assets = getAssetAccountOptions(businessId, user.id); const expenses = getExpenseAccountOptions(businessId, user.id); const settings = getAccountingSettings(businessId, user.id); return <div className="page-container max-w-[1000px]"><Link href={`/b/${businessId}/inventory/items`} className="mb-5 inline-flex items-center gap-1.5 text-[13px] text-muted-foreground hover:text-foreground"><ArrowLeft className="size-4" /> Inventory Items</Link><div className="mb-7"><h1 className="page-title">New Inventory Item</h1><p className="page-description">Set the commercial defaults and accounting mappings once.</p></div><InventoryItemForm businessId={businessId} salesAccounts={sales} assetAccounts={assets} expenseAccounts={expenses} initial={{ sku: "", name: "", description: "", unitName: "pcs", salesPrice: "", purchasePrice: "", salesAccountId: settings.defaultSalesAccountId, inventoryAssetAccountId: settings.defaultInventoryAssetAccountId, costOfSalesAccountId: settings.defaultCostOfSalesAccountId, isActive: true }} /></div>; }

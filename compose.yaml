@@ -1,0 +1,46 @@
+services:
+  app:
+    init: true
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+    command: pnpm dev
+    environment:
+      BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET:-phase-zero-development-secret-change-me}
+      BETTER_AUTH_URL: http://localhost:3000
+      ERP_DATA_DIR: /app/data
+      NEXT_TELEMETRY_DISABLED: "1"
+      NODE_OPTIONS: --max-old-space-size=6144
+    ports:
+      - "3000:3000"
+    volumes:
+      - erp-data:/app/data
+    develop:
+      watch:
+        - action: sync
+          path: .
+          target: /app
+          initial_sync: true
+          ignore:
+            - node_modules/
+            - .next/
+            - .git/
+            - data/
+            - .npm-cache/
+            - .pnpm-store/
+            - .node-gyp/
+            - pnpm-lock.yaml
+            - package.json
+            - Dockerfile.dev
+            - compose.yaml
+        - action: rebuild
+          path: package.json
+        - action: rebuild
+          path: pnpm-lock.yaml
+        - action: rebuild
+          path: pnpm-workspace.yaml
+        - action: rebuild
+          path: Dockerfile.dev
+
+volumes:
+  erp-data:

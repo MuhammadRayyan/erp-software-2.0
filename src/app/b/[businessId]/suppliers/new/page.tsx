@@ -1,0 +1,7 @@
+import Link from "next/link";
+import { ArrowLeft } from "lucide-react";
+import { requireModule } from "@/core/permissions/require-module";
+import { SupplierForm } from "@/modules/suppliers/supplier-form";
+import { getCurrencySettings } from "@/modules/currency/exchange-rate";
+
+export default async function NewSupplierPage({ params }: { params: Promise<{ businessId: string }> }) { const { businessId } = await params; const { user, access } = await requireModule(businessId, "purchases"); const settings = getCurrencySettings(businessId, user.id); return <div className="page-container max-w-[900px]"><Link href={`/b/${businessId}/suppliers`} className="mb-5 inline-flex items-center gap-1.5 text-[13px] text-muted-foreground hover:text-foreground"><ArrowLeft className="size-4" /> Suppliers</Link><div className="mb-7"><h1 className="page-title">New Supplier</h1><p className="page-description">Create a business-local supplier record.</p></div><SupplierForm businessId={businessId} currencies={settings.currencies.filter((currency) => currency.is_active).map((currency) => ({ code: currency.code, name: currency.name }))} initial={{ name: "", email: "", phone: "", taxReference: "", address: "", legalName: "", trn: "", legalRegistrationIdentifier: "", electronicAddress: "", electronicAddressScheme: "", registeredAddress: "", countryCode: "AE", notes: "", isActive: true, defaultCurrencyCode: access.business.currency }} /></div>; }
