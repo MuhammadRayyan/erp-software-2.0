@@ -77,4 +77,17 @@ export const systemMigrations = [
       `);
     },
   },
+  {
+    version: 2,
+    name: "phase_1_user_settings",
+    up(sqlite) {
+      sqlite.exec(`
+        CREATE TABLE IF NOT EXISTS "user_settings" (
+          "user_id" TEXT PRIMARY KEY NOT NULL REFERENCES "user"("id") ON DELETE CASCADE,
+          "theme_font" TEXT NOT NULL DEFAULT 'inter',
+          "theme_size" TEXT NOT NULL DEFAULT 'normal'
+        );
+      `);
+    },
+  },
 ] satisfies readonly SqliteMigration[];

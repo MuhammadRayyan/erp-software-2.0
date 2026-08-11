@@ -16,6 +16,14 @@ export const users = sqliteTable("user", {
   updatedAt: integer("updatedAt", { mode: "timestamp_ms" }).notNull(),
 });
 
+export const userSettings = sqliteTable("user_settings", {
+  userId: text("user_id")
+    .primaryKey()
+    .references(() => users.id, { onDelete: "cascade" }),
+  themeFont: text("theme_font").notNull().default("inter"),
+  themeSize: text("theme_size").notNull().default("normal"),
+});
+
 export const sessions = sqliteTable(
   "session",
   {
