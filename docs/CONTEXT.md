@@ -17,7 +17,9 @@ Improve it with:
 - UAE-first localization later
 - cloud hosting later without abandoning self-hosting
 
-This is not an Odoo clone. Avoid enterprise complexity unless the product truly needs it.
+## Repository
+
+- **GitHub Remote**: `https://github.com/MuhammadRayyan/erp-software-2.0.git`
 
 ## Target
 

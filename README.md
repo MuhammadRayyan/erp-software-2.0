@@ -2,6 +2,8 @@
 
 A compact, Manager.io-inspired multi-business accounting/ERP application for local and self-hosted use. Phases 0-8 are implemented.
 
+**Repository**: [`https://github.com/MuhammadRayyan/erp-software-2.0.git`](https://github.com/MuhammadRayyan/erp-software-2.0.git)
+
 ## Working context for future phases
 
 For normal phase work, read only these files in order:

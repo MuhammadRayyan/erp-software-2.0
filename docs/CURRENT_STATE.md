@@ -5,6 +5,7 @@ This is the compact source of truth for the code that exists now. Historical pha
 ## Stack and architecture
 
 - Node 24 container, pnpm 11, Next.js 16 App Router, React 19, strict TypeScript 6, Tailwind CSS 4, Radix/shadcn-style components, React Hook Form, Zod, and TanStack Table.
+- Remote repository: `https://github.com/MuhammadRayyan/erp-software-2.0.git`.
 - One Next.js application owns UI, server components/actions, authenticated download routes, domain services, and persistence; there is no separate API or worker service.
 - Better Auth provides local email/password auth. The system SQLite database stores auth tables, businesses, and memberships. Each business has a separate SQLite database and attachment directory, accessed with `better-sqlite3`/Drizzle through membership-aware services.
 - Domain logic is server-side; multi-row document posting and accounting/tax/inventory effects use SQLite transactions. Document money remains integer currency-minor units, exchange rates are canonical decimal strings evaluated with `decimal.js`, and quantities support four decimals (`10_000` scale) despite historical `*_micros` names.
