@@ -51,3 +51,19 @@ Completed the first engineering sprint focusing on architectural correctness, pe
   - Added login rate-limiting (max 5 attempts per 15 mins) via a Node.js API route (`/api/auth-rate-limit`) tracking IP addresses.
   - Implemented strict CSP, `X-Frame-Options: DENY`, `nosniff`, and `Strict-Transport-Security` headers in `next.config.ts`.
 - **Cleanup**: Deleted `later-page.tsx`, purged placeholder "Phase 0" copy across the repository, and added `tests/middleware-exists.test.ts` to guard the Edge runtime. Fixed the `npm run dev` script to cleanly use `next dev` instead of `bun`.
+
+## Sprint 2: PDF Engine Migration
+
+**Status:** Implemented
+
+Replaced the legacy `pdfme` dependency with a robust hybrid architecture using `@react-pdf/renderer` for built-in modern templates and Handlebars + Puppeteer for custom HTML templates.
+
+### Key Capabilities
+- **React PDF Defaults:** Built standard document layouts (Invoice, Credit Note, Purchase Order, Receipt) using `@react-pdf/renderer`, maintaining precise type safety and standard styling.
+- **Custom HTML Templates:** Enabled power users to write custom Handlebars templates rendered via a headless browser (Puppeteer).
+- **Template Editor:** Created `TemplateEditor` with live preview, supporting branding configuration (logo, colors, fonts, field toggles).
+
+### Architecture, Deviations & Implementation Details
+- **Schema Migration:** Added `settings_json` and `custom_html` to the `document_templates` table via Migration 10, backfilling legacy templates.
+- **Template Registry:** Introduced `template-registry.tsx` as the single routing hub to dynamically choose between React PDF and HTML rendering.
+- **Deviations (Classic Template):** Implementation of the "Classic" standard template style is deferred to future phases. Only Modern and Custom HTML are currently active.
