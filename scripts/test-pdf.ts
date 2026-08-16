@@ -1,21 +1,14 @@
 import React from 'react';
 import fs from 'node:fs';
 import path from 'node:path';
-import { Font } from '@react-pdf/renderer';
 import { renderReactPdf } from '../src/modules/document-templates/react-pdf/render';
 import { ClassicInvoiceDocument } from '../src/modules/document-templates/react-pdf/classic-invoice-template';
 import { ClassicCreditNoteDocument } from '../src/modules/document-templates/react-pdf/classic-credit-note-template';
 import { ClassicPurchaseOrderDocument } from '../src/modules/document-templates/react-pdf/classic-purchase-order-template';
 import { ClassicReceiptDocument } from '../src/modules/document-templates/react-pdf/classic-receipt-template';
 import { defaultSettings } from '../src/modules/document-templates/template-settings';
-
-// Register Inter
-Font.register({
-  family: 'Inter',
-  fonts: [
-    { src: 'https://fonts.gstatic.com/s/inter/v12/UcCO3FwrK3iLTeHuS_fvQtMwCp50KnMw2boKoduKmMEVuLyfAZ9hjp-Ek-_EeA.woff' }
-  ]
-});
+// Font registration is handled inside renderReactPdf via the shared registerFonts() helper.
+// Fonts are loaded from public/fonts/pdf/ (local TTF files, no network required).
 
 const dummyData = {
   companyName: "Acme Corp",

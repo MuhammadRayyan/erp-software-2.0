@@ -145,9 +145,9 @@ Open `package.json`. Make these changes:
 ```bash
 npm install --legacy-peer-deps
 ```
-Using `npm` (not `bun install`) ensures the prebuilt `better-sqlite3` binary is resolved safely on Windows without C++ build tools. This creates `package-lock.json`.
+Using `npm` (not `npm install`) ensures the prebuilt `better-sqlite3` binary is resolved safely on Windows without C++ build tools. This creates `package-lock.json`.
 
-**If you're on macOS/Linux** (no build-tools issue): use `bun install` instead and use `bun run` for all scripts. Skip the hybrid approach.
+**If you're on macOS/Linux** (no build-tools issue): use `npm install` instead and use `bun run` for all scripts. Skip the hybrid approach.
 
 ### 2.5 Verify better-sqlite3 loads
 ```bash
@@ -235,7 +235,7 @@ export default nextConfig;
 
 ### 3.2 Verify
 ```bash
-bun run dev
+npm run dev
 ```
 - **Expected:** startup in <1 second, "Ready in Xms" where X < 1000.
 - Edit any `.tsx` file, save — HMR should apply in <200 ms.
@@ -263,7 +263,7 @@ mkdir -p public/fonts
 
 **Easiest method — use @fontsource packages:**
 ```bash
-bun add @fontsource/inter @fontsource/roboto @fontsource/open-sans @fontsource/lato
+npm install @fontsource/inter @fontsource/roboto @fontsource/open-sans @fontsource/lato
 ```
 
 Then copy the WOFF2 files from node_modules to public/fonts with a consistent naming convention:
@@ -539,9 +539,9 @@ html[data-font="lato"] { --font-base: "Lato", ui-sans-serif, system-ui, sans-ser
 
 ### 4.6 Verify
 ```bash
-bun run typecheck   # must pass
-bun run lint        # must pass
-bun run dev
+npm run typecheck   # must pass
+npm run lint        # must pass
+npm run dev
 ```
 - Log in, go to Settings → Appearance.
 - Change font to Roboto → page should re-render with Roboto font.

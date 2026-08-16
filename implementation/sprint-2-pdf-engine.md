@@ -23,8 +23,8 @@ The current PDF system uses pdfme 5.5.10 (pinned because 6.x pulls `clawpdf` int
 ### 1.1 Install dependencies
 
 ```bash
-bun add @react-pdf/renderer handlebars puppeteer
-bun add -d @types/handlebars
+npm install @react-pdf/renderer handlebars puppeteer
+npm install -d @types/handlebars
 ```
 
 **Note:** `puppeteer` downloads Chromium (~200 MB) on first install. This is expected. If you want to use a system Chromium instead, install `puppeteer-core` and configure `executablePath`.
@@ -263,8 +263,8 @@ export async function renderReactPdf(element: ReactElement): Promise<Buffer> {
 ### 1.5 Verify compilation
 
 ```bash
-bun run typecheck
-bun run lint
+npm run typecheck
+npm run lint
 ```
 
 ### 1.6 Commit
@@ -338,7 +338,7 @@ export const defaultSettings: TemplateSettings = {
 
 Run the migration:
 ```bash
-bun run db:migrate
+npm run db:migrate
 ```
 
 ### 2.3 Update template-service.ts
@@ -824,10 +824,10 @@ export async function saveTemplateSettingsAction(
 ### 2.9 Verify
 
 ```bash
-bun run typecheck
-bun run lint
-bun run db:migrate  # run the new migration
-bun run dev
+npm run typecheck
+npm run lint
+npm run db:migrate  # run the new migration
+npm run dev
 ```
 - Go to Settings → Document Templates.
 - Change primary color, font, toggles.
@@ -1018,9 +1018,9 @@ export async function GET(_request: Request, { params }: { params: Promise<{ bus
 
 ### 3.4 Verify
 ```bash
-bun run typecheck
-bun run lint
-bun run dev
+npm run typecheck
+npm run lint
+npm run dev
 ```
 - Go to Settings → Document Templates.
 - Select "Custom HTML".
@@ -1080,10 +1080,10 @@ rm src/modules/document-templates/template-designer.tsx  # the old drag-drop des
 
 ### 4.7 Verify
 ```bash
-bun run typecheck  # must pass — no pdfme imports remaining
-bun run lint
-bun run test
-bun run dev
+npm run typecheck  # must pass — no pdfme imports remaining
+npm run lint
+npm run test
+npm run dev
 ```
 - Test all PDF routes: invoice, credit note, PO, receipt.
 - Test all three template types: modern, classic, custom-html.
@@ -1150,7 +1150,7 @@ console.log("Template migration complete.");
 
 Run it:
 ```bash
-bun run scripts/migrate-templates.ts
+npm run scripts/migrate-templates.ts
 ```
 
 ### 5.3 Update the "Classic" template
@@ -1181,12 +1181,12 @@ Update `docs/CURRENT_STATE.md` to reflect the new PDF engine. Replace the pdfme-
 ### 5.5 Final verification
 
 ```bash
-bun run typecheck   # passes
-bun run lint        # passes
-bun run db:check    # passes
-bun run test        # all tests pass
-bun run build       # production build passes
-bun run dev         # dev server starts
+npm run typecheck   # passes
+npm run lint        # passes
+npm run db:check    # passes
+npm run test        # all tests pass
+npm run build       # production build passes
+npm run dev         # dev server starts
 ```
 
 **Manual verification:**

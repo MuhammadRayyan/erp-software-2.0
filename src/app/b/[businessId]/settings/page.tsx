@@ -13,7 +13,7 @@ export default async function SettingsPage({ params }: { params: Promise<{ busin
     { title: "Electronic Invoicing", description: "PINT-AE readiness, seller identity, specification version, and Mock ASP settings.", href: `/b/${businessId}/settings/einvoicing`, icon: Send },
     { title: "Tax codes", description: "Maintain output VAT and recoverable Input VAT mappings.", href: `/b/${businessId}/settings/tax-codes`, icon: Percent },
     { title: "Appearance", description: "Global font family and text scaling preferences.", href: `/b/${businessId}/settings/appearance`, icon: FileText },
-    { title: "Document templates", description: "Move invoice fields and test PDF generation with pdfme.", href: `/b/${businessId}/settings/document-templates`, icon: FileText },
+    { title: "Document templates", description: "Customize invoice layout, branding, colors, and font. Supports React PDF (modern/classic) or custom HTML templates.", href: `/b/${businessId}/settings/document-templates`, icon: FileText },
   ];
   return (
     <div className="page-container max-w-[1050px]">

@@ -27,8 +27,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ bus
       invoiceDate: formatDate(invoice.invoiceDate),
       dueDate: formatDate(invoice.dueDate),
       customerName: customer.name,
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      customerAddress: (customer as any).billingAddress || (customer as any).address || undefined,
+      customerAddress: [customer.addressLine1, customer.city, customer.countrySubdivision].filter(Boolean).join(", ") || undefined,
       customerTrn: customer.taxReference || undefined,
       lines: lines.map((line) => ({
         description: line.description,

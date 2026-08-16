@@ -26,7 +26,7 @@ Restored and optimized the development environment by fixing the middleware, res
 
 ### Key Capabilities
 - **Next.js Turbopack Support:** Re-enabled Turbopack for significantly faster local development rebuilds.
-- **Self-Hosted Fonts:** Moved from Google Fonts to locally hosted `woff2` files (Inter, Roboto, Open Sans, Lato) for faster hydration and privacy.
+- **Self-Hosted Fonts:** Moved from Google Fonts to locally hosted `woff2` files (for browser UI) and `ttf` files (for offline PDF generation) for Inter, Roboto, Open Sans, and Lato to ensure fast hydration and privacy.
 - **Demo Mode:** `login-form.tsx` automatically fills demo credentials (`admin@demo.local` / `demo12345`) only in development environments (`NODE_ENV === "development"`).
 
 ### Architecture, Deviations & Implementation Details

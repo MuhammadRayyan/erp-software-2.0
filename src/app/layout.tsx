@@ -68,6 +68,7 @@ export default async function RootLayout({ children }: Readonly<{ children: Reac
       className={inter.variable}
     >
       <head>
+        {/* eslint-disable-next-line @next/next/no-css-tags -- public/fonts/fonts.css is a static asset for self-hosted font fallbacks, not importable as a module */}
         <link rel="stylesheet" href="/fonts/fonts.css" />
       </head>
       <body style={{ fontFamily }}>

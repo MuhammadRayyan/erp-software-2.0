@@ -40,10 +40,10 @@ This folder contains step-by-step implementation specs for each sprint of the Le
 
 ### Verification after each step
 After each numbered step in a sprint file:
-1. Run `bun run typecheck` — must pass with zero errors.
-2. Run `bun run lint` — must pass.
-3. If the step touches DB or posting: run `bun run test` — all 82 tests must pass.
-4. If the step touches UI: run `bun run dev`, open the affected page, verify it renders.
+1. Run `npm run typecheck` — must pass with zero errors.
+2. Run `npm run lint` — must pass.
+3. If the step touches DB or posting: run `npm run test` — all 82 tests must pass.
+4. If the step touches UI: run `npm run dev`, open the affected page, verify it renders.
 5. Commit with message format: `sprint-N: short description`.
 
 ### File references
@@ -51,7 +51,7 @@ All file paths in these specs are relative to the project root (e.g., `src/app/l
 
 ## Model recommendation (Antigravity)
 
-**Use Gemini 3.1 Pro High** for all sprints.
+**Use Gemini 3.1 Pro (High)** for all sprints.
 
 Reasons:
 1. **Accounting correctness is non-negotiable.** Money math, journal balancing, VAT calculations — a subtle bug here is costly. Pro's stronger reasoning reduces regression risk.
