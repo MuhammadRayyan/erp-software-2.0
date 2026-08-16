@@ -6,9 +6,8 @@ const nextConfig: NextConfig = {
     "/*": ["./src/modules/einvoicing/pint-ae/versions/v1.0.4/validation/*.json"],
   },
   experimental: {
-    webpackMemoryOptimizations: true,
     serverActions: {
-      bodySizeLimit: "50mb",
+      bodySizeLimit: "1mb",
     },
   },
 };

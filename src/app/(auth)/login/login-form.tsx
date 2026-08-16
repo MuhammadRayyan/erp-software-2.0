@@ -44,14 +44,30 @@ export function LoginForm() {
       )}
       <div className="space-y-1.5">
         <Label htmlFor="email">Email</Label>
-        <Input id="email" name="email" type="email" autoComplete="email" defaultValue="admin@demo.local" required />
+        <Input
+          id="email"
+          name="email"
+          type="email"
+          autoComplete="email"
+          defaultValue={process.env.NODE_ENV === "development" ? "admin@demo.local" : ""}
+          required
+        />
       </div>
       <div className="space-y-1.5">
         <div className="flex items-center justify-between">
           <Label htmlFor="password">Password</Label>
-          <span className="text-xs text-muted-foreground">Demo: demo12345</span>
+          {process.env.NODE_ENV === "development" && (
+            <span className="text-xs text-muted-foreground">Demo: demo12345</span>
+          )}
         </div>
-        <Input id="password" name="password" type="password" autoComplete="current-password" defaultValue="demo12345" required />
+        <Input
+          id="password"
+          name="password"
+          type="password"
+          autoComplete="current-password"
+          defaultValue={process.env.NODE_ENV === "development" ? "demo12345" : ""}
+          required
+        />
       </div>
       <Button type="submit" size="lg" className="w-full" disabled={pending}>
         {pending ? <LoaderCircle className="size-4 animate-spin" /> : <>Sign in <ArrowRight className="size-4" /></>}
