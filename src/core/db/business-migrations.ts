@@ -1804,6 +1804,16 @@ function upgradeToPhase9(sqlite: Database.Database) {
   `);
 }
 
+function upgradeToPhase10(sqlite: Database.Database) {
+  sqlite.exec(`
+    ALTER TABLE document_templates ADD COLUMN settings_json TEXT;
+    ALTER TABLE document_templates ADD COLUMN custom_html TEXT;
+    UPDATE document_templates
+    SET settings_json = '{"templateType":"modern","primaryColor":"#356fd0","fontName":"Inter","footerText":"Thank you for your business","showTaxColumn":true}'
+    WHERE settings_json IS NULL;
+  `);
+}
+
 export const businessMigrations = [
   { version: 0, name: "phase_0_baseline", up: createPhase0Baseline },
   {
@@ -1853,6 +1863,11 @@ export const businessMigrations = [
     version: 9,
     name: "phase_9_multi_currency_foundation",
     up: upgradeToPhase9,
+  },
+  {
+    version: 10,
+    name: "document_template_settings",
+    up: upgradeToPhase10,
   },
 ] satisfies readonly SqliteMigration[];
 

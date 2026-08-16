@@ -3,9 +3,9 @@ import { getCurrentSession } from "@/core/auth/session";
 import { formatDate, formatMoney } from "@/core/format";
 import { getDocumentPdfAccess } from "@/core/permissions/document-pdf-access";
 import { quantityMicrosToInput } from "@/modules/accounting/calculations/money";
-import { renderInvoicePdf } from "@/modules/document-templates/pdf-engine";
-import { getInvoiceTemplate } from "@/modules/document-templates/template-service";
+import { renderInvoicePdf } from "@/modules/document-templates/template-registry";
 import { getInvoice } from "@/modules/sales-invoices/invoice-service";
+import type { InvoiceTemplateData } from "@/modules/document-templates/react-pdf/invoice-template";
 
 export const runtime = "nodejs";
 
@@ -19,22 +19,30 @@ export async function GET(_request: Request, { params }: { params: Promise<{ bus
   if (!record) return NextResponse.json({ error: "Invoice not found" }, { status: 404 });
   const { invoice, customer, lines } = record;
   const currency = invoice.currencyCode;
-  const foreignDetail = currency === access.business.currency ? "" : ` · Rate 1 ${currency} = ${invoice.exchangeRateToBase} ${access.business.currency} (${invoice.exchangeRateSource}, ${invoice.exchangeRateDate}) · Base ${formatMoney(invoice.baseTotalMinor, access.business.currency)} · ${access.business.currency} VAT ${formatMoney(invoice.baseTaxMinor, access.business.currency)}`;
+  const foreignDetail = currency === access.business.currency ? "" : `Rate 1 ${currency} = ${invoice.exchangeRateToBase} ${access.business.currency} (${invoice.exchangeRateSource}, ${invoice.exchangeRateDate}) · Base ${formatMoney(invoice.baseTotalMinor, access.business.currency)} · ${access.business.currency} VAT ${formatMoney(invoice.baseTaxMinor, access.business.currency)}`;
   try {
-    const pdf = await renderInvoicePdf(getInvoiceTemplate(businessId, session.user.id), {
-        companyName: access.business.name,
-        invoiceTitle: "INVOICE",
-        invoiceNumber: invoice.invoiceNumber,
-        customerLabel: "BILL TO",
-        customerName: customer.name,
-        invoiceDate: `Invoice date: ${formatDate(invoice.invoiceDate)}`,
-        dueDate: `Due date: ${formatDate(invoice.dueDate)}${foreignDetail}`,
-        itemsTable: JSON.stringify(lines.map((line) => [line.description, quantityMicrosToInput(line.quantityMicros), formatMoney(line.unitPriceMinor, currency), formatMoney(line.grossAmountMinor, currency)])),
-        subtotal: `Subtotal    ${formatMoney(invoice.subtotalMinor, currency)}`,
-        vat: `VAT             ${formatMoney(invoice.taxMinor, currency)}`,
-        total: `TOTAL        ${formatMoney(invoice.totalMinor, currency)}`,
-    });
-    return new NextResponse(pdf, {
+    const data: InvoiceTemplateData = {
+      companyName: access.business.name,
+      invoiceNumber: invoice.invoiceNumber,
+      invoiceDate: formatDate(invoice.invoiceDate),
+      dueDate: formatDate(invoice.dueDate),
+      customerName: customer.name,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      customerAddress: (customer as any).billingAddress || (customer as any).address || undefined,
+      customerTrn: customer.taxReference || undefined,
+      lines: lines.map((line) => ({
+        description: line.description,
+        quantity: quantityMicrosToInput(line.quantityMicros),
+        unitPrice: formatMoney(line.unitPriceMinor, currency),
+        amount: formatMoney(line.grossAmountMinor, currency),
+      })),
+      subtotal: formatMoney(invoice.subtotalMinor, currency),
+      tax: formatMoney(invoice.taxMinor, currency),
+      total: formatMoney(invoice.totalMinor, currency),
+      foreignDetail: foreignDetail || undefined,
+    };
+    const pdf = await renderInvoicePdf(businessId, session.user.id, data);
+    return new NextResponse(new Uint8Array(pdf), {
       headers: {
         "Content-Type": "application/pdf",
         "Content-Disposition": `inline; filename="${invoice.invoiceNumber}.pdf"`,

@@ -70,6 +70,15 @@ This is the compact source of truth for the code that exists now. Historical pha
 - Inbound Phase 6 VAT mapping supports standard-rated 5% and zero-rated 0% purchase codes when a unique compatible code exists. Unsupported categories/rates, locked VAT dates, allowances/charges, amount-due differences, unresolved lines, duplicates, identity failures, and validation findings block draft creation.
 - Receiving or reviewing an inbound document never posts AP, journals, VAT, or stock. A Ready document can create one normal Purchase Invoice in `draft` status only. Final posting remains a separate human action through the existing Purchase Invoice service, which revalidates source identity, dates, totals, quantities, prices, VAT category/rate, duplicate invoice number, and VAT-period locks before using the established accounting/tax posting path.
 
+## Current Sprints Status
+
+- [x] Sprint 0: Foundation & Edge Safety
+- [x] Sprint 1: Correctness & Performance
+- [x] Sprint 2: PDF Engine Migration (React PDF + Puppeteer hybrid)
+- [ ] Sprint 3: Document Uploads & GCS
+- [ ] Sprint 4: Theming & UX Polish
+- [ ] Sprint 5: E2E Testing & Playwright
+
 ## Migrations and compatibility deviations
 
 - The system schema is version `1`. Business migrations are ordered versions `0`-`9`: baseline, accounting, AR/AP, projects, inventory, banking, UAE VAT, outbound eInvoicing, inbound supplier eInvoicing, and multi-currency foundation. Each database has its own `schema_migrations`; pending migrations run once in individual immediate transactions and perform foreign-key checks.

@@ -1467,5 +1467,7 @@ export const documentTemplates = sqliteTable("document_templates", {
   documentType: text("document_type").notNull().unique(),
   name: text("name").notNull(),
   templateJson: text("template_json").notNull(),
+  settingsJson: text("settings_json"),
+  customHtml: text("custom_html"),
   updatedAt: text("updated_at").notNull(),
 });

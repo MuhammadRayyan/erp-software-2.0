@@ -1,10 +1,22 @@
 "use server";
 
+import { revalidatePath } from "next/cache";
 import { requireModule } from "@/core/permissions/require-module";
-import { saveInvoiceTemplate } from "./template-service";
+import { saveTemplateSettings } from "./template-service";
 
-export async function saveInvoiceTemplateAction(businessId: string, template: unknown) {
-  const { user, access } = await requireModule(businessId, "settings");
-  if (access.membership.role !== "administrator") return { error: "Administrator access is required." };
-  try { saveInvoiceTemplate(businessId, user.id, template); return {}; } catch (error) { return { error: error instanceof Error ? error.message : "Template could not be saved" }; }
+export type SettingsResult = { error?: string };
+
+export async function saveTemplateSettingsAction(
+  businessId: string,
+  documentType: string,
+  settings: unknown,
+): Promise<SettingsResult> {
+  const { user } = await requireModule(businessId, "settings");
+  try {
+    saveTemplateSettings(businessId, user.id, documentType, settings);
+    revalidatePath(`/b/${businessId}/settings/document-templates`);
+    return {};
+  } catch (error) {
+    return { error: error instanceof Error ? error.message : "Could not save template settings" };
+  }
 }
