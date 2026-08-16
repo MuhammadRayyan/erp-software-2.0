@@ -47,8 +47,7 @@ export function LoginForm() {
 
     // Success — clear attempts
     await fetch("/api/auth-rate-limit", { method: "DELETE" });
-    router.replace("/businesses");
-    router.refresh();
+    window.location.href = "/businesses";
   }
 
   return (
