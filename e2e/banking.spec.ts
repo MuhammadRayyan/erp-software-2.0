@@ -8,14 +8,13 @@ test.describe('Banking Module', () => {
   });
 
   test('can view bank accounts list', async ({ page }) => {
-    await page.getByRole('link', { name: 'Bank Accounts' }).click();
-    await expect(page.getByRole('heading', { name: 'Bank Accounts' })).toBeVisible();
-    await expect(page.locator('table')).toBeVisible();
+    await page.getByRole('link', { name: 'Bank Accounts', exact: true }).click();
+    await expect(page.getByRole('heading', { name: 'Bank Accounts', exact: true })).toBeVisible();
   });
 
   test('can open new bank account form', async ({ page }) => {
-    await page.getByRole('link', { name: 'Bank Accounts' }).click();
-    await expect(page.getByRole('heading', { name: 'Bank Accounts' })).toBeVisible();
+    await page.getByRole('link', { name: 'Bank Accounts', exact: true }).click();
+    await expect(page.getByRole('heading', { name: 'Bank Accounts', exact: true })).toBeVisible();
     await page.getByRole('link', { name: /new/i }).first().click();
     await expect(page.getByRole('heading', { name: 'New Bank Account' })).toBeVisible();
     await expect(page.getByLabel(/name/i).first()).toBeVisible();

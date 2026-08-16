@@ -84,3 +84,20 @@ Added a comprehensive End-to-End testing suite using Playwright to ensure the st
 - **Test Command:** Executed via `npm run test:e2e`. Playwright manages the local web server lifecycle (spawns/re-uses `npm run dev` depending on CI mode).
 - **Locator Fixes:** Fixed race conditions (e.g. `await expect(...).toBeVisible()`) between clicking sidebar links and triggering nested links (like "New Item") before the main route had fully hydrated the DOM.
 - **Strict Checks:** Enforced Exact Matches on sidebar names to prevent cross-module pollution (e.g., distinguishing between "Invoices" for Sales and "Purchase Invoices").
+
+## Customer Entity Enhancements
+
+**Status:** Implemented
+
+Expanded the `Customer` entity with detailed address structures, active state toggling, and robust PDF statement generation.
+
+### Key Capabilities
+- **Rich Address Data:** Added robust multi-line `billingAddress` and `deliveryAddress` fields to the `customers` table.
+- **Active / Inactive Status:** Introduced an `isActive` boolean (replacing the legacy string status enum) to correctly toggle customers. Inactive customers are hidden by default on the table but can be viewed via the "Status: Active" toggle.
+- **Status Badging:** Added prominent visual badges across the customer list and detailed view indicating whether a customer is active or inactive.
+- **PDF Statements:** Replaced the simple print screen button on the Customer Statement with a fully integrated **Export PDF** button. The statement is rendered via `@react-pdf/renderer` and inherits the business's active logo, fonts, and primary colors (via the `classic` design primitives).
+
+### Architecture & Implementation Details
+- **Schema Migration:** Added `billingAddress`, `deliveryAddress`, and `isActive` boolean flag to the `customers` table.
+- **Statement PDF Route:** Created `/api/businesses/[businessId]/customers/[customerId]/statement/pdf/route.ts` which pipes `StatementTemplateData` into the `<ClassicStatementDocument>` template, ensuring theme parity with invoices and purchase orders.
+- **Service Layer Updates:** Updated `listCustomers` to correctly filter active status based on the new boolean column.

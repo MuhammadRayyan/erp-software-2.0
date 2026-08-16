@@ -5,8 +5,12 @@ import { customers } from "@/core/db/business-schema";
 import { customerInputSchema, type CustomerInput } from "./customer-input";
 import { getBaseCurrency, getCurrency } from "@/modules/currency/currency";
 
-export function listCustomers(businessId: string, userId: string) {
-  return getBusinessDb(businessId, userId).db.select().from(customers).orderBy(asc(customers.name)).all();
+export function listCustomers(businessId: string, userId: string, includeInactive = false) {
+  let query = getBusinessDb(businessId, userId).db.select().from(customers);
+  if (!includeInactive) {
+    query = query.where(eq(customers.isActive, true)) as any;
+  }
+  return query.orderBy(asc(customers.name)).all();
 }
 
 export function getCustomer(businessId: string, userId: string, customerId: string) {

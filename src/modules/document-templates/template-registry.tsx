@@ -7,6 +7,7 @@ import { ClassicInvoiceDocument } from "./react-pdf/classic-invoice-template";
 import { ClassicCreditNoteDocument } from "./react-pdf/classic-credit-note-template";
 import { ClassicPurchaseOrderDocument } from "./react-pdf/classic-purchase-order-template";
 import { ClassicReceiptDocument } from "./react-pdf/classic-receipt-template";
+import { ClassicStatementDocument, type StatementTemplateData } from "./react-pdf/statement-template";
 import { renderHtmlTemplate } from "./html-templates/render";
 import { getTemplateSettings } from "./template-service";
 
@@ -57,4 +58,15 @@ export async function renderDocumentPdf(
   } else {
     return renderReactPdf(<ReceiptDocument data={data} settings={settings} />);
   }
+}
+
+export async function renderStatementPdf(
+  businessId: string,
+  userId: string,
+  data: StatementTemplateData,
+): Promise<Buffer> {
+  const settings = getTemplateSettings(businessId, userId, "sales-invoice");
+  
+  // For statement we just use the classic layout
+  return renderReactPdf(<ClassicStatementDocument data={data} settings={settings} />);
 }

@@ -71,6 +71,9 @@ export const customers = sqliteTable("customers", {
   buyerReference: text("buyer_reference"),
   defaultCurrencyCode: text("default_currency_code").notNull().default("AED").references(() => currencies.code),
   status: text("status", { enum: ["active", "archived"] }).notNull().default("active"),
+  isActive: integer("is_active", { mode: "boolean" }).notNull().default(true),
+  billingAddress: text("billing_address"),
+  deliveryAddress: text("delivery_address"),
   createdAt: text("created_at").notNull(),
   updatedAt: text("updated_at").notNull(),
 });

@@ -100,6 +100,9 @@ function modernExpectation(version: number): SchemaExpectation {
   if (version >= 9) {
     tables.customers = [...tables.customers, "default_currency_code"];
   }
+  if (version >= 11) {
+    tables.customers = [...tables.customers, "is_active", "billing_address", "delivery_address"];
+  }
 
   const indexes = [
     "sales_invoice_number_idx", "sales_invoice_customer_idx",
@@ -474,6 +477,8 @@ function modernExpectation(version: number): SchemaExpectation {
 }
 
 function candidateVersion(sqlite: Database.Database) {
+  if (sqliteColumnExists(sqlite, "customers", "is_active")) return 11;
+  if (sqliteColumnExists(sqlite, "document_templates", "settings_json")) return 10;
   if (sqliteTableExists(sqlite, "currencies")) return 9;
   if (sqliteTableExists(sqlite, "inbound_einvoice_documents")) return 8;
   if (sqliteTableExists(sqlite, "einvoice_documents")) return 7;

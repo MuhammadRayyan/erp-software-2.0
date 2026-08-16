@@ -13,22 +13,22 @@ test.describe('Navigation & Rendering', () => {
 
   test('Sales Customers page loads', async ({ page }) => {
     await page.getByRole('link', { name: 'Customers' }).click();
-    await expect(page.getByRole('heading', { name: 'Customers' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Customers', exact: true })).toBeVisible();
   });
 
   test('Sales Invoices page loads', async ({ page }) => {
     await page.getByRole('link', { name: 'Invoices', exact: true }).click();
-    await expect(page.getByRole('heading', { name: 'Sales Invoices' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Sales Invoices', exact: true })).toBeVisible();
   });
 
   test('Purchases Suppliers page loads', async ({ page }) => {
-    await page.getByRole('link', { name: 'Suppliers' }).click();
-    await expect(page.getByRole('heading', { name: 'Suppliers' })).toBeVisible();
+    await page.getByRole('link', { name: 'Suppliers', exact: true }).click();
+    await expect(page.getByRole('heading', { name: 'Suppliers', exact: true })).toBeVisible();
   });
 
   test('Purchase Orders page loads', async ({ page }) => {
-    await page.getByRole('link', { name: 'Purchase Orders' }).click();
-    await expect(page.getByRole('heading', { name: 'Purchase Orders' })).toBeVisible();
+    await page.getByRole('link', { name: 'Purchase Orders', exact: true }).click();
+    await expect(page.getByRole('heading', { name: 'Purchase Orders', exact: true })).toBeVisible();
   });
 
   test('Inventory Items page loads', async ({ page }) => {
@@ -37,8 +37,8 @@ test.describe('Navigation & Rendering', () => {
   });
 
   test('Banking Accounts page loads', async ({ page }) => {
-    await page.getByRole('link', { name: 'Bank Accounts' }).click();
-    await expect(page.getByRole('heading', { name: 'Bank Accounts' })).toBeVisible();
+    await page.getByRole('link', { name: 'Bank Accounts', exact: true }).click();
+    await expect(page.getByRole('heading', { name: 'Bank Accounts', exact: true })).toBeVisible();
   });
 
   test('Accounting Journal Entries page loads', async ({ page }) => {

@@ -1814,6 +1814,14 @@ function upgradeToPhase10(sqlite: Database.Database) {
   `);
 }
 
+function upgradeToPhase11(sqlite: Database.Database) {
+  sqlite.exec(`
+    ALTER TABLE customers ADD COLUMN billing_address TEXT;
+    ALTER TABLE customers ADD COLUMN delivery_address TEXT;
+    ALTER TABLE customers ADD COLUMN is_active INTEGER NOT NULL DEFAULT 1;
+  `);
+}
+
 export const businessMigrations = [
   { version: 0, name: "phase_0_baseline", up: createPhase0Baseline },
   {
@@ -1868,6 +1876,11 @@ export const businessMigrations = [
     version: 10,
     name: "document_template_settings",
     up: upgradeToPhase10,
+  },
+  {
+    version: 11,
+    name: "customer_addresses_active",
+    up: upgradeToPhase11,
   },
 ] satisfies readonly SqliteMigration[];
 
