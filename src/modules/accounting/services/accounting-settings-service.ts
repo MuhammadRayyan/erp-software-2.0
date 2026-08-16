@@ -1,4 +1,5 @@
 import { eq } from "drizzle-orm";
+import { cache } from "react";
 import { getBusinessDb } from "@/core/db/business";
 import { accountingSettings } from "@/core/db/business-schema";
 import {
@@ -6,7 +7,7 @@ import {
   type InvoiceNumberingInput,
 } from "../numbering-input";
 
-export function getAccountingSettings(businessId: string, userId: string) {
+export const getAccountingSettings = cache((businessId: string, userId: string) => {
   const settings = getBusinessDb(businessId, userId).db
     .select()
     .from(accountingSettings)
@@ -14,7 +15,7 @@ export function getAccountingSettings(businessId: string, userId: string) {
     .get();
   if (!settings) throw new Error("Accounting settings are not configured for this business.");
   return settings;
-}
+});
 
 export function updateInvoiceNumbering(
   businessId: string,

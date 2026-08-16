@@ -1,3 +1,4 @@
+import { cache } from "react";
 import { randomUUID } from "node:crypto";
 import { getBusinessDb } from "@/core/db/business";
 import { minorToInput, parseMoneyToMinor } from "@/modules/accounting/calculations/money";
@@ -56,14 +57,14 @@ export function listInventoryItems(businessId: string, userId: string, options?:
   }>;
 }
 
-export function listInventoryItemOptions(businessId: string, userId: string) {
+export const listInventoryItemOptions = cache((businessId: string, userId: string) => {
   return listInventoryItems(businessId, userId, { activeOnly: true }).map((row) => ({
     id: String(row.id), sku: row.sku as string | null, name: String(row.name), unitName: String(row.unit_name),
     salesPriceMinor: row.sales_price_minor as number | null, purchasePriceMinor: row.purchase_price_minor as number | null,
     salesAccountId: String(row.sales_account_id), inventoryAssetAccountId: String(row.inventory_asset_account_id),
     costOfSalesAccountId: String(row.cost_of_sales_account_id),
   }));
-}
+});
 
 export function getInventoryItem(businessId: string, userId: string, itemId: string) {
   const { sqlite } = getBusinessDb(businessId, userId);

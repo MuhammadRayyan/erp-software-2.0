@@ -263,5 +263,6 @@ English first. Arabic/RTL comes later, so avoid UI assumptions that make RTL imp
 5. Minimal dependencies
 6. Easy Docker setup
 7. Maintainability by one developer + AI
+8. Strict Node.js execution: Use `npm run` for all commands (never `bun run`, `pnpm`, or `yarn`) to prevent Windows native binary crashes with SQLite.
 
 Production hardening is explicitly not a Phase 0 goal.

@@ -1,3 +1,4 @@
+import { cache } from "react";
 import { randomUUID } from "node:crypto";
 import { getBusinessDb } from "@/core/db/business";
 import { bankAccountInputSchema, type BankAccountInput } from "./bank-account-input";
@@ -44,10 +45,10 @@ function accountSelect() {
   `;
 }
 
-export function listBankAccounts(businessId: string, userId: string, includeInactive = true) {
+export const listBankAccounts = cache((businessId: string, userId: string, includeInactive = true) => {
   const { sqlite } = getBusinessDb(businessId, userId);
   return sqlite.prepare(`${accountSelect()} ${includeInactive ? "" : "WHERE ba.is_active = 1"} ORDER BY ba.is_active DESC, ba.name`).all() as BankAccountRow[];
-}
+});
 
 export function getBankAccount(businessId: string, userId: string, bankAccountId: string) {
   const { sqlite } = getBusinessDb(businessId, userId);

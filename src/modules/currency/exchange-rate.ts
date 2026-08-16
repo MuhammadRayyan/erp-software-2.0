@@ -1,3 +1,4 @@
+import { cache } from "react";
 import { randomUUID } from "node:crypto";
 import type Database from "better-sqlite3";
 import { eq } from "drizzle-orm";
@@ -151,7 +152,7 @@ export function changeBaseCurrency(businessId: string, userId: string, nextCode:
     .run();
 }
 
-export function getCurrencySettings(businessId: string, userId: string) {
+export const getCurrencySettings = cache((businessId: string, userId: string) => {
   const context = getBusinessDb(businessId, userId);
   const fxMappings = context.sqlite.prepare(`
     SELECT realized_fx_gain_account_id, realized_fx_loss_account_id
@@ -185,7 +186,7 @@ export function getCurrencySettings(businessId: string, userId: string) {
     `).all() as { id: string; code: string; name: string }[],
     baseLocked: hasBaseCurrencyActivity(context.sqlite),
   };
-}
+});
 
 export function saveRealizedFxAccounts(
   businessId: string,

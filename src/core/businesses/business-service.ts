@@ -1,3 +1,4 @@
+import { cache } from "react";
 import { randomUUID } from "node:crypto";
 import { rmSync } from "node:fs";
 import { and, desc, eq } from "drizzle-orm";
@@ -21,7 +22,7 @@ export function listBusinessesForUser(userId: string, includeArchived = false) {
     .all();
 }
 
-export function getBusinessForUser(businessId: string, userId: string) {
+export const getBusinessForUser = cache((businessId: string, userId: string) => {
   return getSystemDb()
     .select({ business: businesses, membership: memberships })
     .from(businesses)
@@ -31,7 +32,7 @@ export function getBusinessForUser(businessId: string, userId: string) {
     )
     .where(eq(businesses.id, businessId))
     .get();
-}
+});
 
 export function createBusiness(input: BusinessInput, userId: string) {
   const data = businessInputSchema.parse(input);
