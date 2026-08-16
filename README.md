@@ -1,6 +1,6 @@
 # Modern ERP / Accounting
 
-A compact, Manager.io-inspired multi-business accounting/ERP application for local and self-hosted use. Phases 0-8 are implemented.
+A compact, Manager.io-inspired multi-business accounting/ERP application for local and self-hosted use. Sprints 0-2 (Foundation, Correctness, and PDF Engine Migration) are implemented.
 
 ## Working context for future phases
 

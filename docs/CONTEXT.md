@@ -229,8 +229,8 @@ The PDF is only a rendered presentation.
 
 Document templates should be stored as versionable JSON/schema data.
 
-Phase 0 only proves the editor concept with pdfme.
-Do not deeply couple business data to pdfme internals.
+Document rendering relies on a hybrid `@react-pdf/renderer` and Puppeteer engine.
+Do not deeply couple business data to rendering engine internals.
 
 ## Backup Direction
 
