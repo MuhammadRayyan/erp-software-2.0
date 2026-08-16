@@ -21,7 +21,7 @@ export function addExistingUser(businessId: string, adminUserId: string, email: 
   if (!access || access.membership.role !== "administrator") throw new Error("BUSINESS_ACCESS_DENIED");
   const normalized = z.email().parse(email.trim().toLowerCase());
   const user = getSystemDb().select().from(users).where(eq(users.email, normalized)).get();
-  if (!user) throw new Error("No local user has that email. Phase 0 does not send invitations.");
+  if (!user) throw new Error("No local user has that email. Invitation emails are not available.");
   const existing = getSystemDb().select().from(memberships).where(and(eq(memberships.businessId, businessId), eq(memberships.userId, user.id))).get();
   if (existing) throw new Error("That user already has access to this business.");
   getSystemDb().insert(memberships).values({ id: randomUUID(), businessId, userId: user.id, role: "standard", modulesJson: JSON.stringify(["sales"]), createdAt: new Date().toISOString() }).run();

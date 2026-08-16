@@ -62,7 +62,6 @@ function BusinessMenu({ business }: { business: BusinessCard }) {
           {admin
             ? <DropdownMenuItem asChild><a href={`/api/businesses/${business.id}/backup`}><Download className="size-4" /> Backup</a></DropdownMenuItem>
             : <DropdownMenuItem disabled title="Administrator access is required"><Download className="size-4" /> Backup</DropdownMenuItem>}
-          <DropdownMenuItem disabled title="Duplicate is planned after Phase 0"><Building2 className="size-4" /> Duplicate (later)</DropdownMenuItem>
           <DropdownMenuSeparator />
           <DropdownMenuItem disabled={!admin} onSelect={archive}><Archive className="size-4" /> Archive</DropdownMenuItem>
           <DropdownMenuItem disabled={!admin} className="text-danger focus:text-danger" onSelect={() => setDeleteOpen(true)}><Trash2 className="size-4" /> Delete</DropdownMenuItem>

@@ -14,7 +14,7 @@ export async function POST(request: Request) {
   }
   if (file.size > maximumBackupBytes) {
     return NextResponse.json(
-      { error: "Backup files must be smaller than 50 MB in Phase 0." },
+      { error: "Backup files must be smaller than 50 MB." },
       { status: 413 },
     );
   }
