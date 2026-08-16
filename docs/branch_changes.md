@@ -44,7 +44,7 @@ Completed the first engineering sprint focusing on architectural correctness, pe
 ### Key Capabilities
 - **React `cache()`**: Memoized hot read paths (permissions, business-service, tax codes, settings) to eliminate redundant SQLite queries during render.
 - **SQLite Connection Pool**: Added an LRU cache capping concurrent connections to `32`, alongside a 5-minute idle timeout in `src/core/db/business.ts` to prevent file descriptor leaks.
-- **`touchBusiness` Throttling**: Implemented a `bt-[businessId]` cookie to throttle `lastOpenedAt` updates to once every 5 minutes on navigation.
+- **`touchBusiness` Throttling**: Implemented an in-memory Node.js cache inside `business-service.ts` to throttle `lastOpenedAt` updates to once every 5 minutes on navigation (previously attempted via cookies, which violated Next.js Server Component strictness).
 - **Crash Fixes**: Replaced unsafe non-null assertions (`!`) with strict `notFound()` boundaries (e.g. Overview page).
 - **UX Boundaries**: Generated `error.tsx` and `loading.tsx` boundaries for all 11 major route groups.
 - **Security Enhancements**: 
