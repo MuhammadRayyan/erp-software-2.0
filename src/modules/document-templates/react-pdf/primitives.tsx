@@ -75,3 +75,65 @@ export const sharedStyles = StyleSheet.create({
     paddingTop: 8,
   },
 });
+
+export const classicStyles = StyleSheet.create({
+  page: sharedStyles.page,
+  header: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    marginBottom: 20,
+    borderBottomWidth: 2,
+    borderBottomColor: colors.borderStrong,
+    paddingBottom: 20,
+  },
+  sectionTitle: {
+    fontSize: 9,
+    color: colors.text,
+    fontWeight: "heavy",
+    marginBottom: 6,
+    textTransform: "uppercase",
+  },
+  table: {
+    display: "flex",
+    width: "100%",
+    marginVertical: 15,
+    borderTopWidth: 1,
+    borderLeftWidth: 1,
+    borderColor: colors.borderStrong,
+  },
+  tableHeaderRow: {
+    flexDirection: "row",
+    backgroundColor: colors.surfaceMuted,
+  },
+  tableRow: {
+    flexDirection: "row",
+    minHeight: 24,
+  },
+  tableCell: {
+    padding: 6,
+    fontSize: 9,
+    borderBottomWidth: 1,
+    borderRightWidth: 1,
+    borderColor: colors.borderStrong,
+  },
+  totals: {
+    marginTop: 10,
+    alignItems: "flex-end",
+  },
+  totalsRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    width: 250,
+    paddingVertical: 4,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+  },
+  footer: sharedStyles.footer,
+  boxedDetails: {
+    borderWidth: 1,
+    borderColor: colors.borderStrong,
+    padding: 10,
+    backgroundColor: colors.surface,
+    minWidth: 180,
+  }
+});

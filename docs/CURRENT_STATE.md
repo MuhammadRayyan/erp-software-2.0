@@ -113,7 +113,6 @@ Last verified after Phase 9 on 11 August 2026: explicit migration and database c
 ## Known limitations and deferred work
 
 - Customer email delivery and the Help center are not implemented; their visible controls are intentionally labelled and disabled. Command search and business duplication remain explicitly labelled future placeholders.
-- The "Classic" PDF template style is deferred. Currently only "Modern" (React PDF) and "Custom HTML" (Puppeteer) are implemented.
 - Inventory has no GRNI/received-not-invoiced clearing, purchase-price variance, landed-cost allocation, lot/serial tracking, transfers, or historical revaluation engine. The physical/financial timing split and chronology rejection are intentional until those are designed.
 - The GL and Bank/Cash accounts intentionally remain base-currency only. There are no foreign bank accounts, cross-currency allocations, unrealized revaluation, translation reserve, live/automatic rates, or background FX processing.
 - Electronic Invoicing has no real ASP adapter, direct FTA/Corner-5/TDD call, credential/certificate/key management, endpoint discovery, webhooks, background retry policy, self-billing, B2C eReceipts, automatic AP posting, or broader PINT-AE FX scenarios. Mock acceptance/receipt is never government acceptance or production network receipt.

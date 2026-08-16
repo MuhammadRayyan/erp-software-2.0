@@ -66,4 +66,4 @@ Replaced the legacy `pdfme` dependency with a robust hybrid architecture using `
 ### Architecture, Deviations & Implementation Details
 - **Schema Migration:** Added `settings_json` and `custom_html` to the `document_templates` table via Migration 10, backfilling legacy templates.
 - **Template Registry:** Introduced `template-registry.tsx` as the single routing hub to dynamically choose between React PDF and HTML rendering.
-- **Deviations (Classic Template):** Implementation of the "Classic" standard template style is deferred to future phases. Only Modern and Custom HTML are currently active.
+- **Classic Template:** The "Classic" standard template style is now fully implemented alongside Modern and Custom HTML, using bordered tables and traditional structural layouts.
