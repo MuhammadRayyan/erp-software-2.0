@@ -79,13 +79,23 @@ export function createBusiness(input: BusinessInput, userId: string) {
   return { id, directoryKey };
 }
 
+const touchCache = new Map<string, number>();
+const TOUCH_INTERVAL_MS = 5 * 60 * 1000; // 5 minutes
+
 export function touchBusiness(businessId: string, userId: string) {
+  const now = Date.now();
+  const lastTouch = touchCache.get(businessId) || 0;
+  if (now - lastTouch < TOUCH_INTERVAL_MS) return;
+
   if (!getBusinessForUser(businessId, userId)) throw new Error("BUSINESS_ACCESS_DENIED");
+  
   getSystemDb()
     .update(businesses)
-    .set({ lastOpenedAt: new Date().toISOString() })
+    .set({ lastOpenedAt: new Date(now).toISOString() })
     .where(eq(businesses.id, businessId))
     .run();
+    
+  touchCache.set(businessId, now);
 }
 
 export function renameBusiness(businessId: string, userId: string, name: string) {
