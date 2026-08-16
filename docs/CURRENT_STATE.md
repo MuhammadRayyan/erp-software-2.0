@@ -112,6 +112,7 @@ Last verified after Phase 9 on 11 August 2026: explicit migration and database c
 
 ## Known limitations and deferred work
 
+- The PDF document route (`document-pdf/route.ts`) is currently a single large function with multiple branches for handling different document types. This should be refactored to extract per-document-type data-fetching functions if/when new document types are added.
 - Customer email delivery and the Help center are not implemented; their visible controls are intentionally labelled and disabled. Command search and business duplication remain explicitly labelled future placeholders.
 - Inventory has no GRNI/received-not-invoiced clearing, purchase-price variance, landed-cost allocation, lot/serial tracking, transfers, or historical revaluation engine. The physical/financial timing split and chronology rejection are intentional until those are designed.
 - The GL and Bank/Cash accounts intentionally remain base-currency only. There are no foreign bank accounts, cross-currency allocations, unrealized revaluation, translation reserve, live/automatic rates, or background FX processing.
