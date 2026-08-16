@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { notFound } from "next/navigation";
 import { AlertTriangle, ArrowRight, Banknote, CircleDollarSign, ReceiptText } from "lucide-react";
 import { NoticeToast } from "@/components/notice-toast";
 import { requireUser } from "@/core/auth/session";
@@ -13,7 +14,9 @@ export default async function OverviewPage({ params, searchParams }: { params: P
   const { businessId } = await params;
   const { notice } = await searchParams;
   const user = await requireUser();
-  const access = getBusinessForUser(businessId, user.id)!;
+  const access = getBusinessForUser(businessId, user.id);
+  if (!access) notFound();
+  
   const invoiceList = listInvoices(businessId, user.id);
   const posted = invoiceList.filter((invoice) => invoice.documentStatus === "posted");
   const sales = posted.reduce((sum, invoice) => sum + invoice.baseTotalMinor, 0);

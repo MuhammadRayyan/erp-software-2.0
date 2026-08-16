@@ -26,9 +26,11 @@ export default async function BusinessLayout({ children, params }: { children: R
   const cookieStore = await cookies();
   const touchCookie = cookieStore.get(`bt-${businessId}`)?.value;
   const lastTouch = touchCookie ? Number(touchCookie) : 0;
-  if (Date.now() - lastTouch > TOUCH_INTERVAL_MS) {
+  // eslint-disable-next-line react-hooks/purity
+  const now = Date.now();
+  if (now - lastTouch > TOUCH_INTERVAL_MS) {
     touchBusiness(businessId, user.id);
-    cookieStore.set(`bt-${businessId}`, String(Date.now()), {
+    cookieStore.set(`bt-${businessId}`, String(now), {
       maxAge: 60 * 60 * 24 * 30,  // 30 days
       httpOnly: true,
       sameSite: "lax",
