@@ -37,17 +37,17 @@ The seeded Standard User is limited to Sales and Projects so module hiding and d
 Useful commands:
 
 ```bash
-pnpm dev
-pnpm typecheck
-pnpm lint
-pnpm db:migrate
-pnpm db:check
-pnpm db:seed
-pnpm test
-pnpm build
+npm run dev
+npm run typecheck
+npm run lint
+npm run db:migrate
+npm run db:check
+npm run db:seed
+npm run test
+npm run build
 ```
 
-Docker equivalents use `docker compose exec app pnpm <command>`. A non-development run, including `pnpm build`, must have `BETTER_AUTH_SECRET` set.
+Docker equivalents use `docker compose exec app npm run <command>`. A non-development run, including `npm run build`, must have `BETTER_AUTH_SECRET` set.
 
 ## Repository rules
 

@@ -4,7 +4,7 @@ This is the compact source of truth for the code that exists now. Historical pha
 
 ## Stack and architecture
 
-- Node 24 container, pnpm 11, Next.js 16 App Router, React 19, strict TypeScript 6, Tailwind CSS 4, Radix/shadcn-style components, React Hook Form, Zod, and TanStack Table.
+- Node 24 container, npm, Next.js 16 App Router, React 19, strict TypeScript 6, Tailwind CSS 4, Radix/shadcn-style components, React Hook Form, Zod, and TanStack Table.
 - One Next.js application owns UI, server components/actions, authenticated download routes, domain services, and persistence; there is no separate API or worker service.
 - Better Auth provides local email/password auth. The system SQLite database stores auth tables, businesses, and memberships. Each business has a separate SQLite database and attachment directory, accessed with `better-sqlite3`/Drizzle through membership-aware services.
 - Domain logic is server-side; multi-row document posting and accounting/tax/inventory effects use SQLite transactions. Document money remains integer currency-minor units, exchange rates are canonical decimal strings evaluated with `decimal.js`, and quantities support four decimals (`10_000` scale) despite historical `*_micros` names.
@@ -74,7 +74,7 @@ This is the compact source of truth for the code that exists now. Historical pha
 
 - The system schema is version `1`. Business migrations are ordered versions `0`-`9`: baseline, accounting, AR/AP, projects, inventory, banking, UAE VAT, outbound eInvoicing, inbound supplier eInvoicing, and multi-currency foundation. Each database has its own `schema_migrations`; pending migrations run once in individual immediate transactions and perform foreign-key checks.
 - Migration `9` creates business-local currencies/rates, base-currency and realized-FX settings, document/rate/base snapshots, native/base tax snapshots, and foreign/base allocation fields. It backfills existing data as base-currency facts and installs immutability/validation triggers. SQLite cannot add a non-null `REFERENCES` column to a populated table with foreign keys enabled, so legacy document currency columns are backfilled additive columns guarded by equivalent insert/update currency-existence triggers; newly created schema still declares the references in the Drizzle model.
-- `pnpm db:migrate` uses the explicit SQLite runner for dynamically located business databases. Do not use `drizzle-kit push` on real data. Missing/out-of-order/renamed/unknown/newer migration histories are rejected. A history-less legacy database is adopted only after its complete recognized baseline passes schema/index/foreign-key/unique/practical CHECK validation.
+- `npm run db:migrate` uses the explicit SQLite runner for dynamically located business databases. Do not use `drizzle-kit push` on real data. Missing/out-of-order/renamed/unknown/newer migration histories are rejected. A history-less legacy database is adopted only after its complete recognized baseline passes schema/index/foreign-key/unique/practical CHECK validation.
 - Next development and builds intentionally use webpack because Turbopack produced missing route manifests under Compose Watch. Webpack memory optimizations are enabled, and the Compose development process uses a 6 GiB V8 old-space ceiling so sustained multi-route compilation remains below Next's automatic memory-restart threshold within Docker Desktop's configured memory limit. TypeScript is pinned to `6.0.3`; ESLint is pinned to EOL `9.39.5` because `10.8.1` failed with the current Next lint stack. Revisit these together during a deliberate dependency upgrade.
 - The complete pdfme family is pinned to `5.5.10`; `6.1.12` introduced `clawpdf` Node-scheme imports into the browser graph. pdfme is isolated behind `src/modules/document-templates`; do not spread direct imports. Dynamic table pagination is trusted from generated output, not the designer canvas.
 - Compose Watch expects one controller and the app container uses `init: true`. A stale interrupted controller may require `docker compose down` before restart. Development may use the logged Better Auth fallback secret; every non-development process must provide `BETTER_AUTH_SECRET`.
@@ -90,14 +90,14 @@ This is the compact source of truth for the code that exists now. Historical pha
 
 ```bash
 docker compose up --watch
-pnpm typecheck
-pnpm lint
-pnpm db:check
-pnpm test
-pnpm build
+npm run typecheck
+npm run lint
+npm run db:check
+npm run test
+npm run build
 ```
 
-`pnpm build` requires `BETTER_AUTH_SECRET`. `pnpm test` runs the 82 service/migration regressions in `tests/pre-phase-5.test.ts` and `tests/phase-{5,6,7,8,9}.test.ts`; 22 tests specifically cover Phase 9 migration, Decimal math, Sales/Purchases/VAT posting, immutable snapshots, partial/final residuals, FX gains/losses/reversals, cross-currency rejection, inventory, reports, permissions/isolation, PINT boundaries, and backup portability. There is no committed E2E suite. Database setup commands are `pnpm db:migrate` and `pnpm db:seed`. Inside Docker use `docker compose exec app pnpm <command>`.
+`npm run build` requires `BETTER_AUTH_SECRET`. `npm run test` runs the 82 service/migration regressions in `tests/pre-phase-5.test.ts` and `tests/phase-{5,6,7,8,9}.test.ts`; 22 tests specifically cover Phase 9 migration, Decimal math, Sales/Purchases/VAT posting, immutable snapshots, partial/final residuals, FX gains/losses/reversals, cross-currency rejection, inventory, reports, permissions/isolation, PINT boundaries, and backup portability. There is no committed E2E suite. Database setup commands are `npm run db:migrate` and `npm run db:seed`. Inside Docker use `docker compose exec app npm run <command>`.
 
 Last verified after Phase 9 on 11 August 2026: explicit migration and database check passed (system `1`, business `9`, valid foreign keys); TypeScript, ESLint, all 82 tests, and the production webpack build passed. The build used a disposable verification-only `BETTER_AUTH_SECRET`; production still requires its own secret. Compose Watch remained up through sustained compilation/navigation, served the currency settings, Sales Invoice, Receipt, Purchase Invoice, and AR routes with `200` responses, and recorded no application runtime error. Browser QA covered desktop `1440x900` and mobile `390x844`, Light/Dark/System appearance, visible keyboard focus, a non-writing currency-edit interaction, foreign totals/rate/VAT snapshots, base settlement and realized FX detail, report/table containment, zero page-root horizontal overflow after repair, and empty warning/error console output. No accounting document was created or posted during browser QA.
 
