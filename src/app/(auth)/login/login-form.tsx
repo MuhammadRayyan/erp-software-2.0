@@ -18,15 +18,35 @@ export function LoginForm() {
     setPending(true);
     setError("");
     const form = new FormData(event.currentTarget);
+
+    // Pre-flight rate-limit check
+    try {
+      const checkResponse = await fetch("/api/auth-rate-limit", { method: "POST" });
+      if (checkResponse.status === 429) {
+        const data = await checkResponse.json();
+        setError(data.error ?? "Too many attempts. Try again later.");
+        setPending(false);
+        return;
+      }
+    } catch {
+      // Network error — proceed with login attempt anyway
+    }
+
     const result = await authClient.signIn.email({
       email: String(form.get("email")),
       password: String(form.get("password")),
     });
+
     if (result.error) {
+      // Record failed attempt
+      await fetch("/api/auth-rate-limit", { method: "PUT" });
       setError(result.error.message ?? "Sign in failed. Check your details and try again.");
       setPending(false);
       return;
     }
+
+    // Success — clear attempts
+    await fetch("/api/auth-rate-limit", { method: "DELETE" });
     router.replace("/businesses");
     router.refresh();
   }

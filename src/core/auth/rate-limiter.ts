@@ -1,0 +1,60 @@
+// IMPORTANT: This module uses in-memory state and setInterval.
+// It MUST only be imported by API routes (Node runtime), NEVER by middleware (Edge runtime).
+
+const WINDOW_MS = 15 * 60 * 1000;  // 15 minutes
+const MAX_ATTEMPTS = 5;
+
+type Attempt = { count: number; resetAt: number };
+const attempts = new Map<string, Attempt>();
+
+function getClientIp(request: Request): string {
+  const forwarded = request.headers.get("x-forwarded-for");
+  if (forwarded) return forwarded.split(",")[0].trim();
+  const realIp = request.headers.get("x-real-ip");
+  if (realIp) return realIp;
+  return "unknown";
+}
+
+export function checkRateLimit(request: Request): { allowed: boolean; remaining: number; resetAt: number } {
+  const ip = getClientIp(request);
+  const now = Date.now();
+  let attempt = attempts.get(ip);
+
+  if (!attempt || now > attempt.resetAt) {
+    attempt = { count: 0, resetAt: now + WINDOW_MS };
+    attempts.set(ip, attempt);
+  }
+
+  if (attempt.count >= MAX_ATTEMPTS) {
+    return { allowed: false, remaining: 0, resetAt: attempt.resetAt };
+  }
+
+  return { allowed: true, remaining: MAX_ATTEMPTS - attempt.count, resetAt: attempt.resetAt };
+}
+
+export function recordFailedAttempt(request: Request) {
+  const ip = getClientIp(request);
+  const now = Date.now();
+  let attempt = attempts.get(ip);
+
+  if (!attempt || now > attempt.resetAt) {
+    attempt = { count: 0, resetAt: now + WINDOW_MS };
+    attempts.set(ip, attempt);
+  }
+
+  attempt.count += 1;
+}
+
+export function clearAttempts(request: Request) {
+  const ip = getClientIp(request);
+  attempts.delete(ip);
+}
+
+// Periodic cleanup of expired entries (every 5 minutes)
+// Safe here because this module only loads in the Node runtime (API routes).
+setInterval(() => {
+  const now = Date.now();
+  for (const [ip, attempt] of attempts) {
+    if (now > attempt.resetAt) attempts.delete(ip);
+  }
+}, 5 * 60 * 1000);
