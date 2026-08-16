@@ -77,7 +77,7 @@ This is the compact source of truth for the code that exists now. Historical pha
 - [x] Sprint 2: PDF Engine Migration (React PDF + Puppeteer hybrid)
 - [ ] Sprint 3: Document Uploads & GCS
 - [ ] Sprint 4: Theming & UX Polish
-- [ ] Sprint 5: E2E Testing & Playwright
+- [x] Sprint 5: E2E Testing & Playwright
 
 ## Migrations and compatibility deviations
 
@@ -106,9 +106,9 @@ npm run test
 npm run build
 ```
 
-`npm run build` requires `BETTER_AUTH_SECRET`. `npm run test` runs 83 service/migration regressions in `tests/pre-phase-5.test.ts` and `tests/phase-{5,6,7,8,9}.test.ts`; 22 tests specifically cover Phase 9 migration, Decimal math, Sales/Purchases/VAT posting, immutable snapshots, partial/final residuals, FX gains/losses/reversals, cross-currency rejection, inventory, reports, permissions/isolation, PINT boundaries, and backup portability. There is no committed E2E suite. Database setup commands are `npm run db:migrate` and `npm run db:seed`. Inside Docker use `docker compose exec app npm run <command>`.
+`npm run build` requires `BETTER_AUTH_SECRET`. `npm run test` runs 83 service/migration regressions in `tests/pre-phase-5.test.ts` and `tests/phase-{5,6,7,8,9}.test.ts`; 22 tests specifically cover Phase 9 migration, Decimal math, Sales/Purchases/VAT posting, immutable snapshots, partial/final residuals, FX gains/losses/reversals, cross-currency rejection, inventory, reports, permissions/isolation, PINT boundaries, and backup portability. There is a committed Playwright E2E suite covering 28 UI flows run via `npm run test:e2e`. Database setup commands are `npm run db:migrate` and `npm run db:seed`. Inside Docker use `docker compose exec app npm run <command>`.
 
-Last verified after Phase 9 on 11 August 2026: explicit migration and database check passed (system `1`, business `9`, valid foreign keys); TypeScript, ESLint, all 82 tests, and the production webpack build passed. The build used a disposable verification-only `BETTER_AUTH_SECRET`; production still requires its own secret. Compose Watch remained up through sustained compilation/navigation, served the currency settings, Sales Invoice, Receipt, Purchase Invoice, and AR routes with `200` responses, and recorded no application runtime error. Browser QA covered desktop `1440x900` and mobile `390x844`, Light/Dark/System appearance, visible keyboard focus, a non-writing currency-edit interaction, foreign totals/rate/VAT snapshots, base settlement and realized FX detail, report/table containment, zero page-root horizontal overflow after repair, and empty warning/error console output. No accounting document was created or posted during browser QA.
+Last verified after Sprint 5 on 16 August 2026: explicit migration and database check passed; TypeScript, ESLint, all 83 unit tests, 28 E2E tests, and the production webpack build passed. The Playwright suite exhaustively tests layout rendering, navigation boundaries, sidebar links, index grids, and New Entity forms to guarantee absence of 500 crashes and UI FOUCs.
 
 ## Known limitations and deferred work
 
@@ -118,4 +118,4 @@ Last verified after Phase 9 on 11 August 2026: explicit migration and database c
 - The GL and Bank/Cash accounts intentionally remain base-currency only. There are no foreign bank accounts, cross-currency allocations, unrealized revaluation, translation reserve, live/automatic rates, or background FX processing.
 - Electronic Invoicing has no real ASP adapter, direct FTA/Corner-5/TDD call, credential/certificate/key management, endpoint discovery, webhooks, background retry policy, self-billing, B2C eReceipts, automatic AP posting, or broader PINT-AE FX scenarios. Mock acceptance/receipt is never government acceptance or production network receipt.
 - Inbound Credit Notes are validated, archived, identity-matched, and reviewable but cannot create a Purchase Credit Note because that accounting document does not exist. The current Purchase Invoice model also cannot represent source-level allowances/charges or a payable amount different from the invoice total, so those documents remain in review. Prior-invoiced comparison uses deterministic linked-PO line position because Purchase Invoice lines have no PO-line foreign key.
-- There are no queues, Redis, PostgreSQL, microservices, GraphQL/NestJS backend, committed Playwright/UI automation, production deployment, or production observability.
+- There are no queues, Redis, PostgreSQL, microservices, GraphQL/NestJS backend, production deployment, or production observability.

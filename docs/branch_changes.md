@@ -67,3 +67,20 @@ Replaced the legacy `pdfme` dependency with a robust hybrid architecture using `
 - **Schema Migration:** Added `settings_json` and `custom_html` to the `document_templates` table via Migration 10, backfilling legacy templates.
 - **Template Registry:** Introduced `template-registry.tsx` as the single routing hub to dynamically choose between React PDF and HTML rendering.
 - **Classic Template:** The "Classic" standard template style is now fully implemented alongside Modern and Custom HTML, using bordered tables and traditional structural layouts.
+
+## Sprint 5: E2E Testing & Playwright
+
+**Status:** Implemented
+
+Added a comprehensive End-to-End testing suite using Playwright to ensure the stability of UI flows and application boundaries.
+
+### Key Capabilities
+- **Playwright Setup:** Initialized `@playwright/test` connected to `npm run dev`. Configured parallelism and an isolated testing environment.
+- **Automated Demo Auth:** Created `e2e/auth.setup.ts` to log into the application with `admin@demo.local`, select the primary business context, and preserve the session state to `.auth/user.json` to bypass logins for subsequent tests.
+- **Exhaustive Navigation Coverage:** Added test specs across 7 modules (Navigation, Sales, Purchases, Inventory, Banking, Accounting, Settings).
+- **Form Regression Defences:** Covered tests for accessing all primary indexes and "New Entity" forms (Sales Invoice, Purchase Order, Journal Entry, etc.) to guarantee no 500-level rendering crashes block essential user flows.
+
+### Architecture & Implementation Details
+- **Test Command:** Executed via `npm run test:e2e`. Playwright manages the local web server lifecycle (spawns/re-uses `npm run dev` depending on CI mode).
+- **Locator Fixes:** Fixed race conditions (e.g. `await expect(...).toBeVisible()`) between clicking sidebar links and triggering nested links (like "New Item") before the main route had fully hydrated the DOM.
+- **Strict Checks:** Enforced Exact Matches on sidebar names to prevent cross-module pollution (e.g., distinguishing between "Invoices" for Sales and "Purchase Invoices").
