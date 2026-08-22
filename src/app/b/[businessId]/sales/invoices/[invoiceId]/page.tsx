@@ -26,7 +26,7 @@ export default async function InvoiceViewPage({ params, searchParams }: { params
   const linkedProjects = Array.from(new Map(lines.flatMap((line) => line.project ? [[line.project.id, line.project] as const] : [])).values());
   const showLineProjects = linkedProjects.length > 1;
   return (
-    <div className="page-container max-w-[1250px]">
+    <div className="page-container page-wide">
       <NoticeToast message={notice} />
       <Link href={`/b/${businessId}/sales/invoices`} className="mb-5 inline-flex items-center gap-1.5 text-[13px] text-muted-foreground hover:text-foreground"><ArrowLeft className="size-4" /> Sales Invoices</Link>
       <div className="mb-5 flex flex-col justify-between gap-4 lg:flex-row lg:items-start">

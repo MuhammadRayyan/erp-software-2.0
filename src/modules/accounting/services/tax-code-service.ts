@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { cache } from "react";
 import { asc, eq } from "drizzle-orm";
 import { getBusinessDb } from "@/core/db/business";
 import { accounts, taxCodes } from "@/core/db/business-schema";
@@ -33,13 +34,13 @@ function validateTaxAccount(
   return account.id;
 }
 
-export function listTaxCodes(businessId: string, userId: string) {
+export const listTaxCodes = cache((businessId: string, userId: string) => {
   return getBusinessDb(businessId, userId).db
     .select()
     .from(taxCodes)
     .orderBy(asc(taxCodes.rateBasisPoints), asc(taxCodes.name))
     .all();
-}
+});
 
 export function createTaxCode(businessId: string, userId: string, input: TaxCodeInput) {
   const data = taxCodeInputSchema.parse(input);
@@ -127,9 +128,16 @@ export function updateTaxCode(
     .run();
 }
 
-export function getActiveTaxCodes(businessId: string, userId: string) {
-  return listTaxCodes(businessId, userId).filter((taxCode) => taxCode.isActive);
-}
+// Push the is_active filter to SQL instead of JS to avoid a full table scan.
+// Also cached so repeated calls within the same request are free.
+export const getActiveTaxCodes = cache((businessId: string, userId: string) => {
+  return getBusinessDb(businessId, userId).db
+    .select()
+    .from(taxCodes)
+    .where(eq(taxCodes.isActive, true))
+    .orderBy(asc(taxCodes.rateBasisPoints), asc(taxCodes.name))
+    .all();
+});
 
 function validateClassification(
   category: "standard" | "zero_rated" | "exempt" | "out_of_scope" | "reverse_charge" | "import",

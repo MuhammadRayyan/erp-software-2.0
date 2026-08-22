@@ -1,3 +1,4 @@
+import { cache } from "react";
 import { randomUUID } from "node:crypto";
 import { asc, eq } from "drizzle-orm";
 import { getBusinessDb } from "@/core/db/business";
@@ -90,7 +91,7 @@ export function updateSupplier(
   }).where(eq(suppliers.id, supplierId)).run();
 }
 
-export function listActiveSuppliers(businessId: string, userId: string) {
+export const listActiveSuppliers = cache((businessId: string, userId: string) => {
   return getBusinessDb(businessId, userId).db.select().from(suppliers)
     .where(eq(suppliers.isActive, true)).orderBy(asc(suppliers.name)).all();
-}
+});

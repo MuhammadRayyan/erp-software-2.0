@@ -45,9 +45,11 @@ export function LoginForm() {
       return;
     }
 
-    // Success — clear attempts
+    // Success — clear attempts then navigate.
+    // Use router.push + refresh so Next.js re-fetches server state cleanly.
     await fetch("/api/auth-rate-limit", { method: "DELETE" });
-    window.location.href = "/businesses";
+    router.push("/businesses");
+    router.refresh();
   }
 
   return (

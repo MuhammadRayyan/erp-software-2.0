@@ -260,15 +260,19 @@ function insertLines(sqlite: ReturnType<typeof getBusinessDb>["sqlite"], invoice
   for (const line of lines) statement.run(line.id, invoiceId, line.itemId, line.description, line.quantityMicros, line.unitPriceMinor, line.expenseAccountId, line.taxCodeId, line.projectId, line.netAmountMinor, line.taxAmountMinor, line.grossAmountMinor, line.position);
 }
 
+const PAID_MINOR_FRAGMENT = `
+  COALESCE((SELECT SUM(spa.amount_minor) FROM supplier_payment_allocations spa
+    INNER JOIN supplier_payments sp ON sp.id = spa.payment_id AND sp.document_status = 'posted'
+    WHERE spa.purchase_invoice_id = pi.id), 0)
+`;
+
 export function listPurchaseInvoices(businessId: string, userId: string, supplierId?: string) {
   const { sqlite } = getBusinessDb(businessId, userId);
   const where = supplierId ? "WHERE pi.supplier_id = ?" : "";
   const rows = sqlite.prepare(`
     SELECT pi.*, s.name AS supplier_name, cur.minor_unit AS currency_minor_unit,
       (SELECT GROUP_CONCAT(DISTINCT COALESCE(l.project_id, pi.project_id)) FROM purchase_invoice_lines l WHERE l.purchase_invoice_id = pi.id) AS project_ids,
-      COALESCE((SELECT SUM(spa.amount_minor) FROM supplier_payment_allocations spa
-        INNER JOIN supplier_payments sp ON sp.id = spa.payment_id AND sp.document_status = 'posted'
-        WHERE spa.purchase_invoice_id = pi.id), 0) AS paid_minor
+      (${PAID_MINOR_FRAGMENT}) AS paid_minor
     FROM purchase_invoices pi
     INNER JOIN suppliers s ON s.id = pi.supplier_id
     INNER JOIN currencies cur ON cur.code = pi.currency_code
@@ -294,13 +298,27 @@ export function getPurchaseInvoice(businessId: string, userId: string, invoiceId
   const header = context.db.select({ invoice: purchaseInvoices, supplier: suppliers }).from(purchaseInvoices).innerJoin(suppliers, eq(suppliers.id, purchaseInvoices.supplierId)).where(eq(purchaseInvoices.id, invoiceId)).get();
   if (!header) return null;
   const lines = context.db.select().from(purchaseInvoiceLines).where(eq(purchaseInvoiceLines.purchaseInvoiceId, invoiceId)).orderBy(asc(purchaseInvoiceLines.position)).all();
-  const accounts = context.sqlite.prepare("SELECT id, code, name FROM accounts").all() as { id: string; code: string; name: string }[];
-  const taxes = context.sqlite.prepare("SELECT id, name, rate_basis_points FROM tax_codes").all() as { id: string; name: string; rate_basis_points: number }[];
-  const projects = context.sqlite.prepare("SELECT id, code, name FROM projects").all() as { id: string; code: string; name: string }[];
+  const lineAccountIds = [...new Set(lines.map(l => l.expenseAccountId))];
+  const lineTaxCodeIds = [...new Set(lines.map(l => l.taxCodeId))];
+  const lineItemIds = [...new Set(lines.map(l => l.itemId).filter(Boolean))] as string[];
+  const projectIds = [...new Set([header.invoice.projectId, ...lines.map(l => l.projectId)].filter(Boolean))] as string[];
+
+  const accounts = lineAccountIds.length > 0
+    ? context.sqlite.prepare(`SELECT id, code, name FROM accounts WHERE id IN (${lineAccountIds.map(() => '?').join(',')})`).all(...lineAccountIds) as { id: string; code: string; name: string }[]
+    : [];
+  const taxes = lineTaxCodeIds.length > 0
+    ? context.sqlite.prepare(`SELECT id, name, rate_basis_points FROM tax_codes WHERE id IN (${lineTaxCodeIds.map(() => '?').join(',')})`).all(...lineTaxCodeIds) as { id: string; name: string; rate_basis_points: number }[]
+    : [];
+  const projects = projectIds.length > 0
+    ? context.sqlite.prepare(`SELECT id, code, name FROM projects WHERE id IN (${projectIds.map(() => '?').join(',')})`).all(...projectIds) as { id: string; code: string; name: string }[]
+    : [];
+  const itemRows = lineItemIds.length > 0
+    ? context.sqlite.prepare(`SELECT id, sku, name, unit_name FROM inventory_items WHERE id IN (${lineItemIds.map(() => '?').join(',')})`).all(...lineItemIds) as { id: string; sku: string | null; name: string; unit_name: string }[]
+    : [];
+
   const accountById = new Map(accounts.map((row) => [row.id, row]));
   const taxById = new Map(taxes.map((row) => [row.id, row]));
   const projectById = new Map(projects.map((row) => [row.id, row]));
-  const itemRows = context.sqlite.prepare("SELECT id, sku, name, unit_name FROM inventory_items").all() as { id: string; sku: string | null; name: string; unit_name: string }[];
   const itemById = new Map(itemRows.map((item) => [item.id, item]));
   const paidMinor = paidForPurchaseInvoice(context.sqlite, invoiceId);
   const payments = context.sqlite.prepare(`SELECT sp.id, sp.payment_number, sp.date, sp.reference, spa.amount_minor AS allocated_minor FROM supplier_payment_allocations spa INNER JOIN supplier_payments sp ON sp.id = spa.payment_id WHERE spa.purchase_invoice_id = ? AND sp.document_status = 'posted' ORDER BY sp.date DESC, sp.created_at DESC`).all(invoiceId) as { id: string; payment_number: string; date: string; reference: string | null; allocated_minor: number }[];
@@ -493,7 +511,9 @@ export function savePurchaseInvoice(
 export function duplicatePurchaseInvoice(businessId: string, userId: string, invoiceId: string) {
   const record = getPurchaseInvoice(businessId, userId, invoiceId);
   if (!record) throw new Error("Purchase invoice not found.");
-  const minorUnit = getCurrency(getBusinessDb(businessId, userId).sqlite, record.invoice.currencyCode).minor_unit;
+  // Reuse the already-fetched DB context rather than calling getBusinessDb a second time.
+  const context = getBusinessDb(businessId, userId);
+  const minorUnit = getCurrency(context.sqlite, record.invoice.currencyCode).minor_unit;
   return savePurchaseInvoice(businessId, userId, {
     supplierId: record.invoice.supplierId, projectId: record.invoice.projectId ?? "",
     currencyCode: record.invoice.currencyCode, exchangeRateToBase: record.invoice.exchangeRateToBase,

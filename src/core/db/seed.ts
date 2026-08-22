@@ -105,25 +105,25 @@ export async function seedDemoData() {
   const emberlineId = ensureCustomer(business.id, admin.id, {
     name: "Emberline Trading LLC",
     email: "accounts@emberline.example",
-    phone: "+971 4 555 0142",
+    phone: "+97145550142",
     taxReference: "100000000000003",
   });
   const abcId = ensureCustomer(business.id, admin.id, {
     name: "ABC Trading LLC",
     email: "finance@abctrading.example",
-    phone: "+971 4 555 0188",
+    phone: "+97145550188",
     taxReference: "100000000000011",
   });
   const duneId = ensureCustomer(business.id, admin.id, {
     name: "Dune Facilities Management",
     email: "payables@dunefm.example",
-    phone: "+971 2 555 0170",
+    phone: "+97125550170",
     taxReference: "100000000000029",
   });
   const deltaId = ensureCustomer(business.id, admin.id, {
     name: "Delta LLC",
     email: "accounts@delta.example",
-    phone: "+971 4 555 0197",
+    phone: "+97145550197",
     taxReference: "100000000000061",
   });
 
@@ -233,7 +233,7 @@ export async function seedDemoData() {
   updateCustomer(business.id, admin.id, emberlineId, {
     name: "Emberline Trading LLC",
     email: "accounts@emberline.example",
-    phone: "+971 4 555 0142",
+    phone: "+97145550142",
     taxReference: "100000000000003",
     legalName: "Emberline Trading LLC",
     trn: "134567890123003",
@@ -307,9 +307,9 @@ export async function seedDemoData() {
   });
 
   const foreignCustomerId = listCustomers(business.id, admin.id).find((customer) => customer.name === "Orion Export Services")?.id
-    ?? createCustomer(business.id, admin.id, { name: "Orion Export Services", email: "finance@orion.example", phone: "+1 555 0100", taxReference: "", defaultCurrencyCode: "USD" });
+    ?? createCustomer(business.id, admin.id, { name: "Orion Export Services", email: "finance@orion.example", phone: "+15550100", taxReference: "", defaultCurrencyCode: "USD" });
   const foreignSupplierId = listSuppliers(business.id, admin.id).find((supplier) => supplier.name === "Meridian Components Inc.")?.id
-    ?? createSupplier(business.id, admin.id, { name: "Meridian Components Inc.", email: "billing@meridian.example", phone: "+1 555 0110", taxReference: "", address: "United States", notes: "Phase 9 foreign-currency demo Supplier", isActive: true, defaultCurrencyCode: "USD" });
+    ?? createSupplier(business.id, admin.id, { name: "Meridian Components Inc.", email: "billing@meridian.example", phone: "+15550110", taxReference: "", address: "United States", notes: "Phase 9 foreign-currency demo Supplier", isActive: true, defaultCurrencyCode: "USD" });
   const foreignSalesReference = "DEMO-FX-USD-SALES";
   const foreignSalesInvoice = findInvoiceByReference(business.id, admin.id, foreignSalesReference);
   const foreignSalesInvoiceId = foreignSalesInvoice?.id ?? createInvoice(business.id, admin.id, {

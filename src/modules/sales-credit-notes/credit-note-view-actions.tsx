@@ -53,7 +53,7 @@ export function CreditNoteViewActions({
     <div className="flex flex-wrap gap-2">
       {documentStatus !== "void" && !eInvoiceLocked && <Button asChild><Link href={`/b/${businessId}/sales/credit-notes/${noteId}/edit`}><Pencil className="size-4" /> Edit</Link></Button>}
       <Button asChild variant="secondary"><a href={`/api/businesses/${businessId}/documents/sales-credit-note/${noteId}/pdf`} target="_blank" rel="noreferrer"><Download className="size-4" /> Print / PDF</a></Button>
-      <DropdownMenu><DropdownMenuTrigger asChild><Button variant="secondary">More <MoreHorizontal className="size-4" /></Button></DropdownMenuTrigger><DropdownMenuContent align="end">
+      <DropdownMenu><DropdownMenuTrigger asChild><Button variant="secondary" aria-label="More actions">More <MoreHorizontal className="size-4" /></Button></DropdownMenuTrigger><DropdownMenuContent align="end">
         <DropdownMenuItem disabled={pending} onSelect={() => void duplicate()}><Copy className="size-4" /> Duplicate</DropdownMenuItem>
         {journalEntryId && <DropdownMenuItem asChild><Link href={`/b/${businessId}/accounting/journal/${journalEntryId}`}><BookOpenText className="size-4" /> View Journal Entry</Link></DropdownMenuItem>}
         {documentStatus !== "void" && !eInvoiceLocked && <DropdownMenuSeparator />}

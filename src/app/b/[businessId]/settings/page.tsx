@@ -16,7 +16,7 @@ export default async function SettingsPage({ params }: { params: Promise<{ busin
     { title: "Document templates", description: "Customize invoice layout, branding, colors, and font. Supports React PDF (modern/classic) or custom HTML templates.", href: `/b/${businessId}/settings/document-templates`, icon: FileText },
   ];
   return (
-    <div className="page-container max-w-[1050px]">
+    <div className="page-container page-medium">
       <div className="page-header"><div><h1 className="page-title">Settings</h1><p className="page-description">Business-specific accounting, access, and document presentation.</p></div></div>
       <div className="grid gap-3 sm:grid-cols-2">
         {items.map((item) => (

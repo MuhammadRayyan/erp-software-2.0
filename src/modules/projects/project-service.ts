@@ -1,3 +1,4 @@
+import { cache } from "react";
 import { randomUUID } from "node:crypto";
 import { getBusinessDb } from "@/core/db/business";
 import { minorToInput, parseMoneyToMinor } from "@/modules/accounting/calculations/money";
@@ -62,7 +63,7 @@ export function listProjects(businessId: string, userId: string, customerId?: st
   }));
 }
 
-export function listProjectOptions(businessId: string, userId: string) {
+export const listProjectOptions = cache((businessId: string, userId: string) => {
   const { sqlite } = getBusinessDb(businessId, userId);
   return sqlite.prepare(`
     SELECT id, code, name, customer_id, status
@@ -70,7 +71,7 @@ export function listProjectOptions(businessId: string, userId: string) {
     WHERE is_active = 1 AND status <> 'cancelled'
     ORDER BY CASE status WHEN 'active' THEN 0 WHEN 'draft' THEN 1 WHEN 'on_hold' THEN 2 ELSE 3 END, code
   `).all() as { id: string; code: string; name: string; customer_id: string | null; status: ProjectStatus }[];
-}
+});
 
 export function getProject(businessId: string, userId: string, projectId: string) {
   const { sqlite } = getBusinessDb(businessId, userId);

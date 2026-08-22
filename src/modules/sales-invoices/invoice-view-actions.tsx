@@ -74,7 +74,7 @@ export function InvoiceViewActions({
         <Button variant="secondary" className="hidden md:inline-flex" title="Email delivery is planned for a later phase" disabled><Mail className="size-4" /> Email (later)</Button>
         <Button asChild variant="secondary" className="hidden md:inline-flex"><a href={`/api/businesses/${businessId}/invoices/${invoiceId}/pdf`} target="_blank" rel="noreferrer"><Download className="size-4" /> Print / PDF</a></Button>
         <DropdownMenu>
-          <DropdownMenuTrigger asChild><Button variant="secondary">More <MoreHorizontal className="size-4" /></Button></DropdownMenuTrigger>
+          <DropdownMenuTrigger asChild><Button variant="secondary" aria-label="More actions">More <MoreHorizontal className="size-4" /></Button></DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="w-52">
             <DropdownMenuItem className="md:hidden" title="Email delivery is planned for a later phase" disabled><Mail className="size-4" /> Email (later)</DropdownMenuItem>
             <DropdownMenuItem asChild className="md:hidden"><a href={`/api/businesses/${businessId}/invoices/${invoiceId}/pdf`} target="_blank"><Download className="size-4" /> Print / PDF</a></DropdownMenuItem>

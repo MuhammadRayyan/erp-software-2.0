@@ -31,7 +31,7 @@ export default async function NewReceiptPage({
   const today = new Date().toISOString().slice(0, 10);
 
   return (
-    <div className="page-container max-w-[900px]">
+    <div className="page-container page-narrow">
       <Link href={invoiceId ? `/b/${businessId}/sales/invoices/${invoiceId}` : `/b/${businessId}/sales/invoices`} className="mb-5 inline-flex items-center gap-1.5 text-[13px] text-muted-foreground hover:text-foreground">
         <ArrowLeft className="size-4" /> {selected?.invoiceNumber ?? "Sales Invoices"}
       </Link>

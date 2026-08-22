@@ -65,7 +65,7 @@ export default async function ReportsPage({ params }: { params: Promise<{ busine
   if (access.modules.includes("banking")) visibleGroups.push(bankingGroup);
   if (access.modules.includes("inventory")) visibleGroups.push(inventoryGroup);
   return (
-    <div className="page-container max-w-[1050px]">
+    <div className="page-container page-medium">
       <div className="page-header"><div><h1 className="page-title">Reports</h1><p className="page-description">Focused receivables, payables, accounting, Project, Banking, Inventory, and UAE VAT working papers.</p></div></div>
       <div className="space-y-6">
         {visibleGroups.map((group) => <section key={group.title}><h2 className="mb-2 text-xs font-semibold tracking-[0.1em] text-muted-foreground uppercase">{group.title}</h2><div className="data-panel divide-y divide-border">{group.reports.map((report) => <Link key={report.path} href={`/b/${businessId}${report.path}`} className="group flex min-h-18 items-center gap-4 px-4 py-3 hover:bg-surface-muted"><span className="grid size-9 shrink-0 place-items-center rounded-md bg-accent text-accent-foreground"><report.icon className="size-4" /></span><span className="min-w-0 flex-1"><span className="font-medium">{report.title}</span><span className="mt-0.5 block text-sm text-muted-foreground">{report.description}</span></span><ArrowRight className="size-4 text-muted-foreground transition-transform group-hover:translate-x-0.5" /></Link>)}</div></section>)}

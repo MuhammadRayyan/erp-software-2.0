@@ -22,7 +22,7 @@ export default async function PurchaseOrderViewPage({ params, searchParams }: { 
   const currency = order.currencyCode;
   const linkedProjects = Array.from(new Map(lines.flatMap((line) => line.project ? [[line.project.id, line.project] as const] : [])).values());
   const showLineProjects = linkedProjects.length > 1;
-  return <div className="page-container max-w-[1250px]">
+  return <div className="page-container page-wide">
     <NoticeToast message={notice} />
     <Link href={`/b/${businessId}/purchases/orders`} className="mb-5 inline-flex items-center gap-1.5 text-[13px] text-muted-foreground hover:text-foreground"><ArrowLeft className="size-4" /> Purchase Orders</Link>
     <div className="mb-5 flex flex-col justify-between gap-4 lg:flex-row lg:items-start"><div><div className="flex flex-wrap items-center gap-2"><h1 className="page-title tabular">{order.orderNumber}</h1><Badge tone={tones[order.status]}>{order.status[0].toUpperCase() + order.status.slice(1)}</Badge></div><p className="mt-2 text-base font-medium">{supplier.name}</p><p className="mt-1 text-sm text-muted-foreground">Order date: {formatDate(order.date)}{order.expectedDate ? ` · Expected: ${formatDate(order.expectedDate)}` : ""}</p><div className="mt-3 flex flex-wrap items-baseline gap-4"><span className="money text-xl font-semibold">{formatMoney(order.totalMinor, currency)}</span><span className="text-sm text-muted-foreground">No ledger impact</span></div></div><PurchaseOrderViewActions businessId={businessId} orderId={order.id} orderNumber={order.orderNumber} status={order.status} inventoryEnabled={access.modules.includes("inventory")} hasReceivableItems={lines.some((line) => Boolean(line.itemId) && line.remainingMicros > 0)} /></div>

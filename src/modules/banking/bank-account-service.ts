@@ -20,8 +20,9 @@ export type BankAccountRow = {
   unreconciled_count: number;
 };
 
-function accountSelect() {
-  return `
+// SQL fragment reused for both list and single-record queries — defined once
+// at module level to avoid rebuilding the string on every invocation.
+const ACCOUNT_SELECT = `
     SELECT ba.id, ba.name, ba.account_code, ba.bank_name, ba.account_number_masked,
       ba.currency_code, ba.ledger_account_id, ba.is_cash_account, ba.is_active,
       a.code AS ledger_code, a.name AS ledger_name,
@@ -43,16 +44,15 @@ function accountSelect() {
     FROM bank_accounts ba
     INNER JOIN accounts a ON a.id = ba.ledger_account_id
   `;
-}
 
 export const listBankAccounts = cache((businessId: string, userId: string, includeInactive = true) => {
   const { sqlite } = getBusinessDb(businessId, userId);
-  return sqlite.prepare(`${accountSelect()} ${includeInactive ? "" : "WHERE ba.is_active = 1"} ORDER BY ba.is_active DESC, ba.name`).all() as BankAccountRow[];
+  return sqlite.prepare(`${ACCOUNT_SELECT} ${includeInactive ? "" : "WHERE ba.is_active = 1"} ORDER BY ba.is_active DESC, ba.name`).all() as BankAccountRow[];
 });
 
 export function getBankAccount(businessId: string, userId: string, bankAccountId: string) {
   const { sqlite } = getBusinessDb(businessId, userId);
-  return sqlite.prepare(`${accountSelect()} WHERE ba.id = ?`).get(bankAccountId) as BankAccountRow | undefined;
+  return sqlite.prepare(`${ACCOUNT_SELECT} WHERE ba.id = ?`).get(bankAccountId) as BankAccountRow | undefined;
 }
 
 export function listBankLedgerOptions(businessId: string, userId: string, currentBankAccountId?: string) {

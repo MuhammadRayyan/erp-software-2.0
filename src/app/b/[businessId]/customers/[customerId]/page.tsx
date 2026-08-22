@@ -26,7 +26,7 @@ export default async function CustomerPage({ params, searchParams }: { params: P
   const canViewProjects = access.modules.includes("projects");
   const projects = canViewProjects ? listProjects(businessId, user.id, customerId) : [];
   const currency = access.business.currency;
-  return <div className="page-container max-w-[1200px]">
+  return <div className="page-container page-wide">
     <NoticeToast message={notice} />
     <Link href={`/b/${businessId}/customers`} className="mb-5 inline-flex items-center gap-1.5 text-[13px] text-muted-foreground hover:text-foreground"><ArrowLeft className="size-4" /> Customers</Link>
     <div className="page-header">

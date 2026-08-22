@@ -159,6 +159,24 @@ function insertLines(
   }
 }
 
+const ALLOCATED_MINOR_FRAGMENT = `
+  COALESCE((SELECT SUM(ra.amount_minor) FROM receipt_allocations ra
+    INNER JOIN receipts r ON r.id = ra.receipt_id AND r.document_status = 'posted'
+    WHERE ra.sales_invoice_id = i.id), 0)
+  + COALESCE((SELECT SUM(scna.amount_minor) FROM sales_credit_note_allocations scna
+    INNER JOIN sales_credit_notes scn ON scn.id = scna.credit_note_id AND scn.document_status = 'posted'
+    WHERE scna.sales_invoice_id = i.id), 0)
+`;
+
+const ALLOCATED_BASE_MINOR_FRAGMENT = `
+  COALESCE((SELECT SUM(ra.base_carrying_amount_released) FROM receipt_allocations ra
+    INNER JOIN receipts r ON r.id = ra.receipt_id AND r.document_status = 'posted'
+    WHERE ra.sales_invoice_id = i.id), 0)
+  + COALESCE((SELECT SUM(scna.base_carrying_amount_released) FROM sales_credit_note_allocations scna
+    INNER JOIN sales_credit_notes scn ON scn.id = scna.credit_note_id AND scn.document_status = 'posted'
+    WHERE scna.sales_invoice_id = i.id), 0)
+`;
+
 function listInvoiceRows(
   businessId: string,
   userId: string,
@@ -175,18 +193,8 @@ function listInvoiceRows(
              i.updated_at,
              (SELECT GROUP_CONCAT(DISTINCT COALESCE(l.project_id, i.project_id))
                 FROM sales_invoice_lines l WHERE l.invoice_id = i.id) AS project_ids,
-             COALESCE((SELECT SUM(ra.amount_minor) FROM receipt_allocations ra
-               INNER JOIN receipts r ON r.id = ra.receipt_id AND r.document_status = 'posted'
-               WHERE ra.sales_invoice_id = i.id), 0)
-             + COALESCE((SELECT SUM(scna.amount_minor) FROM sales_credit_note_allocations scna
-               INNER JOIN sales_credit_notes scn ON scn.id = scna.credit_note_id AND scn.document_status = 'posted'
-               WHERE scna.sales_invoice_id = i.id), 0) AS allocated_minor,
-             COALESCE((SELECT SUM(ra.base_carrying_amount_released) FROM receipt_allocations ra
-               INNER JOIN receipts r ON r.id = ra.receipt_id AND r.document_status = 'posted'
-               WHERE ra.sales_invoice_id = i.id), 0)
-             + COALESCE((SELECT SUM(scna.base_carrying_amount_released) FROM sales_credit_note_allocations scna
-               INNER JOIN sales_credit_notes scn ON scn.id = scna.credit_note_id AND scn.document_status = 'posted'
-               WHERE scna.sales_invoice_id = i.id), 0) AS allocated_base_minor
+             (${ALLOCATED_MINOR_FRAGMENT}) AS allocated_minor,
+             (${ALLOCATED_BASE_MINOR_FRAGMENT}) AS allocated_base_minor
       FROM sales_invoices i
       INNER JOIN customers c ON c.id = i.customer_id
       INNER JOIN currencies cur ON cur.code = i.currency_code
@@ -268,19 +276,27 @@ export function getInvoice(businessId: string, userId: string, invoiceId: string
     .where(eq(salesInvoiceLines.invoiceId, invoiceId))
     .orderBy(asc(salesInvoiceLines.position))
     .all();
-  const accountRows = context.sqlite.prepare("SELECT id, code, name FROM accounts").all() as {
-    id: string;
-    code: string;
-    name: string;
-  }[];
-  const taxCodeRows = context.sqlite
-    .prepare("SELECT id, name, rate_basis_points FROM tax_codes")
-    .all() as { id: string; name: string; rate_basis_points: number }[];
+  const lineAccountIds = [...new Set(lines.map(l => l.salesAccountId))];
+  const lineTaxCodeIds = [...new Set(lines.map(l => l.taxCodeId))];
+  const lineItemIds = [...new Set(lines.map(l => l.itemId).filter(Boolean))] as string[];
+  const projectIds = [...new Set([header.invoice.projectId, ...lines.map(l => l.projectId)].filter(Boolean))] as string[];
+
+  const accountRows = lineAccountIds.length > 0
+    ? context.sqlite.prepare(`SELECT id, code, name FROM accounts WHERE id IN (${lineAccountIds.map(() => '?').join(',')})`).all(...lineAccountIds) as { id: string; code: string; name: string }[]
+    : [];
+  const taxCodeRows = lineTaxCodeIds.length > 0
+    ? context.sqlite.prepare(`SELECT id, name, rate_basis_points FROM tax_codes WHERE id IN (${lineTaxCodeIds.map(() => '?').join(',')})`).all(...lineTaxCodeIds) as { id: string; name: string; rate_basis_points: number }[]
+    : [];
+  const projectRows = projectIds.length > 0
+    ? context.sqlite.prepare(`SELECT id, code, name FROM projects WHERE id IN (${projectIds.map(() => '?').join(',')})`).all(...projectIds) as { id: string; code: string; name: string }[]
+    : [];
+  const itemRows = lineItemIds.length > 0
+    ? context.sqlite.prepare(`SELECT id, sku, name, unit_name FROM inventory_items WHERE id IN (${lineItemIds.map(() => '?').join(',')})`).all(...lineItemIds) as { id: string; sku: string | null; name: string; unit_name: string }[]
+    : [];
+
   const accountById = new Map(accountRows.map((account) => [account.id, account]));
   const taxCodeById = new Map(taxCodeRows.map((taxCode) => [taxCode.id, taxCode]));
-  const projectRows = context.sqlite.prepare("SELECT id, code, name FROM projects").all() as { id: string; code: string; name: string }[];
   const projectById = new Map(projectRows.map((project) => [project.id, project]));
-  const itemRows = context.sqlite.prepare("SELECT id, sku, name, unit_name FROM inventory_items").all() as { id: string; sku: string | null; name: string; unit_name: string }[];
   const itemById = new Map(itemRows.map((item) => [item.id, item]));
   const deliveredRows = context.sqlite.prepare(`SELECT dnl.sales_invoice_line_id AS line_id, SUM(dnl.quantity_micros) AS delivered_micros FROM delivery_note_lines dnl INNER JOIN delivery_notes dn ON dn.id = dnl.delivery_note_id AND dn.document_status = 'posted' WHERE dn.sales_invoice_id = ? GROUP BY dnl.sales_invoice_line_id`).all(invoiceId) as { line_id: string; delivered_micros: number }[];
   const deliveredByLine = new Map(deliveredRows.map((row) => [row.line_id, row.delivered_micros]));
@@ -583,7 +599,9 @@ export function deleteInvoice(businessId: string, userId: string, invoiceId: str
 export function duplicateInvoice(businessId: string, userId: string, invoiceId: string) {
   const record = getInvoice(businessId, userId, invoiceId);
   if (!record) throw new Error("Invoice not found.");
-  const minorUnit = getCurrency(getBusinessDb(businessId, userId).sqlite, record.invoice.currencyCode).minor_unit;
+  // Reuse the already-fetched DB context (via the LRU pool) rather than calling getBusinessDb a second time.
+  const context = getBusinessDb(businessId, userId);
+  const minorUnit = getCurrency(context.sqlite, record.invoice.currencyCode).minor_unit;
   return createInvoice(
     businessId,
     userId,

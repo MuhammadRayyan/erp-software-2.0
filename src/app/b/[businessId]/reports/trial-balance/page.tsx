@@ -15,7 +15,7 @@ export default async function TrialBalancePage({ params, searchParams }: { param
   const report = getTrialBalance(businessId, user.id, throughDate);
   const balanced = report.debitMinor === report.creditMinor;
   return (
-    <div className="page-container max-w-[1050px]">
+    <div className="page-container page-medium">
       <Link href={`/b/${businessId}/reports`} className="mb-5 inline-flex items-center gap-1.5 text-[13px] text-muted-foreground hover:text-foreground"><ArrowLeft className="size-4" /> Reports</Link>
       <div className="page-header"><div><h1 className="page-title">Trial Balance</h1><p className="page-description">Net account balances from all posted entries through the selected date.</p></div><Badge tone={balanced ? "success" : "danger"}>{balanced ? "Balanced" : "Out of balance"}</Badge></div>
       <form className="mb-4 flex flex-wrap items-end gap-3 rounded-lg border border-border bg-surface p-3"><label className="space-y-1 text-xs text-muted-foreground">Through date<Input name="throughDate" type="date" defaultValue={throughDate} className="mt-1 w-44 text-foreground" /></label><Button type="submit" variant="secondary">Apply</Button></form>

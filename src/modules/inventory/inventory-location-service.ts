@@ -1,15 +1,16 @@
+import { cache } from "react";
 import { randomUUID } from "node:crypto";
 import { getBusinessDb } from "@/core/db/business";
 import { inventoryLocationInputSchema, type InventoryLocationInput } from "./inventory-location-input";
 
-export function listInventoryLocations(businessId: string, userId: string, activeOnly = false) {
+export const listInventoryLocations = cache((businessId: string, userId: string, activeOnly = false) => {
   const { sqlite } = getBusinessDb(businessId, userId);
   return sqlite.prepare(`SELECT l.*,
     COALESCE((SELECT SUM(quantity_delta_micros) FROM inventory_movements m WHERE m.location_id = l.id), 0) AS quantity_micros,
     COALESCE((SELECT SUM(value_delta_minor) FROM inventory_movements m WHERE m.location_id = l.id), 0) AS value_minor
     FROM inventory_locations l ${activeOnly ? "WHERE l.is_active = 1" : ""}
     ORDER BY l.is_default DESC, l.code`).all() as Array<Record<string, unknown> & { id: string; code: string; name: string }>;
-}
+});
 
 export function getDefaultInventoryLocation(businessId: string, userId: string) {
   const locations = listInventoryLocations(businessId, userId, true);

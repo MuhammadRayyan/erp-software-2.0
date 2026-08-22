@@ -49,7 +49,7 @@ export default async function ReceiptsPage({
         </div>
       ) : (
         <div className="rounded-lg border border-dashed border-border-strong bg-surface py-12 text-center">
-          <h2 className="font-semibold">No Receipts yet</h2>
+          <h2 className="font-semibold">No receipts yet</h2>
           <p className="mt-1 text-sm text-muted-foreground">Record a customer collection from a posted invoice.</p>
         </div>
       )}

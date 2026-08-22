@@ -28,7 +28,7 @@ export default async function AppearanceSettingsPage({ params }: { params: Promi
   }
 
   return (
-    <div className="page-container max-w-[980px]">
+    <div className="page-container page-medium">
       <Link href={`/b/${businessId}/settings`} className="mb-5 inline-flex items-center gap-1.5 text-[13px] text-muted-foreground hover:text-foreground">
         <ArrowLeft className="size-4" /> Settings
       </Link>

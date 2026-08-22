@@ -6,11 +6,13 @@ import { customerInputSchema, type CustomerInput } from "./customer-input";
 import { getBaseCurrency, getCurrency } from "@/modules/currency/currency";
 
 export function listCustomers(businessId: string, userId: string, includeInactive = false) {
-  let query = getBusinessDb(businessId, userId).db.select().from(customers);
-  if (!includeInactive) {
-    query = query.where(eq(customers.isActive, true)) as any;
-  }
-  return query.orderBy(asc(customers.name)).all();
+  const db = getBusinessDb(businessId, userId).db;
+  return db
+    .select()
+    .from(customers)
+    .where(includeInactive ? undefined : eq(customers.isActive, true))
+    .orderBy(asc(customers.name))
+    .all();
 }
 
 export function getCustomer(businessId: string, userId: string, customerId: string) {

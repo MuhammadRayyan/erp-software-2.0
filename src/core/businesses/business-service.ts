@@ -30,7 +30,9 @@ export const getBusinessForUser = cache((businessId: string, userId: string) => 
       memberships,
       and(eq(memberships.businessId, businesses.id), eq(memberships.userId, userId)),
     )
-    .where(eq(businesses.id, businessId))
+    // Include archived = false to be consistent with getBusinessAccess and getBusinessDb.
+    // Without this, touchBusiness (and any other caller) could interact with an archived business.
+    .where(and(eq(businesses.id, businessId), eq(businesses.archived, false)))
     .get();
 });
 

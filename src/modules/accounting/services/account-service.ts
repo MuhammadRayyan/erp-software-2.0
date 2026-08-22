@@ -1,3 +1,4 @@
+import { cache } from "react";
 import { randomUUID } from "node:crypto";
 import { asc, eq } from "drizzle-orm";
 import { getBusinessDb } from "@/core/db/business";
@@ -10,13 +11,13 @@ function validateSubtype(data: ReturnType<typeof accountInputSchema.parse>) {
   }
 }
 
-export function listAccounts(businessId: string, userId: string) {
+export const listAccounts = cache((businessId: string, userId: string) => {
   return getBusinessDb(businessId, userId).db
     .select()
     .from(accounts)
     .orderBy(asc(accounts.code))
     .all();
-}
+});
 
 export function createAccount(businessId: string, userId: string, input: AccountInput) {
   const data = accountInputSchema.parse(input);

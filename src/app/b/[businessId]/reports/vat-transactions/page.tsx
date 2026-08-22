@@ -1,5 +1,6 @@
+import { BackLink } from "@/components/back-link";
 import Link from "next/link";
-import { ArrowLeft, Download, Search, X } from "lucide-react";
+import { Download, Search, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -45,17 +46,17 @@ export default async function VatTransactionsPage({
     ? `/b/${businessId}/tax/vat/periods/${query.periodId}`
     : `/b/${businessId}/reports`;
 
-  return <div className="page-container max-w-[1240px]">
-    <Link href={backHref} className="mb-5 inline-flex items-center gap-1.5 text-[13px] text-muted-foreground hover:text-foreground">
-      <ArrowLeft className="size-4" /> Back
-    </Link>
+  return <div className="page-container page-wide">
+    <BackLink href={backHref}>Back</BackLink>
     <div className="page-header">
       <div>
         <h1 className="page-title">VAT Transaction Detail</h1>
         <p className="page-description">Posted source tax detail with preserved classifications and drill-down totals.</p>
       </div>
-      <Button asChild variant="secondary">
-        <a href={`/api/businesses/${businessId}/tax/vat/export?type=detail&${detailQuery}`}><Download className="size-4" /> Export CSV</a>
+      <Button asChild variant="secondary" size="sm">
+        <a href={`/api/businesses/${businessId}/tax/vat/export?type=detail&${detailQuery}`}>
+          <Download className="size-4" /> Export CSV
+        </a>
       </Button>
     </div>
 
