@@ -1,3 +1,4 @@
+import type { ValidationIssue } from "../einvoicing/einvoice-types";
 export const inboundEInvoiceStatuses = [
   "Received",
   "ValidationFailed",
@@ -69,12 +70,7 @@ export type CanonicalInboundEInvoice = {
   amountDueMinor: number;
 };
 
-export type InboundValidationIssue = {
-  layer: "security" | "parsing" | "pint-ubl" | "pint-ae" | "business" | "mapping";
-  ruleId: string;
-  message: string;
-  path?: string;
-};
+
 
 export type InboundValidationReport = {
   valid: boolean;
@@ -88,7 +84,7 @@ export type InboundValidationReport = {
     business: { valid: boolean; issueCount: number };
     mapping: { valid: boolean; issueCount: number };
   };
-  issues: InboundValidationIssue[];
+  issues: ValidationIssue[];
 };
 
 export type InboundLineMappingInput = {
@@ -100,3 +96,5 @@ export type InboundLineMappingInput = {
   projectId?: string | null;
   saveSupplierItemMapping?: boolean;
 };
+
+export type { ValidationIssue };

@@ -6,7 +6,7 @@ import {
   PINT_AE_SPECIFICATION_VERSION,
   type EInvoiceSourceType,
   type EInvoiceStatus,
-  type EInvoiceValidationIssue,
+  type ValidationIssue,
   type EInvoiceValidationReport,
 } from "./einvoice-types";
 import { getPintAeVersion } from "./pint-ae/registry";
@@ -113,10 +113,10 @@ function ensureDocument(sqlite: Database.Database, sourceType: EInvoiceSourceTyp
 
 function validationReport(
   specificationVersion: string,
-  readinessIssues: EInvoiceValidationIssue[],
-  mappingIssues: EInvoiceValidationIssue[],
-  pintUblIssues: EInvoiceValidationIssue[],
-  pintAeIssues: EInvoiceValidationIssue[],
+  readinessIssues: ValidationIssue[],
+  mappingIssues: ValidationIssue[],
+  pintUblIssues: ValidationIssue[],
+  pintAeIssues: ValidationIssue[],
   validatedAt: string,
 ): EInvoiceValidationReport {
   const issues = [...readinessIssues, ...mappingIssues, ...pintUblIssues, ...pintAeIssues];

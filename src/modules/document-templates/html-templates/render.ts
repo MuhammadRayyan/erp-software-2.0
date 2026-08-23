@@ -1,3 +1,5 @@
+// Note: puppeteer and handlebars are retained because the "custom-html" 
+// template type is still actively reachable and used from the UI.
 import puppeteer from "puppeteer";
 import Handlebars from "handlebars";
 

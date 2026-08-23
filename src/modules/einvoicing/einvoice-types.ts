@@ -85,8 +85,8 @@ export function profileExecutionId(flags: EInvoiceTransactionFlags) {
   ].map((value) => value ? "1" : "0").join("");
 }
 
-export type EInvoiceValidationIssue = {
-  layer: "readiness" | "mapping" | "pint-ubl" | "pint-ae";
+export type ValidationIssue = {
+  layer: "readiness" | "mapping" | "pint-ubl" | "pint-ae" | "security" | "parsing" | "business";
   ruleId: string;
   message: string;
   path?: string;
@@ -102,5 +102,5 @@ export type EInvoiceValidationReport = {
     pintUbl: { valid: boolean; issueCount: number };
     pintAe: { valid: boolean; issueCount: number };
   };
-  issues: EInvoiceValidationIssue[];
+  issues: ValidationIssue[];
 };

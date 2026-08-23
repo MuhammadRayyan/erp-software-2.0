@@ -25,7 +25,7 @@ const {
   receiveInboundDocument,
   updateInboundDocumentMatch,
 } = await import("../src/modules/inbound-einvoicing/inbound-service");
-const { buildMockInboundEnvelope } = await import("../src/modules/inbound-einvoicing/mock-fixtures");
+const { buildMockInboundEnvelope } = await import("./inbound-einvoicing/mock-fixtures");
 const { getPurchaseInvoice, savePurchaseInvoice } = await import("../src/modules/purchase-invoices/purchase-invoice-service");
 const { createVatPeriod, finalizeVatPeriod, reopenVatPeriod } = await import("../src/modules/tax/vat-period-service");
 

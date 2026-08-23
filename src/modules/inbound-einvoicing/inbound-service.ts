@@ -15,7 +15,7 @@ import type {
   InboundEInvoiceStatus,
   InboundLineMappingInput,
   InboundLineMatchStatus,
-  InboundValidationIssue,
+  ValidationIssue,
   InboundValidationReport,
 } from "./inbound-types";
 import { assertSafeInboundXml, parseInboundPintAeXml } from "./pint-ae-parser";
@@ -155,12 +155,12 @@ function appendEvent(
 function validationReport(
   specificationVersion: string,
   groups: {
-    security?: InboundValidationIssue[];
-    parsing?: InboundValidationIssue[];
-    pintUbl?: InboundValidationIssue[];
-    pintAe?: InboundValidationIssue[];
-    business?: InboundValidationIssue[];
-    mapping?: InboundValidationIssue[];
+    security?: ValidationIssue[];
+    parsing?: ValidationIssue[];
+    pintUbl?: ValidationIssue[];
+    pintAe?: ValidationIssue[];
+    business?: ValidationIssue[];
+    mapping?: ValidationIssue[];
   },
   validatedAt: string,
 ): InboundValidationReport {
@@ -669,8 +669,8 @@ export function receiveInboundDocument(
   }
   const buyer = buyerIdentityResult(sqlite, canonical);
   const supplierMatch = matchSupplier(sqlite, canonical);
-  const businessIssues: InboundValidationIssue[] = [];
-  const mappingIssues: InboundValidationIssue[] = [];
+  const businessIssues: ValidationIssue[] = [];
+  const mappingIssues: ValidationIssue[] = [];
   if (canonical.currencyCode !== "AED") {
     businessIssues.push({ layer: "business", ruleId: "UNSUPPORTED-CURRENCY", message: "Needs Review / Unsupported Currency Scenario. The source is archived without silent AED conversion." });
   }

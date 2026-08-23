@@ -19,7 +19,7 @@ function insertLines(sqlite: ReturnType<typeof getBusinessDb>["sqlite"], orderId
     (id, purchase_order_id, item_id, description, quantity_micros, unit_price_minor, expense_account_id,
      tax_code_id, project_id, net_amount_minor, tax_amount_minor, gross_amount_minor, position)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
-  for (const line of lines) statement.run(line.id, orderId, line.itemId, line.description, line.quantityMicros, line.unitPriceMinor, line.expenseAccountId, line.taxCodeId, line.projectId, line.netAmountMinor, line.taxAmountMinor, line.grossAmountMinor, line.position);
+  for (const line of lines) statement.run(line.id, orderId, line.itemId, line.description, line.quantityMicros, line.unitPriceMinor, line.expenseAccountId, line.taxCodeId, line.projectId, line.netAmountMinor, line.taxAmountMinor, line.grossAmountMinor, line.lineIndex);
 }
 
 export function listPurchaseOrders(businessId: string, userId: string, supplierId?: string) {

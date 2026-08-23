@@ -57,7 +57,7 @@ export function getRemainingInvoiceBalance(businessId: string, userId: string, i
 
 function insertLines(sqlite: ReturnType<typeof getBusinessDb>["sqlite"], noteId: string, lines: StoredLine[]) {
   const statement = sqlite.prepare(`INSERT INTO sales_credit_note_lines (id, credit_note_id, description, quantity_micros, unit_price_minor, sales_account_id, tax_code_id, project_id, net_amount_minor, tax_amount_minor, gross_amount_minor, position) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
-  for (const line of lines) statement.run(line.id, noteId, line.description, line.quantityMicros, line.unitPriceMinor, line.salesAccountId, line.taxCodeId, line.projectId, line.netAmountMinor, line.taxAmountMinor, line.grossAmountMinor, line.position);
+  for (const line of lines) statement.run(line.id, noteId, line.description, line.quantityMicros, line.unitPriceMinor, line.salesAccountId, line.taxCodeId, line.projectId, line.netAmountMinor, line.taxAmountMinor, line.grossAmountMinor, line.lineIndex);
 }
 
 export function listCreditNotes(businessId: string, userId: string, customerId?: string) {

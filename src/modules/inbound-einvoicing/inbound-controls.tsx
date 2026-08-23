@@ -15,7 +15,7 @@ import {
   updateInboundDocumentMatchAction,
   updateInboundLineMappingAction,
 } from "./actions";
-import { mockInboundScenarios, type MockInboundScenario } from "./mock-scenarios";
+import { mockInboundScenarios, type MockInboundScenario } from "../../../tests/inbound-einvoicing/mock-scenarios";
 import { SelectNative } from "@/components/ui/select-native";
 
 

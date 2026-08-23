@@ -7,10 +7,10 @@ import {
   parseTransactionFlags,
   profileExecutionId,
   type EInvoiceSourceType,
-  type EInvoiceValidationIssue,
+  type ValidationIssue,
 } from "./einvoice-types";
 
-type MappingResult = { canonical: CanonicalEInvoice | null; issues: EInvoiceValidationIssue[] };
+type MappingResult = { canonical: CanonicalEInvoice | null; issues: ValidationIssue[] };
 
 type SourceRow = {
   id: string;
@@ -76,12 +76,12 @@ type SettingsRow = {
 
 const UAE_SUBDIVISIONS = new Set(["AUH", "DXB", "SHJ", "AJ", "UAQ", "RAK", "FUJ"]);
 
-function issue(ruleId: string, message: string, path?: string): EInvoiceValidationIssue {
+function issue(ruleId: string, message: string, path?: string): ValidationIssue {
   return { layer: "readiness", ruleId, message, path };
 }
 
 function required(
-  issues: EInvoiceValidationIssue[],
+  issues: ValidationIssue[],
   value: string | null | undefined,
   ruleId: string,
   label: string,
@@ -91,7 +91,7 @@ function required(
 }
 
 function validateParty(
-  issues: EInvoiceValidationIssue[],
+  issues: ValidationIssue[],
   party: CanonicalParty,
   prefix: "seller" | "buyer",
 ) {
@@ -200,7 +200,7 @@ export function mapSourceToCanonical(
   uuid: string,
   specificationVersion: string,
 ): MappingResult {
-  const issues: EInvoiceValidationIssue[] = [];
+  const issues: ValidationIssue[] = [];
   const source = readSource(sqlite, sourceType, sourceId);
   if (!source) return { canonical: null, issues: [issue("SOURCE-NOT-FOUND", "The source document no longer exists.")] };
   if (source.document_status !== "posted") {

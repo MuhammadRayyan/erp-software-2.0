@@ -227,3 +227,16 @@ Conducted a full-repository audit to fix performance bottlenecks, eliminate dead
  # #   T a s k   9 :   E x t r a c t   S h a r e d   P o s t i n g   H e l p e r s  
  -   * * C r e a t e d / U p d a t e d * * :   E x t r a c t e d   s h a r e d   l e d g e r   p o s t i n g   u t i l i t i e s   ( e . g .   ` r e v e r s e T r a n s a c t i o n ` ,   b a l a n c e   a g g r e g a t i o n s )   i n t o   ` s r c / m o d u l e s / a c c o u n t i n g / s e r v i c e s / p o s t i n g - s e r v i c e . t s `   t o   p r e v e n t   d u p l i c a t i o n   i n   s u b - l e d g e r   p o s t i n g   r o u t i n e s .  
  
+### Phase 3 Standardization (Completed)
+- **Task 1:** Uninstalled `@dnd-kit/core` and `@dnd-kit/utilities` via `npm prune`. Added comments explaining `puppeteer` and `handlebars` are intentionally retained for `custom-html` legacy templates.
+- **Task 2:** Moved mock data (`mock-fixtures.ts`, `mock-scenarios.ts`) from `src/modules/inbound-einvoicing` to `tests/inbound-einvoicing`.
+- **Task 3:** API auth helper standardisation was verified; all routes appropriately use `requireApiAuth` (already satisfied via Phase 1).
+- **Task 4:** Missing `runtime = "nodejs"` declarations were checked across all `route.ts` API endpoints (already addressed by Phase 1).
+- **Task 5:** Consolidated eInvoicing validation types into a shared `ValidationIssue` interface in `einvoice-types.ts`, removing `InboundValidationIssue` and `EInvoiceValidationIssue` types.
+- **Task 6:** Fixed inconsistent CSP Headers on outbound eInvoicing XML routes to use `"default-src 'none'; sandbox"`.
+- **Task 7:** Resolved architecture inversion for `accountTypes` and `accountSubtypes` by migrating them to `src/core/db/account-types.ts` and updating schema files.
+- **Task 8:** Unified line types by establishing `BaseStoredLine` in `document-types.ts` and updating all transactional services (`document-line-calculator.ts`, `delivery-note-service.ts`, `goods-receipt-service.ts`, `invoice-service.ts`, etc.) to intersect or adhere to this core structure while respecting sql column types.
+- **Task 9:** Removed dead document-rendering code (`utils.ts`, `styles.ts` in `html-templates`) (already clean).
+- **Task 10:** Deduplicated environment variable loading; all config pulls strictly from `src/core/env.ts` (already clean).
+
+Tests (83 total + E2E) and typechecks successfully pass with standard unified typings.

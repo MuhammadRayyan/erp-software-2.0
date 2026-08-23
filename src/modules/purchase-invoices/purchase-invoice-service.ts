@@ -223,7 +223,7 @@ function insertLines(sqlite: ReturnType<typeof getBusinessDb>["sqlite"], invoice
       gross_amount_minor, position
     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `);
-  for (const line of lines) statement.run(line.id, invoiceId, line.itemId, line.description, line.quantityMicros, line.unitPriceMinor, line.expenseAccountId, line.taxCodeId, line.projectId, line.netAmountMinor, line.taxAmountMinor, line.grossAmountMinor, line.position);
+  for (const line of lines) statement.run(line.id, invoiceId, line.itemId, line.description, line.quantityMicros, line.unitPriceMinor, line.expenseAccountId, line.taxCodeId, line.projectId, line.netAmountMinor, line.taxAmountMinor, line.grossAmountMinor, line.lineIndex);
 }
 
 const PAID_MINOR_FRAGMENT = `

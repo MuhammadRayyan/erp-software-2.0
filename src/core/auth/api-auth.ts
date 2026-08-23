@@ -5,7 +5,7 @@ import type { ModuleKey } from "@/core/permissions/permissions";
 
 export async function requireApiAuth(
   request: Request,
-  options?: { businessId?: string; module?: ModuleKey; requireAdmin?: boolean }
+  options?: { businessId?: string; module?: ModuleKey; requireAdmin?: boolean; allowPublic?: boolean }
 ) {
   const session = await getCurrentSession();
   if (!session) {

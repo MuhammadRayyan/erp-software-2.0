@@ -1,9 +1,10 @@
+import type { BaseStoredLine } from "@/modules/documents/document-types";
 
 import { addMinor, calculateTax, multiplyMoneyByQuantity, parseQuantityToMicros } from "@/modules/accounting/calculations/money";
 import { parseCurrencyAmountToMinor } from "@/modules/currency/conversion";
 import { randomUUID } from "node:crypto";
 
-export type StoredLine = {
+export type StoredLine = BaseStoredLine & {
   id: string;
   itemId?: string | null;
   description: string;
@@ -16,7 +17,7 @@ export type StoredLine = {
   netAmountMinor: number;
   taxAmountMinor: number;
   grossAmountMinor: number;
-  position: number;
+  lineIndex: number;
 };
 
 type Config = {
@@ -81,7 +82,7 @@ export function calculateLines(
       netAmountMinor,
       taxAmountMinor,
       grossAmountMinor: taxCode.vat_category === "reverse_charge" ? netAmountMinor : addMinor([netAmountMinor, taxAmountMinor]),
-      position,
+      lineIndex: position,
     };
   });
 }

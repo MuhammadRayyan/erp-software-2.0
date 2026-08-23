@@ -1,3 +1,4 @@
+import type { BaseStoredLine } from "@/modules/documents/document-types";
 import { randomUUID } from "node:crypto";
 import { getBusinessDb } from "@/core/db/business";
 import {
@@ -35,17 +36,7 @@ export type { InventoryDocumentIntent, InventoryDocumentStatus } from "./invento
 
 type Sqlite = ReturnType<typeof getBusinessDb>["sqlite"];
 
-type StoredLine = {
-  id: string;
-  itemId: string;
-  description: string;
-  quantityMicros: number;
-  unitCostMinor: number;
-  projectId: string | null;
-  purchaseOrderLineId: string | null;
-  purchaseInvoiceLineId: string | null;
-  position: number;
-};
+export type StoredLine = BaseStoredLine & { purchaseInvoiceLineId: string | null; itemId: string; unitCostMinor: number; purchaseOrderLineId: string | null; };
 
 function prepareLines(
   sqlite: Sqlite,
@@ -58,16 +49,21 @@ function prepareLines(
   return data.lines.map((line, position): StoredLine => {
     if (!itemIds.has(line.itemId)) throw new Error("Choose an active inventory item.");
     return {
-      id: randomUUID(),
-      itemId: line.itemId,
-      description: line.description,
-      quantityMicros: parseQuantityToMicros(line.quantity),
-      unitCostMinor: parseMoneyToMinor(line.unitCost, "Unit cost"),
-      projectId: line.projectId || null,
-      purchaseOrderLineId: line.purchaseOrderLineId || null,
-      purchaseInvoiceLineId: line.purchaseInvoiceLineId || null,
-      position,
-    };
+        id: randomUUID(),
+        itemId: line.itemId,
+        description: line.description,
+        quantityMicros: parseQuantityToMicros(line.quantity),
+        unitPriceMinor: 0,
+        netAmountMinor: 0,
+        taxCodeId: "",
+        taxAmountMinor: 0,
+        grossAmountMinor: 0,
+        unitCostMinor: parseMoneyToMinor(line.unitCost, "Unit cost"),
+        projectId: line.projectId || null,
+        purchaseOrderLineId: line.purchaseOrderLineId || null,
+        purchaseInvoiceLineId: line.purchaseInvoiceLineId || null,
+        lineIndex: position,
+      };
   });
 }
 
@@ -109,7 +105,7 @@ function insertLines(sqlite: Sqlite, receiptId: string, lines: readonly StoredLi
       line.projectId,
       line.purchaseOrderLineId,
       line.purchaseInvoiceLineId,
-      line.position,
+      line.lineIndex,
     );
   }
 }
@@ -141,7 +137,7 @@ function postMovements(
       sourceLineId: line.id,
       projectId: effectiveProjectId(line.projectId, receipt.projectId),
       description: receipt.receiptNumber,
-      createdAt: new Date(Date.parse(receipt.createdAt) + line.position).toISOString(),
+      createdAt: new Date(Date.parse(receipt.createdAt) + line.lineIndex).toISOString(),
     });
   }
 }

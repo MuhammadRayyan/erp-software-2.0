@@ -4,7 +4,7 @@ import type {
   CanonicalInboundLine,
   InboundDocumentType,
   InboundParty,
-  InboundValidationIssue,
+  ValidationIssue,
 } from "./inbound-types";
 
 export const MAX_INBOUND_XML_BYTES = 2 * 1024 * 1024;
@@ -63,7 +63,7 @@ function required(
   current: string,
   ruleId: string,
   message: string,
-  issues: InboundValidationIssue[],
+  issues: ValidationIssue[],
 ) {
   if (!current) issues.push({ layer: "parsing", ruleId, message });
   return current;
@@ -74,7 +74,7 @@ function decimalToScaled(
   scale: number,
   ruleId: string,
   label: string,
-  issues: InboundValidationIssue[],
+  issues: ValidationIssue[],
 ) {
   const normalized = input.trim();
   if (!/^-?\d+(?:\.\d+)?$/.test(normalized)) {
@@ -107,7 +107,7 @@ function money(
   localName: string,
   ruleId: string,
   label: string,
-  issues: InboundValidationIssue[],
+  issues: ValidationIssue[],
   requiredValue = true,
 ) {
   const raw = value(xml, localName);
@@ -116,11 +116,11 @@ function money(
   return decimalToScaled(raw || "0", 100, ruleId, label, issues);
 }
 
-function percentBasisPoints(raw: string, issues: InboundValidationIssue[]) {
+function percentBasisPoints(raw: string, issues: ValidationIssue[]) {
   return decimalToScaled(raw || "0", 100, "TAX-RATE", "VAT percentage", issues);
 }
 
-function parseParty(xml: string, wrapper: string, role: "supplier" | "buyer", issues: InboundValidationIssue[]): InboundParty {
+function parseParty(xml: string, wrapper: string, role: "supplier" | "buyer", issues: ValidationIssue[]): InboundParty {
   const block = firstElement(xml, wrapper)?.inner ?? "";
   if (!block) {
     issues.push({ layer: "parsing", ruleId: `${role.toUpperCase()}-PARTY`, message: `Accounting ${role} party is required.` });
@@ -148,7 +148,7 @@ function parseParty(xml: string, wrapper: string, role: "supplier" | "buyer", is
   };
 }
 
-function parseLine(block: string, position: number, documentType: InboundDocumentType, issues: InboundValidationIssue[]): CanonicalInboundLine | null {
+function parseLine(block: string, position: number, documentType: InboundDocumentType, issues: ValidationIssue[]): CanonicalInboundLine | null {
   const quantityName = documentType === "invoice" ? "InvoicedQuantity" : "CreditedQuantity";
   const quantityElement = firstElement(block, quantityName);
   const quantityMicros = decimalToScaled(
@@ -232,9 +232,9 @@ export function assertSafeInboundXml(xml: string): InboundDocumentType {
 export function parseInboundPintAeXml(
   xml: string,
   specificationVersion: string,
-): { canonical: CanonicalInboundEInvoice; issues: InboundValidationIssue[] } {
+): { canonical: CanonicalInboundEInvoice; issues: ValidationIssue[] } {
   const documentType = assertSafeInboundXml(xml);
-  const issues: InboundValidationIssue[] = [];
+  const issues: ValidationIssue[] = [];
   const customizationId = required(value(xml, "CustomizationID"), "CUSTOMIZATION-ID", "PINT-AE CustomizationID is required.", issues);
   if (customizationId && customizationId !== PINT_AE_CUSTOMIZATION_ID) {
     issues.push({ layer: "parsing", ruleId: "CUSTOMIZATION-ID", message: `Unsupported PINT-AE customization ${customizationId}.` });

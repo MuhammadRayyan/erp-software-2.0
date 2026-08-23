@@ -87,7 +87,7 @@ function insertLines(
       line.grossAmountMinor,
       line.projectId,
       line.itemId,
-      line.position,
+      line.lineIndex,
     );
   }
 }

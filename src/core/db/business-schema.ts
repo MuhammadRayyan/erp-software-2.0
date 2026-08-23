@@ -1,6 +1,6 @@
 import { sql } from "drizzle-orm";
 import { check, index, integer, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core";
-import { accountSubtypes, accountTypes } from "@/modules/accounting/account-types";
+import { accountSubtypes, accountTypes } from "./account-types";
 
 export { accountSubtypes, accountTypes };
 

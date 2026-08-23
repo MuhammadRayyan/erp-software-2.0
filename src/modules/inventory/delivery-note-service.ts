@@ -1,3 +1,4 @@
+import type { BaseStoredLine } from "@/modules/documents/document-types";
 import { randomUUID } from "node:crypto";
 import { getBusinessDb } from "@/core/db/business";
 import {
@@ -39,14 +40,14 @@ export type { InventoryDocumentIntent, InventoryDocumentStatus } from "./invento
 
 type Sqlite = ReturnType<typeof getBusinessDb>["sqlite"];
 
-type StoredLine = {
+export type StoredLine = BaseStoredLine & {
   id: string;
   itemId: string;
   description: string;
   quantityMicros: number;
   projectId: string | null;
   salesInvoiceLineId: string | null;
-  position: number;
+  lineIndex: number;
 };
 
 type ItemAccounts = {
@@ -85,14 +86,19 @@ function prepareLines(
   return data.lines.map((line, position): StoredLine => {
     if (!itemIds.has(line.itemId)) throw new Error("Choose an active inventory item.");
     return {
-      id: randomUUID(),
-      itemId: line.itemId,
-      description: line.description,
-      quantityMicros: parseQuantityToMicros(line.quantity),
-      projectId: line.projectId || null,
-      salesInvoiceLineId: line.salesInvoiceLineId || null,
-      position,
-    };
+        id: randomUUID(),
+        itemId: line.itemId,
+        description: line.description,
+        quantityMicros: parseQuantityToMicros(line.quantity),
+        unitPriceMinor: 0,
+        netAmountMinor: 0,
+        taxCodeId: "",
+        taxAmountMinor: 0,
+        grossAmountMinor: 0,
+        projectId: line.projectId || null,
+        salesInvoiceLineId: line.salesInvoiceLineId || null,
+        lineIndex: position,
+      };
   });
 }
 
@@ -112,7 +118,7 @@ function insertLines(sqlite: Sqlite, deliveryId: string, lines: readonly StoredL
       line.quantityMicros,
       line.projectId,
       line.salesInvoiceLineId,
-      line.position,
+      line.lineIndex,
     );
   }
 }
@@ -172,7 +178,7 @@ function postDelivery(
       sourceLineId: line.id,
       projectId,
       description: delivery.number,
-      createdAt: new Date(Date.parse(delivery.createdAt) + line.position).toISOString(),
+      createdAt: new Date(Date.parse(delivery.createdAt) + line.lineIndex).toISOString(),
     });
 
     const cogsKey = `${item.cost_of_sales_account_id}\u0000${projectId ?? ""}`;

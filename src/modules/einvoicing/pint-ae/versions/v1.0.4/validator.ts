@@ -1,6 +1,6 @@
 import { join } from "node:path";
 import SaxonJS from "saxon-js";
-import type { EInvoiceValidationIssue } from "@/modules/einvoicing/einvoice-types";
+import type { ValidationIssue } from "@/modules/einvoicing/einvoice-types";
 
 type SaxonResult = { principalResult?: string };
 
@@ -19,7 +19,7 @@ function attribute(block: string, name: string) {
 }
 
 function parseFailedAssertions(svrl: string, layer: "pint-ubl" | "pint-ae") {
-  const issues: EInvoiceValidationIssue[] = [];
+  const issues: ValidationIssue[] = [];
   for (const match of svrl.matchAll(/<svrl:failed-assert\b[\s\S]*?<\/svrl:failed-assert>/g)) {
     const block = match[0];
     const textMatch = block.match(/<svrl:text>([\s\S]*?)<\/svrl:text>/);

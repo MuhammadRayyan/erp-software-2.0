@@ -15,8 +15,8 @@ import {
   updateInboundDocumentMatch,
   updateInboundLineMapping,
 } from "./inbound-service";
-import { buildMockInboundEnvelope } from "./mock-fixtures";
-import { mockInboundScenarios } from "./mock-scenarios";
+import { buildMockInboundEnvelope } from "../../../tests/inbound-einvoicing/mock-fixtures";
+import { mockInboundScenarios } from "../../../tests/inbound-einvoicing/mock-scenarios";
 
 export type InboundEInvoiceActionResult = {
   error?: string;
