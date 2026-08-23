@@ -1,5 +1,6 @@
 import type Database from "better-sqlite3";
 import { addMinor } from "../calculations/money";
+import { addAmount, addProjectAmount, ProjectAmount } from "./posting-helpers";
 import { convertDocumentLinesToBase } from "@/modules/currency/conversion";
 import type { RateSnapshot } from "@/modules/currency/validation";
 import { postTransaction, type JournalLineInput } from "./posting-service";
@@ -7,9 +8,6 @@ import { postTransaction, type JournalLineInput } from "./posting-service";
 type PostedPurchaseInvoice = { id: string; internalNumber: string; supplierId: string; invoiceDate: string; totalMinor: number; rate: RateSnapshot };
 type PostedPurchaseInvoiceLine = { expenseAccountId: string; taxCodeId: string; projectId?: string | null; itemId?: string | null; netAmountMinor: number; taxAmountMinor: number; grossAmountMinor: number };
 
-function addAmount(group: Map<string, number>, accountId: string, amountMinor: number) {
-  group.set(accountId, addMinor([group.get(accountId) ?? 0, amountMinor]));
-}
 
 type ProjectAmount = { accountId: string; projectId: string | null; amountMinor: number };
 function addProjectAmount(group: Map<string, ProjectAmount>, accountId: string, projectId: string | null, amountMinor: number) {

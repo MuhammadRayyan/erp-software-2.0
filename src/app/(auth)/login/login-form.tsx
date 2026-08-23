@@ -1,4 +1,5 @@
 "use client";
+import { FormError } from "@/components/form-error";
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
@@ -59,9 +60,7 @@ export function LoginForm() {
         <p className="mt-1.5 text-sm text-muted-foreground">Sign in to continue to your businesses.</p>
       </div>
       {error && (
-        <div role="alert" className="rounded-md border border-danger/25 bg-danger/10 px-3 py-2.5 text-sm text-danger">
-          {error}
-        </div>
+        <FormError message={error} />
       )}
       <div className="space-y-1.5">
         <Label htmlFor="email">Email</Label>

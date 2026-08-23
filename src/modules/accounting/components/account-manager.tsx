@@ -24,6 +24,8 @@ import {
   type AccountInput,
 } from "../account-input";
 import { deleteAccountAction, saveAccountAction } from "../actions";
+import { FormError } from "@/components/form-error";
+import { SelectNative } from "@/components/ui/select-native";
 
 type AccountRow = AccountInput & {
   id: string;
@@ -139,11 +141,11 @@ export function AccountManager({ businessId, accounts }: { businessId: string; a
           <div className="mt-5 grid gap-4 sm:grid-cols-2">
             <div className="space-y-1.5"><Label htmlFor="account-code">Code</Label><Input id="account-code" value={values.code} onChange={(event) => setValues((current) => ({ ...current, code: event.target.value }))} aria-invalid={!!errors.code} />{errors.code && <p className="field-error">{errors.code[0]}</p>}</div>
             <div className="space-y-1.5"><Label htmlFor="account-name">Name</Label><Input id="account-name" value={values.name} onChange={(event) => setValues((current) => ({ ...current, name: event.target.value }))} aria-invalid={!!errors.name} />{errors.name && <p className="field-error">{errors.name[0]}</p>}</div>
-            <div className="space-y-1.5"><Label htmlFor="account-type">Type</Label><select id="account-type" className={selectClass} value={values.type} disabled={!!editing?.isSystem} onChange={(event) => { const type = event.target.value as AccountInput["type"]; setValues((current) => ({ ...current, type, subtype: accountSubtypesByType[type][0] })); }}>{accountTypes.map((type) => <option key={type} value={type}>{accountTypeLabels[type]}</option>)}</select></div>
-            <div className="space-y-1.5"><Label htmlFor="account-subtype">Subtype</Label><select id="account-subtype" className={selectClass} value={values.subtype} disabled={!!editing?.isSystem} onChange={(event) => setValues((current) => ({ ...current, subtype: event.target.value as AccountInput["subtype"] }))}>{accountSubtypesByType[values.type].map((subtype) => <option key={subtype} value={subtype}>{accountSubtypeLabels[subtype]}</option>)}</select></div>
+            <div className="space-y-1.5"><Label htmlFor="account-type">Type</Label><SelectNative id="account-type"  value={values.type} disabled={!!editing?.isSystem} onChange={(event) => { const type = event.target.value as AccountInput["type"]; setValues((current) => ({ ...current, type, subtype: accountSubtypesByType[type][0] })); }}>{accountTypes.map((type) => <option key={type} value={type}>{accountTypeLabels[type]}</option>)}</SelectNative></div>
+            <div className="space-y-1.5"><Label htmlFor="account-subtype">Subtype</Label><SelectNative id="account-subtype"  value={values.subtype} disabled={!!editing?.isSystem} onChange={(event) => setValues((current) => ({ ...current, subtype: event.target.value as AccountInput["subtype"] }))}>{accountSubtypesByType[values.type].map((subtype) => <option key={subtype} value={subtype}>{accountSubtypeLabels[subtype]}</option>)}</SelectNative></div>
             <label className="flex min-h-9 items-center gap-2 text-sm sm:col-span-2"><input type="checkbox" checked={values.isActive} disabled={!!editing?.isSystem} onChange={(event) => setValues((current) => ({ ...current, isActive: event.target.checked }))} className="size-4 accent-[var(--primary)]" /> Active account</label>
           </div>
-          {serverError && <div role="alert" className="mt-4 rounded-md border border-danger/25 bg-danger/10 px-3 py-2 text-sm text-danger">{serverError}</div>}
+          {serverError && <FormError message={serverError} />}
           <div className="mt-5 flex justify-end gap-2"><Button variant="ghost" onClick={() => setEditing(undefined)}>Cancel</Button><Button onClick={save} disabled={pending}>{editing ? "Save changes" : "Create account"}</Button></div>
         </DialogContent>
       </DialogRoot>
@@ -152,7 +154,7 @@ export function AccountManager({ businessId, accounts }: { businessId: string; a
         <DialogContent>
           <DialogTitle>Delete {deleting?.name}?</DialogTitle>
           <DialogDescription>The account can only be deleted when it is not configured or used by any transaction.</DialogDescription>
-          {serverError && <div role="alert" className="mt-4 rounded-md border border-danger/25 bg-danger/10 px-3 py-2 text-sm text-danger">{serverError}</div>}
+          {serverError && <FormError message={serverError} />}
           <div className="mt-5 flex justify-end gap-2"><Button variant="secondary" onClick={() => setDeleting(null)}>Cancel</Button><Button variant="danger" onClick={remove} disabled={pending}>Delete account</Button></div>
         </DialogContent>
       </DialogRoot>

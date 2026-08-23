@@ -16,8 +16,8 @@ import {
   updateInboundLineMappingAction,
 } from "./actions";
 import { mockInboundScenarios, type MockInboundScenario } from "./mock-scenarios";
+import { SelectNative } from "@/components/ui/select-native";
 
-const selectClass = "h-9 rounded-md border border-border-strong bg-surface-raised px-2.5 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-ring/25";
 
 const scenarioLabels: Record<MockInboundScenario, string> = {
   valid_invoice: "Valid Invoice",
@@ -44,7 +44,7 @@ export function MockInboundInjector({ businessId }: { businessId: string }) {
     });
   }
   return <div className="rounded-lg border border-info/25 bg-info/5 p-4">
-    <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between"><div><p className="text-sm font-semibold">MOCK inbound provider</p><p className="mt-1 text-xs text-muted-foreground">Local development fixtures only. No network or government service is contacted.</p></div><div className="flex flex-wrap gap-2"><label className="sr-only" htmlFor="mock-inbound-scenario">Mock scenario</label><select id="mock-inbound-scenario" className={selectClass} value={scenario} onChange={(event) => setScenario(event.target.value as MockInboundScenario)}>{mockInboundScenarios.map((value) => <option key={value} value={value}>{scenarioLabels[value]}</option>)}</select><Button type="button" onClick={inject} disabled={pending}>{pending && <LoaderCircle className="size-4 animate-spin" />} Inject MOCK</Button></div></div>
+    <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between"><div><p className="text-sm font-semibold">MOCK inbound provider</p><p className="mt-1 text-xs text-muted-foreground">Local development fixtures only. No network or government service is contacted.</p></div><div className="flex flex-wrap gap-2"><label className="sr-only" htmlFor="mock-inbound-scenario">Mock scenario</label><SelectNative id="mock-inbound-scenario"  value={scenario} onChange={(event) => setScenario(event.target.value as MockInboundScenario)}>{mockInboundScenarios.map((value) => <option key={value} value={value}>{scenarioLabels[value]}</option>)}</SelectNative><Button type="button" onClick={inject} disabled={pending}>{pending && <LoaderCircle className="size-4 animate-spin" />} Inject MOCK</Button></div></div>
     {error && <p role="alert" className="mt-3 text-sm text-danger">{error}</p>}
   </div>;
 }
@@ -79,7 +79,7 @@ export function SupplierResolutionControls({
       router.refresh();
     });
   }
-  return <div className="space-y-3"><div className="flex flex-wrap gap-2"><select className={`${selectClass} min-w-64`} value={supplierId} onChange={(event) => setSupplierId(event.target.value)}><option value="">Select existing Supplier…</option>{suppliers.map((supplier) => <option key={supplier.id} value={supplier.id}>{supplier.label}</option>)}</select><Button type="button" onClick={select} disabled={pending || !supplierId}>{pending && <LoaderCircle className="size-4 animate-spin" />} Confirm identity</Button><Button type="button" variant="secondary" onClick={create} disabled={pending}>Create Supplier from source</Button></div>{error && <p role="alert" className="text-sm text-danger">{error}</p>}</div>;
+  return <div className="space-y-3"><div className="flex flex-wrap gap-2"><SelectNative className="min-w-64" value={supplierId} onChange={(event) => setSupplierId(event.target.value)}><option value="">Select existing Supplier…</option>{suppliers.map((supplier) => <option key={supplier.id} value={supplier.id}>{supplier.label}</option>)}</SelectNative><Button type="button" onClick={select} disabled={pending || !supplierId}>{pending && <LoaderCircle className="size-4 animate-spin" />} Confirm identity</Button><Button type="button" variant="secondary" onClick={create} disabled={pending}>Create Supplier from source</Button></div>{error && <p role="alert" className="text-sm text-danger">{error}</p>}</div>;
 }
 
 export function ProcurementMatchControls({
@@ -115,7 +115,7 @@ export function ProcurementMatchControls({
       router.refresh();
     });
   }
-  return <div className="space-y-3"><div className="grid gap-3 sm:grid-cols-2"><label className="space-y-1 text-xs text-muted-foreground">Purchase Order<select className={`${selectClass} block w-full`} value={purchaseOrderId} onChange={(event) => { setPurchaseOrderId(event.target.value); setGoodsReceiptId(""); }}><option value="">No Purchase Order</option>{supplierOrders.map((entry) => <option key={entry.id} value={entry.id}>{entry.label}</option>)}</select></label><label className="space-y-1 text-xs text-muted-foreground">Goods Receipt<select className={`${selectClass} block w-full`} value={goodsReceiptId} onChange={(event) => setGoodsReceiptId(event.target.value)}><option value="">No Goods Receipt</option>{supplierReceipts.map((entry) => <option key={entry.id} value={entry.id}>{entry.label}</option>)}</select></label></div><Button type="button" size="sm" variant="secondary" onClick={save} disabled={pending}>{pending && <LoaderCircle className="size-4 animate-spin" />} Save procurement match</Button>{error && <p role="alert" className="text-sm text-danger">{error}</p>}</div>;
+  return <div className="space-y-3"><div className="grid gap-3 sm:grid-cols-2"><label className="space-y-1 text-xs text-muted-foreground">Purchase Order<SelectNative className="block w-full" value={purchaseOrderId} onChange={(event) => { setPurchaseOrderId(event.target.value); setGoodsReceiptId(""); }}><option value="">No Purchase Order</option>{supplierOrders.map((entry) => <option key={entry.id} value={entry.id}>{entry.label}</option>)}</SelectNative></label><label className="space-y-1 text-xs text-muted-foreground">Goods Receipt<SelectNative className="block w-full" value={goodsReceiptId} onChange={(event) => setGoodsReceiptId(event.target.value)}><option value="">No Goods Receipt</option>{supplierReceipts.map((entry) => <option key={entry.id} value={entry.id}>{entry.label}</option>)}</SelectNative></label></div><Button type="button" size="sm" variant="secondary" onClick={save} disabled={pending}>{pending && <LoaderCircle className="size-4 animate-spin" />} Save procurement match</Button>{error && <p role="alert" className="text-sm text-danger">{error}</p>}</div>;
 }
 
 export function InboundLineMappingControls({
@@ -162,11 +162,11 @@ export function InboundLineMappingControls({
     });
   }
   return <div className="mt-3 grid gap-2 border-t border-border pt-3 sm:grid-cols-2 xl:grid-cols-3">
-    <select aria-label="Purchase Order line" className={selectClass} value={purchaseOrderLineId} onChange={(event) => setPurchaseOrderLineId(event.target.value)}><option value="">No PO line</option>{purchaseOrderLines.map((entry) => <option key={entry.id} value={entry.id}>{entry.label}</option>)}</select>
-    <select aria-label="Inventory Item" className={selectClass} value={itemId} onChange={(event) => setItemId(event.target.value)}><option value="">Expense / Service</option>{items.map((entry) => <option key={entry.id} value={entry.id}>{entry.label}</option>)}</select>
-    {!itemId && <select aria-label="Expense account" className={selectClass} value={expenseAccountId} onChange={(event) => setExpenseAccountId(event.target.value)}><option value="">Choose expense account…</option>{expenseAccounts.map((entry) => <option key={entry.id} value={entry.id}>{entry.label}</option>)}</select>}
-    <select aria-label="VAT code" className={selectClass} value={taxCodeId} onChange={(event) => setTaxCodeId(event.target.value)}><option value="">Choose VAT code…</option>{taxCodes.map((entry) => <option key={entry.id} value={entry.id}>{entry.label}</option>)}</select>
-    <select aria-label="Project" className={selectClass} value={projectId} onChange={(event) => setProjectId(event.target.value)}><option value="">No Project</option>{projects.map((entry) => <option key={entry.id} value={entry.id}>{entry.label}</option>)}</select>
+    <SelectNative aria-label="Purchase Order line"  value={purchaseOrderLineId} onChange={(event) => setPurchaseOrderLineId(event.target.value)}><option value="">No PO line</option>{purchaseOrderLines.map((entry) => <option key={entry.id} value={entry.id}>{entry.label}</option>)}</SelectNative>
+    <SelectNative aria-label="Inventory Item"  value={itemId} onChange={(event) => setItemId(event.target.value)}><option value="">Expense / Service</option>{items.map((entry) => <option key={entry.id} value={entry.id}>{entry.label}</option>)}</SelectNative>
+    {!itemId && <SelectNative aria-label="Expense account"  value={expenseAccountId} onChange={(event) => setExpenseAccountId(event.target.value)}><option value="">Choose expense account…</option>{expenseAccounts.map((entry) => <option key={entry.id} value={entry.id}>{entry.label}</option>)}</SelectNative>}
+    <SelectNative aria-label="VAT code"  value={taxCodeId} onChange={(event) => setTaxCodeId(event.target.value)}><option value="">Choose VAT code…</option>{taxCodes.map((entry) => <option key={entry.id} value={entry.id}>{entry.label}</option>)}</SelectNative>
+    <SelectNative aria-label="Project"  value={projectId} onChange={(event) => setProjectId(event.target.value)}><option value="">No Project</option>{projects.map((entry) => <option key={entry.id} value={entry.id}>{entry.label}</option>)}</SelectNative>
     <div className="flex flex-wrap items-center gap-3"><Button type="button" size="sm" variant="secondary" onClick={save} disabled={pending}>{pending && <LoaderCircle className="size-4 animate-spin" />} Confirm line mapping</Button>{line.supplierItemIdentifier && <label className="flex items-center gap-1.5 text-xs text-muted-foreground"><input type="checkbox" checked={saveSupplierItemMapping} onChange={(event) => setSaveSupplierItemMapping(event.target.checked)} /> Remember item ID</label>}</div>
     {error && <p role="alert" className="text-sm text-danger sm:col-span-2 xl:col-span-3">{error}</p>}
   </div>;

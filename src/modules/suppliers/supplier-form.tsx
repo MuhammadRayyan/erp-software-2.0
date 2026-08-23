@@ -1,4 +1,5 @@
 "use client";
+import { FormError } from "@/components/form-error";
 
 import Link from "next/link";
 import { useState } from "react";
@@ -25,7 +26,7 @@ export function SupplierForm({ businessId, supplierId, currencies, initial }: { 
   }
   const cancelHref = supplierId ? `/b/${businessId}/suppliers/${supplierId}` : `/b/${businessId}/suppliers`;
   return <form onSubmit={handleSubmit(submit)} className="space-y-7" noValidate>
-    {serverError && <div role="alert" className="rounded-md border border-danger/25 bg-danger/10 px-3 py-2.5 text-sm text-danger">{serverError}</div>}
+    {serverError && <FormError message={serverError} />}
     <section className="border-b border-border pb-7">
       <h2 className="text-base font-semibold">Supplier details</h2>
       <div className="mt-5 grid gap-5 md:grid-cols-2">

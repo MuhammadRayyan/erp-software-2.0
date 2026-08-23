@@ -15,8 +15,8 @@ import {
   reopenVatPeriodAction,
 } from "./actions";
 import { addDaysIso } from "./uae-vat-config";
+import { SelectNative } from "@/components/ui/select-native";
 
-const selectClass = "h-9 w-full rounded-[6px] border border-border-strong bg-surface-raised px-3 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-ring/25";
 
 export function NewVatPeriodForm({ businessId }: { businessId: string }) {
   const router = useRouter();
@@ -109,7 +109,7 @@ export function VatAdjustmentForm({ businessId, periodId, disabled }: { business
     <h2 className="font-semibold">Manual VAT adjustment</h2>
     <p className="mt-1 text-sm text-muted-foreground">Calculated figures remain unchanged; adjustments are shown separately in Return Total.</p>
     <div className="mt-4 grid gap-3 md:grid-cols-5">
-      <div className="space-y-1"><Label htmlFor="vat-adjustment-type">Adjustment type</Label><select id="vat-adjustment-type" className={selectClass} value={values.reportBucket} onChange={(event) => setValues((current) => ({ ...current, reportBucket: event.target.value }))}><option value="output_vat_adjustment">Output VAT adjustment</option><option value="input_vat_adjustment">Input VAT adjustment</option></select></div>
+      <div className="space-y-1"><Label htmlFor="vat-adjustment-type">Adjustment type</Label><SelectNative id="vat-adjustment-type"  value={values.reportBucket} onChange={(event) => setValues((current) => ({ ...current, reportBucket: event.target.value }))}><option value="output_vat_adjustment">Output VAT adjustment</option><option value="input_vat_adjustment">Input VAT adjustment</option></SelectNative></div>
       <div className="space-y-1"><Label htmlFor="vat-adjustment-net">Net amount</Label><Input id="vat-adjustment-net" value={values.amount} onChange={(event) => setValues((current) => ({ ...current, amount: event.target.value }))} inputMode="decimal" /></div>
       <div className="space-y-1"><Label htmlFor="vat-adjustment-vat">VAT amount</Label><Input id="vat-adjustment-vat" value={values.vatAmount} onChange={(event) => setValues((current) => ({ ...current, vatAmount: event.target.value }))} inputMode="decimal" /></div>
       <div className="space-y-1"><Label htmlFor="vat-adjustment-reason">Required reason</Label><Input id="vat-adjustment-reason" value={values.reason} onChange={(event) => setValues((current) => ({ ...current, reason: event.target.value }))} /></div>

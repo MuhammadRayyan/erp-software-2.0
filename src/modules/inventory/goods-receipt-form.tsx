@@ -1,4 +1,5 @@
 "use client";
+import { FormError } from "@/components/form-error";
 
 import Link from "next/link";
 import { useState } from "react";
@@ -14,6 +15,7 @@ import {
   type GoodsReceiptInput,
 } from "./goods-receipt-input";
 import type { InventoryDocumentStatus } from "./inventory-document";
+import { SelectNative } from "@/components/ui/select-native";
 
 type ItemOption = {
   id: string;
@@ -100,9 +102,7 @@ export function GoodsReceiptForm({
   return (
     <form className="space-y-7" noValidate>
       {serverError && (
-        <div role="alert" className="rounded-md border border-danger/25 bg-danger/10 px-3 py-2.5 text-sm text-danger">
-          {serverError}
-        </div>
+        <FormError message={serverError} />
       )}
       <section className="border-b border-border pb-7">
         <h2 className="text-base font-semibold">Receipt details</h2>
@@ -112,12 +112,12 @@ export function GoodsReceiptForm({
         <div className="mt-5 grid gap-5 md:grid-cols-3">
           <div className="space-y-1.5">
             <Label htmlFor="supplierId">Supplier</Label>
-            <select id="supplierId" className={selectClass} {...register("supplierId")}>
+            <SelectNative id="supplierId"  {...register("supplierId")}>
               <option value="">Choose a supplier…</option>
               {suppliers.map((supplier) => (
                 <option key={supplier.id} value={supplier.id}>{supplier.name}</option>
               ))}
-            </select>
+            </SelectNative>
             {errors.supplierId && <p className="field-error">{errors.supplierId.message}</p>}
           </div>
           <div className="space-y-1.5">
@@ -126,46 +126,46 @@ export function GoodsReceiptForm({
           </div>
           <div className="space-y-1.5">
             <Label htmlFor="locationId">Location</Label>
-            <select id="locationId" className={selectClass} {...register("locationId")}>
+            <SelectNative id="locationId"  {...register("locationId")}>
               {locations.map((location) => (
                 <option key={location.id} value={location.id}>
                   {location.code} — {location.name}
                 </option>
               ))}
-            </select>
+            </SelectNative>
           </div>
           <div className="space-y-1.5">
             <Label htmlFor="purchaseOrderId">
               Purchase Order <span className="font-normal text-muted-foreground">(optional)</span>
             </Label>
-            <select id="purchaseOrderId" className={selectClass} {...register("purchaseOrderId")}>
+            <SelectNative id="purchaseOrderId"  {...register("purchaseOrderId")}>
               <option value="">No linked order</option>
               {orders.map((order) => (
                 <option key={order.id} value={order.id}>{order.number}</option>
               ))}
-            </select>
+            </SelectNative>
           </div>
           <div className="space-y-1.5">
             <Label htmlFor="purchaseInvoiceId">
               Purchase Invoice <span className="font-normal text-muted-foreground">(optional)</span>
             </Label>
-            <select id="purchaseInvoiceId" className={selectClass} {...register("purchaseInvoiceId")}>
+            <SelectNative id="purchaseInvoiceId"  {...register("purchaseInvoiceId")}>
               <option value="">No linked invoice</option>
               {invoices.map((invoice) => (
                 <option key={invoice.id} value={invoice.id}>{invoice.number}</option>
               ))}
-            </select>
+            </SelectNative>
           </div>
           <div className="space-y-1.5">
             <Label htmlFor="projectId">
               Project <span className="font-normal text-muted-foreground">(optional)</span>
             </Label>
-            <select id="projectId" className={selectClass} {...register("projectId")}>
+            <SelectNative id="projectId"  {...register("projectId")}>
               <option value="">No project</option>
               {projects.map((project) => (
                 <option key={project.id} value={project.id}>{project.code} — {project.name}</option>
               ))}
-            </select>
+            </SelectNative>
           </div>
           <div className="space-y-1.5">
             <Label htmlFor="reference">
@@ -229,8 +229,8 @@ export function GoodsReceiptForm({
               {fields.map((field, index) => (
                 <tr key={field.id} className="hover:bg-transparent!">
                   <td>
-                    <select
-                      className={selectClass}
+                    <SelectNative
+                      
                       aria-label={`Line ${index + 1} item`}
                       {...register(`lines.${index}.itemId`, {
                         onChange: (event) => selectItem(index, event.target.value),
@@ -242,7 +242,7 @@ export function GoodsReceiptForm({
                           {item.sku ? `${item.sku} — ` : ""}{item.name}
                         </option>
                       ))}
-                    </select>
+                    </SelectNative>
                     <input type="hidden" {...register(`lines.${index}.purchaseOrderLineId`)} />
                     <input type="hidden" {...register(`lines.${index}.purchaseInvoiceLineId`)} />
                   </td>
@@ -251,12 +251,12 @@ export function GoodsReceiptForm({
                   <td><Input className="money text-right" type="number" min="0" step="0.01" {...register(`lines.${index}.unitCost`)} /></td>
                   {showProjects && (
                     <td>
-                      <select className={selectClass} {...register(`lines.${index}.projectId`)}>
+                      <SelectNative  {...register(`lines.${index}.projectId`)}>
                         <option value="">Use document Project</option>
                         {projects.map((project) => (
                           <option key={project.id} value={project.id}>{project.code} — {project.name}</option>
                         ))}
-                      </select>
+                      </SelectNative>
                     </td>
                   )}
                   <td>

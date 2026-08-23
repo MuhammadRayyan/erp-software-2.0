@@ -1,4 +1,5 @@
 "use client";
+import { FormError } from "@/components/form-error";
 
 import { useState } from "react";
 import { LoaderCircle } from "lucide-react";
@@ -51,7 +52,7 @@ export function NumberingForm({ businessId, initial }: { businessId: string; ini
           return <section key={sequence.label} className="border-b border-border pb-5"><h2 className="text-base font-semibold">{sequence.label}</h2><div className="mt-4 grid gap-4 sm:grid-cols-[1fr_1fr_auto_auto]"><div className="space-y-1.5"><Label htmlFor={sequence.prefixKey}>Prefix</Label><Input id={sequence.prefixKey} value={prefix} onChange={(event) => setValues((current) => ({ ...current, [sequence.prefixKey]: event.target.value }))} aria-invalid={!!errors[sequence.prefixKey]} />{errors[sequence.prefixKey] && <p className="field-error">{errors[sequence.prefixKey][0]}</p>}</div><div className="space-y-1.5"><Label htmlFor={sequence.nextKey}>Next number</Label><Input id={sequence.nextKey} type="number" min="1" value={next} onChange={(event) => setValues((current) => ({ ...current, [sequence.nextKey]: Number(event.target.value) }))} aria-invalid={!!errors[sequence.nextKey]} />{errors[sequence.nextKey] && <p className="field-error">{errors[sequence.nextKey][0]}</p>}</div>{pKey && <div className="space-y-1.5 max-w-24"><Label htmlFor={pKey}>Padding</Label><Input id={pKey} type="number" min="1" max="10" value={padValue} onChange={(event) => setValues((current) => ({ ...current, [pKey]: Number(event.target.value) }))} aria-invalid={!!errors[pKey]} />{errors[pKey] && <p className="field-error">{errors[pKey][0]}</p>}</div>}<div className="min-w-36 self-end pb-2 text-sm text-muted-foreground">Next: <span className="tabular font-medium text-foreground">{prefix}{String(next).padStart(Math.max(1, padValue), "0")}</span></div></div></section>;
         })}
       </div>
-      {serverError && <div role="alert" className="mt-4 rounded-md border border-danger/25 bg-danger/10 px-3 py-2 text-sm text-danger">{serverError}</div>}
+      {serverError && <FormError message={serverError} />}
       <div className="mt-5 flex justify-end"><Button onClick={save} disabled={pending}>{pending && <LoaderCircle className="size-4 animate-spin" />} Save numbering</Button></div>
     </div>
   );

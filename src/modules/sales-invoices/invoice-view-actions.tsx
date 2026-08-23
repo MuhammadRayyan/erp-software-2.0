@@ -10,6 +10,7 @@ import { DialogContent, DialogDescription, DialogRoot, DialogTitle } from "@/com
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { deleteInvoiceAction, duplicateInvoiceAction, voidInvoiceAction } from "./actions";
 import type { DocumentStatus } from "./invoice-service";
+import { FormError } from "@/components/form-error";
 
 type ConfirmAction = "delete" | "void" | null;
 
@@ -91,7 +92,7 @@ export function InvoiceViewActions({
         <DialogContent>
           <DialogTitle>{confirmAction === "delete" ? `Delete ${invoiceNumber}?` : `Void ${invoiceNumber}?`}</DialogTitle>
           <DialogDescription>{confirmAction === "delete" ? "This permanently removes the draft. Drafts have no ledger impact." : "This retains the invoice and creates a balanced reversing journal entry. An invoice with receipt allocations cannot be voided."}</DialogDescription>
-          {error && <div role="alert" className="mt-4 rounded-md border border-danger/25 bg-danger/10 px-3 py-2 text-sm text-danger">{error}</div>}
+          {error && <FormError message={error} />}
           <div className="mt-5 flex justify-end gap-2"><Button variant="secondary" onClick={() => setConfirmAction(null)}>Cancel</Button><Button variant="danger" disabled={pending} onClick={confirm}>{confirmAction === "delete" ? "Delete draft" : "Void invoice"}</Button></div>
         </DialogContent>
       </DialogRoot>

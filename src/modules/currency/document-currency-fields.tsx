@@ -2,6 +2,7 @@
 
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { SelectNative } from "@/components/ui/select-native";
 
 export type DocumentCurrencyOption = {
   code: string;
@@ -18,7 +19,6 @@ export type DocumentRateOption = {
   sourceReference: string | null;
 };
 
-const selectClass = "h-9 w-full rounded-[6px] border border-border-strong bg-surface-raised px-2.5 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-ring/25 disabled:opacity-60";
 
 export function DocumentCurrencyFields({
   baseCurrencyCode,
@@ -71,9 +71,9 @@ export function DocumentCurrencyFields({
   }
 
   return <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-    <div className="space-y-1.5"><Label htmlFor="currencyCode">Currency</Label><select id="currencyCode" className={selectClass} value={currencyCode} disabled={disabled || lockCurrency} onChange={(event) => selectCurrency(event.target.value)}>{currencies.map((currency) => <option key={currency.code} value={currency.code}>{currency.code} — {currency.name}</option>)}</select></div>
+    <div className="space-y-1.5"><Label htmlFor="currencyCode">Currency</Label><SelectNative id="currencyCode"  value={currencyCode} disabled={disabled || lockCurrency} onChange={(event) => selectCurrency(event.target.value)}>{currencies.map((currency) => <option key={currency.code} value={currency.code}>{currency.code} — {currency.name}</option>)}</SelectNative></div>
     {foreign ? <>
-      <div className="space-y-1.5 sm:col-span-1 lg:col-span-2"><Label htmlFor="storedExchangeRate">Stored exchange rate</Label><select id="storedExchangeRate" className={selectClass} value={selectedRate?.id ?? ""} disabled={disabled} onChange={(event) => selectRate(event.target.value)}><option value="">Choose an explicit stored rate…</option>{availableRates.map((rate) => <option key={rate.id} value={rate.id}>{rate.rateDate} · 1 {currencyCode} = {rate.rateToBase} {baseCurrencyCode} · {rate.source}</option>)}</select>{availableRates.length === 0 && <p className="text-xs text-danger">No stored rate exists for {currencyCode}. Add one in Settings → Currencies & exchange rates.</p>}</div>
+      <div className="space-y-1.5 sm:col-span-1 lg:col-span-2"><Label htmlFor="storedExchangeRate">Stored exchange rate</Label><SelectNative id="storedExchangeRate"  value={selectedRate?.id ?? ""} disabled={disabled} onChange={(event) => selectRate(event.target.value)}><option value="">Choose an explicit stored rate…</option>{availableRates.map((rate) => <option key={rate.id} value={rate.id}>{rate.rateDate} · 1 {currencyCode} = {rate.rateToBase} {baseCurrencyCode} · {rate.source}</option>)}</SelectNative>{availableRates.length === 0 && <p className="text-xs text-danger">No stored rate exists for {currencyCode}. Add one in Settings → Currencies & exchange rates.</p>}</div>
       <div className="space-y-1.5"><Label>Snapshot</Label><div className="min-h-9 rounded-[6px] border border-border bg-surface-muted px-2.5 py-2 text-xs tabular-nums">{exchangeRateToBase ? `${exchangeRateDate} · ${exchangeRateSource} · ${exchangeRateToBase}` : "Not selected"}</div></div>
     </> : <div className="space-y-1.5 sm:col-span-1 lg:col-span-3"><Label>Exchange rate</Label><Input value={`1 ${baseCurrencyCode} = 1 ${baseCurrencyCode}`} disabled /></div>}
     <input type="hidden" name="exchangeRateToBase" value={exchangeRateToBase} readOnly />

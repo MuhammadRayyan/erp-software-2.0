@@ -1,4 +1,6 @@
+import { SelectNative } from "@/components/ui/select-native";
 "use client";
+import { FormError } from "@/components/form-error";
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
@@ -15,7 +17,6 @@ import {
   saveRealizedFxAccountsAction,
 } from "./actions";
 
-const selectClass = "h-9 w-full rounded-[6px] border border-border-strong bg-surface-raised px-2.5 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-ring/25 disabled:opacity-60";
 
 type Currency = { code: string; name: string; symbol: string | null; minor_unit: number; is_base: number; is_active: number };
 type Rate = { id: string; currency_code: string; rate_date: string; rate_to_base: string; source: "Manual" | "CBUAE"; source_reference: string | null };
@@ -46,7 +47,7 @@ export function CurrencySettingsForm({
 
   return <div className="space-y-8">
     {!isAdmin && <div className="rounded-md border border-info/25 bg-info/10 px-3 py-2 text-sm">Currency settings are read-only for non-Administrators.</div>}
-    {error && <div role="alert" className="rounded-md border border-danger/25 bg-danger/10 px-3 py-2.5 text-sm text-danger">{error}</div>}
+    {error && <FormError message={error} />}
 
     <section className="space-y-4">
       <div><h2 className="text-base font-semibold">Currency master</h2><p className="mt-1 text-sm text-muted-foreground">The base currency is used by the general ledger. Minor units control authoritative document rounding.</p></div>
@@ -68,10 +69,10 @@ export function CurrencySettingsForm({
     <section className="space-y-4">
       <div><h2 className="text-base font-semibold">Exchange rates</h2><p className="mt-1 text-sm text-muted-foreground">Convention: {baseCode} units per 1 foreign unit. CBUAE is a manual label in this phase; no rates are downloaded.</p></div>
       {isAdmin && <div className="grid gap-3 rounded-lg border border-border bg-surface-raised p-4 sm:grid-cols-2 lg:grid-cols-[100px_140px_1fr_120px_1fr_auto]">
-        <div><Label htmlFor="rate-currency">Currency</Label><select id="rate-currency" className={selectClass} value={rate.currencyCode} onChange={(event) => setRate((current) => ({ ...current, currencyCode: event.target.value }))}>{foreign.map((currency) => <option key={currency.code}>{currency.code}</option>)}</select></div>
+        <div><Label htmlFor="rate-currency">Currency</Label><SelectNative id="rate-currency"  value={rate.currencyCode} onChange={(event) => setRate((current) => ({ ...current, currencyCode: event.target.value }))}>{foreign.map((currency) => <option key={currency.code}>{currency.code}</option>)}</SelectNative></div>
         <div><Label htmlFor="rate-date">Date</Label><Input id="rate-date" type="date" value={rate.rateDate} onChange={(event) => setRate((current) => ({ ...current, rateDate: event.target.value }))} /></div>
         <div><Label htmlFor="rate-value">Rate to {baseCode}</Label><Input id="rate-value" inputMode="decimal" placeholder="3.672500" value={rate.rateToBase} onChange={(event) => setRate((current) => ({ ...current, rateToBase: event.target.value }))} /></div>
-        <div><Label htmlFor="rate-source">Source</Label><select id="rate-source" className={selectClass} value={rate.source} onChange={(event) => setRate((current) => ({ ...current, source: event.target.value as "Manual" | "CBUAE" }))}><option>Manual</option><option>CBUAE</option></select></div>
+        <div><Label htmlFor="rate-source">Source</Label><SelectNative id="rate-source"  value={rate.source} onChange={(event) => setRate((current) => ({ ...current, source: event.target.value as "Manual" | "CBUAE" }))}><option>Manual</option><option>CBUAE</option></SelectNative></div>
         <div><Label htmlFor="rate-reference">Reference</Label><Input id="rate-reference" placeholder="Demo / bulletin reference" value={rate.sourceReference} onChange={(event) => setRate((current) => ({ ...current, sourceReference: event.target.value }))} /></div>
         <Button className="self-end" disabled={Boolean(pending) || foreign.length === 0} onClick={() => run("rate", () => saveExchangeRateAction(businessId, rate), "Exchange rate saved.")}>{pending === "rate" && <LoaderCircle className="size-4 animate-spin" />} Save rate</Button>
       </div>}
@@ -83,8 +84,8 @@ export function CurrencySettingsForm({
     <section className="space-y-4">
       <div><h2 className="text-base font-semibold">Realized FX accounts</h2><p className="mt-1 text-sm text-muted-foreground">Settlement differences post automatically to these base-currency GL accounts.</p></div>
       <div className="grid gap-4 rounded-lg border border-border bg-surface-raised p-4 sm:grid-cols-2">
-        <div><Label htmlFor="fx-gain">Realized FX Gain</Label><select id="fx-gain" className={selectClass} disabled={!isAdmin} value={fxAccounts.gainAccountId} onChange={(event) => setFxAccounts((current) => ({ ...current, gainAccountId: event.target.value }))}>{gainAccounts.map((account) => <option key={account.id} value={account.id}>{account.code} — {account.name}</option>)}</select></div>
-        <div><Label htmlFor="fx-loss">Realized FX Loss</Label><select id="fx-loss" className={selectClass} disabled={!isAdmin} value={fxAccounts.lossAccountId} onChange={(event) => setFxAccounts((current) => ({ ...current, lossAccountId: event.target.value }))}>{lossAccounts.map((account) => <option key={account.id} value={account.id}>{account.code} — {account.name}</option>)}</select></div>
+        <div><Label htmlFor="fx-gain">Realized FX Gain</Label><SelectNative id="fx-gain"  disabled={!isAdmin} value={fxAccounts.gainAccountId} onChange={(event) => setFxAccounts((current) => ({ ...current, gainAccountId: event.target.value }))}>{gainAccounts.map((account) => <option key={account.id} value={account.id}>{account.code} — {account.name}</option>)}</SelectNative></div>
+        <div><Label htmlFor="fx-loss">Realized FX Loss</Label><SelectNative id="fx-loss"  disabled={!isAdmin} value={fxAccounts.lossAccountId} onChange={(event) => setFxAccounts((current) => ({ ...current, lossAccountId: event.target.value }))}>{lossAccounts.map((account) => <option key={account.id} value={account.id}>{account.code} — {account.name}</option>)}</SelectNative></div>
         {isAdmin && <div className="sm:col-span-2 flex justify-end"><Button disabled={Boolean(pending)} onClick={() => run("accounts", () => saveRealizedFxAccountsAction(businessId, fxAccounts), "Realized FX accounts saved.")}>Save accounts</Button></div>}
       </div>
     </section>

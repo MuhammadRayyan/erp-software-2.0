@@ -1,4 +1,5 @@
 "use client";
+import { FormError } from "@/components/form-error";
 
 import Link from "next/link";
 import { useState } from "react";
@@ -14,6 +15,7 @@ import {
   type DeliveryNoteInput,
 } from "./delivery-note-input";
 import type { InventoryDocumentStatus } from "./inventory-document";
+import { SelectNative } from "@/components/ui/select-native";
 
 type Item = { id: string; sku: string | null; name: string; unitName: string };
 type Option = { id: string; name: string };
@@ -91,12 +93,7 @@ export function DeliveryNoteForm({
   return (
     <form className="space-y-7" noValidate>
       {serverError && (
-        <div
-          role="alert"
-          className="rounded-md border border-danger/25 bg-danger/10 px-3 py-2.5 text-sm text-danger"
-        >
-          {serverError}
-        </div>
+        <FormError message={serverError} />
       )}
 
       <section className="border-b border-border pb-7">
@@ -108,14 +105,14 @@ export function DeliveryNoteForm({
         <div className="mt-5 grid gap-5 md:grid-cols-3">
           <div className="space-y-1.5">
             <Label htmlFor="customerId">Customer</Label>
-            <select id="customerId" className={selectClass} {...register("customerId")}>
+            <SelectNative id="customerId"  {...register("customerId")}>
               <option value="">Choose a customer…</option>
               {customers.map((customer) => (
                 <option key={customer.id} value={customer.id}>
                   {customer.name}
                 </option>
               ))}
-            </select>
+            </SelectNative>
           </div>
           <div className="space-y-1.5">
             <Label htmlFor="date">Delivery date</Label>
@@ -123,21 +120,21 @@ export function DeliveryNoteForm({
           </div>
           <div className="space-y-1.5">
             <Label htmlFor="locationId">Location</Label>
-            <select id="locationId" className={selectClass} {...register("locationId")}>
+            <SelectNative id="locationId"  {...register("locationId")}>
               {locations.map((location) => (
                 <option key={location.id} value={location.id}>
                   {location.code} — {location.name}
                 </option>
               ))}
-            </select>
+            </SelectNative>
           </div>
           <div className="space-y-1.5">
             <Label htmlFor="salesInvoiceId">
               Sales Invoice <span className="font-normal text-muted-foreground">(optional)</span>
             </Label>
-            <select
+            <SelectNative
               id="salesInvoiceId"
-              className={selectClass}
+              
               {...register("salesInvoiceId")}
             >
               <option value="">No linked invoice</option>
@@ -148,20 +145,20 @@ export function DeliveryNoteForm({
                     {invoice.number}
                   </option>
                 ))}
-            </select>
+            </SelectNative>
           </div>
           <div className="space-y-1.5">
             <Label htmlFor="projectId">
               Project <span className="font-normal text-muted-foreground">(optional)</span>
             </Label>
-            <select id="projectId" className={selectClass} {...register("projectId")}>
+            <SelectNative id="projectId"  {...register("projectId")}>
               <option value="">No project</option>
               {availableProjects.map((project) => (
                 <option key={project.id} value={project.id}>
                   {project.code} — {project.name}
                 </option>
               ))}
-            </select>
+            </SelectNative>
           </div>
           <div className="space-y-1.5">
             <Label htmlFor="reference">
@@ -229,8 +226,8 @@ export function DeliveryNoteForm({
               {fields.map((field, index) => (
                 <tr key={field.id} className="hover:bg-transparent!">
                   <td>
-                    <select
-                      className={selectClass}
+                    <SelectNative
+                      
                       {...register(`lines.${index}.itemId`, {
                         onChange: (event) => selectItem(index, event.target.value),
                       })}
@@ -241,7 +238,7 @@ export function DeliveryNoteForm({
                           {item.sku ? `${item.sku} — ` : ""}{item.name}
                         </option>
                       ))}
-                    </select>
+                    </SelectNative>
                     <input type="hidden" {...register(`lines.${index}.salesInvoiceLineId`)} />
                   </td>
                   <td><Input {...register(`lines.${index}.description`)} /></td>
@@ -256,14 +253,14 @@ export function DeliveryNoteForm({
                   </td>
                   {showProjects && (
                     <td>
-                      <select className={selectClass} {...register(`lines.${index}.projectId`)}>
+                      <SelectNative  {...register(`lines.${index}.projectId`)}>
                         <option value="">Use document Project</option>
                         {availableProjects.map((project) => (
                           <option key={project.id} value={project.id}>
                             {project.code} — {project.name}
                           </option>
                         ))}
-                      </select>
+                      </SelectNative>
                     </td>
                   )}
                   <td>

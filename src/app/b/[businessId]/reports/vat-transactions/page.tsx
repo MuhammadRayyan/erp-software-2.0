@@ -16,8 +16,8 @@ import {
   type VatCategory,
 } from "@/modules/tax/uae-vat-config";
 import { getVatDetailFilterOptions, getVatTransactionDetail } from "@/modules/tax/vat-report-service";
+import { SelectNative } from "@/components/ui/select-native";
 
-const selectClass = "h-9 w-full rounded-[6px] border border-border-strong bg-surface-raised px-3 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-ring/25";
 
 function sourceHref(businessId: string, type: string, id: string) {
   if (type.startsWith("sales_invoice")) return `/b/${businessId}/sales/invoices/${id}`;
@@ -63,14 +63,14 @@ export default async function VatTransactionsPage({
     <form method="get" className="mb-5 rounded-lg border border-border bg-surface-raised p-4">
       {query.bucket && <input type="hidden" name="bucket" value={query.bucket} />}
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        <div className="space-y-1"><Label htmlFor="periodId">VAT period</Label><select id="periodId" name="periodId" className={selectClass} defaultValue={query.periodId ?? ""}><option value="">Custom / all dates</option>{options.periods.map((period) => <option key={period.id} value={period.id}>{period.period_reference}</option>)}</select></div>
+        <div className="space-y-1"><Label htmlFor="periodId">VAT period</Label><SelectNative id="periodId" name="periodId"  defaultValue={query.periodId ?? ""}><option value="">Custom / all dates</option>{options.periods.map((period) => <option key={period.id} value={period.id}>{period.period_reference}</option>)}</SelectNative></div>
         <div className="space-y-1"><Label htmlFor="dateFrom">Tax date from</Label><Input id="dateFrom" name="dateFrom" type="date" defaultValue={query.dateFrom ?? ""} /></div>
         <div className="space-y-1"><Label htmlFor="dateTo">Tax date to</Label><Input id="dateTo" name="dateTo" type="date" defaultValue={query.dateTo ?? ""} /></div>
-        <div className="space-y-1"><Label htmlFor="taxCodeId">Tax code</Label><select id="taxCodeId" name="taxCodeId" className={selectClass} defaultValue={query.taxCodeId ?? ""}><option value="">All tax codes</option>{options.taxCodes.map((code) => <option key={code.id} value={code.id}>{code.name}</option>)}</select></div>
-        <div className="space-y-1"><Label htmlFor="category">Category</Label><select id="category" name="category" className={selectClass} defaultValue={query.category ?? ""}><option value="">All categories</option>{vatCategories.map((category) => <option key={category} value={category}>{vatCategoryLabels[category]}</option>)}</select></div>
-        <div className="space-y-1"><Label htmlFor="direction">Direction</Label><select id="direction" name="direction" className={selectClass} defaultValue={query.direction ?? ""}><option value="">Sales and Purchases</option>{(["sales", "purchases"] as const).map((direction) => <option key={direction} value={direction}>{taxDirectionLabels[direction]}</option>)}</select></div>
-        <div className="space-y-1"><Label htmlFor="emirate">Supply Emirate</Label><select id="emirate" name="emirate" className={selectClass} defaultValue={query.emirate ?? ""}><option value="">All Emirates</option>{emirates.map((emirate) => <option key={emirate} value={emirate}>{emirateLabels[emirate]}</option>)}</select></div>
-        <div className="space-y-1"><Label htmlFor="sourceType">Source type</Label><select id="sourceType" name="sourceType" className={selectClass} defaultValue={query.sourceType ?? ""}><option value="">All sources</option><option value="sales_invoice">Sales Invoice</option><option value="sales_credit_note">Sales Credit Note</option><option value="purchase_invoice">Purchase Invoice</option><option value="bank_transaction">Bank Transaction</option></select></div>
+        <div className="space-y-1"><Label htmlFor="taxCodeId">Tax code</Label><SelectNative id="taxCodeId" name="taxCodeId"  defaultValue={query.taxCodeId ?? ""}><option value="">All tax codes</option>{options.taxCodes.map((code) => <option key={code.id} value={code.id}>{code.name}</option>)}</SelectNative></div>
+        <div className="space-y-1"><Label htmlFor="category">Category</Label><SelectNative id="category" name="category"  defaultValue={query.category ?? ""}><option value="">All categories</option>{vatCategories.map((category) => <option key={category} value={category}>{vatCategoryLabels[category]}</option>)}</SelectNative></div>
+        <div className="space-y-1"><Label htmlFor="direction">Direction</Label><SelectNative id="direction" name="direction"  defaultValue={query.direction ?? ""}><option value="">Sales and Purchases</option>{(["sales", "purchases"] as const).map((direction) => <option key={direction} value={direction}>{taxDirectionLabels[direction]}</option>)}</SelectNative></div>
+        <div className="space-y-1"><Label htmlFor="emirate">Supply Emirate</Label><SelectNative id="emirate" name="emirate"  defaultValue={query.emirate ?? ""}><option value="">All Emirates</option>{emirates.map((emirate) => <option key={emirate} value={emirate}>{emirateLabels[emirate]}</option>)}</SelectNative></div>
+        <div className="space-y-1"><Label htmlFor="sourceType">Source type</Label><SelectNative id="sourceType" name="sourceType"  defaultValue={query.sourceType ?? ""}><option value="">All sources</option><option value="sales_invoice">Sales Invoice</option><option value="sales_credit_note">Sales Credit Note</option><option value="purchase_invoice">Purchase Invoice</option><option value="bank_transaction">Bank Transaction</option></SelectNative></div>
         <div className="space-y-1 sm:col-span-2 lg:col-span-3"><Label htmlFor="party">Customer / Supplier</Label><Input id="party" name="party" defaultValue={query.party ?? ""} placeholder="Search party name" /></div>
         <div className="flex items-end gap-2"><Button type="submit" className="flex-1"><Search className="size-4" /> Apply filters</Button><Button asChild type="button" variant="ghost"><Link href={`/b/${businessId}/reports/vat-transactions`}><X className="size-4" /> Clear</Link></Button></div>
       </div>

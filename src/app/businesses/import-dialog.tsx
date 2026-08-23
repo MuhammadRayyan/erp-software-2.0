@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { DialogContent, DialogDescription, DialogRoot, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { FormError } from "@/components/form-error";
 
 type ImportResult = { businessId?: string; error?: string };
 
@@ -55,7 +56,7 @@ export function ImportDialog() {
             <Input id="backup" name="backup" type="file" accept=".erpbackup,application/zip,application/octet-stream" className="mt-1.5 h-auto py-2 file:mr-3 file:border-0 file:bg-transparent file:text-sm" required />
             <p className="mt-2 text-xs text-muted-foreground">Maximum 50 MB · manifest and checksum are validated before import.</p>
           </div>
-          {error && <div role="alert" className="rounded-md border border-danger/25 bg-danger/10 px-3 py-2 text-sm text-danger">{error}</div>}
+          {error && <FormError message={error} />}
           <div className="flex justify-end gap-2"><Button type="button" variant="ghost" onClick={() => setOpen(false)}>Cancel</Button><Button type="submit" disabled={pending}>{pending && <LoaderCircle className="size-4 animate-spin" />} Import copy</Button></div>
         </form>
       </DialogContent>

@@ -12,6 +12,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { voidReceiptAction } from "./actions";
+import { FormError } from "@/components/form-error";
 
 export function ReceiptViewActions({
   businessId,
@@ -53,7 +54,7 @@ export function ReceiptViewActions({
             This keeps the Receipt in history, releases its invoice allocation, and posts
             Debit Accounts Receivable / Credit Bank or Cash.
           </DialogDescription>
-          {error && <div role="alert" className="mt-4 rounded-md border border-danger/25 bg-danger/10 px-3 py-2 text-sm text-danger">{error}</div>}
+          {error && <FormError message={error} />}
           <div className="mt-5 flex justify-end gap-2">
             <Button variant="secondary" onClick={() => setOpen(false)}>Cancel</Button>
             <Button variant="danger" disabled={pending} onClick={reverse}>

@@ -6,6 +6,7 @@ import { Search } from "lucide-react";
 import { formatDate, formatDateTime, formatMoney } from "@/core/format";
 import type { EInvoiceSourceType, EInvoiceStatus } from "./einvoice-types";
 import { EInvoiceStatusBadge } from "./status-badge";
+import { SelectNative } from "@/components/ui/select-native";
 
 export type EInvoiceListRow = {
   source_type: EInvoiceSourceType;
@@ -25,7 +26,6 @@ export type EInvoiceListRow = {
   updated_at: string;
 };
 
-const selectClass = "h-9 rounded-[6px] border border-border-strong bg-surface-raised px-2.5 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-ring/25";
 
 export function EInvoiceList({ businessId, currency, rows }: { businessId: string; currency: string; rows: EInvoiceListRow[] }) {
   const [query, setQuery] = useState("");
@@ -47,11 +47,11 @@ export function EInvoiceList({ businessId, currency, rows }: { businessId: strin
   return <section className="data-panel">
     <div className="flex flex-wrap items-center gap-2 border-b border-border p-3">
       <label className="relative min-w-[220px] flex-1"><Search className="pointer-events-none absolute top-2.5 left-2.5 size-4 text-muted-foreground" /><span className="sr-only">Search eInvoices</span><input className="h-9 w-full rounded-[6px] border border-border-strong bg-surface-raised pr-3 pl-9 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-ring/25" placeholder="Search number, customer, or UUID" value={query} onChange={(event) => setQuery(event.target.value)} /></label>
-      <select aria-label="Filter by document type" className={selectClass} value={type} onChange={(event) => setType(event.target.value)}><option value="all">All document types</option><option value="sales_invoice">Sales Invoices</option><option value="sales_credit_note">Sales Credit Notes</option></select>
-      <select aria-label="Filter by customer" className={selectClass} value={customer} onChange={(event) => setCustomer(event.target.value)}><option value="all">All customers</option>{customers.map((name) => <option key={name} value={name}>{name}</option>)}</select>
-      <select aria-label="Filter by status" className={selectClass} value={status} onChange={(event) => setStatus(event.target.value)}><option value="all">All statuses</option><option value="NotPrepared">Not Prepared</option><option value="NeedsData">Needs Data</option><option value="ValidationFailed">Validation Failed</option><option value="Ready">Ready</option><option value="Submitted">Submitted</option><option value="Accepted">Accepted</option><option value="Rejected">Rejected</option></select>
-      <input type="date" aria-label="Issue date from" className={selectClass} value={dateFrom} onChange={(event) => setDateFrom(event.target.value)} />
-      <input type="date" aria-label="Issue date to" className={selectClass} value={dateTo} onChange={(event) => setDateTo(event.target.value)} />
+      <SelectNative aria-label="Filter by document type"  value={type} onChange={(event) => setType(event.target.value)}><option value="all">All document types</option><option value="sales_invoice">Sales Invoices</option><option value="sales_credit_note">Sales Credit Notes</option></SelectNative>
+      <SelectNative aria-label="Filter by customer"  value={customer} onChange={(event) => setCustomer(event.target.value)}><option value="all">All customers</option>{customers.map((name) => <option key={name} value={name}>{name}</option>)}</SelectNative>
+      <SelectNative aria-label="Filter by status"  value={status} onChange={(event) => setStatus(event.target.value)}><option value="all">All statuses</option><option value="NotPrepared">Not Prepared</option><option value="NeedsData">Needs Data</option><option value="ValidationFailed">Validation Failed</option><option value="Ready">Ready</option><option value="Submitted">Submitted</option><option value="Accepted">Accepted</option><option value="Rejected">Rejected</option></SelectNative>
+      <input type="date" aria-label="Issue date from" className="h-9 w-full rounded-[6px] border border-border-strong bg-surface-raised px-2.5 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-ring/25 disabled:cursor-not-allowed disabled:opacity-60" value={dateFrom} onChange={(event) => setDateFrom(event.target.value)} />
+      <input type="date" aria-label="Issue date to" className="h-9 w-full rounded-[6px] border border-border-strong bg-surface-raised px-2.5 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-ring/25 disabled:cursor-not-allowed disabled:opacity-60" value={dateTo} onChange={(event) => setDateTo(event.target.value)} />
     </div>
     {filtered.length ? <div className="overflow-x-auto"><table className="data-table min-w-[1180px]"><thead><tr><th>Document</th><th>Customer</th><th>Date</th><th>Status</th><th>Exchange / reporting</th><th>Provider</th><th>Specification</th><th>Last update</th><th className="text-right!">Total</th></tr></thead><tbody>{filtered.map((row) => {
       const sourceHref = row.source_type === "sales_invoice" ? `/b/${businessId}/sales/invoices/${row.source_id}` : `/b/${businessId}/sales/credit-notes/${row.source_id}`;

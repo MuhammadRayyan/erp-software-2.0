@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { DialogClose, DialogContent, DialogDescription, DialogRoot, DialogTitle } from "@/components/ui/dialog";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { deleteProjectAction } from "./actions";
+import { FormError } from "@/components/form-error";
 
 export function ProjectViewActions({ businessId, projectId, customerId }: { businessId: string; projectId: string; customerId: string | null }) {
   const [confirmDelete, setConfirmDelete] = useState(false);
@@ -35,6 +36,6 @@ export function ProjectViewActions({ businessId, projectId, customerId }: { busi
       <Button asChild variant="secondary" className="hidden md:inline-flex"><Link href={poHref}><ShoppingCart className="size-4" /> New Purchase Order</Link></Button>
       <DropdownMenu><DropdownMenuTrigger asChild><Button variant="secondary"><MoreHorizontal className="size-4" /> More</Button></DropdownMenuTrigger><DropdownMenuContent align="end"><DropdownMenuItem asChild className="md:hidden"><Link href={poHref}>New Purchase Order</Link></DropdownMenuItem><DropdownMenuItem asChild><Link href={piHref}>New Purchase Invoice</Link></DropdownMenuItem><DropdownMenuSeparator /><DropdownMenuItem className="text-danger" onSelect={() => setConfirmDelete(true)}>Delete unused project</DropdownMenuItem></DropdownMenuContent></DropdownMenu>
     </div>
-    <DialogRoot open={confirmDelete} onOpenChange={setConfirmDelete}><DialogContent><DialogTitle>Delete project?</DialogTitle><DialogDescription>Only a project with no documents, journal lines, notes, or files can be deleted. This action cannot be undone.</DialogDescription>{error && <div role="alert" className="mt-3 rounded-md border border-danger/25 bg-danger/10 px-3 py-2 text-sm text-danger">{error}</div>}<div className="mt-5 flex justify-end gap-2"><DialogClose asChild><Button variant="secondary" disabled={pending}>Cancel</Button></DialogClose><Button variant="danger" disabled={pending} onClick={remove}>{pending ? "Deleting…" : "Delete Project"}</Button></div></DialogContent></DialogRoot>
+    <DialogRoot open={confirmDelete} onOpenChange={setConfirmDelete}><DialogContent><DialogTitle>Delete project?</DialogTitle><DialogDescription>Only a project with no documents, journal lines, notes, or files can be deleted. This action cannot be undone.</DialogDescription>{error && <FormError message={error} />}<div className="mt-5 flex justify-end gap-2"><DialogClose asChild><Button variant="secondary" disabled={pending}>Cancel</Button></DialogClose><Button variant="danger" disabled={pending} onClick={remove}>{pending ? "Deleting…" : "Delete Project"}</Button></div></DialogContent></DialogRoot>
   </>;
 }

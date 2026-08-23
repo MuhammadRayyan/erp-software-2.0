@@ -8,8 +8,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { saveTemplateSettingsAction } from "./actions";
 import type { TemplateSettings } from "./template-settings";
+import { SelectNative } from "@/components/ui/select-native";
 
-const selectClass = "h-9 w-full rounded-[6px] border border-border-strong bg-surface-raised px-2.5 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-ring/25";
 
 export function TemplateEditor({ businessId, initialSettings }: { businessId: string; initialSettings: TemplateSettings }) {
   const [settings, setSettings] = useState<TemplateSettings>(initialSettings);
@@ -105,9 +105,9 @@ export function TemplateEditor({ businessId, initialSettings }: { businessId: st
               </div>
               <div className="space-y-1.5">
                 <Label htmlFor="fontName">Font</Label>
-                <select
+                <SelectNative
                   id="fontName"
-                  className={selectClass}
+                  
                   value={settings.fontName}
                   onChange={(e) => update("fontName", e.target.value as TemplateSettings["fontName"])}
                 >
@@ -115,7 +115,7 @@ export function TemplateEditor({ businessId, initialSettings }: { businessId: st
                   <option value="Roboto">Roboto</option>
                   <option value="Open Sans">Open Sans</option>
                   <option value="Lato">Lato</option>
-                </select>
+                </SelectNative>
               </div>
               <div className="space-y-1.5 sm:col-span-2">
                 <Label htmlFor="logoUrl">Logo URL (optional)</Label>

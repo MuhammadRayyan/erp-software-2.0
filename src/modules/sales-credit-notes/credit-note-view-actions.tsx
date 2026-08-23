@@ -10,6 +10,7 @@ import { DialogContent, DialogDescription, DialogRoot, DialogTitle } from "@/com
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { deleteCreditNoteAction, duplicateCreditNoteAction, voidCreditNoteAction } from "./actions";
 import type { CreditNoteStatus } from "./credit-note-service";
+import { FormError } from "@/components/form-error";
 
 type Confirm = "delete" | "void" | null;
 
@@ -64,7 +65,7 @@ export function CreditNoteViewActions({
     <DialogRoot open={!!confirm} onOpenChange={(open) => !open && setConfirm(null)}><DialogContent>
       <DialogTitle>{confirm === "delete" ? `Delete ${creditNoteNumber}?` : `Void ${creditNoteNumber}?`}</DialogTitle>
       <DialogDescription>{confirm === "delete" ? "This permanently removes the non-posting draft." : "This retains the credit note, reverses its journal, and restores the invoice balance."}</DialogDescription>
-      {error && <div role="alert" className="mt-4 rounded-md border border-danger/25 bg-danger/10 px-3 py-2 text-sm text-danger">{error}</div>}
+      {error && <FormError message={error} />}
       <div className="mt-5 flex justify-end gap-2"><Button variant="secondary" onClick={() => setConfirm(null)}>Cancel</Button><Button variant="danger" disabled={pending} onClick={run}>{confirm === "delete" ? "Delete draft" : "Void credit note"}</Button></div>
     </DialogContent></DialogRoot>
   </>;

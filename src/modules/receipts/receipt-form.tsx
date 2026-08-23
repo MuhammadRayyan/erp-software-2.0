@@ -1,4 +1,5 @@
 "use client";
+import { FormError } from "@/components/form-error";
 
 import Link from "next/link";
 import { useMemo, useState } from "react";
@@ -12,6 +13,7 @@ import { formatMoney } from "@/core/format";
 import { DocumentCurrencyFields, type DocumentCurrencyOption, type DocumentRateOption } from "@/modules/currency/document-currency-fields";
 import { createReceiptAction } from "./actions";
 import { receiptInputSchema, type ReceiptInput } from "./receipt-input";
+import { SelectNative } from "@/components/ui/select-native";
 
 type Option = { id: string; name: string };
 type InvoiceOption = {
@@ -85,9 +87,7 @@ export function ReceiptForm({
   return (
     <form onSubmit={handleSubmit(submit)} className="space-y-7" noValidate>
       {serverError && (
-        <div role="alert" className="rounded-md border border-danger/25 bg-danger/10 px-3 py-2.5 text-sm text-danger">
-          {serverError}
-        </div>
+        <FormError message={serverError} />
       )}
       <section className="border-b border-border pb-7">
         <h2 className="text-base font-semibold">Receipt details</h2>
@@ -97,9 +97,9 @@ export function ReceiptForm({
         <div className="mt-5 grid gap-5 md:grid-cols-2">
           <div className="space-y-1.5">
             <Label htmlFor="customerId">Customer</Label>
-            <select
+            <SelectNative
               id="customerId"
-              className={selectClass}
+              
               {...register("customerId", {
                 onChange: () => setValue("invoiceId", "", { shouldValidate: false }),
               })}
@@ -107,19 +107,19 @@ export function ReceiptForm({
             >
               <option value="">Choose a customer…</option>
               {customers.map((customer) => <option key={customer.id} value={customer.id}>{customer.name}</option>)}
-            </select>
+            </SelectNative>
             {errors.customerId && <p className="field-error">{errors.customerId.message}</p>}
           </div>
           <div className="space-y-1.5">
             <Label htmlFor="invoiceId">Invoice</Label>
-            <select id="invoiceId" className={selectClass} {...register("invoiceId", { onChange: (event) => { const invoice = invoices.find((entry) => entry.id === event.target.value); const code = invoice?.currencyCode ?? currency; setValue("currencyCode", code); setValue("exchangeRateToBase", code === currency ? "1" : ""); setValue("exchangeRateDate", code === currency ? receiptDate : ""); setValue("exchangeRateSource", code === currency ? "Base" : ""); } })} aria-invalid={!!errors.invoiceId}>
+            <SelectNative id="invoiceId"  {...register("invoiceId", { onChange: (event) => { const invoice = invoices.find((entry) => entry.id === event.target.value); const code = invoice?.currencyCode ?? currency; setValue("currencyCode", code); setValue("exchangeRateToBase", code === currency ? "1" : ""); setValue("exchangeRateDate", code === currency ? receiptDate : ""); setValue("exchangeRateSource", code === currency ? "Base" : ""); } })} aria-invalid={!!errors.invoiceId}>
               <option value="">Choose an outstanding invoice…</option>
               {customerInvoices.map((invoice) => (
                 <option key={invoice.id} value={invoice.id}>
                   {invoice.invoiceNumber} · {formatMoney(invoice.balanceMinor, invoice.currencyCode, invoice.minorUnit)} outstanding
                 </option>
               ))}
-            </select>
+            </SelectNative>
             {errors.invoiceId && <p className="field-error">{errors.invoiceId.message}</p>}
           </div>
           <div className="space-y-1.5">
@@ -129,10 +129,10 @@ export function ReceiptForm({
           </div>
           <div className="space-y-1.5">
             <Label htmlFor="bankAccountId">Deposit to</Label>
-            <select id="bankAccountId" className={selectClass} {...register("bankAccountId")} aria-invalid={!!errors.bankAccountId}>
+            <SelectNative id="bankAccountId"  {...register("bankAccountId")} aria-invalid={!!errors.bankAccountId}>
               <option value="">Choose Bank or Cash…</option>
               {bankAccounts.map((account) => <option key={account.id} value={account.id}>{account.name}</option>)}
-            </select>
+            </SelectNative>
             {errors.bankAccountId && <p className="field-error">{errors.bankAccountId.message}</p>}
           </div>
           <div className="space-y-1.5">
