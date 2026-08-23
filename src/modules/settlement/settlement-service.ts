@@ -49,6 +49,12 @@ export function createSettlement(
   `).get(invoiceId, partyId) as any;
   if (!invoice) throw new Error("Invoice not found or not posted.");
 
+  if (data.currencyCode && data.currencyCode.toUpperCase() !== invoice.currency_code) {
+    const typeLabel = config.partyType === "customer" ? "Receipt" : "Payment";
+    throw new Error(`This ${data.currencyCode.toUpperCase()} ${typeLabel} can only allocate ${data.currencyCode.toUpperCase()} invoices.`);
+  }
+
+
   const rate = resolveRateSnapshot(sqlite, {
     currencyCode: invoice.currency_code,
     exchangeRateToBase: data.exchangeRateToBase,
@@ -62,7 +68,13 @@ export function createSettlement(
   const open = getOpenState(sqlite, config, invoice.id);
 
   if (amountMinor > open.foreign_open_minor) {
-    throw new Error("Amount cannot exceed the balance.");
+    
+    if (config.partyType === "customer") {
+      throw new Error("Receipt amount cannot exceed the invoice balance.");
+    } else {
+      throw new Error("Payment amount exceeds the selected payable.");
+    }
+
   }
 
   const allocation = calculateSettlementAllocation({
