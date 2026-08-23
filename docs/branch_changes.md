@@ -175,3 +175,15 @@ Conducted a full-repository audit to fix performance bottlenecks, eliminate dead
 - Standardized empty state styling (capitalization and dashed borders) in Delivery Notes, Sales Receipts, and Items modules.
 - Added missing ria-label="More actions" to <DropdownMenuTrigger> in src/modules/projects/project-view-actions.tsx.
 - Validated via 28/28 Playwright End-to-End browser tests and standard invariant test suites.
+
+### Phase 1 Critical Fixes (Security & Integrity)
+**Objective**: Address critical security, data integrity, readability, and API runtime issues according to `fixes/PHASE_1_CRITICAL_FIXES.md`.
+**Changes**:
+- **Rate Limiter Fix**: Protected `rate-limit-sync.ts` by ensuring it runs in the `nodejs` runtime and exposed the functionality securely through a validated server action (`rate-limit-actions.ts`).
+- **API Authentication**: Standardized API route protection by applying `requireApiAuth` to all 10 unprotected handler functions under `src/app/api/businesses/`.
+- **Numbering Padding Segregation**: Stopped document sequence padding settings (e.g. `project_padding`, `goods_receipt_padding`, `bank_transfer_padding`) from incorrectly sharing the global `invoice_padding` value. Created a new migration (Phase 12) to add these individual padding columns to `business_accounting_settings` and updated the UI forms.
+- **Customer Status Clean-Up**: Removed the ambiguous dual `status` column from the Customer schema, ported existing values natively to the `is_active` boolean field via migration, and removed leftover ORM references.
+- **Credit Note Formatting**: Refactored the minified `credit-note-posting-service.ts` into a readable, formatted script. Abstracted `addAmount` and `addProjectAmount` into a generic `posting-helpers.ts` shared file to clean up logic for both invoices and credit notes.
+- **API Runtime Declarations**: Enforced `export const runtime = "nodejs";` in `src/app/api/auth/[...all]/route.ts` to prevent edge-runtime compilation faults.
+- **Test Suite Alignment**: Updated test assertions inside `tests/phase-6.test.ts`, `tests/phase-8.test.ts`, and `tests/phase-9.test.ts` to account for Migration 12 and the deprecated Customer `status` column.
+

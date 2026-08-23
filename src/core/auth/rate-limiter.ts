@@ -7,16 +7,7 @@ const MAX_ATTEMPTS = 5;
 type Attempt = { count: number; resetAt: number };
 const attempts = new Map<string, Attempt>();
 
-function getClientIp(request: Request): string {
-  const forwarded = request.headers.get("x-forwarded-for");
-  if (forwarded) return forwarded.split(",")[0].trim();
-  const realIp = request.headers.get("x-real-ip");
-  if (realIp) return realIp;
-  return "unknown";
-}
-
-export function checkRateLimit(request: Request): { allowed: boolean; remaining: number; resetAt: number } {
-  const ip = getClientIp(request);
+export function checkRateLimit(ip: string): { allowed: boolean; remaining: number; resetAt: number } {
   const now = Date.now();
   let attempt = attempts.get(ip);
 
@@ -32,8 +23,7 @@ export function checkRateLimit(request: Request): { allowed: boolean; remaining:
   return { allowed: true, remaining: MAX_ATTEMPTS - attempt.count, resetAt: attempt.resetAt };
 }
 
-export function recordFailedAttempt(request: Request) {
-  const ip = getClientIp(request);
+export function recordFailedAttempt(ip: string) {
   const now = Date.now();
   let attempt = attempts.get(ip);
 
@@ -45,8 +35,7 @@ export function recordFailedAttempt(request: Request) {
   attempt.count += 1;
 }
 
-export function clearAttempts(request: Request) {
-  const ip = getClientIp(request);
+export function clearAttempts(ip: string) {
   attempts.delete(ip);
 }
 

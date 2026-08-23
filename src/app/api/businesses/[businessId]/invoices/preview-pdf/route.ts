@@ -1,6 +1,5 @@
 import { NextResponse } from "next/server";
-import { getCurrentSession } from "@/core/auth/session";
-import { requireModule } from "@/core/permissions/require-module";
+import { requireApiAuth } from "@/core/auth/api-auth";
 import { renderInvoicePdf } from "@/modules/document-templates/template-registry";
 import type { InvoiceTemplateData } from "@/modules/document-templates/react-pdf/invoice-template";
 
@@ -11,10 +10,9 @@ export async function GET(
   { params }: { params: Promise<{ businessId: string }> }
 ) {
   try {
-    const session = await getCurrentSession();
-    if (!session) return new NextResponse("Unauthorized", { status: 401 });
     const { businessId } = await params;
-    await requireModule(businessId, "settings");
+    const { session, access, error: authError } = await requireApiAuth(request, { businessId, module: "settings" });
+    if (authError || !session || !access) return authError;
 
     const sampleData: InvoiceTemplateData = {
       companyName: "Acme Corporation",

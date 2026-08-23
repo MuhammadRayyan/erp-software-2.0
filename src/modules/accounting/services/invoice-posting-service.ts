@@ -4,6 +4,8 @@ import { convertDocumentLinesToBase } from "@/modules/currency/conversion";
 import type { RateSnapshot } from "@/modules/currency/validation";
 import { postTransaction, type JournalLineInput } from "./posting-service";
 
+import { addProjectAmount, type ProjectAmount } from "./posting-helpers";
+
 type PostedInvoice = {
   id: string;
   invoiceNumber: string;
@@ -42,23 +44,6 @@ function requiredSettings(sqlite: Database.Database) {
   return settings;
 }
 
-type ProjectAmount = { accountId: string; projectId: string | null; amountMinor: number };
-
-function addCredit(
-  group: Map<string, ProjectAmount>,
-  accountId: string,
-  projectId: string | null,
-  amountMinor: number,
-) {
-  const key = `${accountId}\u0000${projectId ?? ""}`;
-  const current = group.get(key);
-  group.set(key, {
-    accountId,
-    projectId,
-    amountMinor: addMinor([current?.amountMinor ?? 0, amountMinor]),
-  });
-}
-
 export function buildJournalForSalesInvoice(
   sqlite: Database.Database,
   invoice: PostedInvoice,
@@ -78,7 +63,7 @@ export function buildJournalForSalesInvoice(
 
   for (const line of converted) {
     if (!line.salesAccountId) throw new Error("Cannot post invoice because a line has no sales account.");
-    addCredit(salesCredits, line.salesAccountId, line.projectId ?? null, line.baseNetAmountMinor);
+    addProjectAmount(salesCredits, line.salesAccountId, line.projectId ?? null, line.baseNetAmountMinor);
     if (line.baseTaxAmountMinor > 0) {
       const taxCode = taxCodeById.get(line.taxCodeId);
       const taxAccountId = taxCode?.sales_tax_account_id ?? settings.vat_output_account_id;

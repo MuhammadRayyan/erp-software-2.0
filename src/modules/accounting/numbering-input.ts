@@ -14,16 +14,22 @@ export const invoiceNumberingInputSchema = z.object({
   supplierPaymentNextNumber: z.coerce.number().int().positive().max(999_999_999),
   projectPrefix: z.string().trim().min(1, "Enter a project prefix").max(12),
   projectNextNumber: z.coerce.number().int().positive().max(999_999_999),
+  projectPadding: z.coerce.number().int().min(1).max(10),
   goodsReceiptPrefix: z.string().trim().min(1, "Enter a goods receipt prefix").max(12),
   goodsReceiptNextNumber: z.coerce.number().int().positive().max(999_999_999),
+  goodsReceiptPadding: z.coerce.number().int().min(1).max(10),
   deliveryNotePrefix: z.string().trim().min(1, "Enter a delivery note prefix").max(12),
   deliveryNoteNextNumber: z.coerce.number().int().positive().max(999_999_999),
+  deliveryNotePadding: z.coerce.number().int().min(1).max(10),
   stockAdjustmentPrefix: z.string().trim().min(1, "Enter a stock adjustment prefix").max(12),
   stockAdjustmentNextNumber: z.coerce.number().int().positive().max(999_999_999),
+  stockAdjustmentPadding: z.coerce.number().int().min(1).max(10),
   bankTransactionPrefix: z.string().trim().min(1, "Enter a bank transaction prefix").max(12),
   bankTransactionNextNumber: z.coerce.number().int().positive().max(999_999_999),
+  bankTransactionPadding: z.coerce.number().int().min(1).max(10),
   bankTransferPrefix: z.string().trim().min(1, "Enter a bank transfer prefix").max(12),
   bankTransferNextNumber: z.coerce.number().int().positive().max(999_999_999),
+  bankTransferPadding: z.coerce.number().int().min(1).max(10),
 });
 
 export type InvoiceNumberingInput = z.output<typeof invoiceNumberingInputSchema>;

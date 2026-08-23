@@ -1,16 +1,13 @@
 import { NextResponse } from "next/server";
-import { getCurrentSession } from "@/core/auth/session";
-import { getBusinessAccess } from "@/core/permissions/permissions";
+import { requireApiAuth } from "@/core/auth/api-auth";
 import { getEInvoiceXml } from "@/modules/einvoicing/einvoice-service";
 
 export const runtime = "nodejs";
 
-export async function GET(_request: Request, { params }: { params: Promise<{ businessId: string; documentId: string }> }) {
-  const session = await getCurrentSession();
-  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+export async function GET(request: Request, { params }: { params: Promise<{ businessId: string; documentId: string }> }) {
   const { businessId, documentId } = await params;
-  const access = getBusinessAccess(businessId, session.user.id);
-  if (!access?.modules.includes("sales")) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  const { session, access, error: authError } = await requireApiAuth(request, { businessId, module: "sales" });
+  if (authError || !session || !access) return authError;
   const payload = getEInvoiceXml(businessId, session.user.id, documentId);
   if (!payload) return NextResponse.json({ error: "Validated XML not found" }, { status: 404 });
   return new NextResponse(payload.xml, {

@@ -41,7 +41,7 @@ test("Phase 8 migration preserves Phase 7 data and installs immutable inbound st
   ).run(now, now);
   runMigrations(legacy, { label: "Phase 8 migration fixture", migrations: businessMigrations });
   assert.equal((legacy.prepare("SELECT name FROM suppliers WHERE id = 'phase8-supplier'").get() as { name: string }).name, "Preserved Supplier");
-  assert.equal((legacy.prepare("SELECT MAX(version) AS version FROM schema_migrations").get() as { version: number }).version, 11);
+  assert.equal((legacy.prepare("SELECT MAX(version) AS version FROM schema_migrations").get() as { version: number }).version, 12);
   assert.ok(legacy.prepare("SELECT 1 FROM sqlite_master WHERE type = 'trigger' AND name = 'inbound_einvoice_original_immutable'").get());
   legacy.close();
 });

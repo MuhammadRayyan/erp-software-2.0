@@ -74,7 +74,7 @@ const businessId = seeded.business.id;
 const adminId = seeded.admin.id;
 const standardUserId = seeded.standard.id;
 const { sqlite } = getBusinessDb(businessId, adminId);
-const customer = sqlite.prepare("SELECT id FROM customers WHERE status = 'active' ORDER BY name LIMIT 1").get() as { id: string };
+const customer = sqlite.prepare("SELECT id FROM customers WHERE is_active = 1 ORDER BY name LIMIT 1").get() as { id: string };
 const supplier = sqlite.prepare("SELECT id FROM suppliers WHERE is_active = 1 ORDER BY name LIMIT 1").get() as { id: string };
 const accounting = sqlite.prepare(`
   SELECT default_sales_account_id, default_purchase_expense_account_id

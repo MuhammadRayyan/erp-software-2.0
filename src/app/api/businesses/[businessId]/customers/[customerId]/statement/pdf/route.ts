@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server";
-import { getCurrentSession } from "@/core/auth/session";
+import { requireApiAuth } from "@/core/auth/api-auth";
 import { formatDate, formatMoney } from "@/core/format";
-import { getDocumentPdfAccess } from "@/core/permissions/document-pdf-access";
 import { journalSourceLabel } from "@/modules/accounting/journal-source";
 import { renderStatementPdf } from "@/modules/document-templates/template-registry";
 import { getCustomer } from "@/modules/customers/customer-service";
@@ -10,15 +9,12 @@ import type { StatementTemplateData } from "@/modules/document-templates/react-p
 
 export const runtime = "nodejs";
 
-export async function GET(_request: Request, { params }: { params: Promise<{ businessId: string; customerId: string }> }) {
-  const session = await getCurrentSession();
-  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  
+export async function GET(request: Request, { params }: { params: Promise<{ businessId: string; customerId: string }> }) {
   const { businessId, customerId } = await params;
   
-  // Checking access using sales-invoice scope since statements relate to receivables
-  const access = getDocumentPdfAccess(businessId, session.user.id, "sales-invoice");
-  if (!access) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  // Checking access using sales module since statements relate to receivables
+  const { session, access, error: authError } = await requireApiAuth(request, { businessId, module: "sales" });
+  if (authError || !session || !access) return authError;
   
   const customer = getCustomer(businessId, session.user.id, customerId);
   if (!customer) return NextResponse.json({ error: "Customer not found" }, { status: 404 });

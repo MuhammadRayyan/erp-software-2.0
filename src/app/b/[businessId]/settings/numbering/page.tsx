@@ -26,16 +26,22 @@ export default async function NumberingPage({ params }: { params: Promise<{ busi
         supplierPaymentNextNumber: settings.supplierPaymentNextNumber,
         projectPrefix: settings.projectPrefix,
         projectNextNumber: settings.projectNextNumber,
+        projectPadding: settings.projectPadding,
         goodsReceiptPrefix: settings.goodsReceiptPrefix,
         goodsReceiptNextNumber: settings.goodsReceiptNextNumber,
+        goodsReceiptPadding: settings.goodsReceiptPadding,
         deliveryNotePrefix: settings.deliveryNotePrefix,
         deliveryNoteNextNumber: settings.deliveryNoteNextNumber,
+        deliveryNotePadding: settings.deliveryNotePadding,
         stockAdjustmentPrefix: settings.stockAdjustmentPrefix,
         stockAdjustmentNextNumber: settings.stockAdjustmentNextNumber,
+        stockAdjustmentPadding: settings.stockAdjustmentPadding,
         bankTransactionPrefix: settings.bankTransactionPrefix,
         bankTransactionNextNumber: settings.bankTransactionNextNumber,
+        bankTransactionPadding: settings.bankTransactionPadding,
         bankTransferPrefix: settings.bankTransferPrefix,
         bankTransferNextNumber: settings.bankTransferNextNumber,
+        bankTransferPadding: settings.bankTransferPadding,
       }} />
     </div>
   );

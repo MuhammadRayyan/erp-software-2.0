@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server";
-import { getCurrentSession } from "@/core/auth/session";
+import { requireApiAuth } from "@/core/auth/api-auth";
 import { formatDate, formatMoney } from "@/core/format";
-import { getDocumentPdfAccess } from "@/core/permissions/document-pdf-access";
 import { quantityMicrosToInput } from "@/modules/accounting/calculations/money";
 import { renderInvoicePdf } from "@/modules/document-templates/template-registry";
 import { getInvoice } from "@/modules/sales-invoices/invoice-service";
@@ -9,12 +8,10 @@ import type { InvoiceTemplateData } from "@/modules/document-templates/react-pdf
 
 export const runtime = "nodejs";
 
-export async function GET(_request: Request, { params }: { params: Promise<{ businessId: string; invoiceId: string }> }) {
-  const session = await getCurrentSession();
-  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+export async function GET(request: Request, { params }: { params: Promise<{ businessId: string; invoiceId: string }> }) {
   const { businessId, invoiceId } = await params;
-  const access = getDocumentPdfAccess(businessId, session.user.id, "sales-invoice");
-  if (!access) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  const { session, access, error: authError } = await requireApiAuth(request, { businessId, module: "sales" });
+  if (authError || !session || !access) return authError;
   const record = getInvoice(businessId, session.user.id, invoiceId);
   if (!record) return NextResponse.json({ error: "Invoice not found" }, { status: 404 });
   const { invoice, customer, lines } = record;

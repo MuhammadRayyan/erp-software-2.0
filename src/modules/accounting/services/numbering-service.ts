@@ -22,12 +22,12 @@ const columns: Record<NumberKind, { prefix: string; next: string; padding?: stri
   purchaseOrder: { prefix: "purchase_order_prefix", next: "purchase_order_next_number" },
   purchaseInvoice: { prefix: "purchase_invoice_prefix", next: "purchase_invoice_next_number" },
   supplierPayment: { prefix: "supplier_payment_prefix", next: "supplier_payment_next_number" },
-  project: { prefix: "project_prefix", next: "project_next_number", padding: "invoice_padding" },
-  goodsReceipt: { prefix: "goods_receipt_prefix", next: "goods_receipt_next_number", padding: "invoice_padding" },
-  deliveryNote: { prefix: "delivery_note_prefix", next: "delivery_note_next_number", padding: "invoice_padding" },
-  stockAdjustment: { prefix: "stock_adjustment_prefix", next: "stock_adjustment_next_number", padding: "invoice_padding" },
-  bankTransaction: { prefix: "bank_transaction_prefix", next: "bank_transaction_next_number", padding: "invoice_padding" },
-  bankTransfer: { prefix: "bank_transfer_prefix", next: "bank_transfer_next_number", padding: "invoice_padding" },
+  project: { prefix: "project_prefix", next: "project_next_number", padding: "project_padding" },
+  goodsReceipt: { prefix: "goods_receipt_prefix", next: "goods_receipt_next_number", padding: "goods_receipt_padding" },
+  deliveryNote: { prefix: "delivery_note_prefix", next: "delivery_note_next_number", padding: "delivery_note_padding" },
+  stockAdjustment: { prefix: "stock_adjustment_prefix", next: "stock_adjustment_next_number", padding: "stock_adjustment_padding" },
+  bankTransaction: { prefix: "bank_transaction_prefix", next: "bank_transaction_next_number", padding: "bank_transaction_padding" },
+  bankTransfer: { prefix: "bank_transfer_prefix", next: "bank_transfer_next_number", padding: "bank_transfer_padding" },
   journal: { prefix: "journal_prefix", next: "journal_next_number" },
 };
 

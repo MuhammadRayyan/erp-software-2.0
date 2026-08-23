@@ -1,6 +1,5 @@
 import { NextResponse } from "next/server";
-import { getCurrentSession } from "@/core/auth/session";
-import { canAccessModule } from "@/core/permissions/permissions";
+import { requireApiAuth } from "@/core/auth/api-auth";
 import { getVatTransactionDetail, getVatWorkingPaper } from "@/modules/tax/vat-report-service";
 import { emirateLabels, vatReportBuckets, type Emirate, type VatReportBucket } from "@/modules/tax/uae-vat-config";
 
@@ -14,10 +13,9 @@ function csv(rows: (string | number | null | undefined)[][]) {
 }
 
 export async function GET(request: Request, { params }: { params: Promise<{ businessId: string }> }) {
-  const session = await getCurrentSession();
-  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const { businessId } = await params;
-  if (!canAccessModule(businessId, session.user.id, "reports")) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  const { session, access, error: authError } = await requireApiAuth(request, { businessId, module: "reports" });
+  if (authError || !session || !access) return authError;
   const url = new URL(request.url);
   const type = url.searchParams.get("type") ?? "detail";
   const periodId = url.searchParams.get("periodId") ?? undefined;

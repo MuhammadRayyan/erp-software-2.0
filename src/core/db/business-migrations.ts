@@ -1822,6 +1822,29 @@ function upgradeToPhase11(sqlite: Database.Database) {
   `);
 }
 
+function upgradeToPhase12(sqlite: Database.Database) {
+  sqlite.exec(`
+    ALTER TABLE business_accounting_settings ADD COLUMN project_padding INTEGER NOT NULL DEFAULT 4;
+    ALTER TABLE business_accounting_settings ADD COLUMN goods_receipt_padding INTEGER NOT NULL DEFAULT 4;
+    ALTER TABLE business_accounting_settings ADD COLUMN delivery_note_padding INTEGER NOT NULL DEFAULT 4;
+    ALTER TABLE business_accounting_settings ADD COLUMN stock_adjustment_padding INTEGER NOT NULL DEFAULT 4;
+    ALTER TABLE business_accounting_settings ADD COLUMN bank_transaction_padding INTEGER NOT NULL DEFAULT 4;
+    ALTER TABLE business_accounting_settings ADD COLUMN bank_transfer_padding INTEGER NOT NULL DEFAULT 4;
+    
+    UPDATE business_accounting_settings SET
+      project_padding = invoice_padding,
+      goods_receipt_padding = invoice_padding,
+      delivery_note_padding = invoice_padding,
+      stock_adjustment_padding = invoice_padding,
+      bank_transaction_padding = invoice_padding,
+      bank_transfer_padding = invoice_padding;
+
+    UPDATE customers SET is_active = 0 WHERE status = 'archived';
+    UPDATE customers SET is_active = 1 WHERE status = 'active' OR status IS NULL;
+    ALTER TABLE customers DROP COLUMN status;
+  `);
+}
+
 export const businessMigrations = [
   { version: 0, name: "phase_0_baseline", up: createPhase0Baseline },
   {
@@ -1881,6 +1904,11 @@ export const businessMigrations = [
     version: 11,
     name: "customer_addresses_active",
     up: upgradeToPhase11,
+  },
+  {
+    version: 12,
+    name: "numbering_padding_and_customer_status",
+    up: upgradeToPhase12,
   },
 ] satisfies readonly SqliteMigration[];
 

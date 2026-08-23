@@ -1,10 +1,7 @@
 import { NextResponse } from "next/server";
-import { getCurrentSession } from "@/core/auth/session";
+import { requireApiAuth } from "@/core/auth/api-auth";
 import { formatDate, formatMoney } from "@/core/format";
-import {
-  getDocumentPdfAccess,
-  getDocumentPdfModule,
-} from "@/core/permissions/document-pdf-access";
+import { getDocumentPdfModule } from "@/core/permissions/document-pdf-access";
 import { quantityMicrosToInput } from "@/modules/accounting/calculations/money";
 import { renderDocumentPdf } from "@/modules/document-templates/template-registry";
 import { getPurchaseInvoice } from "@/modules/purchase-invoices/purchase-invoice-service";
@@ -16,14 +13,16 @@ import { averageUnitCostMicros, formatUnitCostMicros } from "@/modules/inventory
 
 export const runtime = "nodejs";
 
-export async function GET(_request: Request, { params }: { params: Promise<{ businessId: string; documentType: string; documentId: string }> }) {
-  const session = await getCurrentSession(); if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+export async function GET(request: Request, { params }: { params: Promise<{ businessId: string; documentType: string; documentId: string }> }) {
   const { businessId, documentType, documentId } = await params;
-  if (!getDocumentPdfModule(documentType)) {
+  
+  const requiredModule = getDocumentPdfModule(documentType);
+  if (!requiredModule) {
     return NextResponse.json({ error: "Unsupported document type" }, { status: 404 });
   }
-  const access = getDocumentPdfAccess(businessId, session.user.id, documentType);
-  if (!access) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+
+  const { session, access, error: authError } = await requireApiAuth(request, { businessId, module: requiredModule });
+  if (authError || !session || !access) return authError;
   let currency = access.business.currency;
   let title: string; let number: string; let partyLabel = "SUPPLIER"; let partyName: string; let dateLabel: string; let dueLabel: string; let subtotalMinor: number; let taxMinor: number; let totalMinor: number; 
   let rows: Array<{description: string, quantity: string, unitPrice: string, amount: string}>;

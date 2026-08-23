@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { ArrowRight, LoaderCircle } from "lucide-react";
 import { authClient } from "@/core/auth/auth-client";
+import { preLoginCheck, reportFailedLogin, clearLoginAttempts } from "@/core/auth/actions";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -21,10 +22,9 @@ export function LoginForm() {
 
     // Pre-flight rate-limit check
     try {
-      const checkResponse = await fetch("/api/auth-rate-limit", { method: "POST" });
-      if (checkResponse.status === 429) {
-        const data = await checkResponse.json();
-        setError(data.error ?? "Too many attempts. Try again later.");
+      const check = await preLoginCheck();
+      if (!check.allowed) {
+        setError(check.error ?? "Too many attempts. Try again later.");
         setPending(false);
         return;
       }
@@ -39,7 +39,7 @@ export function LoginForm() {
 
     if (result.error) {
       // Record failed attempt
-      await fetch("/api/auth-rate-limit", { method: "PUT" });
+      await reportFailedLogin();
       setError(result.error.message ?? "Sign in failed. Check your details and try again.");
       setPending(false);
       return;
@@ -47,7 +47,7 @@ export function LoginForm() {
 
     // Success — clear attempts then navigate.
     // Use router.push + refresh so Next.js re-fetches server state cleanly.
-    await fetch("/api/auth-rate-limit", { method: "DELETE" });
+    await clearLoginAttempts();
     router.push("/businesses");
     router.refresh();
   }

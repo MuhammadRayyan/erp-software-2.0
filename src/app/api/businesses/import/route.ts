@@ -1,11 +1,16 @@
 import { NextResponse } from "next/server";
-import { requireUser } from "@/core/auth/session";
+import { requireApiAuth } from "@/core/auth/api-auth";
 import { importBusinessBackup } from "@/core/businesses/backup-service";
+
+export const runtime = "nodejs";
 
 const maximumBackupBytes = 50 * 1024 * 1024;
 
 export async function POST(request: Request) {
-  const user = await requireUser();
+  const { session, error: authError } = await requireApiAuth(request);
+  if (authError) return authError;
+  const user = session.user;
+
   const formData = await request.formData();
   const file = formData.get("backup");
 

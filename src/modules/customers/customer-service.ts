@@ -32,7 +32,7 @@ export function createCustomer(businessId: string, userId: string, input: Custom
   const id = randomUUID();
   context.db
     .insert(customers)
-    .values({ id, ...data, defaultCurrencyCode, createdAt: now, updatedAt: now, status: "active" })
+    .values({ id, ...data, defaultCurrencyCode, createdAt: now, updatedAt: now })
     .run();
   return id;
 }
