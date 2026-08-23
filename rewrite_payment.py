@@ -1,14 +1,11 @@
-import { createSettlement, voidSettlement, type SettlementConfig } from "@/modules/settlement/settlement-service";
-import { randomUUID } from "node:crypto";
-import { getBusinessDb } from "@/core/db/business";
-import { allocateNumber } from "@/modules/accounting/services/numbering-service";
-import { postSupplierPayment } from "@/modules/accounting/services/supplier-payment-posting-service";
-import { reverseTransaction } from "@/modules/accounting/services/posting-service";
-import { supplierPaymentInputSchema, type SupplierPaymentInput } from "./supplier-payment-input";
-import { parseCurrencyAmountToMinor } from "@/modules/currency/conversion";
-import { calculateSettlementAllocation } from "@/modules/currency/settlement";
-import { resolveRateSnapshot } from "@/modules/currency/validation";
+file_path = "src/modules/supplier-payments/supplier-payment-service.ts"
+with open(file_path, "r", encoding="utf-8") as f:
+    content = f.read()
 
+new_content = """import { getBusinessDb } from "@/core/db/business";
+import { postSupplierPayment } from "@/modules/accounting/services/supplier-payment-posting-service";
+import { supplierPaymentInputSchema, type SupplierPaymentInput } from "./supplier-payment-input";
+import { createSettlement, voidSettlement, type SettlementConfig } from "@/modules/settlement/settlement-service";
 
 const paymentConfig: SettlementConfig = {
   partyType: "supplier",
@@ -36,7 +33,6 @@ const paymentConfig: SettlementConfig = {
   postSettlement: postSupplierPayment,
 };
 
-
 export function createSupplierPayment(businessId: string, userId: string, input: SupplierPaymentInput) {
   const data = supplierPaymentInputSchema.parse(input);
   const context = getBusinessDb(businessId, userId);
@@ -47,11 +43,11 @@ export function createSupplierPayment(businessId: string, userId: string, input:
   return result;
 }
 
-export function listAllSupplierPayments(businessId: string, userId: string) {
+export function listSupplierPayments(businessId: string, userId: string) {
   const { sqlite } = getBusinessDb(businessId, userId);
   return sqlite.prepare(`
-    SELECT sp.id, sp.payment_number, sp.date, sp.amount_minor, sp.base_amount_minor,
-      sp.currency_code, cur.minor_unit AS currency_minor_unit, sp.reference,
+    SELECT sp.id, sp.payment_number, sp.date, sp.amount_minor, sp.base_amount_minor, sp.currency_code,
+      cur.minor_unit AS currency_minor_unit, sp.reference,
       sp.document_status, sp.created_at, s.id AS supplier_id, s.name AS supplier_name,
       a.id AS bank_account_id, a.code AS bank_account_code, a.name AS bank_account_name
     FROM supplier_payments sp
@@ -59,30 +55,10 @@ export function listAllSupplierPayments(businessId: string, userId: string) {
     INNER JOIN accounts a ON a.id = sp.bank_account_id
     INNER JOIN currencies cur ON cur.code = sp.currency_code
     ORDER BY sp.date DESC, sp.created_at DESC
-  `).all() as {
-    id: string;
-    payment_number: string;
-    date: string;
-    amount_minor: number;
-    base_amount_minor: number;
-    currency_code: string;
-    currency_minor_unit: number;
-    reference: string | null;
-    document_status: "posted" | "void";
-    created_at: string;
-    supplier_id: string;
-    supplier_name: string;
-    bank_account_id: string;
-    bank_account_code: string;
-    bank_account_name: string;
-  }[];
+  `).all() as any[];
 }
 
-export function getSupplierPayment(
-  businessId: string,
-  userId: string,
-  paymentId: string,
-) {
+export function getSupplierPayment(businessId: string, userId: string, paymentId: string) {
   const { sqlite } = getBusinessDb(businessId, userId);
   const payment = sqlite.prepare(`
     SELECT sp.*, s.name AS supplier_name, s.email AS supplier_email,
@@ -91,7 +67,7 @@ export function getSupplierPayment(
     INNER JOIN suppliers s ON s.id = sp.supplier_id
     INNER JOIN accounts a ON a.id = sp.bank_account_id
     WHERE sp.id = ?
-  `).get(paymentId) as Record<string, unknown> | undefined;
+  `).get(paymentId) as any;
   if (!payment) return null;
   const allocations = sqlite.prepare(`
     SELECT spa.id, spa.amount_minor, spa.base_carrying_amount_released,
@@ -100,24 +76,13 @@ export function getSupplierPayment(
     INNER JOIN purchase_invoices pi ON pi.id = spa.purchase_invoice_id
     WHERE spa.payment_id = ?
     ORDER BY pi.internal_number
-  `).all(paymentId) as {
-    id: string;
-    amount_minor: number;
-    base_carrying_amount_released: number;
-    invoice_id: string;
-    internal_number: string;
-  }[];
+  `).all(paymentId) as any[];
   const journals = sqlite.prepare(`
     SELECT id, entry_number, source_type, date
     FROM journal_entries
     WHERE source_id = ? AND source_type IN ('supplier_payment', 'supplier_payment_void')
     ORDER BY CASE source_type WHEN 'supplier_payment' THEN 0 ELSE 1 END
-  `).all(paymentId) as {
-    id: string;
-    entry_number: string;
-    source_type: "supplier_payment" | "supplier_payment_void";
-    date: string;
-  }[];
+  `).all(paymentId) as any[];
   return { payment, allocations, journals };
 }
 
@@ -128,12 +93,9 @@ export function voidSupplierPayment(businessId: string, userId: string, paymentI
   }).immediate();
 }
 
-export function listSupplierPayments(
-  businessId: string,
-  userId: string,
-  supplierId: string,
-) {
-  return getBusinessDb(businessId, userId).sqlite.prepare(`
+export function listPaymentsForSupplier(businessId: string, userId: string, supplierId: string) {
+  const { sqlite } = getBusinessDb(businessId, userId);
+  return sqlite.prepare(`
     SELECT sp.id, sp.payment_number, sp.date, sp.amount_minor, sp.currency_code,
       cur.minor_unit AS currency_minor_unit, sp.reference,
       pi.id AS invoice_id, pi.internal_number
@@ -143,15 +105,9 @@ export function listSupplierPayments(
     INNER JOIN currencies cur ON cur.code = sp.currency_code
     WHERE sp.supplier_id = ? AND sp.document_status = 'posted'
     ORDER BY sp.date DESC, sp.created_at DESC
-  `).all(supplierId) as {
-    id: string;
-    payment_number: string;
-    date: string;
-    amount_minor: number;
-    currency_code: string;
-    currency_minor_unit: number;
-    reference: string | null;
-    invoice_id: string;
-    internal_number: string;
-  }[];
+  `).all(supplierId) as any[];
 }
+"""
+
+with open(file_path, "w", encoding="utf-8") as f:
+    f.write(new_content)

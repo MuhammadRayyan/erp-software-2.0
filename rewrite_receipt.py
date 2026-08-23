@@ -1,15 +1,15 @@
-import { createSettlement, voidSettlement, type SettlementConfig } from "@/modules/settlement/settlement-service";
-import { randomUUID } from "node:crypto";
-import { getBusinessDb } from "@/core/db/business";
-import { allocateNumber } from "@/modules/accounting/services/numbering-service";
-import { postReceipt } from "@/modules/accounting/services/receipt-posting-service";
-import { reverseTransaction } from "@/modules/accounting/services/posting-service";
-import { receiptInputSchema, type ReceiptInput } from "./receipt-input";
-import { parseCurrencyAmountToMinor } from "@/modules/currency/conversion";
-import { calculateSettlementAllocation } from "@/modules/currency/settlement";
-import { resolveRateSnapshot } from "@/modules/currency/validation";
+file_path = "src/modules/receipts/receipt-service.ts"
+with open(file_path, "r", encoding="utf-8") as f:
+    content = f.read()
 
-type Sqlite = ReturnType<typeof getBusinessDb>["sqlite"];
+import re
+
+# We will just rewrite the entire file since it's cleaner.
+
+new_content = """import { getBusinessDb } from "@/core/db/business";
+import { postReceipt } from "@/modules/accounting/services/receipt-posting-service";
+import { receiptInputSchema, type ReceiptInput } from "./receipt-input";
+import { createSettlement, voidSettlement, type SettlementConfig } from "@/modules/settlement/settlement-service";
 
 const receiptConfig: SettlementConfig = {
   partyType: "customer",
@@ -49,7 +49,6 @@ const receiptConfig: SettlementConfig = {
   postSettlement: postReceipt,
 };
 
-
 export function createReceipt(businessId: string, userId: string, input: ReceiptInput) {
   const data = receiptInputSchema.parse(input);
   const context = getBusinessDb(businessId, userId);
@@ -72,23 +71,7 @@ export function listReceipts(businessId: string, userId: string) {
     INNER JOIN accounts a ON a.id = r.bank_account_id
     INNER JOIN currencies cur ON cur.code = r.currency_code
     ORDER BY r.date DESC, r.created_at DESC
-  `).all() as {
-    id: string;
-    receipt_number: string;
-    date: string;
-    amount_minor: number;
-    base_amount_minor: number;
-    currency_code: string;
-    currency_minor_unit: number;
-    reference: string | null;
-    document_status: "posted" | "void";
-    created_at: string;
-    customer_id: string;
-    customer_name: string;
-    bank_account_id: string;
-    bank_account_code: string;
-    bank_account_name: string;
-  }[];
+  `).all() as any[];
 }
 
 export function getReceipt(businessId: string, userId: string, receiptId: string) {
@@ -100,7 +83,7 @@ export function getReceipt(businessId: string, userId: string, receiptId: string
     INNER JOIN customers c ON c.id = r.customer_id
     INNER JOIN accounts a ON a.id = r.bank_account_id
     WHERE r.id = ?
-  `).get(receiptId) as Record<string, unknown> | undefined;
+  `).get(receiptId) as any;
   if (!receipt) return null;
   const allocations = sqlite.prepare(`
     SELECT ra.id, ra.amount_minor, ra.base_carrying_amount_released,
@@ -109,24 +92,13 @@ export function getReceipt(businessId: string, userId: string, receiptId: string
     INNER JOIN sales_invoices i ON i.id = ra.sales_invoice_id
     WHERE ra.receipt_id = ?
     ORDER BY i.invoice_number
-  `).all(receiptId) as {
-    id: string;
-    amount_minor: number;
-    base_carrying_amount_released: number;
-    invoice_id: string;
-    invoice_number: string;
-  }[];
+  `).all(receiptId) as any[];
   const journals = sqlite.prepare(`
     SELECT id, entry_number, source_type, date
     FROM journal_entries
     WHERE source_id = ? AND source_type IN ('receipt', 'receipt_void')
     ORDER BY CASE source_type WHEN 'receipt' THEN 0 ELSE 1 END
-  `).all(receiptId) as {
-    id: string;
-    entry_number: string;
-    source_type: "receipt" | "receipt_void";
-    date: string;
-  }[];
+  `).all(receiptId) as any[];
   return { receipt, allocations, journals };
 }
 
@@ -137,11 +109,7 @@ export function voidReceipt(businessId: string, userId: string, receiptId: strin
   }).immediate();
 }
 
-export function listReceiptsForCustomer(
-  businessId: string,
-  userId: string,
-  customerId: string,
-) {
+export function listReceiptsForCustomer(businessId: string, userId: string, customerId: string) {
   const { sqlite } = getBusinessDb(businessId, userId);
   return sqlite.prepare(`
     SELECT r.id, r.receipt_number, r.date, r.amount_minor, r.currency_code,
@@ -153,15 +121,9 @@ export function listReceiptsForCustomer(
     INNER JOIN currencies cur ON cur.code = r.currency_code
     WHERE r.customer_id = ? AND r.document_status = 'posted'
     ORDER BY r.date DESC, r.created_at DESC
-  `).all(customerId) as {
-    id: string;
-    receipt_number: string;
-    date: string;
-    amount_minor: number;
-    currency_code: string;
-    currency_minor_unit: number;
-    reference: string | null;
-    invoice_id: string;
-    invoice_number: string;
-  }[];
+  `).all(customerId) as any[];
 }
+"""
+
+with open(file_path, "w", encoding="utf-8") as f:
+    f.write(new_content)
