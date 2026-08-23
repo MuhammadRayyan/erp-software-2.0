@@ -13,17 +13,12 @@ import { purchaseInvoiceInputSchema, type PurchaseInvoiceInput } from "./purchas
 import { convertDocumentLinesToBase, minorToCurrencyInput, parseCurrencyAmountToMinor } from "@/modules/currency/conversion";
 import { getBaseCurrency, getCurrency } from "@/modules/currency/currency";
 import { resolveRateSnapshot } from "@/modules/currency/validation";
+import { calculateLines, totalsForLines, type StoredLine } from "@/modules/accounting/services/document-line-calculator";
 
 export type PurchaseInvoiceStatus = "draft" | "posted" | "void";
 export type PurchasePaymentStatus = "unpaid" | "partially_paid" | "paid" | "overdue";
 export type PurchaseInvoiceIntent = "draft" | "post";
 export type PurchaseInvoiceSourceOptions = { inboundDocumentId?: string };
-
-type StoredLine = {
-  id: string; itemId: string | null; description: string; quantityMicros: number; unitPriceMinor: number;
-  expenseAccountId: string; taxCodeId: string; projectId: string | null;
-  netAmountMinor: number; taxAmountMinor: number; grossAmountMinor: number; position: number;
-};
 
 function deriveStatus(documentStatus: PurchaseInvoiceStatus, totalMinor: number, paidMinor: number, dueDate: string): PurchasePaymentStatus | null {
   if (documentStatus !== "posted") return null;
@@ -43,35 +38,6 @@ export function paidForPurchaseInvoice(sqlite: ReturnType<typeof getBusinessDb>[
   return row.paid_minor;
 }
 
-function calculateLines(sqlite: ReturnType<typeof getBusinessDb>["sqlite"], data: ReturnType<typeof purchaseInvoiceInputSchema.parse>, minorUnit: number) {
-  const expenseIds = new Set((sqlite.prepare("SELECT id FROM accounts WHERE type = 'expense' AND is_active = 1").all() as { id: string }[]).map((row) => row.id));
-  const taxRows = sqlite.prepare("SELECT id, rate_basis_points, vat_category, direction FROM tax_codes WHERE is_active = 1").all() as { id: string; rate_basis_points: number; vat_category: string | null; direction: string }[];
-  const taxById = new Map(taxRows.map((row) => [row.id, row]));
-  const itemRows = sqlite.prepare("SELECT id, inventory_asset_account_id FROM inventory_items WHERE is_active = 1").all() as { id: string; inventory_asset_account_id: string }[];
-  const itemById = new Map(itemRows.map((row) => [row.id, row]));
-  return data.lines.map((line, position): StoredLine => {
-    const item = line.itemId ? itemById.get(line.itemId) : null;
-    if (line.itemId && !item) throw new Error("Choose an active inventory item.");
-    const expenseAccountId = item?.inventory_asset_account_id ?? line.expenseAccountId;
-    if (!item && !expenseIds.has(expenseAccountId)) throw new Error("Purchase invoice line has no expense account.");
-    const tax = taxById.get(line.taxCodeId);
-    if (!tax) throw new Error("Purchase invoice line has no active tax code.");
-    if (!["purchases", "both"].includes(tax.direction)) throw new Error("The selected tax code cannot be used for Purchases.");
-    if (!tax.vat_category) throw new Error("The selected tax code needs a VAT category before posting.");
-    const quantityMicros = parseQuantityToMicros(line.quantity);
-    const unitPriceMinor = parseCurrencyAmountToMinor(line.unitPrice, minorUnit, "Unit price");
-    const netAmountMinor = multiplyMoneyByQuantity(unitPriceMinor, quantityMicros);
-    const taxAmountMinor = calculateTax(netAmountMinor, tax.rate_basis_points);
-    const grossAmountMinor = tax.vat_category === "reverse_charge" ? netAmountMinor : addMinor([netAmountMinor, taxAmountMinor]);
-    return { id: randomUUID(), itemId: line.itemId || null, description: line.description, quantityMicros, unitPriceMinor, expenseAccountId, taxCodeId: line.taxCodeId, projectId: line.projectId || null, netAmountMinor, taxAmountMinor, grossAmountMinor, position };
-  });
-}
-
-function totals(lines: StoredLine[]) {
-  const subtotalMinor = addMinor(lines.map((line) => line.netAmountMinor));
-  const taxMinor = addMinor(lines.map((line) => line.taxAmountMinor));
-  return { subtotalMinor, taxMinor, totalMinor: addMinor(lines.map((line) => line.grossAmountMinor)) };
-}
 
 function assertSupplierInvoiceNumberAvailable(
   sqlite: ReturnType<typeof getBusinessDb>["sqlite"],
@@ -99,7 +65,7 @@ function assertInboundSource(
   invoiceId: string,
   data: ReturnType<typeof purchaseInvoiceInputSchema.parse>,
   lines: StoredLine[],
-  amounts: ReturnType<typeof totals>,
+  amounts: ReturnType<typeof totalsForLines>,
   requireExactMonetaryFacts: boolean,
   creating: boolean,
 ) {
@@ -401,8 +367,8 @@ export function savePurchaseInvoice(
     if (!order || order.supplier_id !== data.supplierId) throw new Error("Choose a purchase order for the selected supplier.");
     if (order.status === "cancelled") throw new Error("A cancelled purchase order cannot be billed.");
   }
-  const lines = calculateLines(context.sqlite, data, rate.currencyMinorUnit);
-  const amounts = totals(lines);
+  const lines = calculateLines(context.sqlite, data.lines, rate.currencyMinorUnit, { accountTypeFilter: "expense", taxDirection: "purchases", supportItems: true, accountFieldOnLine: "expenseAccountId" });
+  const amounts = totalsForLines(lines);
   const base = convertDocumentLinesToBase(lines, rate);
   const now = new Date().toISOString();
   const id = invoiceId ?? randomUUID();

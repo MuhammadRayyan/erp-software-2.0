@@ -8,43 +8,11 @@ import { purchaseOrderInputSchema, type PurchaseOrderInput } from "./purchase-or
 import { effectiveProjectId, validateProjectReferences } from "@/modules/projects/project-validation";
 import { convertDocumentLinesToBase, parseCurrencyAmountToMinor } from "@/modules/currency/conversion";
 import { resolveRateSnapshot } from "@/modules/currency/validation";
+import { calculateLines, totalsForLines, type StoredLine } from "@/modules/accounting/services/document-line-calculator";
 
 export type PurchaseOrderStatus = "draft" | "issued" | "closed" | "cancelled";
 export type PurchaseOrderIntent = "draft" | "issue";
 
-type StoredLine = {
-  id: string; itemId: string | null; description: string; quantityMicros: number; unitPriceMinor: number;
-  expenseAccountId: string | null; taxCodeId: string; netAmountMinor: number;
-  taxAmountMinor: number; grossAmountMinor: number; position: number;
-  projectId: string | null;
-};
-
-function calculateLines(sqlite: ReturnType<typeof getBusinessDb>["sqlite"], input: ReturnType<typeof purchaseOrderInputSchema.parse>, minorUnit: number) {
-  const expenseIds = new Set((sqlite.prepare("SELECT id FROM accounts WHERE type = 'expense' AND is_active = 1").all() as { id: string }[]).map((row) => row.id));
-  const taxRows = sqlite.prepare("SELECT id, rate_basis_points FROM tax_codes WHERE is_active = 1").all() as { id: string; rate_basis_points: number }[];
-  const taxById = new Map(taxRows.map((row) => [row.id, row]));
-  const itemRows = sqlite.prepare("SELECT id, inventory_asset_account_id FROM inventory_items WHERE is_active = 1").all() as { id: string; inventory_asset_account_id: string }[];
-  const itemById = new Map(itemRows.map((row) => [row.id, row]));
-  return input.lines.map((line, position): StoredLine => {
-    const item = line.itemId ? itemById.get(line.itemId) : null;
-    if (line.itemId && !item) throw new Error("Choose an active inventory item.");
-    const expenseAccountId = item?.inventory_asset_account_id ?? line.expenseAccountId;
-    if (!item && expenseAccountId && !expenseIds.has(expenseAccountId)) throw new Error("Choose an active expense account or leave it blank.");
-    const tax = taxById.get(line.taxCodeId);
-    if (!tax) throw new Error("Purchase order line has no active tax code.");
-    const quantityMicros = parseQuantityToMicros(line.quantity);
-    const unitPriceMinor = parseCurrencyAmountToMinor(line.unitPrice, minorUnit, "Unit price");
-    const netAmountMinor = multiplyMoneyByQuantity(unitPriceMinor, quantityMicros);
-    const taxAmountMinor = calculateTax(netAmountMinor, tax.rate_basis_points);
-    return { id: randomUUID(), itemId: line.itemId || null, description: line.description, quantityMicros, unitPriceMinor, expenseAccountId: expenseAccountId || null, taxCodeId: line.taxCodeId, projectId: line.projectId || null, netAmountMinor, taxAmountMinor, grossAmountMinor: addMinor([netAmountMinor, taxAmountMinor]), position };
-  });
-}
-
-function totals(lines: StoredLine[]) {
-  const subtotalMinor = addMinor(lines.map((line) => line.netAmountMinor));
-  const taxMinor = addMinor(lines.map((line) => line.taxAmountMinor));
-  return { subtotalMinor, taxMinor, totalMinor: addMinor([subtotalMinor, taxMinor]) };
-}
 
 function insertLines(sqlite: ReturnType<typeof getBusinessDb>["sqlite"], orderId: string, lines: StoredLine[]) {
   const statement = sqlite.prepare(`INSERT INTO purchase_order_lines
@@ -110,8 +78,8 @@ export function savePurchaseOrder(businessId: string, userId: string, input: Pur
     enforceVatPolicy: false,
   });
   validateProjectReferences(context.sqlite, { headerProjectId: data.projectId, lineProjectIds: data.lines.map((line) => line.projectId) });
-  const lines = calculateLines(context.sqlite, data, rate.currencyMinorUnit);
-  const amounts = totals(lines);
+  const lines = calculateLines(context.sqlite, data.lines, rate.currencyMinorUnit, { accountTypeFilter: "expense", taxDirection: "purchases", supportItems: true, accountFieldOnLine: "expenseAccountId" });
+  const amounts = totalsForLines(lines);
   const base = convertDocumentLinesToBase(lines, rate);
   const now = new Date().toISOString();
   const id = orderId ?? randomUUID();

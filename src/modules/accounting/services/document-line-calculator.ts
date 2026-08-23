@@ -1,7 +1,7 @@
 
 import { addMinor, calculateTax, multiplyMoneyByQuantity, parseQuantityToMicros } from "@/modules/accounting/calculations/money";
 import { parseCurrencyAmountToMinor } from "@/modules/currency/conversion";
-import { randomUUID } from "crypto";
+import { randomUUID } from "node:crypto";
 
 export type StoredLine = {
   id: string;
@@ -9,8 +9,8 @@ export type StoredLine = {
   description: string;
   quantityMicros: number;
   unitPriceMinor: number;
-  salesAccountId?: string;
-  expenseAccountId?: string;
+  salesAccountId: string;
+  expenseAccountId: string;
   taxCodeId: string;
   projectId: string | null;
   netAmountMinor: number;
@@ -47,7 +47,7 @@ export function calculateLines(
     : [];
   const itemById = new Map(itemRows.map((item) => [item.id, item]));
 
-  return lines.map((line, position): StoredLine => {
+  return lines.map((line: any, position: number): StoredLine => {
     const item = config.supportItems && line.itemId ? itemById.get(line.itemId) : null;
     if (config.supportItems && line.itemId && !item) {
       throw new Error("Cannot save document because an inventory item is missing or inactive.");
@@ -74,7 +74,8 @@ export function calculateLines(
       description: line.description,
       quantityMicros,
       unitPriceMinor,
-      ...(config.accountFieldOnLine === "salesAccountId" ? { salesAccountId: accountId } : { expenseAccountId: accountId }),
+      salesAccountId: accountId,
+      expenseAccountId: accountId,
       taxCodeId: line.taxCodeId,
       projectId: line.projectId || null,
       netAmountMinor,

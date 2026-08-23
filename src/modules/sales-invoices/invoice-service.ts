@@ -25,25 +25,11 @@ import { invoiceInputSchema, type InvoiceData, type InvoiceInput } from "./invoi
 import { convertDocumentLinesToBase, minorToCurrencyInput, parseCurrencyAmountToMinor } from "@/modules/currency/conversion";
 import { getCurrency } from "@/modules/currency/currency";
 import { resolveRateSnapshot } from "@/modules/currency/validation";
+import { calculateLines, totalsForLines, type StoredLine } from "@/modules/accounting/services/document-line-calculator";
 
 export type DocumentStatus = "draft" | "posted" | "void";
 export type PaymentStatus = "unpaid" | "partially_paid" | "paid" | "overdue";
 export type InvoiceSaveIntent = "draft" | "post";
-
-type StoredLine = {
-  id: string;
-  itemId: string | null;
-  description: string;
-  quantityMicros: number;
-  unitPriceMinor: number;
-  salesAccountId: string;
-  taxCodeId: string;
-  projectId: string | null;
-  netAmountMinor: number;
-  taxAmountMinor: number;
-  grossAmountMinor: number;
-  position: number;
-};
 
 function derivePaymentStatus(
   documentStatus: DocumentStatus,
@@ -74,59 +60,6 @@ function allocatedForInvoice(sqlite: ReturnType<typeof getBusinessDb>["sqlite"],
   return row.allocated_minor;
 }
 
-function calculateLines(
-  sqlite: ReturnType<typeof getBusinessDb>["sqlite"],
-  data: InvoiceData,
-  minorUnit: number,
-) {
-  const incomeAccounts = sqlite
-    .prepare("SELECT id FROM accounts WHERE type = 'income' AND is_active = 1")
-    .all() as { id: string }[];
-  const incomeIds = new Set(incomeAccounts.map((account) => account.id));
-  const taxCodeRows = sqlite
-    .prepare("SELECT id, rate_basis_points, direction, vat_category FROM tax_codes WHERE is_active = 1")
-    .all() as { id: string; rate_basis_points: number; direction: string; vat_category: string | null }[];
-  const taxCodeById = new Map(taxCodeRows.map((taxCode) => [taxCode.id, taxCode]));
-  const itemRows = sqlite.prepare("SELECT id, sales_account_id FROM inventory_items WHERE is_active = 1").all() as { id: string; sales_account_id: string }[];
-  const itemById = new Map(itemRows.map((item) => [item.id, item]));
-
-  return data.lines.map((line, position): StoredLine => {
-    const item = line.itemId ? itemById.get(line.itemId) : null;
-    if (line.itemId && !item) throw new Error("Cannot save invoice because an inventory item is missing or inactive.");
-    const salesAccountId = item?.sales_account_id ?? line.salesAccountId;
-    if (!incomeIds.has(salesAccountId)) {
-      throw new Error("Cannot save invoice because a line has no active sales account.");
-    }
-    const taxCode = taxCodeById.get(line.taxCodeId);
-    if (!taxCode) throw new Error("Cannot save invoice because a line has no active tax code.");
-    if (!["sales", "both"].includes(taxCode.direction)) throw new Error("The selected tax code cannot be used for Sales.");
-    if (!taxCode.vat_category) throw new Error("The selected tax code needs a VAT category before posting.");
-    const quantityMicros = parseQuantityToMicros(line.quantity);
-    const unitPriceMinor = parseCurrencyAmountToMinor(line.unitPrice, minorUnit, "Unit price");
-    const netAmountMinor = multiplyMoneyByQuantity(unitPriceMinor, quantityMicros);
-    const taxAmountMinor = calculateTax(netAmountMinor, taxCode.rate_basis_points);
-    return {
-      id: randomUUID(),
-      itemId: line.itemId || null,
-      description: line.description,
-      quantityMicros,
-      unitPriceMinor,
-      salesAccountId,
-      taxCodeId: line.taxCodeId,
-      projectId: line.projectId || null,
-      netAmountMinor,
-      taxAmountMinor,
-      grossAmountMinor: addMinor([netAmountMinor, taxAmountMinor]),
-      position,
-    };
-  });
-}
-
-function totalsForLines(lines: StoredLine[]) {
-  const subtotalMinor = addMinor(lines.map((line) => line.netAmountMinor));
-  const taxMinor = addMinor(lines.map((line) => line.taxAmountMinor));
-  return { subtotalMinor, taxMinor, totalMinor: addMinor([subtotalMinor, taxMinor]) };
-}
 
 function insertLines(
   sqlite: ReturnType<typeof getBusinessDb>["sqlite"],
@@ -400,7 +333,7 @@ export function createInvoice(
     enforceVatPolicy: true,
   });
   validateProjectReferences(context.sqlite, { headerProjectId: data.projectId, lineProjectIds: data.lines.map((line) => line.projectId), customerId: data.customerId, customerFacing: true });
-  const lines = calculateLines(context.sqlite, data, rate.currencyMinorUnit);
+  const lines = calculateLines(context.sqlite, data.lines, rate.currencyMinorUnit, { accountTypeFilter: "income", taxDirection: "sales", supportItems: true, accountFieldOnLine: "salesAccountId" });
   const totals = totalsForLines(lines);
   const base = convertDocumentLinesToBase(lines, rate);
   const id = randomUUID();
@@ -509,7 +442,7 @@ export function updateInvoice(
   if (allocatedMinor > 0 && current.customerId !== data.customerId) {
     throw new Error("Cannot change the customer after receipts have been allocated.");
   }
-  const lines = calculateLines(context.sqlite, data, rate.currencyMinorUnit);
+  const lines = calculateLines(context.sqlite, data.lines, rate.currencyMinorUnit, { accountTypeFilter: "income", taxDirection: "sales", supportItems: true, accountFieldOnLine: "salesAccountId" });
   const totals = totalsForLines(lines);
   const base = convertDocumentLinesToBase(lines, rate);
   if (totals.totalMinor < allocatedMinor) {

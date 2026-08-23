@@ -9,12 +9,6 @@ type PostedPurchaseInvoice = { id: string; internalNumber: string; supplierId: s
 type PostedPurchaseInvoiceLine = { expenseAccountId: string; taxCodeId: string; projectId?: string | null; itemId?: string | null; netAmountMinor: number; taxAmountMinor: number; grossAmountMinor: number };
 
 
-type ProjectAmount = { accountId: string; projectId: string | null; amountMinor: number };
-function addProjectAmount(group: Map<string, ProjectAmount>, accountId: string, projectId: string | null, amountMinor: number) {
-  const key = `${accountId}\u0000${projectId ?? ""}`;
-  const current = group.get(key);
-  group.set(key, { accountId, projectId, amountMinor: addMinor([current?.amountMinor ?? 0, amountMinor]) });
-}
 
 export function buildJournalForPurchaseInvoice(sqlite: Database.Database, invoice: PostedPurchaseInvoice, invoiceLines: PostedPurchaseInvoiceLine[]) {
   const convertedLines = convertDocumentLinesToBase(invoiceLines, invoice.rate).lines;

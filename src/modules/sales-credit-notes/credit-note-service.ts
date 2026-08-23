@@ -14,11 +14,10 @@ import { creditNoteReasonCodeValues, parseTransactionFlags, type CreditNoteReaso
 import { creditNoteInputSchema, type CreditNoteInput } from "./credit-note-input";
 import { convertDocumentLinesToBase, minorToCurrencyInput, parseCurrencyAmountToMinor, proportionalCarryingRelease } from "@/modules/currency/conversion";
 import { storedRateSnapshot } from "@/modules/currency/validation";
+import { calculateLines, totalsForLines, type StoredLine } from "@/modules/accounting/services/document-line-calculator";
 
 export type CreditNoteStatus = "draft" | "posted" | "void";
 export type CreditNoteIntent = "draft" | "post";
-type StoredLine = { id: string; description: string; quantityMicros: number; unitPriceMinor: number; salesAccountId: string; taxCodeId: string; projectId: string | null; netAmountMinor: number; taxAmountMinor: number; grossAmountMinor: number; position: number };
-
 function receiptTotal(sqlite: ReturnType<typeof getBusinessDb>["sqlite"], invoiceId: string) {
   return (sqlite.prepare(`SELECT COALESCE(SUM(ra.amount_minor), 0) AS amount FROM receipt_allocations ra INNER JOIN receipts r ON r.id = ra.receipt_id AND r.document_status = 'posted' WHERE ra.sales_invoice_id = ?`).get(invoiceId) as { amount: number }).amount;
 }
@@ -55,29 +54,6 @@ export function getRemainingInvoiceBalance(businessId: string, userId: string, i
   return remainingInvoiceBalance(getBusinessDb(businessId, userId).sqlite, invoiceId, excludeNoteId);
 }
 
-function calculateLines(sqlite: ReturnType<typeof getBusinessDb>["sqlite"], data: ReturnType<typeof creditNoteInputSchema.parse>, minorUnit: number) {
-  const incomeIds = new Set((sqlite.prepare("SELECT id FROM accounts WHERE type = 'income' AND is_active = 1").all() as { id: string }[]).map((row) => row.id));
-  const taxRows = sqlite.prepare("SELECT id, rate_basis_points, direction, vat_category FROM tax_codes WHERE is_active = 1").all() as { id: string; rate_basis_points: number; direction: string; vat_category: string | null }[];
-  const taxById = new Map(taxRows.map((row) => [row.id, row]));
-  return data.lines.map((line, position): StoredLine => {
-    if (!incomeIds.has(line.salesAccountId)) throw new Error("Credit note line has no active sales account.");
-    const tax = taxById.get(line.taxCodeId);
-    if (!tax) throw new Error("Credit note line has no active tax code.");
-    if (!["sales", "both"].includes(tax.direction)) throw new Error("The selected tax code cannot be used for Sales.");
-    if (!tax.vat_category) throw new Error("The selected tax code needs a VAT category before posting.");
-    const quantityMicros = parseQuantityToMicros(line.quantity);
-    const unitPriceMinor = parseCurrencyAmountToMinor(line.unitPrice, minorUnit, "Unit price");
-    const netAmountMinor = multiplyMoneyByQuantity(unitPriceMinor, quantityMicros);
-    const taxAmountMinor = calculateTax(netAmountMinor, tax.rate_basis_points);
-    return { id: randomUUID(), description: line.description, quantityMicros, unitPriceMinor, salesAccountId: line.salesAccountId, taxCodeId: line.taxCodeId, projectId: line.projectId || null, netAmountMinor, taxAmountMinor, grossAmountMinor: addMinor([netAmountMinor, taxAmountMinor]), position };
-  });
-}
-
-function totals(lines: StoredLine[]) {
-  const subtotalMinor = addMinor(lines.map((line) => line.netAmountMinor));
-  const taxMinor = addMinor(lines.map((line) => line.taxAmountMinor));
-  return { subtotalMinor, taxMinor, totalMinor: addMinor([subtotalMinor, taxMinor]) };
-}
 
 function insertLines(sqlite: ReturnType<typeof getBusinessDb>["sqlite"], noteId: string, lines: StoredLine[]) {
   const statement = sqlite.prepare(`INSERT INTO sales_credit_note_lines (id, credit_note_id, description, quantity_micros, unit_price_minor, sales_account_id, tax_code_id, project_id, net_amount_minor, tax_amount_minor, gross_amount_minor, position) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
@@ -137,8 +113,8 @@ export function saveCreditNote(businessId: string, userId: string, input: Credit
   }
   const rate = storedRateSnapshot(context.sqlite, invoice);
   validateProjectReferences(context.sqlite, { headerProjectId: data.projectId, lineProjectIds: data.lines.map((line) => line.projectId), customerId: data.customerId, customerFacing: true });
-  const lines = calculateLines(context.sqlite, data, rate.currencyMinorUnit);
-  const amounts = totals(lines);
+  const lines = calculateLines(context.sqlite, data.lines, rate.currencyMinorUnit, { accountTypeFilter: "income", taxDirection: "sales", supportItems: false, accountFieldOnLine: "salesAccountId" });
+  const amounts = totalsForLines(lines);
   const available = remainingInvoiceBalance(context.sqlite, invoice.id, noteId);
   if (amounts.totalMinor > available) throw new Error("Credit note cannot exceed the remaining invoice balance.");
   const base = convertDocumentLinesToBase(lines, rate);
