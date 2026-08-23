@@ -154,7 +154,7 @@ export function voidSettlement(
   }
 
   reverseTransaction(sqlite, {
-    originalSourceType: config.partyType === "customer" ? "receipt" : "supplierPayment",
+    originalSourceType: config.partyType === "customer" ? "receipt" : "supplier_payment",
     originalSourceId: paymentId,
     reversalSourceType: config.partyType === "customer" ? "receipt_void" : "supplier_payment_void",
     reversalSourceId: paymentId,
