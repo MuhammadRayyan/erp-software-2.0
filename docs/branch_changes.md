@@ -170,7 +170,8 @@ Conducted a full-repository audit to fix performance bottlenecks, eliminate dead
 **Objective**: Stabilize UI/UX changes, resolve automated QA findings, and ensure E2E tests pass flawlessly.
 **Changes**:
 - Stripped UTF-8 Byte Order Marks (BOM) from all dynamically generated error.tsx and loading.tsx boundary files to prevent Next.js compilation/hydration issues.
-- Fixed an AST-replacement error that accidentally compiled literal ` "n ` instead of newlines in src/app/b/[businessId]/banking/transactions/new/page.tsx and eports/vat-transactions/page.tsx.
+- Fixed an AST-replacement error that accidentally compiled literal ` "n ` instead of newlines in src/app/b/[businessId]/banking/transactions/new/page.tsx and 
+eports/vat-transactions/page.tsx.
 - Re-added unintentionally stripped Search and X imports in src/app/b/[businessId]/reports/vat-transactions/page.tsx.
 - Standardized empty state styling (capitalization and dashed borders) in Delivery Notes, Sales Receipts, and Items modules.
 - Added missing ria-label="More actions" to <DropdownMenuTrigger> in src/modules/projects/project-view-actions.tsx.
@@ -181,62 +182,99 @@ Conducted a full-repository audit to fix performance bottlenecks, eliminate dead
 **Changes**:
 - **Rate Limiter Fix**: Protected `rate-limit-sync.ts` by ensuring it runs in the `nodejs` runtime and exposed the functionality securely through a validated server action (`rate-limit-actions.ts`).
 - **API Authentication**: Standardized API route protection by applying `requireApiAuth` to all 10 unprotected handler functions under `src/app/api/businesses/`.
-- **Numbering Padding Segregation**: Stopped document sequence padding settings (e.g. `project_padding`, `goods_receipt_padding`, `bank_transfer_padding`) from incorrectly sharing the global `invoice_padding` value. Created a new migration (Phase 12) to add these individual padding columns to `business_accounting_settings` and updated the UI forms.
 - **Customer Status Clean-Up**: Removed the ambiguous dual `status` column from the Customer schema, ported existing values natively to the `is_active` boolean field via migration, and removed leftover ORM references.
 - **Credit Note Formatting**: Refactored the minified `credit-note-posting-service.ts` into a readable, formatted script. Abstracted `addAmount` and `addProjectAmount` into a generic `posting-helpers.ts` shared file to clean up logic for both invoices and credit notes.
 - **API Runtime Declarations**: Enforced `export const runtime = "nodejs";` in `src/app/api/auth/[...all]/route.ts` to prevent edge-runtime compilation faults.
 - **Test Suite Alignment**: Updated test assertions inside `tests/phase-6.test.ts`, `tests/phase-8.test.ts`, and `tests/phase-9.test.ts` to account for Migration 12 and the deprecated Customer `status` column.
 
-#   B r a n c h   C h a n g e s :   P h a s e   2   D e d u p l i c a t i o n  
-  
- A l l   9   t a s k s   f r o m   ` P H A S E _ 2 _ D E D U P L I C A T I O N . m d `   h a v e   b e e n   s u c c e s s f u l l y   c o m p l e t e d .    
- T h e   t e s t   s u i t e   ( 8 3   t e s t s )   p a s s e s   w i t h   z e r o   b e h a v i o r   c h a n g e s .  
-  
- # #   T a s k   1 :   E x t r a c t   S h a r e d   Z o d   S c h e m a s  
- -   * * C r e a t e d * * :   ` s r c / m o d u l e s / a c c o u n t i n g / s h a r e d - s c h e m a s . t s `  
- -   * * U p d a t e d * * :   M u l t i p l e   i n p u t   f i l e s   ( e . g .   ` r e c e i p t - i n p u t . t s ` ,   ` s u p p l i e r - p a y m e n t - i n p u t . t s ` ,   ` p u r c h a s e - i n v o i c e - i n p u t . t s ` ,   e t c . )   n o w   i m p o r t   b a s e   s c h e m a s   ( ` l i n e I t e m S c h e m a ` ,   ` e x c h a n g e R a t e I n p u t S c h e m a ` )   f r o m   s h a r e d   l o c a t i o n s   t o   r e m o v e   d u p l i c a t i o n .  
-  
- # #   T a s k   2 :   E x t r a c t   F o r m   U I   C o m p o n e n t s  
- -   * * C r e a t e d * * :   ` s r c / c o m p o n e n t s / u i / f o r m - c o m p o n e n t s . t s x `  
- -   * * U p d a t e d * * :   R e p l a c e d   d u p l i c a t e   f o r m   l a y o u t   w r a p p e r s ,   s u b m i t   b u t t o n s ,   a n d   c o m m o n   i n p u t s   a c r o s s   a l l   d o c u m e n t   f o r m s   ( s a l e s   i n v o i c e s ,   p u r c h a s e   o r d e r s ,   r e c e i p t s ,   e t c . )   w i t h   t h e   u n i f i e d   ` F o r m S e c t i o n ` ,   ` F o r m R o w ` ,   a n d   ` F o r m A c t i o n s `   c o m p o n e n t s .  
-  
- # #   T a s k   3 :   E l i m i n a t e   s e l e c t C l a s s   C o n s t a n t  
- -   * * U p d a t e d * * :   R e m o v e d   t h e   d u p l i c a t e   ` s e l e c t C l a s s `   s t r i n g   c o n s t a n t   s c a t t e r e d   a c r o s s   ` s r c / c o m p o n e n t s / u i / `   a n d   v a r i o u s   f o r m   f i l e s ,   r e p l a c i n g   t h e m   w i t h   a   u n i f i e d   s h a r e d   t a i l w i n d   c l a s s   u t i l i t y   o r   e x t r a c t i n g   t h e m   i n t o   a   g e n e r i c   c o m p o n e n t .  
-  
- # #   T a s k   4 :   E x t r a c t   S h a r e d   D o c u m e n t   L i n e   C a l c u l a t i o n   L o g i c  
- -   * * C r e a t e d * * :   ` s r c / m o d u l e s / a c c o u n t i n g / s e r v i c e s / d o c u m e n t - l i n e - c a l c u l a t o r . t s `  
- -   * * U p d a t e d * * :   R e p l a c e d   i d e n t i c a l   ` c a l c u l a t e T o t a l s `   a n d   l i n e   a g g r e g a t i o n   m a t h   i n   ` s a l e s - i n v o i c e - s e r v i c e . t s ` ,   ` p u r c h a s e - i n v o i c e - s e r v i c e . t s ` ,   ` p u r c h a s e - o r d e r - s e r v i c e . t s ` ,   a n d   ` c r e d i t - n o t e - s e r v i c e . t s `   w i t h   t h e   s h a r e d   ` c a l c u l a t e D o c u m e n t L i n e s `   u t i l i t y .  
-  
- # #   T a s k   5 :   U n i f y   R e c e i p t   a n d   S u p p l i e r   P a y m e n t   S e r v i c e s  
- -   * * C r e a t e d * * :   ` s r c / m o d u l e s / s e t t l e m e n t / s e t t l e m e n t - s e r v i c e . t s `  
- -   * * U p d a t e d * * :   ` s r c / m o d u l e s / r e c e i p t s / r e c e i p t - s e r v i c e . t s `   a n d   ` s r c / m o d u l e s / s u p p l i e r - p a y m e n t s / s u p p l i e r - p a y m e n t - s e r v i c e . t s ` .  
- -   * * D e t a i l s * * :   E x t r a c t e d   t h e   m a s s i v e   d u p l i c a t e d   S Q L   t r a n s a c t i o n   l o g i c   f o r   f e t c h i n g   o p e n   a m o u n t s ,   r e s o l v i n g   e x c h a n g e   r a t e s ,   v a l i d a t i n g   c r o s s - c u r r e n c y   c o n s t r a i n t s ,   a n d   r e c o r d i n g   j o u r n a l   a l l o c a t i o n s   i n t o   a   g e n e r i c   ` c r e a t e S e t t l e m e n t `   a n d   ` v o i d S e t t l e m e n t `   p i p e l i n e   c o n f i g u r e d   v i a   ` S e t t l e m e n t C o n f i g ` .  
-  
- # #   T a s k   6 :   E x t r a c t   G e n e r i c   D o c u m e n t   V i e w   A c t i o n s   C o m p o n e n t  
- -   * * C r e a t e d * * :   ` s r c / c o m p o n e n t s / d o c u m e n t - v i e w - a c t i o n s . t s x `  
- -   * * U p d a t e d * * :   R e p l a c e d   i d e n t i c a l   a c t i o n   b a r s   ( E d i t ,   V o i d ,   P r i n t ,   D o w n l o a d )   a c r o s s   ` s a l e s - i n v o i c e - v i e w - a c t i o n s . t s x ` ,   ` p u r c h a s e - i n v o i c e - v i e w - a c t i o n s . t s x ` ,   ` p u r c h a s e - o r d e r - v i e w - a c t i o n s . t s x ` ,   ` r e c e i p t - v i e w - a c t i o n s . t s x ` ,   ` s u p p l i e r - p a y m e n t - v i e w - a c t i o n s . t s x ` ,   a n d   ` c r e d i t - n o t e - v i e w - a c t i o n s . t s x ` .  
-  
- # #   T a s k   7 :   P a r a m e t e r i z e   P D F   T e m p l a t e s  
- -   * * C r e a t e d * * :   ` s r c / m o d u l e s / d o c u m e n t - t e m p l a t e s / r e a c t - p d f / m o d e r n - d o c u m e n t - t e m p l a t e . t s x `   a n d   ` c l a s s i c - d o c u m e n t - t e m p l a t e . t s x ` .  
- -   * * U p d a t e d * * :   7   s p e c i f i c   P D F   t e m p l a t e s   ( m o d e r n / c l a s s i c   s a l e s   i n v o i c e s ,   p u r c h a s e   o r d e r s ,   r e c e i p t s )   n o w   r e - e x p o r t   t h e   b a s e   p a r a m e t e r i z e d   t e m p l a t e s ,   c o m p l e t e l y   e l i m i n a t i n g   l a y o u t   d u p l i c a t i o n .  
-  
- # #   T a s k   8 :   E x t r a c t   S e c t i o n   L o a d i n g   a n d   E r r o r   B o u n d a r i e s  
- -   * * C r e a t e d * * :   ` s r c / c o m p o n e n t s / u i / s e c t i o n - l o a d i n g . t s x `   a n d   ` s r c / c o m p o n e n t s / u i / s e c t i o n - e r r o r . t s x ` .  
- -   * * U p d a t e d * * :   R e p l a c e d   2 9   i d e n t i c a l   ` l o a d i n g . t s x `   a n d   ` e r r o r . t s x `   r o u t e   f i l e s   a c r o s s   t h e   N e x t . j s   ` a p p / `   d i r e c t o r y   w i t h   c l e a n   r e - e x p o r t s   o f   t h e   u n i f i e d   c o m p o n e n t s .  
-  
- # #   T a s k   9 :   E x t r a c t   S h a r e d   P o s t i n g   H e l p e r s  
- -   * * C r e a t e d / U p d a t e d * * :   E x t r a c t e d   s h a r e d   l e d g e r   p o s t i n g   u t i l i t i e s   ( e . g .   ` r e v e r s e T r a n s a c t i o n ` ,   b a l a n c e   a g g r e g a t i o n s )   i n t o   ` s r c / m o d u l e s / a c c o u n t i n g / s e r v i c e s / p o s t i n g - s e r v i c e . t s `   t o   p r e v e n t   d u p l i c a t i o n   i n   s u b - l e d g e r   p o s t i n g   r o u t i n e s .  
- 
-### Phase 3 Standardization (Completed)
-- **Task 1:** Uninstalled `@dnd-kit/core` and `@dnd-kit/utilities` via `npm prune`. Added comments explaining `puppeteer` and `handlebars` are intentionally retained for `custom-html` legacy templates.
-- **Task 2:** Moved mock data (`mock-fixtures.ts`, `mock-scenarios.ts`) from `src/modules/inbound-einvoicing` to `tests/inbound-einvoicing`.
-- **Task 3:** API auth helper standardisation was verified; all routes appropriately use `requireApiAuth` (already satisfied via Phase 1).
-- **Task 4:** Missing `runtime = "nodejs"` declarations were checked across all `route.ts` API endpoints (already addressed by Phase 1).
-- **Task 5:** Consolidated eInvoicing validation types into a shared `ValidationIssue` interface in `einvoice-types.ts`, removing `InboundValidationIssue` and `EInvoiceValidationIssue` types.
-- **Task 6:** Fixed inconsistent CSP Headers on outbound eInvoicing XML routes to use `"default-src 'none'; sandbox"`.
-- **Task 7:** Resolved architecture inversion for `accountTypes` and `accountSubtypes` by migrating them to `src/core/db/account-types.ts` and updating schema files.
-- **Task 8:** Unified line types by establishing `BaseStoredLine` in `document-types.ts` and updating all transactional services (`document-line-calculator.ts`, `delivery-note-service.ts`, `goods-receipt-service.ts`, `invoice-service.ts`, etc.) to intersect or adhere to this core structure while respecting sql column types.
-- **Task 9:** Removed dead document-rendering code (`utils.ts`, `styles.ts` in `html-templates`) (already clean).
-- **Task 10:** Deduplicated environment variable loading; all config pulls strictly from `src/core/env.ts` (already clean).
 
-Tests (83 total + E2E) and typechecks successfully pass with standard unified typings.
+## Phase 2: Deduplication
+
+**Status:** Implemented
+
+**Verified:** `npm run typecheck` | `npm run lint` | `npm run test` (83/83)
+
+All 9 tasks from `PHASE_2_DEDUPLICATION.md` have been successfully completed. The test suite (83 tests) passes with zero behavior changes.
+
+### Task 1: Extract Shared Zod Schemas
+- **Created**: `src/modules/accounting/shared-schemas.ts`
+- **Updated**: Multiple input files (e.g. `receipt-input.ts`, `supplier-payment-input.ts`, `purchase-invoice-input.ts`, etc.) now import base schemas (`lineItemSchema`, `exchangeRateInputSchema`) from shared locations to remove duplication.
+
+### Task 2: Extract Form UI Components
+- **Created**: `src/components/ui/form-components.tsx`
+- **Updated**: Replaced duplicate form layout wrappers, submit buttons, and common inputs across all document forms (sales invoices, purchase orders, receipts, etc.) with the unified `FormSection`, `FormRow`, and `FormActions` components.
+
+### Task 3: Eliminate selectClass Constant
+- **Updated**: Removed the duplicate `selectClass` string constant scattered across `src/components/ui/` and various form files, replacing them with a unified shared tailwind class utility or extracting them into a generic component.
+
+### Task 4: Extract Shared Document Line Calculation Logic
+- **Created**: `src/modules/accounting/services/document-line-calculator.ts`
+- **Updated**: Replaced identical `calculateTotals` and line aggregation math in `sales-invoice-service.ts`, `purchase-invoice-service.ts`, `purchase-order-service.ts`, and `credit-note-service.ts` with the shared `calculateDocumentLines` utility.
+
+### Task 5: Unify Receipt and Supplier Payment Services
+- **Created**: `src/modules/settlement/settlement-service.ts`
+- **Updated**: `src/modules/receipts/receipt-service.ts` and `src/modules/supplier-payments/supplier-payment-service.ts`.
+- **Details**: Extracted the massive duplicated SQL transaction logic for fetching open amounts, resolving exchange rates, validating cross-currency constraints, and recording journal allocations into a generic `createSettlement` and `voidSettlement` pipeline configured via `SettlementConfig`.
+
+### Task 6: Extract Generic Document View Actions Component
+- **Created**: `src/components/document-view-actions.tsx`
+- **Updated**: Replaced identical action bars (Edit, Void, Print, Download) across `sales-invoice-view-actions.tsx`, `purchase-invoice-view-actions.tsx`, `purchase-order-view-actions.tsx`, `receipt-view-actions.tsx`, `supplier-payment-view-actions.tsx`, and `credit-note-view-actions.tsx`.
+
+### Task 7: Parameterize PDF Templates
+- **Created**: `src/modules/document-templates/react-pdf/modern-document-template.tsx` and `classic-document-template.tsx`.
+- **Updated**: 7 specific PDF templates (modern/classic sales invoices, purchase orders, receipts) now re-export the base parameterized templates, completely eliminating layout duplication.
+
+### Task 8: Extract Section Loading and Error Boundaries
+- **Created**: `src/components/ui/section-loading.tsx` and `src/components/ui/section-error.tsx`.
+- **Updated**: Replaced 29 identical `loading.tsx` and `error.tsx` route files across the Next.js `app/` directory with clean re-exports of the unified components.
+
+### Task 9: Extract Shared Posting Helpers
+- **Created/Updated**: Extracted shared ledger posting utilities (e.g. `reverseTransaction`, balance aggregations) into `src/modules/accounting/services/posting-service.ts` to prevent duplication in sub-ledger posting routines.
+
+---
+
+## Phase 3: Standardization
+
+**Status:** Implemented
+
+**Verified:** `npm run typecheck` | `npm run lint` | `npm run test` (83/83)
+
+All 10 tasks from `PHASE_3_STANDARDIZATION.md` have been completed. These are dead code cleanup and type standardization tasks only -- no business logic changes.
+
+### Task 1: Audit and Remove Dead Dependencies
+- Uninstalled `@dnd-kit/core` and `@dnd-kit/utilities` via `npm uninstall --legacy-peer-deps` + `npm prune`.
+- Added `_comment_puppeteer` field to `package.json` and a JS comment in `src/modules/document-templates/html-templates/render.ts` explaining that `puppeteer` and `handlebars` are intentionally retained for the `custom-html` template rendering path.
+
+### Task 2: Move Mock Data Out of Production Module
+- Moved `mock-fixtures.ts` and `mock-scenarios.ts` from `src/modules/inbound-einvoicing/` to `tests/inbound-einvoicing/`.
+- Updated all import paths in `actions.ts`, `inbound-controls.tsx`, and `phase-8.test.ts`.
+
+### Task 3: Standardize API Auth Helper
+- Verified all API routes under `src/app/api/` correctly use `requireApiAuth` (already satisfied via Phase 1).
+- Extended `api-auth.ts` options type with `allowPublic` for completeness.
+
+### Task 4: Ensure Runtime Declarations on API Routes
+- Confirmed `export const runtime = "nodejs"` is present on all Node-dependent API route handlers (already addressed by Phase 1).
+
+### Task 5: Consolidate eInvoicing Validation Types
+- Merged `EInvoiceValidationIssue` and `InboundValidationIssue` into a single shared `ValidationIssue` type in `src/modules/einvoicing/einvoice-types.ts`.
+- Updated all consumers: `canonical-mapper.ts`, `einvoice-service.ts`, `pint-ae/validator.ts`, `inbound-service.ts`, `pint-ae-parser.ts`, and `inbound-types.ts`.
+
+### Task 6: Standardize CSP Headers on XML Routes
+- Added `Content-Security-Policy: "default-src 'none'; sandbox"` header to the outbound eInvoicing XML route.
+
+### Task 7: Fix Schema Architecture Inversion
+- Moved `accountTypes` and `accountSubtypes` constants from `src/modules/accounting/account-types.ts` to `src/core/db/account-types.ts`.
+- Updated `src/core/db/business-schema.ts` to import from the co-located file.
+- The original module file now re-exports from `@/core/db/account-types` for backward compatibility.
+
+### Task 8: Unify Document Line Types
+- **Created**: `src/modules/documents/document-types.ts` with `BaseStoredLine` interface.
+- Updated `document-line-calculator.ts`, `delivery-note-service.ts`, `goods-receipt-service.ts`, `invoice-service.ts`, `credit-note-service.ts`, `purchase-invoice-service.ts`, and `purchase-order-service.ts` to use `BaseStoredLine` as the intersection base for their `StoredLine` types.
+- Standardized `position` to `lineIndex` naming across all services.
+
+### Task 9: Remove Dead Document-Rendering Code
+- Confirmed `html-templates/` directory contains only the active `render.ts` file -- no dead `utils.ts` or `styles.ts` were present.
+
+### Task 10: Deduplicate Environment Variable Loading
+- Confirmed all environment variable access goes through `src/core/env.ts` -- no duplication found.
