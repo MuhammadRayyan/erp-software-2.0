@@ -1,4 +1,11 @@
-"use client";
+import re
+
+file_path = "src/modules/sales-invoices/invoice-view-actions.tsx"
+with open(file_path, "r", encoding="utf-8") as f:
+    content = f.read()
+
+# I will just rewrite it since I know exactly what it does.
+new_content = '''"use client";
 
 import Link from "next/link";
 import { BookOpenText, CircleDollarSign, FileMinus2, PackageCheck } from "lucide-react";
@@ -44,6 +51,7 @@ export function InvoiceViewActions({
       onDuplicate={async () => {
         const result = await duplicateInvoiceAction(businessId, invoiceId);
         if (result?.error) throw new Error(result.error);
+        router.push(`/b/${businessId}/sales/invoices/${result.data}/edit`);
       }}
       onVoid={documentStatus === "posted" && !eInvoiceLocked ? {
         label: "Void",
@@ -96,3 +104,6 @@ export function InvoiceViewActions({
     />
   );
 }
+'''
+with open(file_path, "w", encoding="utf-8") as f:
+    f.write(new_content)

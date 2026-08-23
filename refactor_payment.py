@@ -1,4 +1,5 @@
-"use client";
+file_path = "src/modules/supplier-payments/supplier-payment-view-actions.tsx"
+new_content = """"use client";
 
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
@@ -31,3 +32,6 @@ export function SupplierPaymentViewActions({
     />
   );
 }
+"""
+with open(file_path, "w", encoding="utf-8") as f:
+    f.write(new_content)

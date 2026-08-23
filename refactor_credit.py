@@ -1,4 +1,5 @@
-"use client";
+file_path = "src/modules/sales-credit-notes/credit-note-view-actions.tsx"
+new_content = """"use client";
 
 import Link from "next/link";
 import { BookOpenText } from "lucide-react";
@@ -68,3 +69,6 @@ export function CreditNoteViewActions({
     />
   );
 }
+"""
+with open(file_path, "w", encoding="utf-8") as f:
+    f.write(new_content)

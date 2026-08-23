@@ -1,0 +1,98 @@
+import { Document, Page, Text, View, Image } from "@react-pdf/renderer";
+import { classicStyles as styles, colors } from "./primitives";
+import type { TemplateSettings } from "../template-settings";
+import type { DocumentTemplateData, DocumentTemplateVariant } from "./modern-document-template";
+
+export function ClassicDocumentTemplate({ data, settings, variant }: { data: DocumentTemplateData; settings: TemplateSettings; variant: DocumentTemplateVariant }) {
+  const primaryColor = settings.primaryColor || colors.text;
+
+  return (
+    <Document>
+      <Page size="A4" style={[styles.page, { fontFamily: settings.fontName }]}>
+        <View style={styles.header}>
+          <View style={{ flex: 1 }}>
+            {/* eslint-disable-next-line jsx-a11y/alt-text */}
+            {settings.logoUrl && <Image src={settings.logoUrl} style={{ width: 120, height: 40, objectFit: "contain", marginBottom: 10 }} />}
+            <Text style={{ fontSize: 14, color: primaryColor, fontWeight: "heavy" }}>{data.companyName}</Text>
+            {settings.headerText && <Text style={{ fontSize: 9, color: colors.muted, marginTop: 4 }}>{settings.headerText}</Text>}
+          </View>
+          <View style={styles.boxedDetails}>
+            <Text style={{ fontSize: 18, fontWeight: "heavy", color: primaryColor, marginBottom: 8, textAlign: "center" }}>
+              {variant.title}
+            </Text>
+            <View style={{ flexDirection: "row", justifyContent: "space-between", marginBottom: 4 }}>
+              <Text style={{ fontSize: 9, fontWeight: "heavy" }}>Number:</Text>
+              <Text style={{ fontSize: 9 }}>{data.invoiceNumber}</Text>
+            </View>
+            <View style={{ flexDirection: "row", justifyContent: "space-between", marginBottom: 4 }}>
+              <Text style={{ fontSize: 9, fontWeight: "heavy" }}>Date:</Text>
+              <Text style={{ fontSize: 9 }}>{data.invoiceDate.replace("Invoice date: ", "").replace("Date: ", "")}</Text>
+            </View>
+            {variant.showDueDate && (
+              <View style={{ flexDirection: "row", justifyContent: "space-between" }}>
+                <Text style={{ fontSize: 9, fontWeight: "heavy" }}>Due Date:</Text>
+                <Text style={{ fontSize: 9 }}>{data.dueDate.replace("Due date: ", "")}</Text>
+              </View>
+            )}
+          </View>
+        </View>
+
+        <View style={{ marginBottom: 20 }}>
+          <Text style={styles.sectionTitle}>{variant.partyLabel}</Text>
+          <Text style={{ fontSize: 12, fontWeight: "heavy", marginBottom: 2 }}>{data.customerName}</Text>
+          {data.customerAddress && <Text style={{ fontSize: 9, color: colors.text, marginBottom: 2 }}>{data.customerAddress}</Text>}
+          {variant.showBuyerTrn && settings.showCustomerTrn && data.customerTrn && (
+            <Text style={{ fontSize: 9, color: colors.text }}>TRN: {data.customerTrn}</Text>
+          )}
+        </View>
+
+        {data.lines.length > 0 && (
+          <View style={styles.table}>
+            <View style={styles.tableHeaderRow}>
+              <Text style={[styles.tableCell, { flex: 3, fontWeight: "heavy" }]}>Description</Text>
+              <Text style={[styles.tableCell, { flex: 1, textAlign: "right", fontWeight: "heavy" }]}>Qty</Text>
+              <Text style={[styles.tableCell, { flex: 1, textAlign: "right", fontWeight: "heavy" }]}>Rate</Text>
+              <Text style={[styles.tableCell, { flex: 1, textAlign: "right", fontWeight: "heavy" }]}>Amount</Text>
+            </View>
+            {data.lines.map((line, i) => (
+              <View key={i} style={styles.tableRow} wrap={false}>
+                <Text style={[styles.tableCell, { flex: 3 }]}>{line.description}</Text>
+                <Text style={[styles.tableCell, { flex: 1, textAlign: "right" }]}>{line.quantity}</Text>
+                <Text style={[styles.tableCell, { flex: 1, textAlign: "right" }]}>{line.unitPrice}</Text>
+                <Text style={[styles.tableCell, { flex: 1, textAlign: "right" }]}>{line.amount}</Text>
+              </View>
+            ))}
+          </View>
+        )}
+
+        <View style={styles.totals}>
+          <View style={[styles.boxedDetails, { minWidth: 250, padding: 0 }]}>
+            <View style={[styles.totalsRow, { paddingHorizontal: 10, paddingTop: 10, width: "100%", borderBottomWidth: 0 }]}>
+              <Text style={{ color: colors.text, fontWeight: "heavy" }}>Subtotal</Text>
+              <Text>{data.subtotal}</Text>
+            </View>
+            {variant.showTax && settings.showTaxColumn && (
+              <View style={[styles.totalsRow, { paddingHorizontal: 10, width: "100%", borderBottomWidth: 0 }]}>
+                <Text style={{ color: colors.text, fontWeight: "heavy" }}>VAT</Text>
+                <Text>{data.tax}</Text>
+              </View>
+            )}
+            <View style={[styles.totalsRow, { paddingHorizontal: 10, paddingBottom: 10, width: "100%", borderBottomWidth: 0, borderTopWidth: 1, borderTopColor: colors.borderStrong, marginTop: 4, paddingTop: 6 }]}>
+              <Text style={{ fontWeight: "heavy", fontSize: 12 }}>{variant.totalLabel}</Text>
+              <Text style={{ fontWeight: "heavy", fontSize: 12 }}>{data.total}</Text>
+            </View>
+          </View>
+          {data.foreignDetail && (
+            <Text style={{ fontSize: 8, color: colors.muted, marginTop: 8, textAlign: "right" }}>
+              {data.foreignDetail}
+            </Text>
+          )}
+        </View>
+
+        {settings.footerText && (
+          <Text style={styles.footer}>{settings.footerText}</Text>
+        )}
+      </Page>
+    </Document>
+  );
+}

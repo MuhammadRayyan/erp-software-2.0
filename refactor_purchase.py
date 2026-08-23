@@ -1,4 +1,5 @@
-"use client";
+file_path = "src/modules/purchase-invoices/purchase-invoice-view-actions.tsx"
+new_content = """"use client";
 
 import Link from "next/link";
 import { BookOpenText, CircleDollarSign, PackagePlus } from "lucide-react";
@@ -73,3 +74,6 @@ export function PurchaseInvoiceViewActions({
     />
   );
 }
+"""
+with open(file_path, "w", encoding="utf-8") as f:
+    f.write(new_content)
