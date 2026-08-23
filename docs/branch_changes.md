@@ -182,6 +182,7 @@ eports/vat-transactions/page.tsx.
 **Changes**:
 - **Rate Limiter Fix**: Protected `rate-limit-sync.ts` by ensuring it runs in the `nodejs` runtime and exposed the functionality securely through a validated server action (`rate-limit-actions.ts`).
 - **API Authentication**: Standardized API route protection by applying `requireApiAuth` to all 10 unprotected handler functions under `src/app/api/businesses/`.
+- **Numbering Padding Separation**: Created Migration 12 to add per-document-type padding columns (`project_padding`, `goods_receipt_padding`, `delivery_note_padding`, `stock_adjustment_padding`, `bank_transaction_padding`, `bank_transfer_padding`) to `business_document_settings`, backfilled from `invoice_padding`. Updated `numbering-service.ts` to use the correct column for each document type.
 - **Customer Status Clean-Up**: Removed the ambiguous dual `status` column from the Customer schema, ported existing values natively to the `is_active` boolean field via migration, and removed leftover ORM references.
 - **Credit Note Formatting**: Refactored the minified `credit-note-posting-service.ts` into a readable, formatted script. Abstracted `addAmount` and `addProjectAmount` into a generic `posting-helpers.ts` shared file to clean up logic for both invoices and credit notes.
 - **API Runtime Declarations**: Enforced `export const runtime = "nodejs";` in `src/app/api/auth/[...all]/route.ts` to prevent edge-runtime compilation faults.
@@ -278,3 +279,11 @@ All 10 tasks from `PHASE_3_STANDARDIZATION.md` have been completed. These are de
 
 ### Task 10: Deduplicate Environment Variable Loading
 - Confirmed all environment variable access goes through `src/core/env.ts` -- no duplication found.
+
+### Post-Audit Verification (selectClass & CSP Completion)
+**Objective**: Verification audit discovered that 7 files still contained dead `const selectClass` declarations (SelectNative was already imported and used, but the old constant was not deleted), and the outbound eInvoice XML route was missing its CSP header.
+**Changes**:
+- Removed dead `const selectClass` from: `invoice-form.tsx`, `receipt-form.tsx`, `delivery-note-form.tsx`, `goods-receipt-form.tsx`, `stock-adjustment-form.tsx`, `account-manager.tsx`, `tax-code-manager.tsx`.
+- Added `Content-Security-Policy: "default-src 'none'; sandbox"` to the outbound eInvoice XML route (`src/app/api/businesses/[businessId]/einvoicing/[documentId]/xml/route.ts`).
+- Added regression guard tests: `selectClass` elimination, CSP header consistency, `requireApiAuth` coverage, and `runtime = "nodejs"` declarations.
+- Updated `docs/CURRENT_STATE.md`: migration range 0-12, headline through Phase 3, Migration 12 description, last-verified text.

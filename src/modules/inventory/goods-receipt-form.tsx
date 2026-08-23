@@ -29,8 +29,6 @@ type Location = { id: string; code: string; name: string };
 type Source = { id: string; number: string; supplierId: string };
 type Project = { id: string; code: string; name: string };
 
-const selectClass =
-  "h-9 w-full rounded-[6px] border border-border-strong bg-surface-raised px-2.5 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-ring/25";
 
 export function GoodsReceiptForm({
   businessId,

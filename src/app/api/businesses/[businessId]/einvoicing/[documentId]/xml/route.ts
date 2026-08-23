@@ -16,6 +16,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ busi
       "Content-Disposition": `attachment; filename="einvoice-${payload.uuid}.xml"`,
       "Cache-Control": "no-store",
       "X-Content-Type-Options": "nosniff",
+      "Content-Security-Policy": "default-src 'none'; sandbox",
       "X-EInvoice-SHA256": payload.hash,
     },
   });

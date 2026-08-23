@@ -26,8 +26,6 @@ type TaxCodeOption = { id: string; name: string; rateBasisPoints: number };
 type ProjectOption = { id: string; code: string; name: string; customerId: string | null };
 type ItemOption = { id: string; sku: string | null; name: string; salesPriceMinor: number | null; salesAccountId: string };
 
-const selectClass =
-  "h-9 w-full rounded-[6px] border border-border-strong bg-surface-raised px-2.5 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-ring/25";
 
 function previewLine(line: InvoiceInput["lines"][number] | undefined, taxCodes: TaxCodeOption[], minorUnit: number) {
   try {

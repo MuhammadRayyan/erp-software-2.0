@@ -28,8 +28,6 @@ type TaxCodeRow = {
   isActive: boolean;
 };
 
-const selectClass =
-  "h-9 w-full rounded-[6px] border border-border-strong bg-surface-raised px-3 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-ring/25";
 
 export function TaxCodeManager({
   businessId,
