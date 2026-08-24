@@ -9,7 +9,7 @@ export default async function ChartOfAccountsPage({ params }: { params: Promise<
   const { user } = await requireModule(businessId, "accounting");
   const accounts = listAccounts(businessId, user.id);
   return (
-    <div className="page-container page-wide">
+    <div className="page-container">
       <div className="page-header">
         <div>
           <h1 className="page-title">Chart of Accounts</h1>

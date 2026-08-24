@@ -118,11 +118,7 @@ button, a { -webkit-tap-highlight-color: transparent; }
 
 .field-error { margin-top: 5px; color: var(--danger); font-size: 12px; }
 
-.page-container { margin-inline: auto; width: 100%; max-width: 1440px; padding: 22px 26px 40px; }
-.page-narrow  { max-width: 900px; }
-.page-medium  { max-width: 1050px; }
-.page-wide    { max-width: 1200px; }
-.page-full    { max-width: 1440px; }
+.page-container { margin-inline: auto; width: 100%; max-width: 1280px; padding: 22px 26px 40px; }
 
 .page-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; margin-bottom: 22px; }
 .page-title { font-size: 24px; line-height: 1.25; font-weight: 650; letter-spacing: -0.025em; }

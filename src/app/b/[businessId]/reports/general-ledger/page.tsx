@@ -22,7 +22,7 @@ export default async function GeneralLedgerPage({ params, searchParams }: { para
     <div className="page-container">
       <Link href={`/b/${businessId}/reports`} className="mb-5 inline-flex items-center gap-1.5 text-[13px] text-muted-foreground hover:text-foreground"><ArrowLeft className="size-4" /> Reports</Link>
       <div className="page-header"><div><h1 className="page-title">General Ledger</h1><p className="page-description">Posted journal lines with natural running balances per account.</p></div></div>
-      <form className="mb-4 flex flex-wrap items-end gap-3 rounded-lg border border-border bg-surface p-3">
+      <form className="mb-3 flex flex-wrap items-end gap-3">
         <label className="space-y-1 text-xs text-muted-foreground">Date from<Input name="dateFrom" type="date" defaultValue={filters.dateFrom} className="mt-1 w-40 text-foreground" /></label>
         <label className="space-y-1 text-xs text-muted-foreground">Date to<Input name="dateTo" type="date" defaultValue={filters.dateTo} className="mt-1 w-40 text-foreground" /></label>
         <label className="space-y-1 text-xs text-muted-foreground">Account<SelectNative name="accountId" defaultValue={filters.accountId ?? ""} className="mt-1 block min-w-52 text-foreground"><option value="">All accounts</option>{accounts.map((account) => <option key={account.id} value={account.id}>{account.code} {account.name}</option>)}</SelectNative></label>

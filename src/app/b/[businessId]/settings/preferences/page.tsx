@@ -13,7 +13,7 @@ export const metadata = { title: "Display preferences" };
  * destructive "Reset to defaults" affordance — useful when a user wants
  * to start fresh after experimenting with column toggles.
  *
- * Re-uses the existing `page-container page-medium` shell from the
+ * Re-uses the existing `page-container` shell from the
  * other settings sub-pages so the visual language stays consistent.
  */
 export default async function PreferencesSettingsPage({ params }: { params: Promise<{ businessId: string }> }) {
@@ -37,7 +37,7 @@ export default async function PreferencesSettingsPage({ params }: { params: Prom
   });
 
   return (
-    <div className="page-container page-medium">
+    <div className="page-container">
       <Link href={`/b/${businessId}/settings`} className="mb-5 inline-flex items-center gap-1.5 text-[13px] text-muted-foreground hover:text-foreground">
         <ArrowLeft className="size-4" /> Settings
       </Link>

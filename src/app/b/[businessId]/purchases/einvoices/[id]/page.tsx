@@ -44,7 +44,7 @@ export default async function SupplierEInvoiceDetailPage({
   const accountOptions = record.options.expenseAccounts.map((account) => ({ id: account.id, label: `${account.code} · ${account.name}` }));
   const taxOptions = record.options.taxCodes.map((tax) => ({ id: String(tax.id), label: `${String(tax.name)} (${rateBasisPointsToPercent(Number(tax.rate_basis_points))}%)` }));
   const projectOptions = record.options.projects.map((project) => ({ id: project.id, label: `${project.code} · ${project.name}` }));
-  return <div className="page-container page-wide">
+  return <div className="page-container">
     <NoticeToast message={notice} />
     <Link href={`/b/${businessId}/purchases/einvoices`} className="mb-5 inline-flex items-center gap-1.5 text-[13px] text-muted-foreground hover:text-foreground"><ArrowLeft className="size-4" /> Supplier eInvoices</Link>
     <div className="page-header"><div><div className="flex flex-wrap items-center gap-2"><h1 className="page-title tabular">{record.documentNumber}</h1><Badge tone={tones[record.status] ?? "neutral"}>{labels[record.status] ?? record.status}</Badge><Badge tone="info">MOCK</Badge>{officialValid && <Badge tone="success">PINT-AE Valid</Badge>}</div><p className="page-description">{record.sellerLegalName} · {record.documentType === "credit_note" ? "Credit Note" : "Invoice"} · Received {formatDate(record.receivedAt.slice(0, 10))}</p></div>{record.purchaseInvoice && <Button asChild><Link href={`/b/${businessId}/purchases/invoices/${record.purchaseInvoice.id}`}>View {String(record.purchaseInvoice.internal_number)}</Link></Button>}</div>

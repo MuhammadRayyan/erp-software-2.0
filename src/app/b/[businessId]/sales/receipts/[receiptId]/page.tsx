@@ -22,7 +22,7 @@ export default async function ReceiptViewPage({
   const status = String(receipt.document_status) as "posted" | "void";
   const number = String(receipt.receipt_number);
   return (
-    <div className="page-container page-medium">
+    <div className="page-container">
       <Link href={`/b/${businessId}/sales/receipts`} className="mb-5 inline-flex items-center gap-1.5 text-[13px] text-muted-foreground hover:text-foreground"><ArrowLeft className="size-4" /> Receipts</Link>
       <div className="mb-6 flex flex-col justify-between gap-4 lg:flex-row lg:items-start">
         <div>

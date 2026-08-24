@@ -27,7 +27,7 @@ export default async function ProjectViewPage({ params, searchParams }: { params
   if (!project) notFound();
   const operational = getProjectOperationalView(businessId, user.id, projectId);
   const currency = access.business.currency;
-  return <div className="page-container page-wide">
+  return <div className="page-container">
     <NoticeToast message={notice} />
     <Link href={`/b/${businessId}/projects`} className="mb-5 inline-flex items-center gap-1.5 text-[13px] text-muted-foreground hover:text-foreground"><ArrowLeft className="size-4" /> Projects</Link>
     <div className="mb-5 flex flex-col justify-between gap-4 lg:flex-row lg:items-start"><div><div className="flex flex-wrap items-center gap-2"><span className="tabular text-sm font-semibold text-primary">{project.code}</span><ProjectStatusBadge status={project.status} /></div><h1 className="page-title mt-1">{project.name}</h1><p className="mt-2 text-sm text-muted-foreground">{project.customerId ? <Link href={`/b/${businessId}/customers/${project.customerId}`} className="font-medium text-foreground hover:text-primary hover:underline">{project.customerName}</Link> : "No customer assigned"}</p></div><ProjectViewActions businessId={businessId} projectId={projectId} customerId={project.customerId} /></div>

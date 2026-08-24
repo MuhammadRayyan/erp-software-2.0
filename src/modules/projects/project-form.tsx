@@ -33,7 +33,7 @@ export function ProjectForm({ businessId, projectId, customers, initial }: { bus
     if (result.error) setServerError(result.error);
   }
 
-  return <form className="space-y-7" noValidate onSubmit={handleSubmit(save)}>
+  return <form className="space-y-7 max-w-4xl" noValidate onSubmit={handleSubmit(save)}>
     {serverError && <FormError message={serverError} />}
     <section className="border-b border-border pb-7">
       <h2 className="text-base font-semibold">Project details</h2>

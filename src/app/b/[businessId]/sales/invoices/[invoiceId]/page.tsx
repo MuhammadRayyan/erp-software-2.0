@@ -35,7 +35,7 @@ export default async function InvoiceViewPage({ params, searchParams }: { params
   const emailContext = buildInvoiceEmailContext(access.business.name, record);
   const emailDefaults = buildInvoiceEmailDefaults(emailContext, emailContext.to);
   return (
-    <div className="page-container page-wide">
+    <div className="page-container">
       <NoticeToast message={notice} />
       <Link href={`/b/${businessId}/sales/invoices`} className="mb-5 inline-flex items-center gap-1.5 text-[13px] text-muted-foreground hover:text-foreground"><ArrowLeft className="size-4" /> Sales Invoices</Link>
       <div className="mb-5 flex flex-col justify-between gap-4 lg:flex-row lg:items-start">

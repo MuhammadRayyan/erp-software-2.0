@@ -58,7 +58,7 @@ export function PurchaseOrderForm({ businessId, orderId, status = "draft", suppl
     if (result.error) setServerError(result.error);
   }
   const cancelHref = orderId ? `/b/${businessId}/purchases/orders/${orderId}` : `/b/${businessId}/purchases/orders`;
-  return <form className="space-y-7" noValidate>
+  return <form className="space-y-7 max-w-4xl" noValidate>
     {serverError && <FormError message={serverError} />}
     <section className="border-b border-border pb-7"><h2 className="text-base font-semibold">Order details</h2><p className="mt-1 text-sm text-muted-foreground">Purchase orders are operational documents and never post to the ledger.</p><div className="mt-5 grid gap-5 md:grid-cols-3">
       <div className="space-y-1.5"><Label htmlFor="supplierId">Supplier</Label><SelectNative id="supplierId"  {...register("supplierId", { onChange: (event) => { if (status === "draft") { const code = suppliers.find((supplier) => supplier.id === event.target.value)?.defaultCurrencyCode ?? currency; setValue("currencyCode", code); setValue("exchangeRateToBase", code === currency ? "1" : ""); setValue("exchangeRateDate", code === currency ? orderDate : ""); setValue("exchangeRateSource", code === currency ? "Base" : ""); } } })} aria-invalid={!!errors.supplierId}><option value="">Choose a supplier…</option>{suppliers.map((supplier) => <option key={supplier.id} value={supplier.id}>{supplier.name}</option>)}</SelectNative>{errors.supplierId && <p className="field-error">{errors.supplierId.message}</p>}</div>

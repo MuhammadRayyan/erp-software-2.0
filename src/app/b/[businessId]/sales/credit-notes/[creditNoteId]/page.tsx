@@ -23,7 +23,7 @@ export default async function CreditNoteViewPage({ params, searchParams }: { par
   const eInvoice = note.documentStatus === "posted" ? getEInvoiceForSource(businessId, user.id, "sales_credit_note", creditNoteId) : null;
   const eInvoiceLocked = Boolean(eInvoice && ["Submitted", "Accepted", "Rejected"].includes(eInvoice.status));
   const linkedProjects = Array.from(new Map(lines.filter((line) => line.project).map((line) => [line.project!.id, line.project!] as const)).values());
-  return <div className="page-container page-wide">
+  return <div className="page-container">
     <NoticeToast message={notice} />
     <Link href={`/b/${businessId}/sales/credit-notes`} className="mb-5 inline-flex items-center gap-1.5 text-[13px] text-muted-foreground hover:text-foreground"><ArrowLeft className="size-4" /> Sales Credit Notes</Link>
     <div className="mb-5 flex flex-col justify-between gap-4 lg:flex-row lg:items-start">

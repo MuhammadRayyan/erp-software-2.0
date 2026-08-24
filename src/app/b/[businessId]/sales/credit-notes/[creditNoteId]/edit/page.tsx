@@ -23,7 +23,7 @@ export default async function EditCreditNotePage({ params }: { params: Promise<{
   if (!record || record.note.documentStatus === "void") notFound();
   const eInvoice = getEInvoiceForSource(businessId, user.id, "sales_credit_note", creditNoteId);
   if (eInvoice && ["Submitted", "Accepted", "Rejected"].includes(eInvoice.status)) {
-    return <div className="page-container page-narrow"><h1 className="page-title">Submitted eInvoice snapshot</h1><p className="page-description">This Sales Credit Note cannot be rewritten after eInvoice submission. Create a new correction document if another adjustment is required.</p><Button asChild className="mt-5"><Link href={`/b/${businessId}/sales/credit-notes/${creditNoteId}`}>Return to credit note</Link></Button></div>;
+    return <div className="page-container"><h1 className="page-title">Submitted eInvoice snapshot</h1><p className="page-description">This Sales Credit Note cannot be rewritten after eInvoice submission. Create a new correction document if another adjustment is required.</p><Button asChild className="mt-5"><Link href={`/b/${businessId}/sales/credit-notes/${creditNoteId}`}>Return to credit note</Link></Button></div>;
   }
   const customers = listCustomers(businessId, user.id);
   const invoices = listInvoices(businessId, user.id)
@@ -34,7 +34,7 @@ export default async function EditCreditNotePage({ params }: { params: Promise<{
   const projects = listProjectOptions(businessId, user.id);
   const currencySettings = getCurrencySettings(businessId, user.id);
   const minorUnits = new Map(currencySettings.currencies.map((currency) => [currency.code, currency.minor_unit]));
-  return <div className="page-container page-wide">
+  return <div className="page-container">
     <Link href={`/b/${businessId}/sales/credit-notes/${creditNoteId}`} className="mb-5 inline-flex items-center gap-1.5 text-[13px] text-muted-foreground hover:text-foreground"><ArrowLeft className="size-4" /> {record.note.creditNoteNumber}</Link>
     <div className="mb-7"><h1 className="page-title">Edit Sales Credit Note</h1><p className="page-description">{record.note.documentStatus === "posted" ? "Financial changes rebuild the journal and invalidate any unsubmitted eInvoice snapshot atomically." : "Update the draft, or post it when ready."}</p></div>
     <CreditNoteForm

@@ -23,11 +23,11 @@ export default async function EditInvoicePage({ params }: { params: Promise<{ bu
   const record = getInvoice(businessId, user.id, invoiceId);
   if (!record) notFound();
   if (record.invoice.documentStatus === "void") {
-    return <div className="page-container page-narrow"><h1 className="page-title">Void invoice</h1><p className="page-description">Void invoices are retained for history and cannot be edited.</p><Button asChild className="mt-5"><Link href={`/b/${businessId}/sales/invoices/${invoiceId}`}>Return to invoice</Link></Button></div>;
+    return <div className="page-container"><h1 className="page-title">Void invoice</h1><p className="page-description">Void invoices are retained for history and cannot be edited.</p><Button asChild className="mt-5"><Link href={`/b/${businessId}/sales/invoices/${invoiceId}`}>Return to invoice</Link></Button></div>;
   }
   const eInvoice = getEInvoiceForSource(businessId, user.id, "sales_invoice", invoiceId);
   if (eInvoice && ["Submitted", "Accepted", "Rejected"].includes(eInvoice.status)) {
-    return <div className="page-container page-narrow"><h1 className="page-title">Submitted eInvoice snapshot</h1><p className="page-description">This source is immutable after submission. For an accepted invoice, create a Sales Credit Note to correct the accounting and eInvoice trail.</p><div className="mt-5 flex gap-2"><Button asChild><Link href={`/b/${businessId}/sales/invoices/${invoiceId}`}>Return to invoice</Link></Button>{eInvoice.status === "Accepted" && record.balanceMinor > 0 && <Button asChild variant="secondary"><Link href={`/b/${businessId}/sales/credit-notes/new?invoiceId=${invoiceId}`}>Create Credit Note</Link></Button>}</div></div>;
+    return <div className="page-container"><h1 className="page-title">Submitted eInvoice snapshot</h1><p className="page-description">This source is immutable after submission. For an accepted invoice, create a Sales Credit Note to correct the accounting and eInvoice trail.</p><div className="mt-5 flex gap-2"><Button asChild><Link href={`/b/${businessId}/sales/invoices/${invoiceId}`}>Return to invoice</Link></Button>{eInvoice.status === "Accepted" && record.balanceMinor > 0 && <Button asChild variant="secondary"><Link href={`/b/${businessId}/sales/credit-notes/new?invoiceId=${invoiceId}`}>Create Credit Note</Link></Button>}</div></div>;
   }
   const customers = listCustomers(businessId, user.id);
   const salesAccounts = getSalesAccountOptions(businessId, user.id);
@@ -40,7 +40,7 @@ export default async function EditInvoicePage({ params }: { params: Promise<{ bu
   const customFieldValues = customFields.length
     ? getCustomFieldValuesForEntities(businessId, user.id, "sales_invoice", [invoiceId]).get(invoiceId) ?? {}
     : {};
-  return <div className="page-container page-wide">
+  return <div className="page-container">
     <Link href={`/b/${businessId}/sales/invoices/${invoiceId}`} className="mb-5 inline-flex items-center gap-1.5 text-[13px] text-muted-foreground hover:text-foreground"><ArrowLeft className="size-4" /> {record.invoice.invoiceNumber}</Link>
     <div className="mb-7"><h1 className="page-title">Edit Sales Invoice</h1><p className="page-description">{record.invoice.documentStatus === "posted" ? "Financial changes rebuild the journal and invalidate any unsubmitted eInvoice snapshot atomically." : "Update the draft, or post it when ready."}</p></div>
     <InvoiceForm

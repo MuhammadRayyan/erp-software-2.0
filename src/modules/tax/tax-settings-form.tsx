@@ -25,7 +25,7 @@ export function TaxSettingsForm({ businessId, initial, isAdmin }: { businessId: 
     if (result.error) return setError(result.error);
     toast.success("VAT registration settings saved."); router.refresh();
   }
-  return <div className="space-y-6">
+  return <div className="space-y-6 max-w-4xl">
     {!isAdmin && <div className="rounded-md border border-info/25 bg-info/10 px-3 py-2 text-sm">Only a business Administrator can change VAT registration settings.</div>}
     <label className="flex items-center gap-3 rounded-lg border border-border bg-surface-raised p-4"><input type="checkbox" disabled={!isAdmin} checked={values.vatRegistered} onChange={(event) => setValues((current) => ({ ...current, vatRegistered: event.target.checked }))} className="size-4 accent-[var(--primary)]" /><span><span className="block font-medium">VAT registered</span><span className="block text-sm text-muted-foreground">Enables VAT-period working papers and standard-rated Sales validation.</span></span></label>
     <div className="grid gap-5 md:grid-cols-2">

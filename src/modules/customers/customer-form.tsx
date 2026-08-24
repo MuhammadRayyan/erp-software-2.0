@@ -62,7 +62,7 @@ export function CustomerForm({ businessId, customerId, currencies, initial, cust
   }
   const cancelHref = customerId ? `/b/${businessId}/customers/${customerId}` : `/b/${businessId}/customers`;
   return (
-    <form onSubmit={handleSubmit(submit)} className="space-y-7" noValidate>
+    <form onSubmit={handleSubmit(submit)} className="space-y-7 max-w-4xl" noValidate>
       {serverError && <FormError message={serverError} />}
       <section className="border-b border-border pb-7"><h2 className="text-base font-semibold">Contact information</h2><p className="mt-1 text-sm text-muted-foreground">Keep the core identity clear; more addresses and custom fields come later.</p><div className="mt-5 grid gap-5 sm:grid-cols-2">
         <div className="space-y-1.5 sm:col-span-2"><Label htmlFor="name">Customer name</Label><Input id="name" autoFocus {...register("name")} aria-invalid={!!errors.name} />{errors.name && <p className="field-error">{errors.name.message}</p>}</div>

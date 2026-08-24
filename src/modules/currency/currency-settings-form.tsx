@@ -45,7 +45,7 @@ export function CurrencySettingsForm({
     toast.success(success); router.refresh();
   }
 
-  return <div className="space-y-8">
+  return <div className="space-y-8 max-w-4xl">
     {!isAdmin && <div className="rounded-md border border-info/25 bg-info/10 px-3 py-2 text-sm">Currency settings are read-only for non-Administrators.</div>}
     {error && <FormError message={error} />}
 

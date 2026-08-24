@@ -132,7 +132,7 @@ export function InvoiceForm({
   }
 
   return (
-    <form className="space-y-7" noValidate>
+    <form className="space-y-7 max-w-4xl" noValidate>
       {serverError && <FormError message={serverError} />}
       <section className="border-b border-border pb-7">
         <h2 className="text-base font-semibold">Invoice details</h2>

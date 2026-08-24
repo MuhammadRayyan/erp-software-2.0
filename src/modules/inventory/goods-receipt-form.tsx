@@ -101,7 +101,7 @@ export function GoodsReceiptForm({
   }
 
   return (
-    <form className="space-y-7" noValidate>
+    <form className="space-y-7 max-w-4xl" noValidate>
       {serverError && (
         <FormError message={serverError} />
       )}

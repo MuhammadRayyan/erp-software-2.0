@@ -14,7 +14,7 @@ export default async function JournalEntryPage({ params }: { params: Promise<{ b
   if (!record) notFound();
   const sourceHref = journalSourceHref(businessId, record.entry.source_type, record.entry.source_id);
   const sourceReference = record.lines.find((line) => line.reference)?.reference;
-  return <div className="page-container page-medium">
+  return <div className="page-container">
     <Link href={`/b/${businessId}/accounting/journal`} className="mb-5 inline-flex items-center gap-1.5 text-[13px] text-muted-foreground hover:text-foreground"><ArrowLeft className="size-4" /> Journal</Link>
     <div className="mb-5 flex flex-wrap items-start justify-between gap-4">
       <div><div className="flex items-center gap-3"><h1 className="page-title tabular">{record.entry.entry_number}</h1><Badge tone="info">Posted</Badge></div><p className="mt-2 text-sm text-muted-foreground">{formatDate(record.entry.date)} · {record.entry.description}</p></div>

@@ -22,7 +22,7 @@ export default async function SupplierPaymentViewPage({
   const status = String(payment.document_status) as "posted" | "void";
   const number = String(payment.payment_number);
   return (
-    <div className="page-container page-medium">
+    <div className="page-container">
       <Link href={`/b/${businessId}/purchases/payments`} className="mb-5 inline-flex items-center gap-1.5 text-[13px] text-muted-foreground hover:text-foreground"><ArrowLeft className="size-4" /> Supplier Payments</Link>
       <div className="mb-6 flex flex-col justify-between gap-4 lg:flex-row lg:items-start"><div><div className="flex items-center gap-2"><h1 className="page-title tabular">{number}</h1><Badge tone={status === "posted" ? "info" : "danger"}>{status === "posted" ? "Posted" : "Reversed"}</Badge></div><p className="mt-2 font-medium">{String(payment.supplier_name)}</p><p className="mt-1 text-sm text-muted-foreground">{formatDate(String(payment.date))}</p><p className="money mt-3 text-xl font-semibold">{formatMoney(Number(payment.amount_minor), String(payment.currency_code))}</p><p className="mt-1 text-sm text-muted-foreground">Bank {formatMoney(Number(payment.base_amount_minor), access.business.currency)} at 1 {String(payment.currency_code)} = {String(payment.exchange_rate_to_base)} {access.business.currency} · Realized FX {formatMoney(Number(payment.realized_fx_amount_minor), access.business.currency)}</p></div><SupplierPaymentViewActions businessId={businessId} paymentId={paymentId} paymentNumber={number} status={status} /></div>
       <article className="rounded-lg border border-border bg-surface-raised p-5 sm:p-7">

@@ -17,7 +17,7 @@ export default async function CustomerStatementPage({ params }: { params: Promis
   if (!customer) notFound();
   const rows = getCustomerStatement(businessId, user.id, customerId);
   return (
-    <div className="page-container page-medium">
+    <div className="page-container">
       <Link href={`/b/${businessId}/customers/${customerId}`} className="mb-5 inline-flex items-center gap-1.5 text-[13px] text-muted-foreground hover:text-foreground print:hidden"><ArrowLeft className="size-4" /> {customer.name}</Link>
       <div className="page-header">
         <div>

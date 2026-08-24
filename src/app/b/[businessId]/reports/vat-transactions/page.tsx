@@ -46,7 +46,7 @@ export default async function VatTransactionsPage({
     ? `/b/${businessId}/tax/vat/periods/${query.periodId}`
     : `/b/${businessId}/reports`;
 
-  return <div className="page-container page-wide">
+  return <div className="page-container">
     <BackLink href={backHref}>Back</BackLink>
     <div className="page-header">
       <div>

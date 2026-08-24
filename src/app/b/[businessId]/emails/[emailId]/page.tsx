@@ -40,7 +40,7 @@ export default async function SentEmailViewPage({ params }: { params: Promise<{ 
   const cc = parseMailboxes(email.ccAddresses);
 
   return (
-    <div className="page-container page-wide">
+    <div className="page-container">
       <Link
         href={`/b/${businessId}/emails`}
         className="mb-5 inline-flex items-center gap-1.5 text-[13px] text-muted-foreground hover:text-foreground"

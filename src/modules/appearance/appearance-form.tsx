@@ -23,7 +23,7 @@ export function AppearanceForm({ initialFont, initialSize }: { initialFont: stri
   };
 
   return (
-    <form action={handleSave} className="space-y-8">
+    <form action={handleSave} className="space-y-8 max-w-4xl">
       <div className="space-y-4">
         <div>
           <h2 className="text-sm font-medium mb-3">Font Family</h2>
