@@ -9,6 +9,7 @@ import { useFieldArray, useForm } from "react-hook-form";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { minorToCurrencyInput } from "@/modules/currency/conversion";
 import { saveGoodsReceiptAction } from "./goods-receipt-actions";
 import {
   goodsReceiptInputSchema,
@@ -34,6 +35,7 @@ export function GoodsReceiptForm({
   businessId,
   receiptId,
   status = "draft",
+  baseMinorUnit,
   suppliers,
   locations,
   items,
@@ -45,6 +47,7 @@ export function GoodsReceiptForm({
   businessId: string;
   receiptId?: string;
   status?: InventoryDocumentStatus;
+  baseMinorUnit: number;
   suppliers: Option[];
   locations: Location[];
   items: ItemOption[];
@@ -93,7 +96,7 @@ export function GoodsReceiptForm({
     setValue(`lines.${index}.description`, item.name);
     setValue(
       `lines.${index}.unitCost`,
-      item.purchasePriceMinor == null ? "0.00" : (item.purchasePriceMinor / 100).toFixed(2),
+      minorToCurrencyInput(item.purchasePriceMinor ?? 0, baseMinorUnit),
     );
   }
 

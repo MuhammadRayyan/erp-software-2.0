@@ -1,8 +1,6 @@
 "use client";
 import { useRouter } from "next/navigation";
 import { FormError } from "@/components/form-error";
-
-import Link from "next/link";
 import { useState } from "react";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Columns3, LoaderCircle, Plus, Trash2 } from "lucide-react";
@@ -11,8 +9,11 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { formatMoney } from "@/core/format";
-import { convertToBase, parseCurrencyAmountToMinor } from "@/modules/currency/conversion";
+import { convertToBase, minorToCurrencyInput, parseCurrencyAmountToMinor } from "@/modules/currency/conversion";
+import { calculateTax, multiplyMoneyByQuantity, parseQuantityToMicros } from "@/modules/accounting/calculations/money";
 import { DocumentCurrencyFields, type DocumentCurrencyOption, type DocumentRateOption } from "@/modules/currency/document-currency-fields";
+import { CustomFieldInputs, type CustomFieldInputDefinition } from "@/modules/custom-fields/custom-field-inputs";
+import { firstMissingRequiredCustomField } from "@/modules/custom-fields/custom-field-display";
 import { createInvoiceAction, updateInvoiceAction } from "./actions";
 import { invoiceInputSchema, type InvoiceInput } from "./invoice-input";
 import type { DocumentStatus, InvoiceSaveIntent } from "./invoice-service";
@@ -29,9 +30,11 @@ type ItemOption = { id: string; sku: string | null; name: string; salesPriceMino
 
 function previewLine(line: InvoiceInput["lines"][number] | undefined, taxCodes: TaxCodeOption[], minorUnit: number) {
   try {
-    const netMinor = parseCurrencyAmountToMinor(String((Number(line?.quantity) || 0) * (Number(line?.unitPrice) || 0)), minorUnit);
+    const unitPriceMinor = parseCurrencyAmountToMinor(String(line?.unitPrice || "0"), minorUnit, "Unit price");
+    const quantityMicros = parseQuantityToMicros(String(line?.quantity || "0"));
+    const netMinor = multiplyMoneyByQuantity(unitPriceMinor, quantityMicros);
     const rate = taxCodes.find((taxCode) => taxCode.id === line?.taxCodeId)?.rateBasisPoints ?? 0;
-    const taxMinor = Math.round((netMinor * rate) / 10_000);
+    const taxMinor = calculateTax(netMinor, rate);
     return { netMinor, taxMinor, grossMinor: netMinor + taxMinor };
   } catch { return { netMinor: 0, taxMinor: 0, grossMinor: 0 }; }
 }
@@ -49,6 +52,8 @@ export function InvoiceForm({
   currencies,
   rates,
   initial,
+  customFields = [],
+  customFieldValues,
 }: {
   businessId: string;
   invoiceId?: string;
@@ -62,10 +67,20 @@ export function InvoiceForm({
   currencies: DocumentCurrencyOption[];
   rates: DocumentRateOption[];
   initial: InvoiceInput;
+  customFields?: CustomFieldInputDefinition[];
+  customFieldValues?: Record<string, string>;
 }) {
   const router = useRouter();
   const [serverError, setServerError] = useState("");
   const [showLineProjects, setShowLineProjects] = useState(() => initial.lines.some((line) => Boolean(line.projectId)));
+  const [customValues, setCustomValues] = useState<Record<string, string>>(() => {
+    const initialCustomValues: Record<string, string> = {};
+    for (const definition of customFields) {
+      initialCustomValues[definition.id] = customFieldValues?.[definition.id]
+        ?? (definition.fieldType === "checkbox" ? "false" : "");
+    }
+    return initialCustomValues;
+  });
   const form = useForm<InvoiceInput>({ resolver: zodResolver(invoiceInputSchema), defaultValues: initial });
   const { register, control, handleSubmit, setError, setValue, formState: { errors, isSubmitting } } = form;
   const { fields, append, remove } = useFieldArray({ control, name: "lines" });
@@ -94,15 +109,20 @@ export function InvoiceForm({
     const item = items.find((entry) => entry.id === itemId);
     if (!item) { form.setValue(`lines.${index}.salesAccountId`, defaultSalesAccountId); return; }
     form.setValue(`lines.${index}.description`, item.name);
-    form.setValue(`lines.${index}.unitPrice`, item.salesPriceMinor == null ? "0.00" : (item.salesPriceMinor / 100).toFixed(2));
+    form.setValue(`lines.${index}.unitPrice`, minorToCurrencyInput(item.salesPriceMinor ?? 0, minorUnit));
     form.setValue(`lines.${index}.salesAccountId`, item.salesAccountId);
   }
 
   async function save(values: InvoiceInput, intent: InvoiceSaveIntent) {
     setServerError("");
+    const missingCustomField = firstMissingRequiredCustomField(customFields, customValues);
+    if (missingCustomField) {
+      setServerError(`"${missingCustomField}" is required.`);
+      return;
+    }
     const result = invoiceId
-      ? await updateInvoiceAction(businessId, invoiceId, values, intent)
-      : await createInvoiceAction(businessId, values, intent);
+      ? await updateInvoiceAction(businessId, invoiceId, values, intent, customValues)
+      : await createInvoiceAction(businessId, values, intent, customValues);
     if (result.fieldErrors) {
       for (const [field, messages] of Object.entries(result.fieldErrors)) {
         setError(field as keyof InvoiceInput, { message: messages[0] });
@@ -158,6 +178,19 @@ export function InvoiceForm({
         </div>
         <dl className="mt-5 ml-auto w-full max-w-xs space-y-2 text-sm"><div className="flex justify-between"><dt className="text-muted-foreground">Subtotal</dt><dd className="money">{formatMoney(subtotalMinor, currencyCode, minorUnit)}</dd></div><div className="flex justify-between"><dt className="text-muted-foreground">VAT</dt><dd className="money">{formatMoney(taxMinor, currencyCode, minorUnit)}</dd></div><div className="flex justify-between border-t border-border pt-2 text-base font-semibold"><dt>Total</dt><dd className="money">{formatMoney(subtotalMinor + taxMinor, currencyCode, minorUnit)}</dd></div>{baseEquivalentMinor != null && <div className="flex justify-between border-t border-border pt-2"><dt className="text-muted-foreground">Base equivalent</dt><dd className="money">{formatMoney(baseEquivalentMinor, currency, baseMinorUnit)}</dd></div>}</dl>
       </section>
+      {customFields.length > 0 && (
+        <section className="border-b border-border pb-7">
+          <h2 className="text-base font-semibold">Custom Fields</h2>
+          <p className="mt-1 text-sm text-muted-foreground">Fields defined in Settings → Custom Fields.</p>
+          <CustomFieldInputs
+            definitions={customFields}
+            values={customValues}
+            onChange={(definitionId, value) => setCustomValues((current) => ({ ...current, [definitionId]: value }))}
+            className="mt-5 grid gap-5 sm:grid-cols-2"
+            checkboxClassName="size-4 rounded-[4px] border-border-strong accent-primary"
+          />
+        </section>
+      )}
       <DocumentFormFooter onCancel={() => router.push(cancelHref)}>
         {documentStatus === "posted" ? <Button type="button" disabled={isSubmitting} onClick={handleSubmit((values) => save(values, "post"))}>{isSubmitting && <LoaderCircle className="size-4 animate-spin" />} Update Posted Invoice</Button> : <div className="flex gap-2"><Button type="button" variant="secondary" disabled={isSubmitting} onClick={handleSubmit((values) => save(values, "draft"))}>Save Draft</Button><Button type="button" disabled={isSubmitting} onClick={handleSubmit((values) => save(values, "post"))}>{isSubmitting && <LoaderCircle className="size-4 animate-spin" />} Post Invoice</Button></div>}
       </DocumentFormFooter>

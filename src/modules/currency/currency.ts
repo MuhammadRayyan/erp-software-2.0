@@ -37,8 +37,3 @@ export function listCurrencies(sqlite: Database.Database, activeOnly = false) {
     ORDER BY is_base DESC, code
   `).all() as (CurrencyRecord & { created_at: string; updated_at: string })[];
 }
-
-export function validateCurrency(sqlite: Database.Database, code: string) {
-  return getCurrency(sqlite, code, true);
-}
-

@@ -7,6 +7,7 @@ import { quantityMicrosToInput } from "@/modules/accounting/calculations/money";
 import { getSalesAccountOptions } from "@/modules/accounting/services/account-service";
 import { getActiveTaxCodes } from "@/modules/accounting/services/tax-code-service";
 import { listCustomers } from "@/modules/customers/customer-service";
+import { getCustomFieldValuesForEntities, listCustomFieldDefinitions } from "@/modules/custom-fields/custom-field-service";
 import { getEInvoiceForSource } from "@/modules/einvoicing/einvoice-service";
 import { parseTransactionFlags } from "@/modules/einvoicing/einvoice-types";
 import { listInventoryItemOptions } from "@/modules/inventory/inventory-item-service";
@@ -35,6 +36,10 @@ export default async function EditInvoicePage({ params }: { params: Promise<{ bu
   const items = listInventoryItemOptions(businessId, user.id);
   const currencySettings = getCurrencySettings(businessId, user.id);
   const documentMinorUnit = currencySettings.currencies.find((entry) => entry.code === record.invoice.currencyCode)?.minor_unit ?? 2;
+  const customFields = listCustomFieldDefinitions(businessId, user.id, "sales_invoice").map(({ id, name, fieldType, selectOptions, isRequired }) => ({ id, name, fieldType, selectOptions, isRequired }));
+  const customFieldValues = customFields.length
+    ? getCustomFieldValuesForEntities(businessId, user.id, "sales_invoice", [invoiceId]).get(invoiceId) ?? {}
+    : {};
   return <div className="page-container page-wide">
     <Link href={`/b/${businessId}/sales/invoices/${invoiceId}`} className="mb-5 inline-flex items-center gap-1.5 text-[13px] text-muted-foreground hover:text-foreground"><ArrowLeft className="size-4" /> {record.invoice.invoiceNumber}</Link>
     <div className="mb-7"><h1 className="page-title">Edit Sales Invoice</h1><p className="page-description">{record.invoice.documentStatus === "posted" ? "Financial changes rebuild the journal and invalidate any unsubmitted eInvoice snapshot atomically." : "Update the draft, or post it when ready."}</p></div>
@@ -42,6 +47,8 @@ export default async function EditInvoicePage({ params }: { params: Promise<{ bu
       businessId={businessId}
       invoiceId={invoiceId}
       documentStatus={record.invoice.documentStatus}
+      customFields={customFields}
+      customFieldValues={customFieldValues}
       customers={customers.map(({ id, name, defaultCurrencyCode }) => ({ id, name, defaultCurrencyCode }))}
       salesAccounts={salesAccounts.map(({ id, code, name }) => ({ id, code, name }))}
       taxCodes={taxCodes.map(({ id, name, rateBasisPoints }) => ({ id, name, rateBasisPoints }))}

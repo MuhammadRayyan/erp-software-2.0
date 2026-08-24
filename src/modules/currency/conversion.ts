@@ -47,6 +47,7 @@ export function minorToCurrencyInput(amountMinor: number, minorUnit: number) {
   return new Decimal(amountMinor).div(powerOfTen(minorUnit)).toFixed(minorUnit);
 }
 
+// Used by unit tests only.
 export function roundCurrencyAmount(value: Decimal.Value, minorUnit: number) {
   validateMinorUnit(minorUnit);
   return new Decimal(value).toDecimalPlaces(minorUnit, Decimal.ROUND_HALF_UP).toFixed(minorUnit);
@@ -72,6 +73,7 @@ export function convertToBase(
   );
 }
 
+// Used by unit tests only.
 export function convertFromBase(
   baseAmountMinor: number,
   baseMinorUnit: number,

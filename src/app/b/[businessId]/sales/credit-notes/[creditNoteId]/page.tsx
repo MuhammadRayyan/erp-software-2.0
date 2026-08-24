@@ -2,7 +2,7 @@ import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
 import { notFound } from "next/navigation";
 import { NoticeToast } from "@/components/notice-toast";
-import { Badge } from "@/components/ui/badge";
+import { StatusBadge } from "@/components/status-badge";
 import { formatDate, formatMoney } from "@/core/format";
 import { requireModule } from "@/core/permissions/require-module";
 import { quantityMicrosToInput, rateBasisPointsToPercent } from "@/modules/accounting/calculations/money";
@@ -11,8 +11,6 @@ import { CreditNoteViewActions } from "@/modules/sales-credit-notes/credit-note-
 import { emirateLabels, type Emirate } from "@/modules/tax/uae-vat-config";
 import { getEInvoiceForSource } from "@/modules/einvoicing/einvoice-service";
 import { EInvoiceSourcePanel } from "@/modules/einvoicing/source-panel";
-
-const tones = { draft: "neutral", posted: "info", void: "danger" } as const;
 
 export default async function CreditNoteViewPage({ params, searchParams }: { params: Promise<{ businessId: string; creditNoteId: string }>; searchParams: Promise<{ notice?: string }> }) {
   const { businessId, creditNoteId } = await params;
@@ -30,7 +28,7 @@ export default async function CreditNoteViewPage({ params, searchParams }: { par
     <Link href={`/b/${businessId}/sales/credit-notes`} className="mb-5 inline-flex items-center gap-1.5 text-[13px] text-muted-foreground hover:text-foreground"><ArrowLeft className="size-4" /> Sales Credit Notes</Link>
     <div className="mb-5 flex flex-col justify-between gap-4 lg:flex-row lg:items-start">
       <div>
-        <div className="flex flex-wrap items-center gap-2"><h1 className="page-title tabular">{note.creditNoteNumber}</h1><Badge tone={tones[note.documentStatus]}>{note.documentStatus[0].toUpperCase() + note.documentStatus.slice(1)}</Badge></div>
+        <div className="flex flex-wrap items-center gap-2"><h1 className="page-title tabular">{note.creditNoteNumber}</h1><StatusBadge status={note.documentStatus} /></div>
         <p className="mt-2 text-base font-medium">{customer.name}</p>
         <p className="mt-1 text-sm text-muted-foreground">Credit date: {formatDate(note.date)} · Applied to <Link className="tabular text-primary hover:underline" href={`/b/${businessId}/sales/invoices/${invoice.id}`}>{invoice.invoiceNumber}</Link></p>
         {linkedProjects.length > 0 && <p className="mt-1 text-sm text-muted-foreground">Project: {linkedProjects.map((project, index) => <span key={project.id}>{index > 0 && ", "}<Link className="font-medium text-primary hover:underline" href={`/b/${businessId}/projects/${project.id}`}>{project.code} · {project.name}</Link></span>)}</p>}

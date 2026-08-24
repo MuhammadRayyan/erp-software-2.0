@@ -10,13 +10,17 @@ import * as schema from "./business-schema";
 
 const MAX_CONNECTIONS = 32;
 const IDLE_TIMEOUT_MS = 5 * 60 * 1000;  // 5 minutes
+// Never evict a connection that was used this recently: a request may hold
+// the handle across an await boundary, and closing it would crash that
+// request with "database is closed".
+const MIN_AGE_BEFORE_EVICTION_MS = 10_000;
 
 type Connection = {
   sqlite: Database.Database;
   db: ReturnType<typeof drizzle>;
   paths: ReturnType<typeof getBusinessPaths>;
   lastUsed: number;
-  idleTimer: ReturnType<typeof setTimeout>;
+  idleTimer: ReturnType<typeof setTimeout> | null;
 };
 
 const connections = new Map<string, Connection>();
@@ -24,7 +28,7 @@ const connections = new Map<string, Connection>();
 function closeConnection(directoryKey: string) {
   const conn = connections.get(directoryKey);
   if (!conn) return;
-  clearTimeout(conn.idleTimer);
+  if (conn.idleTimer) clearTimeout(conn.idleTimer);
   conn.sqlite.close();
   connections.delete(directoryKey);
 }
@@ -32,7 +36,7 @@ function closeConnection(directoryKey: string) {
 function scheduleIdleClose(directoryKey: string) {
   const conn = connections.get(directoryKey);
   if (!conn) return;
-  clearTimeout(conn.idleTimer);
+  if (conn.idleTimer) clearTimeout(conn.idleTimer);
   conn.idleTimer = setTimeout(() => {
     closeConnection(directoryKey);
   }, IDLE_TIMEOUT_MS);
@@ -40,10 +44,14 @@ function scheduleIdleClose(directoryKey: string) {
 
 function evictIfNeeded() {
   if (connections.size < MAX_CONNECTIONS) return;
-  // Find the least-recently-used connection
+  const now = Date.now();
+  // Evict the least-recently-used connection that is old enough to be
+  // safely closable. If every connection is currently active, allow the
+  // pool to grow past the soft cap instead of yanking a live handle.
   let oldestKey: string | null = null;
   let oldestTime = Infinity;
   for (const [key, conn] of connections) {
+    if (now - conn.lastUsed < MIN_AGE_BEFORE_EVICTION_MS) continue;
     if (conn.lastUsed < oldestTime) {
       oldestTime = conn.lastUsed;
       oldestKey = key;
@@ -63,7 +71,7 @@ export function openBusinessDatabase(directoryKey: string) {
     sqlite.pragma("foreign_keys = ON");
     migrateBusinessDatabase(sqlite, `business database ${directoryKey}`);
     const db = drizzle(sqlite, { schema });
-    conn = { sqlite, db, paths, lastUsed: Date.now(), idleTimer: setTimeout(() => {}, 0) };
+    conn = { sqlite, db, paths, lastUsed: Date.now(), idleTimer: null };
     connections.set(directoryKey, conn);
   }
   conn.lastUsed = Date.now();

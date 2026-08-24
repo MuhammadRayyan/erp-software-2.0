@@ -1,7 +1,12 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  serverExternalPackages: ["better-sqlite3", "saxon-js"],
+  // Standalone output for container deployment (server.js + traced node_modules).
+  output: "standalone",
+  // Allows validation builds to target a separate directory (NEXT_DIST_DIR=.next-validate)
+  // so they never clobber the running dev server's .next output.
+  ...(process.env.NEXT_DIST_DIR ? { distDir: process.env.NEXT_DIST_DIR } : {}),
+  serverExternalPackages: ["better-sqlite3", "saxon-js", "puppeteer"],
   outputFileTracingIncludes: {
     "/*": ["./src/modules/einvoicing/pint-ae/versions/v1.0.4/validation/*.json"],
   },

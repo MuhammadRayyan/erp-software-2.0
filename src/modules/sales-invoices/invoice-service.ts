@@ -6,13 +6,7 @@ import {
   salesInvoiceLines,
   salesInvoices,
 } from "@/core/db/business-schema";
-import {
-  addMinor,
-  calculateTax,
-  multiplyMoneyByQuantity,
-  parseQuantityToMicros,
-  quantityMicrosToInput,
-} from "@/modules/accounting/calculations/money";
+import { quantityMicrosToInput } from "@/modules/accounting/calculations/money";
 import { postSalesInvoice } from "@/modules/accounting/services/invoice-posting-service";
 import { allocateNumber } from "@/modules/accounting/services/numbering-service";
 import { reverseTransaction } from "@/modules/accounting/services/posting-service";
@@ -21,8 +15,9 @@ import { replaceTaxEntries, reverseTaxEntries } from "@/modules/tax/tax-entry-se
 import { assertVatDateUnlocked, assertVatSourceUnlocked } from "@/modules/tax/tax-lock-service";
 import { assertEInvoiceSourceEditable, invalidatePreparedEInvoice } from "@/modules/einvoicing/einvoice-service";
 import { parseTransactionFlags } from "@/modules/einvoicing/einvoice-types";
-import { invoiceInputSchema, type InvoiceData, type InvoiceInput } from "./invoice-input";
-import { convertDocumentLinesToBase, minorToCurrencyInput, parseCurrencyAmountToMinor } from "@/modules/currency/conversion";
+import { saveCustomFieldValuesInTransaction } from "@/modules/custom-fields/custom-field-service";
+import { invoiceInputSchema, type InvoiceInput } from "./invoice-input";
+import { convertDocumentLinesToBase, minorToCurrencyInput } from "@/modules/currency/conversion";
 import { getCurrency } from "@/modules/currency/currency";
 import { resolveRateSnapshot } from "@/modules/currency/validation";
 import { calculateLines, totalsForLines, type StoredLine } from "@/modules/accounting/services/document-line-calculator";
@@ -110,13 +105,128 @@ const ALLOCATED_BASE_MINOR_FRAGMENT = `
     WHERE scna.sales_invoice_id = i.id), 0)
 `;
 
+export type InvoiceListFilters = {
+  /** Inclusive lower bound on invoice_date (YYYY-MM-DD). Invalid values are ignored. */
+  from?: string;
+  /** Inclusive upper bound on invoice_date (YYYY-MM-DD). Invalid values are ignored. */
+  to?: string;
+  /** Maximum rows to return (server-side LIMIT). Used by the paginated list path. */
+  take?: number;
+  /** Number of rows to skip (server-side OFFSET). Used by the paginated list path. */
+  skip?: number;
+};
+
+/**
+ * Paginated invoice list result. The rows slice contains just the rows
+ * for the requested page; `total` is the unfiltered-over-rows count for
+ * the same `filters` (so the UI can show "Page X of Y"). When `filters`
+ * is empty the total is the full invoice count for the business.
+ */
+export type PaginatedInvoices = {
+  rows: Awaited<ReturnType<typeof listInvoiceRows>>;
+  total: number;
+  /** 1-indexed page number actually returned (clamped to the last valid page). */
+  page: number;
+  /** Rows per page that were requested. */
+  pageSize: number;
+  /** Total number of pages computed from `total` / `pageSize`. */
+  totalPages: number;
+};
+
+const DEFAULT_PAGE_SIZE = 50;
+const MAX_PAGE_SIZE = 200;
+
+function clampPositiveInt(value: number | undefined, fallback: number, max: number): number {
+  if (value === undefined || !Number.isInteger(value) || value < 1) return fallback;
+  return Math.min(value, max);
+}
+
+/**
+ * Count invoices matching `filters` (without customer scoping) using the
+ * same WHERE-clause builder as `listInvoiceRows`. Returns the row count
+ * used by `listInvoicesPaginated` to compute total pages.
+ */
+function countInvoiceRows(businessId: string, userId: string, filters?: InvoiceListFilters): number {
+  const { sqlite } = getBusinessDb(businessId, userId);
+  const conditions: string[] = [];
+  const values: string[] = [];
+  const dateFrom = validDate(filters?.from);
+  const dateTo = validDate(filters?.to);
+  if (dateFrom) {
+    conditions.push("i.invoice_date >= ?");
+    values.push(dateFrom);
+  }
+  if (dateTo) {
+    conditions.push("i.invoice_date <= ?");
+    values.push(dateTo);
+  }
+  const where = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";
+  const row = sqlite.prepare(`SELECT COUNT(*) AS total FROM sales_invoices i ${where}`).get(...values) as { total: number };
+  return row.total;
+}
+
+/**
+ * Paginated list of invoices for the list page. Server-side LIMIT/OFFSET
+ * keeps the query cheap as the invoice table grows past thousands of
+ * rows. The returned `total` is the count for the same `filters`
+ * excluding the page bounds — the UI uses it to render "Page X of Y"
+ * and disable the Next button on the last page.
+ *
+ * @param page 1-indexed page number (clamped to >= 1).
+ * @param pageSize rows per page (defaults to 50, capped at 200 to
+ *   protect against accidental huge-page requests).
+ */
+export function listInvoicesPaginated(
+  businessId: string,
+  userId: string,
+  filters: InvoiceListFilters & { page?: number; pageSize?: number } = {},
+): PaginatedInvoices {
+  const page = clampPositiveInt(filters.page, 1, Number.MAX_SAFE_INTEGER);
+  const pageSize = clampPositiveInt(filters.pageSize, DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE);
+  const total = countInvoiceRows(businessId, userId, filters);
+  // Clamp the page number to the last valid page so out-of-range URLs
+  // (e.g. `?page=999`) still render the last page rather than 0 rows.
+  const maxPage = Math.max(1, Math.ceil(total / pageSize));
+  const effectivePage = Math.min(page, maxPage);
+  const offset = (effectivePage - 1) * pageSize;
+  const rows = listInvoiceRows(businessId, userId, undefined, { ...filters, take: pageSize, skip: offset });
+  return { rows, total, page: effectivePage, pageSize, totalPages: maxPage };
+}
+
+function validDate(value?: string) {
+  return value && /^\d{4}-\d{2}-\d{2}$/.test(value) ? value : undefined;
+}
+
 function listInvoiceRows(
   businessId: string,
   userId: string,
   customerId?: string,
+  filters?: InvoiceListFilters,
 ) {
   const { sqlite } = getBusinessDb(businessId, userId);
-  const where = customerId ? "WHERE i.customer_id = ?" : "";
+  const conditions: string[] = [];
+  const values: string[] = [];
+  if (customerId) {
+    conditions.push("i.customer_id = ?");
+    values.push(customerId);
+  }
+  const dateFrom = validDate(filters?.from);
+  const dateTo = validDate(filters?.to);
+  if (dateFrom) {
+    conditions.push("i.invoice_date >= ?");
+    values.push(dateFrom);
+  }
+  if (dateTo) {
+    conditions.push("i.invoice_date <= ?");
+    values.push(dateTo);
+  }
+  const where = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";
+  // Server-side LIMIT/OFFSET supports the paginated list path. When both
+  // are undefined the query returns the full result set (used by the
+  // overview page, customer statement view, etc.).
+  const limitClause = filters?.take !== undefined && Number.isFinite(filters.take) && filters.take >= 0 ? `LIMIT ${Math.floor(filters.take)}` : "";
+  const offsetClause = filters?.skip !== undefined && Number.isFinite(filters.skip) && filters.skip >= 0 ? `OFFSET ${Math.floor(filters.skip)}` : "";
+  const pagination = `${limitClause} ${offsetClause}`.trim();
   const rows = sqlite
     .prepare(`
       SELECT i.id, i.invoice_number, i.customer_id, c.name AS customer_name,
@@ -133,8 +243,9 @@ function listInvoiceRows(
       INNER JOIN currencies cur ON cur.code = i.currency_code
       ${where}
       ORDER BY i.invoice_date DESC, i.created_at DESC
+      ${pagination}
     `)
-    .all(...(customerId ? [customerId] : [])) as {
+    .all(...values) as {
       id: string;
       invoice_number: string;
       customer_id: string;
@@ -186,8 +297,8 @@ function listInvoiceRows(
   }));
 }
 
-export function listInvoices(businessId: string, userId: string) {
-  return listInvoiceRows(businessId, userId);
+export function listInvoices(businessId: string, userId: string, filters?: InvoiceListFilters) {
+  return listInvoiceRows(businessId, userId, undefined, filters);
 }
 
 export function listInvoicesForCustomer(businessId: string, userId: string, customerId: string) {
@@ -317,6 +428,7 @@ export function createInvoice(
   userId: string,
   input: InvoiceInput,
   intent: InvoiceSaveIntent,
+  customFieldValues?: Record<string, string>,
 ) {
   const data = invoiceInputSchema.parse(input);
   const context = getBusinessDb(businessId, userId);
@@ -378,6 +490,9 @@ export function createInvoice(
         now,
       );
     insertLines(context.sqlite, id, lines);
+    if (customFieldValues) {
+      saveCustomFieldValuesInTransaction(context.sqlite, "sales_invoice", id, customFieldValues);
+    }
     if (intent === "post") {
       postSalesInvoice(
         context.sqlite,
@@ -411,6 +526,7 @@ export function updateInvoice(
   invoiceId: string,
   input: InvoiceInput,
   intent: InvoiceSaveIntent,
+  customFieldValues?: Record<string, string>,
 ) {
   const data = invoiceInputSchema.parse(input);
   const context = getBusinessDb(businessId, userId);
@@ -490,6 +606,9 @@ export function updateInvoice(
       );
     context.sqlite.prepare("DELETE FROM sales_invoice_lines WHERE invoice_id = ?").run(invoiceId);
     insertLines(context.sqlite, invoiceId, lines);
+    if (customFieldValues) {
+      saveCustomFieldValuesInTransaction(context.sqlite, "sales_invoice", invoiceId, customFieldValues);
+    }
     if (shouldPost) {
       postSalesInvoice(
         context.sqlite,

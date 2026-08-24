@@ -90,4 +90,22 @@ export const systemMigrations = [
       `);
     },
   },
+  {
+    version: 3,
+    name: "review_4_user_business_preferences",
+    up(sqlite) {
+      sqlite.exec(`
+        CREATE TABLE IF NOT EXISTS "user_business_preferences" (
+          "user_id" TEXT NOT NULL REFERENCES "user"("id") ON DELETE CASCADE,
+          "business_id" TEXT NOT NULL REFERENCES "businesses"("id") ON DELETE CASCADE,
+          "key" TEXT NOT NULL,
+          "value" TEXT NOT NULL,
+          "updated_at" INTEGER NOT NULL,
+          PRIMARY KEY ("user_id", "business_id", "key")
+        );
+        CREATE INDEX IF NOT EXISTS "user_business_pref_business_idx"
+          ON "user_business_preferences" ("business_id");
+      `);
+    },
+  },
 ] satisfies readonly SqliteMigration[];

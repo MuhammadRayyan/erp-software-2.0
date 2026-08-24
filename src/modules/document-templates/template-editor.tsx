@@ -16,7 +16,6 @@ export function TemplateEditor({ businessId, initialSettings }: { businessId: st
 
   const [saving, setSaving] = useState(false);
   const [previewing, setPreviewing] = useState(false);
-  const [loading] = useState(false);
 
   const update = (key: keyof TemplateSettings, value: unknown) => {
     setSettings((prev) => ({ ...prev, [key]: value as never }));
@@ -40,14 +39,6 @@ export function TemplateEditor({ businessId, initialSettings }: { businessId: st
       toast.error("Preview failed");
     }
     setPreviewing(false);
-  }
-
-  if (loading) {
-    return (
-      <div className="flex h-64 items-center justify-center">
-        <LoaderCircle className="size-8 animate-spin text-muted-foreground/50" />
-      </div>
-    );
   }
 
   return (
@@ -191,6 +182,15 @@ export function TemplateEditor({ businessId, initialSettings }: { businessId: st
                   className="size-4 accent-[var(--primary)]"
                 />
                 Payment terms
+              </label>
+              <label className="flex items-center gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  checked={settings.showCustomFields}
+                  onChange={(e) => update("showCustomFields", e.target.checked)}
+                  className="size-4 accent-[var(--primary)]"
+                />
+                Custom fields (sales invoices)
               </label>
             </div>
           </section>

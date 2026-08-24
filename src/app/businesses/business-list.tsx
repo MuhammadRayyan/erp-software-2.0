@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import Link from "next/link";
 import { Archive, ArrowRight, Building2, Download, MoreHorizontal, Pencil, Search, Star, Trash2 } from "lucide-react";
 import { toast } from "sonner";
+import { EmptyState } from "@/components/empty-state";
 import { Button } from "@/components/ui/button";
 import { DialogContent, DialogDescription, DialogRoot, DialogTitle } from "@/components/ui/dialog";
 import {
@@ -29,6 +30,7 @@ type BusinessCard = {
 function BusinessMenu({ business }: { business: BusinessCard }) {
   const [renameOpen, setRenameOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
+  const [archiveOpen, setArchiveOpen] = useState(false);
   const [name, setName] = useState(business.name);
   const admin = business.role === "administrator";
 
@@ -42,6 +44,7 @@ function BusinessMenu({ business }: { business: BusinessCard }) {
   async function archive() {
     const result = await archiveBusinessAction(business.id);
     if (result.error) return toast.error(result.error);
+    setArchiveOpen(false);
     toast.success("Business archived.");
   }
 
@@ -63,7 +66,7 @@ function BusinessMenu({ business }: { business: BusinessCard }) {
             ? <DropdownMenuItem asChild><a href={`/api/businesses/${business.id}/backup`}><Download className="size-4" /> Backup</a></DropdownMenuItem>
             : <DropdownMenuItem disabled title="Administrator access is required"><Download className="size-4" /> Backup</DropdownMenuItem>}
           <DropdownMenuSeparator />
-          <DropdownMenuItem disabled={!admin} onSelect={archive}><Archive className="size-4" /> Archive</DropdownMenuItem>
+          <DropdownMenuItem disabled={!admin} onSelect={() => setArchiveOpen(true)}><Archive className="size-4" /> Archive</DropdownMenuItem>
           <DropdownMenuItem disabled={!admin} className="text-danger focus:text-danger" onSelect={() => setDeleteOpen(true)}><Trash2 className="size-4" /> Delete</DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
@@ -73,6 +76,13 @@ function BusinessMenu({ business }: { business: BusinessCard }) {
           <DialogDescription>This changes the display name only. Its isolated database identity stays the same.</DialogDescription>
           <div className="mt-5 space-y-1.5"><Label htmlFor={`rename-${business.id}`}>Business name</Label><Input id={`rename-${business.id}`} value={name} onChange={(event) => setName(event.target.value)} /></div>
           <div className="mt-5 flex justify-end gap-2"><Button variant="ghost" onClick={() => setRenameOpen(false)}>Cancel</Button><Button onClick={rename}>Save name</Button></div>
+        </DialogContent>
+      </DialogRoot>
+      <DialogRoot open={archiveOpen} onOpenChange={setArchiveOpen}>
+        <DialogContent>
+          <DialogTitle>Archive {business.name}?</DialogTitle>
+          <DialogDescription>Archiving hides the business from your list. Its data is kept, but there is no one-click unarchive — restore a backup copy if you need it back.</DialogDescription>
+          <div className="mt-5 flex justify-end gap-2"><Button variant="secondary" onClick={() => setArchiveOpen(false)}>Cancel</Button><Button onClick={archive}><Archive className="size-4" /> Archive business</Button></div>
         </DialogContent>
       </DialogRoot>
       <DialogRoot open={deleteOpen} onOpenChange={setDeleteOpen}>
@@ -93,7 +103,7 @@ export function BusinessList({ businesses }: { businesses: BusinessCard[] }) {
     <>
       <div className="relative mb-4 max-w-md"><Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" /><Input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search businesses…" aria-label="Search businesses" className="pl-9" /></div>
       {businesses.length === 0 ? (
-        <div className="rounded-lg border border-dashed border-border-strong bg-surface py-12 text-center"><Building2 className="mx-auto mb-3 size-7 text-muted-foreground" /><h2 className="font-semibold">No businesses yet</h2><p className="mt-1 text-sm text-muted-foreground">Create your first isolated business workspace.</p><Button asChild className="mt-4"><Link href="/businesses/new">New business</Link></Button></div>
+        <EmptyState icon={<Building2 className="mx-auto mb-3 size-7 text-muted-foreground" />} title="No businesses yet" description="Create your first isolated business workspace." action={<Button asChild><Link href="/businesses/new">New business</Link></Button>} />
       ) : filtered.length === 0 ? (
         <div className="rounded-lg border border-border bg-surface py-10 text-center"><p className="font-medium">No businesses match “{query}”</p><Button variant="ghost" className="mt-2" onClick={() => setQuery("")}>Clear search</Button></div>
       ) : (

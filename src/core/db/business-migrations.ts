@@ -1822,6 +1822,59 @@ function upgradeToPhase11(sqlite: Database.Database) {
   `);
 }
 
+function upgradeToPhase13(sqlite: Database.Database) {
+  sqlite.exec(`
+    CREATE TABLE custom_field_definitions (
+      id TEXT PRIMARY KEY,
+      entity_type TEXT NOT NULL,
+      name TEXT NOT NULL,
+      field_type TEXT NOT NULL,
+      select_options TEXT NOT NULL DEFAULT '[]',
+      position INTEGER NOT NULL DEFAULT 0,
+      is_required INTEGER NOT NULL DEFAULT 0,
+      show_in_list INTEGER NOT NULL DEFAULT 0,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+    CREATE TABLE custom_field_values (
+      id TEXT PRIMARY KEY,
+      definition_id TEXT NOT NULL REFERENCES custom_field_definitions(id) ON DELETE CASCADE,
+      entity_id TEXT NOT NULL,
+      value TEXT NOT NULL DEFAULT '',
+      updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+    CREATE UNIQUE INDEX custom_field_values_definition_entity ON custom_field_values(definition_id, entity_id);
+    CREATE INDEX custom_field_definitions_entity ON custom_field_definitions(entity_type, position);
+  `);
+}
+
+function upgradeToPhase14(sqlite: Database.Database) {
+  sqlite.exec(`
+    CREATE TABLE sent_emails (
+      id TEXT PRIMARY KEY,
+      message_id TEXT NOT NULL,
+      from_address TEXT NOT NULL,
+      to_addresses TEXT NOT NULL,
+      cc_addresses TEXT NOT NULL DEFAULT '',
+      subject TEXT NOT NULL,
+      body_html TEXT NOT NULL,
+      body_text TEXT NOT NULL DEFAULT '',
+      status TEXT NOT NULL DEFAULT 'queued' CHECK (status IN ('queued','sent','delivered','failed')),
+      related_entity_type TEXT,
+      related_entity_id TEXT,
+      related_document_number TEXT,
+      attachment_filename TEXT,
+      attachment_size_bytes INTEGER,
+      sent_at TEXT,
+      error_message TEXT,
+      created_by TEXT NOT NULL,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+    CREATE INDEX sent_emails_created_idx ON sent_emails (created_at);
+    CREATE INDEX sent_emails_related_idx ON sent_emails (related_entity_type, related_entity_id);
+  `);
+}
+
 function upgradeToPhase12(sqlite: Database.Database) {
   sqlite.exec(`
     ALTER TABLE business_accounting_settings ADD COLUMN project_padding INTEGER NOT NULL DEFAULT 4;
@@ -1909,6 +1962,16 @@ export const businessMigrations = [
     version: 12,
     name: "numbering_padding_and_customer_status",
     up: upgradeToPhase12,
+  },
+  {
+    version: 13,
+    name: "custom_fields",
+    up: upgradeToPhase13,
+  },
+  {
+    version: 14,
+    name: "sent_emails",
+    up: upgradeToPhase14,
   },
 ] satisfies readonly SqliteMigration[];
 

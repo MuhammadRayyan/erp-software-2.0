@@ -1,9 +1,31 @@
 import { test } from "node:test";
 import assert from "node:assert";
 import { existsSync } from "node:fs";
-import { readFile } from "node:fs/promises";
+import { readdir, readFile } from "node:fs/promises";
 import path from "node:path";
-import { execSync } from "node:child_process";
+
+/** Recursively collect files matching a predicate (portable across platforms). */
+async function collectFiles(
+  dir: string,
+  predicate: (name: string) => boolean,
+  acc: string[] = [],
+): Promise<string[]> {
+  let entries;
+  try {
+    entries = await readdir(dir, { withFileTypes: true });
+  } catch {
+    return acc;
+  }
+  for (const entry of entries) {
+    const full = path.join(dir, entry.name);
+    if (entry.isDirectory()) {
+      await collectFiles(full, predicate, acc);
+    } else if (predicate(entry.name)) {
+      acc.push(full);
+    }
+  }
+  return acc;
+}
 
 test("src/middleware.ts exists and exports middleware", async () => {
   const middlewarePath = path.join(process.cwd(), "src", "middleware.ts");
@@ -21,46 +43,43 @@ test("src/middleware.ts exists and exports middleware", async () => {
   );
 });
 
-test("selectClass constant has been fully eliminated from src/", () => {
-  try {
-    const output = execSync('findstr /S /M /C:"const selectClass" src\\*.tsx src\\*.ts', {
-      cwd: process.cwd(),
-      encoding: "utf8",
-      stdio: ["pipe", "pipe", "pipe"],
-    });
-    assert.fail(`Found residual 'const selectClass' in: ${output.trim()}`);
-  } catch (error) {
-    // findstr returns exit code 1 when no matches found — that is the expected success case
-    if ((error as { status?: number }).status === 1) return;
-    // Re-throw if it's an actual assertion failure from assert.fail above
-    throw error;
+test("selectClass constant has been fully eliminated from src/", async () => {
+  const srcDir = path.join(process.cwd(), "src");
+  const files = await collectFiles(srcDir, (name) => name.endsWith(".ts") || name.endsWith(".tsx"));
+  const offenders: string[] = [];
+  for (const file of files) {
+    const content = await readFile(file, "utf8");
+    if (content.includes("const selectClass")) {
+      offenders.push(path.relative(process.cwd(), file));
+    }
   }
+  assert.strictEqual(offenders.length, 0, `Found residual 'const selectClass' in: ${offenders.join(", ")}`);
 });
 
 test("all API route files declare runtime = nodejs", async () => {
   const apiDir = path.join(process.cwd(), "src", "app", "api");
-  const routes = execSync(`where /r "${apiDir}" route.ts`, { encoding: "utf8" }).trim().split(/\r?\n/);
+  const routes = await collectFiles(apiDir, (name) => name === "route.ts");
   assert.ok(routes.length > 0, "Should find at least one API route");
   for (const route of routes) {
-    const content = await readFile(route.trim(), "utf8");
+    const content = await readFile(route, "utf8");
     assert.ok(
       content.includes('export const runtime = "nodejs"'),
-      `Missing runtime = "nodejs" in ${path.relative(process.cwd(), route.trim())}`
+      `Missing runtime = "nodejs" in ${path.relative(process.cwd(), route)}`
     );
   }
 });
 
 test("all API route files use requireApiAuth (except auth handler)", async () => {
   const apiDir = path.join(process.cwd(), "src", "app", "api");
-  const routes = execSync(`where /r "${apiDir}" route.ts`, { encoding: "utf8" }).trim().split(/\r?\n/);
+  const routes = await collectFiles(apiDir, (name) => name === "route.ts");
+  assert.ok(routes.length > 0, "Should find at least one API route");
   for (const route of routes) {
-    const trimmed = route.trim();
     // The auth catch-all route is the exception — it IS the auth handler
-    if (trimmed.includes("[...all]")) continue;
-    const content = await readFile(trimmed, "utf8");
+    if (route.includes("[...all]")) continue;
+    const content = await readFile(route, "utf8");
     assert.ok(
       content.includes("requireApiAuth"),
-      `Missing requireApiAuth in ${path.relative(process.cwd(), trimmed)}`
+      `Missing requireApiAuth in ${path.relative(process.cwd(), route)}`
     );
   }
 });

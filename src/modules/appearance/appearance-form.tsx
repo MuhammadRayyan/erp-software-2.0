@@ -13,11 +13,11 @@ export function AppearanceForm({ initialFont, initialSize }: { initialFont: stri
     const size = formData.get("themeSize") as string;
     
     startTransition(async () => {
-      try {
-        await upsertUserSettings(font, size);
+      const result = await upsertUserSettings(font, size);
+      if (result?.error) {
+        toast.error(result.error);
+      } else {
         toast.success("Appearance settings updated successfully.");
-      } catch {
-        toast.error("Failed to update appearance settings.");
       }
     });
   };

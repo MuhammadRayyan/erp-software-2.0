@@ -89,6 +89,22 @@ export function ClassicDocumentTemplate({ data, settings, variant }: { data: Doc
           )}
         </View>
 
+        {settings.showCustomFields && data.customFields && data.customFields.length > 0 && (
+          <View style={{ marginTop: 15, borderWidth: 1, borderColor: colors.borderStrong, backgroundColor: colors.surface }}>
+            <View style={{ borderBottomWidth: 1, borderBottomColor: colors.borderStrong, backgroundColor: colors.surfaceMuted, paddingHorizontal: 8, paddingVertical: 4 }}>
+              <Text style={{ fontSize: 9, fontWeight: "heavy", textTransform: "uppercase" }}>Additional Information</Text>
+            </View>
+            {data.customFields.map((field) => (
+              <View key={field.name} style={{ flexDirection: "row", borderBottomWidth: 0.5, borderBottomColor: colors.border }}>
+                <Text style={{ flex: 1, fontSize: 9, fontWeight: "heavy", padding: 6, borderRightWidth: 0.5, borderRightColor: colors.border }}>
+                  {field.name}
+                </Text>
+                <Text style={{ flex: 2, fontSize: 9, padding: 6 }}>{field.value}</Text>
+              </View>
+            ))}
+          </View>
+        )}
+
         {settings.footerText && (
           <Text style={styles.footer}>{settings.footerText}</Text>
         )}

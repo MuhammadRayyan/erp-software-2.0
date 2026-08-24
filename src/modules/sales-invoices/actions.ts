@@ -16,19 +16,24 @@ import {
 
 export type InvoiceActionResult = { error?: string; fieldErrors?: Record<string, string[]> };
 
+const customFieldValuesSchema = z.record(z.string(), z.string()).optional();
+
 export async function createInvoiceAction(
   businessId: string,
   input: unknown,
   intent: InvoiceSaveIntent,
+  customFieldValues?: unknown,
 ): Promise<InvoiceActionResult> {
   const { user } = await requireModule(businessId, "sales");
   const parsed = invoiceInputSchema.safeParse(input);
   if (!parsed.success) {
     return { error: "Check the invoice fields and line items.", fieldErrors: z.flattenError(parsed.error).fieldErrors };
   }
+  const parsedCustomFields = customFieldValuesSchema.safeParse(customFieldValues);
+  if (!parsedCustomFields.success) return { error: "Check the highlighted fields." };
   let invoiceId: string;
   try {
-    invoiceId = createInvoice(businessId, user.id, parsed.data, intent);
+    invoiceId = createInvoice(businessId, user.id, parsed.data, intent, parsedCustomFields.data);
   } catch (error) {
     return { error: error instanceof Error ? error.message : "The invoice could not be saved. Your entries are still here." };
   }
@@ -41,14 +46,17 @@ export async function updateInvoiceAction(
   invoiceId: string,
   input: unknown,
   intent: InvoiceSaveIntent,
+  customFieldValues?: unknown,
 ): Promise<InvoiceActionResult> {
   const { user } = await requireModule(businessId, "sales");
   const parsed = invoiceInputSchema.safeParse(input);
   if (!parsed.success) {
     return { error: "Check the invoice fields and line items.", fieldErrors: z.flattenError(parsed.error).fieldErrors };
   }
+  const parsedCustomFields = customFieldValuesSchema.safeParse(customFieldValues);
+  if (!parsedCustomFields.success) return { error: "Check the highlighted fields." };
   try {
-    updateInvoice(businessId, user.id, invoiceId, parsed.data, intent);
+    updateInvoice(businessId, user.id, invoiceId, parsed.data, intent, parsedCustomFields.data);
   } catch (error) {
     return { error: error instanceof Error ? error.message : "The invoice could not be updated. Your entries are still here." };
   }

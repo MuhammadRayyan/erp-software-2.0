@@ -20,6 +20,7 @@ export interface DocumentTemplateData {
   tax: string;
   total: string;
   foreignDetail?: string;
+  customFields?: Array<{ name: string; value: string }>;
 }
 
 export type DocumentTemplateVariant = {
@@ -106,6 +107,18 @@ export function ModernDocumentTemplate({ data, settings, variant }: { data: Docu
             </Text>
           )}
         </View>
+
+        {settings.showCustomFields && data.customFields && data.customFields.length > 0 && (
+          <View style={{ marginTop: 20, padding: 8, backgroundColor: colors.surface, borderRadius: 4 }}>
+            <Text style={[styles.sectionTitle, { marginBottom: 6 }]}>Additional Information</Text>
+            {data.customFields.map((field) => (
+              <View key={field.name} style={{ flexDirection: "row", marginBottom: 2 }}>
+                <Text style={{ flex: 1, fontSize: 9, color: colors.muted }}>{field.name}</Text>
+                <Text style={{ flex: 2, fontSize: 9, color: colors.text }}>{field.value}</Text>
+              </View>
+            ))}
+          </View>
+        )}
 
         {settings.footerText && (
           <Text style={styles.footer}>{settings.footerText}</Text>

@@ -53,7 +53,7 @@ export default async function RootLayout({ children }: Readonly<{ children: Reac
 
     if (settings) {
       if (isFontKey(settings.themeFont)) fontKey = settings.themeFont;
-      themeSize = settings.themeSize;
+      if (["small", "normal", "large"].includes(settings.themeSize)) themeSize = settings.themeSize;
     }
   }
 

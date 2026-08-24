@@ -4,8 +4,9 @@ import { getBusinessAccess } from "@/core/permissions/permissions";
 import type { ModuleKey } from "@/core/permissions/permissions";
 
 export async function requireApiAuth(
-  request: Request,
-  options?: { businessId?: string; module?: ModuleKey; requireAdmin?: boolean; allowPublic?: boolean }
+  // Kept for future per-request context (e.g. rate limiting / client IP checks); intentionally unused.
+  _request: Request,
+  options?: { businessId?: string; module?: ModuleKey; requireAdmin?: boolean }
 ) {
   const session = await getCurrentSession();
   if (!session) {

@@ -163,7 +163,7 @@ export function readMigrationState(
 ) {
   validateRegistry(migrations);
   if (!tableExists(sqlite, MIGRATION_TABLE)) {
-    throw new Error(`${label} has no ${MIGRATION_TABLE} table; run pnpm db:migrate.`);
+    throw new Error(`${label} has no ${MIGRATION_TABLE} table; run npm run db:migrate.`);
   }
   const rows = readHistory(sqlite);
   validateHistory(rows, migrations, label);

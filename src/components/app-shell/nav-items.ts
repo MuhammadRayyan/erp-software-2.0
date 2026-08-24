@@ -5,6 +5,7 @@ import {
   FileText,
   FolderKanban,
   LayoutDashboard,
+  Mail,
   ReceiptText,
   Scale,
   Settings,
@@ -32,6 +33,7 @@ export const primaryNav: { label?: string; items: NavItem[] }[] = [
       { label: "Customers", path: "/customers", icon: ContactRound, module: "sales" },
       { label: "Invoices", path: "/sales/invoices", icon: ReceiptText, module: "sales" },
       { label: "Electronic Invoices", path: "/einvoicing", icon: FileCode2, module: "sales" },
+      { label: "Sent Emails", path: "/emails", icon: Mail, module: "sales" },
     ],
   },
   {

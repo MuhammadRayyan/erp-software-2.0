@@ -1,5 +1,11 @@
 import { z } from "zod";
 
+/**
+ * Shared Zod building blocks for commercial document input schemas.
+ * Keep these canonical: document modules must import from here instead of
+ * redefining identical quantity/money/flag/project schemas locally.
+ */
+
 export const eInvoiceTransactionFlagsSchema = z.object({
   freeTradeZone: z.boolean().optional().default(false),
   deemedSupply: z.boolean().optional().default(false),
@@ -31,5 +37,18 @@ export const moneySchema = z
   .trim()
   .regex(/^\d{1,10}(?:\.\d{1,6})?$/, "Enter an amount with up to 6 decimals");
 
-export const projectIdField = z.union([z.literal(""), z.string().uuid("Choose a valid project")]).optional().default("");
+/** Positive money input (settlement amounts, receipt/payment totals). */
+export const positiveMoneySchema = moneySchema.refine(
+  (value) => Number(value) > 0,
+  "Amount must be greater than zero",
+);
 
+export const projectIdField = z
+  .union([z.literal(""), z.string().uuid("Choose a valid project")])
+  .optional()
+  .default("");
+
+export const itemIdField = z
+  .union([z.literal(""), z.string().uuid("Choose a valid inventory item")])
+  .optional()
+  .default("");

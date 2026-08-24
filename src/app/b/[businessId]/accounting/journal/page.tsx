@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { BookOpen } from "lucide-react";
+import { EmptyState } from "@/components/empty-state";
 import { requireModule } from "@/core/permissions/require-module";
 import { formatDate, formatMoney } from "@/core/format";
 import { journalSourceLabel } from "@/modules/accounting/journal-source";
@@ -22,7 +23,7 @@ export default async function JournalPage({ params }: { params: Promise<{ busine
           </table>
         </div>
       ) : (
-        <div className="rounded-lg border border-dashed border-border-strong bg-surface py-11 text-center"><BookOpen className="mx-auto mb-3 size-7 text-muted-foreground" /><h2 className="font-semibold">No journal entries yet</h2><p className="mt-1 text-sm text-muted-foreground">Post a Sales Invoice or Receipt to create the first balanced entry.</p></div>
+        <EmptyState icon={<BookOpen className="mx-auto mb-3 size-7 text-muted-foreground" />} title="No journal entries yet" description="Post a Sales Invoice or Receipt to create the first balanced entry." />
       )}
     </div>
   );

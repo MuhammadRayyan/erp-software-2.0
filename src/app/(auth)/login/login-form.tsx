@@ -5,7 +5,6 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { ArrowRight, LoaderCircle } from "lucide-react";
 import { authClient } from "@/core/auth/auth-client";
-import { preLoginCheck, reportFailedLogin, clearLoginAttempts } from "@/core/auth/actions";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -21,34 +20,20 @@ export function LoginForm() {
     setError("");
     const form = new FormData(event.currentTarget);
 
-    // Pre-flight rate-limit check
-    try {
-      const check = await preLoginCheck();
-      if (!check.allowed) {
-        setError(check.error ?? "Too many attempts. Try again later.");
-        setPending(false);
-        return;
-      }
-    } catch {
-      // Network error — proceed with login attempt anyway
-    }
-
+    // Rate limiting is enforced server-side by the auth handler
+    // (better-auth hooks + built-in rate limits); error messages surface here.
     const result = await authClient.signIn.email({
       email: String(form.get("email")),
       password: String(form.get("password")),
     });
 
     if (result.error) {
-      // Record failed attempt
-      await reportFailedLogin();
       setError(result.error.message ?? "Sign in failed. Check your details and try again.");
       setPending(false);
       return;
     }
 
-    // Success — clear attempts then navigate.
     // Use router.push + refresh so Next.js re-fetches server state cleanly.
-    await clearLoginAttempts();
     router.push("/businesses");
     router.refresh();
   }

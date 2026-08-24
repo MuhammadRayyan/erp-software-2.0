@@ -1,4 +1,4 @@
-import { index, integer, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core";
+import { index, integer, primaryKey, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core";
 
 export const schemaMigrations = sqliteTable("schema_migrations", {
   version: integer("version").primaryKey(),
@@ -104,4 +104,30 @@ export const memberships = sqliteTable(
     createdAt: text("created_at").notNull(),
   },
   (table) => [uniqueIndex("membership_business_user_idx").on(table.businessId, table.userId)],
+);
+
+/**
+ * Per-user, per-business UI preferences. Each row is one key/value pair
+ * (e.g. `cols.sales-invoices` → `{"dueDate":false}`). Used to sync UI
+ * state — column visibility, KPI card toggles, etc. — across devices for
+ * the same account+business combination. The composite primary key
+ * guarantees one value per (user, business, key).
+ */
+export const userBusinessPreferences = sqliteTable(
+  "user_business_preferences",
+  {
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    businessId: text("business_id")
+      .notNull()
+      .references(() => businesses.id, { onDelete: "cascade" }),
+    key: text("key").notNull(),
+    value: text("value").notNull(),
+    updatedAt: integer("updated_at", { mode: "timestamp_ms" }).notNull(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.userId, table.businessId, table.key] }),
+    index("user_business_pref_business_idx").on(table.businessId),
+  ],
 );

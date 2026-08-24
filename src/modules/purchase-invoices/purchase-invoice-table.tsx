@@ -2,11 +2,13 @@
 
 import { useMemo, useState } from "react";
 import Link from "next/link";
-import { Search } from "lucide-react";
-import { Badge } from "@/components/ui/badge";
+import { Columns3, MoreHorizontal } from "lucide-react";
+import { StatusBadge, statusLabel } from "@/components/status-badge";
+import { ListToolbar, SearchInput, ToolbarSelect } from "@/components/list-toolbar";
 import { Button } from "@/components/ui/button";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { FilterChip } from "@/components/ui/filter-chip";
-import { Input } from "@/components/ui/input";
+import { useColumnVisibility, type ColumnVisibility } from "@/components/use-column-visibility";
 import { formatDate, formatMoney } from "@/core/format";
 import type { PurchaseInvoiceStatus, PurchasePaymentStatus } from "./purchase-invoice-service";
 
@@ -28,49 +30,232 @@ type Row = {
   projectNames: string[];
 };
 
-const documentTone = { draft: "neutral", posted: "info", void: "danger" } as const;
-const paymentTone = { unpaid: "warning", partially_paid: "warning", paid: "success", overdue: "danger" } as const;
-const paymentLabel = { unpaid: "Unpaid", partially_paid: "Partially Paid", paid: "Paid", overdue: "Overdue" };
-const documentLabel = { draft: "Draft", posted: "Posted", void: "Void" };
+// Columns a user can toggle off. The "Bill" + "Supplier" columns stay
+// always-on — they're the primary identifier and link target. The
+// toggle set mirrors what manager.io exposes: date fields, money,
+// and the document/payment status pills (advanced users hide them to
+// fit more columns on small screens).
+const COLUMN_LABELS: Record<string, string> = {
+  supplierInvoice: "Supplier invoice #",
+  date: "Date",
+  due: "Due",
+  total: "Total",
+  balance: "Balance",
+  payment: "Payment",
+  document: "Document",
+};
 
-export function PurchaseInvoiceTable({ businessId, invoices }: { businessId: string; invoices: Row[] }) {
+export function PurchaseInvoiceTable({
+  businessId,
+  invoices,
+  serverSnapshot,
+}: {
+  businessId: string;
+  invoices: Row[];
+  /** Server-loaded snapshot for the "purchase-invoices" storage key. */
+  serverSnapshot?: ColumnVisibility;
+}) {
   const [query, setQuery] = useState("");
   const [status, setStatus] = useState("");
   const [supplierId, setSupplierId] = useState("");
   const [projectId, setProjectId] = useState("");
-  const [fromDate, setFromDate] = useState("");
-  const [toDate, setToDate] = useState("");
   const supplierOptions = useMemo(
     () => Array.from(new Map(invoices.map((invoice) => [invoice.supplier_id, invoice.supplier_name])).entries()).sort((a, b) => a[1].localeCompare(b[1])),
     [invoices],
   );
-  const projectOptions = useMemo(() => Array.from(new Map(invoices.flatMap((invoice) => invoice.projectIds.map((id, index) => [id, invoice.projectNames[index] ?? id] as const))).entries()).sort((a, b) => a[1].localeCompare(b[1])), [invoices]);
-  const rows = useMemo(() => invoices.filter((invoice) => {
-    const [kind, value] = status.split(":");
-    const matchesStatus = !status || (kind === "document" ? invoice.document_status === value : invoice.paymentStatus === value);
-    const matchesQuery = `${invoice.internal_number} ${invoice.supplier_name} ${invoice.supplier_invoice_number}`.toLowerCase().includes(query.trim().toLowerCase());
-    return matchesStatus && matchesQuery && (!supplierId || invoice.supplier_id === supplierId) && (!projectId || invoice.projectIds.includes(projectId)) && (!fromDate || invoice.invoice_date >= fromDate) && (!toDate || invoice.invoice_date <= toDate);
-  }), [fromDate, invoices, projectId, query, status, supplierId, toDate]);
-  const clearFilters = () => { setQuery(""); setStatus(""); setSupplierId(""); setProjectId(""); setFromDate(""); setToDate(""); };
+  const projectOptions = useMemo(
+    () =>
+      Array.from(
+        new Map(
+          invoices.flatMap((invoice) => invoice.projectIds.map((id, index) => [id, invoice.projectNames[index] ?? id] as const)),
+        ).entries(),
+      ).sort((a, b) => a[1].localeCompare(b[1])),
+    [invoices],
+  );
+  // Memoized so the shared visibility hook sees a stable defaults reference.
+  // All listed columns default to visible — the snapshot only stores
+  // explicitly-toggled entries.
+  const initialColumns = useMemo(
+    () => ({
+      supplierInvoice: true,
+      date: true,
+      due: true,
+      total: true,
+      balance: true,
+      payment: true,
+      document: true,
+    }),
+    [],
+  );
+  const { visibility: columns, toggle: toggleColumn } = useColumnVisibility("purchase-invoices", initialColumns, {
+    businessId,
+    serverSnapshot,
+  });
+  const columnLabel = (column: string) => COLUMN_LABELS[column] ?? column;
+  const rows = useMemo(
+    () =>
+      invoices.filter((invoice) => {
+        const [kind, value] = status.split(":");
+        const matchesStatus = !status || (kind === "document" ? invoice.document_status === value : invoice.paymentStatus === value);
+        const matchesQuery = `${invoice.internal_number} ${invoice.supplier_name} ${invoice.supplier_invoice_number}`
+          .toLowerCase()
+          .includes(query.trim().toLowerCase());
+        return (
+          matchesStatus &&
+          matchesQuery &&
+          (!supplierId || invoice.supplier_id === supplierId) &&
+          (!projectId || invoice.projectIds.includes(projectId))
+        );
+      }),
+    [invoices, projectId, query, status, supplierId],
+  );
+  const clearFilters = () => {
+    setQuery("");
+    setStatus("");
+    setSupplierId("");
+    setProjectId("");
+  };
   const statusValue = status.split(":")[1] as PurchaseInvoiceStatus | PurchasePaymentStatus | undefined;
-  const statusText = status.startsWith("document:") ? documentLabel[statusValue as PurchaseInvoiceStatus] : paymentLabel[statusValue as PurchasePaymentStatus];
+  const statusText = statusLabel(statusValue ?? "");
+  const hasActiveFilter = Boolean(supplierId || projectId || status || query);
 
-  return <>
-    <div className="mb-3 flex flex-wrap gap-2">
-      <div className="relative min-w-[220px] flex-1"><Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" /><Input className="pl-9" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search purchase invoices…" aria-label="Search purchase invoices" /></div>
-      <select value={supplierId} onChange={(event) => setSupplierId(event.target.value)} aria-label="Filter by supplier" className="h-9 min-w-44 rounded-[6px] border border-border-strong bg-surface-raised px-3 text-sm"><option value="">All suppliers</option>{supplierOptions.map(([id, name]) => <option key={id} value={id}>{name}</option>)}</select>
-      <select value={projectId} onChange={(event) => setProjectId(event.target.value)} aria-label="Filter by project" className="h-9 min-w-44 rounded-[6px] border border-border-strong bg-surface-raised px-3 text-sm"><option value="">All projects</option>{projectOptions.map(([id, name]) => <option key={id} value={id}>{name}</option>)}</select>
-      <Input type="date" value={fromDate} onChange={(event) => setFromDate(event.target.value)} aria-label="Invoice date from" className="w-38" />
-      <Input type="date" value={toDate} onChange={(event) => setToDate(event.target.value)} aria-label="Invoice date to" className="w-38" />
-      <select value={status} onChange={(event) => setStatus(event.target.value)} aria-label="Filter invoices" className="h-9 rounded-[6px] border border-border-strong bg-surface-raised px-3 text-sm"><option value="">All statuses</option><optgroup label="Document"><option value="document:draft">Draft</option><option value="document:posted">Posted</option><option value="document:void">Void</option></optgroup><optgroup label="Payment"><option value="payment:unpaid">Unpaid</option><option value="payment:partially_paid">Partially Paid</option><option value="payment:paid">Paid</option><option value="payment:overdue">Overdue</option></optgroup></select>
-    </div>
-    {(supplierId || projectId || fromDate || toDate || status) && <div className="mb-3 flex flex-wrap gap-2">
-      {supplierId && <FilterChip onRemove={() => setSupplierId("")}>Supplier: {supplierOptions.find(([id]) => id === supplierId)?.[1]}</FilterChip>}
-      {projectId && <FilterChip onRemove={() => setProjectId("")}>Project: {projectOptions.find(([id]) => id === projectId)?.[1]}</FilterChip>}
-      {fromDate && <FilterChip onRemove={() => setFromDate("")}>From: {formatDate(fromDate)}</FilterChip>}
-      {toDate && <FilterChip onRemove={() => setToDate("")}>To: {formatDate(toDate)}</FilterChip>}
-      {status && <FilterChip onRemove={() => setStatus("")}>Status: {statusText}</FilterChip>}
-    </div>}
-    {rows.length ? <div className="data-panel overflow-x-auto"><table className="data-table min-w-[1080px]"><thead><tr><th>Bill</th><th>Supplier</th><th>Supplier invoice</th><th>Date</th><th>Due</th><th className="text-right!">Total</th><th className="text-right!">Balance</th><th>Payment</th><th>Document</th></tr></thead><tbody>{rows.map((invoice) => <tr key={invoice.id}><td><Link href={`/b/${businessId}/purchases/invoices/${invoice.id}`} className="tabular font-medium text-primary hover:underline">{invoice.internal_number}</Link></td><td>{invoice.supplier_name}</td><td className="tabular text-muted-foreground">{invoice.supplier_invoice_number}</td><td>{formatDate(invoice.invoice_date)}</td><td>{formatDate(invoice.due_date)}</td><td className="money text-right">{formatMoney(invoice.total_minor, invoice.currency_code, invoice.currency_minor_unit)}</td><td className="money text-right">{invoice.document_status === "posted" ? formatMoney(invoice.balanceMinor, invoice.currency_code, invoice.currency_minor_unit) : "—"}</td><td>{invoice.paymentStatus ? <Badge tone={paymentTone[invoice.paymentStatus]}>{paymentLabel[invoice.paymentStatus]}</Badge> : "—"}</td><td><Badge tone={documentTone[invoice.document_status]}>{documentLabel[invoice.document_status]}</Badge></td></tr>)}</tbody></table></div> : <div className="rounded-lg border border-border bg-surface py-10 text-center"><p className="font-medium">No purchase invoices match</p><p className="mt-1 text-sm text-muted-foreground">Adjust the search or filters.</p><Button variant="ghost" className="mt-2" onClick={clearFilters}>Clear filters</Button></div>}
-  </>;
+  return (
+    <>
+      <ListToolbar>
+        <SearchInput value={query} onChange={setQuery} placeholder="Search purchase invoices…" ariaLabel="Search purchase invoices" />
+        <ToolbarSelect
+          value={supplierId}
+          onChange={setSupplierId}
+          ariaLabel="Filter by supplier"
+          className="min-w-44"
+          options={[{ value: "", label: "All suppliers" }, ...supplierOptions.map(([id, name]) => ({ value: id, label: name }))]}
+        />
+        <ToolbarSelect
+          value={projectId}
+          onChange={setProjectId}
+          ariaLabel="Filter by project"
+          className="min-w-44"
+          options={[{ value: "", label: "All projects" }, ...projectOptions.map(([id, name]) => ({ value: id, label: name }))]}
+        />
+        <select
+          value={status}
+          onChange={(event) => setStatus(event.target.value)}
+          aria-label="Filter invoices"
+          className="h-9 rounded-[6px] border border-border-strong bg-surface-raised px-3 text-sm"
+        >
+          <option value="">All statuses</option>
+          <optgroup label="Document">
+            <option value="document:draft">Draft</option>
+            <option value="document:posted">Posted</option>
+            <option value="document:void">Void</option>
+          </optgroup>
+          <optgroup label="Payment">
+            <option value="payment:unpaid">Unpaid</option>
+            <option value="payment:partially_paid">Partially Paid</option>
+            <option value="payment:paid">Paid</option>
+            <option value="payment:overdue">Overdue</option>
+          </optgroup>
+        </select>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button variant="secondary">
+              <Columns3 className="size-4" /> Columns
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end">
+            {Object.entries(columns).map(([column, visible]) => (
+              <DropdownMenuItem
+                key={column}
+                onSelect={(event) => {
+                  event.preventDefault();
+                  toggleColumn(column);
+                }}
+              >
+                <span className="w-4">{visible ? "✓" : ""}</span>
+                {columnLabel(column)}
+              </DropdownMenuItem>
+            ))}
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </ListToolbar>
+      {hasActiveFilter && (
+        <ListToolbar>
+          {supplierId && (
+            <FilterChip onRemove={() => setSupplierId("")}>
+              Supplier: {supplierOptions.find(([id]) => id === supplierId)?.[1]}
+            </FilterChip>
+          )}
+          {projectId && (
+            <FilterChip onRemove={() => setProjectId("")}>
+              Project: {projectOptions.find(([id]) => id === projectId)?.[1]}
+            </FilterChip>
+          )}
+          {status && <FilterChip onRemove={() => setStatus("")}>Status: {statusText}</FilterChip>}
+          {query && <FilterChip onRemove={() => setQuery("")}>Search: {query}</FilterChip>}
+        </ListToolbar>
+      )}
+      {rows.length ? (
+        <div className="overflow-x-auto">
+          <table className="data-table min-w-[640px]">
+            <thead>
+              <tr>
+                <th>Bill</th>
+                <th>Supplier</th>
+                {columns.supplierInvoice && <th>Supplier invoice</th>}
+                {columns.date && <th>Date</th>}
+                {columns.due && <th>Due</th>}
+                {columns.total && <th className="text-right!">Total</th>}
+                {columns.balance && <th className="text-right!">Balance</th>}
+                {columns.payment && <th>Payment</th>}
+                {columns.document && <th>Document</th>}
+                <th className="w-12">
+                  <span className="sr-only">Actions</span>
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((invoice) => (
+                <tr key={invoice.id}>
+                  <td>
+                    <Link href={`/b/${businessId}/purchases/invoices/${invoice.id}`} className="tabular font-medium text-primary hover:underline">
+                      {invoice.internal_number}
+                    </Link>
+                  </td>
+                  <td>{invoice.supplier_name}</td>
+                  {columns.supplierInvoice && <td className="tabular text-muted-foreground">{invoice.supplier_invoice_number}</td>}
+                  {columns.date && <td>{formatDate(invoice.invoice_date)}</td>}
+                  {columns.due && <td>{formatDate(invoice.due_date)}</td>}
+                  {columns.total && (
+                    <td className="money text-right">{formatMoney(invoice.total_minor, invoice.currency_code, invoice.currency_minor_unit)}</td>
+                  )}
+                  {columns.balance && (
+                    <td className="money text-right">
+                      {invoice.document_status === "posted" ? formatMoney(invoice.balanceMinor, invoice.currency_code, invoice.currency_minor_unit) : "—"}
+                    </td>
+                  )}
+                  {columns.payment && <td>{invoice.paymentStatus ? <StatusBadge status={invoice.paymentStatus} /> : "—"}</td>}
+                  {columns.document && <td><StatusBadge status={invoice.document_status} /></td>}
+                  <td>
+                    <Button asChild variant="ghost" size="icon">
+                      <Link href={`/b/${businessId}/purchases/invoices/${invoice.id}`} aria-label={`Open ${invoice.internal_number}`}>
+                        <MoreHorizontal className="size-4" />
+                      </Link>
+                    </Button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      ) : (
+        <div className="py-10 text-center">
+          <p className="font-medium">No purchase invoices match</p>
+          <p className="mt-1 text-sm text-muted-foreground">Adjust the search or filters.</p>
+          <Button variant="ghost" className="mt-2" onClick={clearFilters}>
+            Clear filters
+          </Button>
+        </div>
+      )}
+    </>
+  );
 }

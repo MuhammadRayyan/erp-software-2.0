@@ -1,11 +1,13 @@
 import Link from "next/link";
-import { ArrowLeft, CircleDollarSign, FilePlus2, FolderKanban, Mail, Pencil, Phone, ScrollText } from "lucide-react";
+import { ArrowLeft, CircleDollarSign, FilePlus2, FolderKanban, Mail, Pencil, Phone, ScrollText, Tag } from "lucide-react";
 import { notFound } from "next/navigation";
 import { NoticeToast } from "@/components/notice-toast";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { formatDate, formatMoney } from "@/core/format";
 import { requireModule } from "@/core/permissions/require-module";
+import { formatCustomFieldValue } from "@/modules/custom-fields/custom-field-display";
+import { getCustomFieldValuesForEntities, listCustomFieldDefinitions } from "@/modules/custom-fields/custom-field-service";
 import { getCustomer } from "@/modules/customers/customer-service";
 import { listProjects } from "@/modules/projects/project-service";
 import { ProjectStatusBadge } from "@/modules/projects/project-status";
@@ -20,6 +22,10 @@ export default async function CustomerPage({ params, searchParams }: { params: P
   const { user, access } = await requireModule(businessId, "sales");
   const customer = getCustomer(businessId, user.id, customerId);
   if (!customer) notFound();
+  const customFieldDefinitions = listCustomFieldDefinitions(businessId, user.id, "customer");
+  const customFieldValues = customFieldDefinitions.length
+    ? getCustomFieldValuesForEntities(businessId, user.id, "customer", [customerId]).get(customerId) ?? {}
+    : {};
   const invoices = listInvoicesForCustomer(businessId, user.id, customerId);
   const receipts = listReceiptsForCustomer(businessId, user.id, customerId);
   const summary = getCustomerAccountingSummary(businessId, user.id, customerId);
@@ -35,7 +41,29 @@ export default async function CustomerPage({ params, searchParams }: { params: P
     </div>
     <section aria-label="Customer accounting summary" className="mb-5 grid gap-px overflow-hidden rounded-lg border border-border bg-border sm:grid-cols-3"><div className="bg-surface-raised px-4 py-3"><p className="text-xs text-muted-foreground">Outstanding · Base</p><p className="money mt-1 text-base font-semibold">{formatMoney(summary.outstandingMinor, currency)}</p></div><div className="bg-surface-raised px-4 py-3"><p className="text-xs text-muted-foreground">Total Invoiced · Base</p><p className="money mt-1 text-base font-semibold">{formatMoney(summary.totalInvoicedMinor, currency)}</p></div><div className="bg-surface-raised px-4 py-3"><p className="text-xs text-muted-foreground">Carrying Released · Base</p><p className="money mt-1 text-base font-semibold">{formatMoney(summary.totalReceivedMinor, currency)}</p></div></section>
     <div className="grid gap-5 lg:grid-cols-[0.7fr_1.3fr]">
+      <div className="space-y-5">
       <section className="rounded-lg border border-border bg-surface-raised p-5"><h2 className="text-base font-semibold">Contact details</h2><dl className="mt-4 space-y-4"><div><dt className="text-xs text-muted-foreground">Email</dt><dd className="mt-1 flex items-center gap-2"><Mail className="size-4 text-muted-foreground" />{customer.email || "Not provided"}</dd></div><div><dt className="text-xs text-muted-foreground">Phone</dt><dd className="mt-1 flex items-center gap-2"><Phone className="size-4 text-muted-foreground" />{customer.phone || "Not provided"}</dd></div><div><dt className="text-xs text-muted-foreground">TRN / Reference</dt><dd className="mt-1 text-sm">{customer.taxReference || "Not provided"}</dd></div><div><dt className="text-xs text-muted-foreground">Billing Address</dt><dd className="mt-1 whitespace-pre-wrap text-sm">{customer.billingAddress || "Not provided"}</dd></div><div><dt className="text-xs text-muted-foreground">Delivery Address</dt><dd className="mt-1 whitespace-pre-wrap text-sm">{customer.deliveryAddress || "Not provided"}</dd></div><div><dt className="text-xs text-muted-foreground">eInvoice readiness</dt><dd className="mt-1 text-sm">{customer.legalName && customer.trn && customer.electronicAddress && customer.addressLine1 ? "Core buyer data complete" : "Buyer data needs completion"}</dd></div><div><dt className="text-xs text-muted-foreground">Legal name / TRN (eInvoice)</dt><dd className="mt-1 tabular">{customer.legalName || "Not provided"}{customer.trn ? ` · ${customer.trn}` : ""}</dd></div><div><dt className="text-xs text-muted-foreground">Electronic address</dt><dd className="mt-1 tabular">{customer.electronicAddress ? `${customer.electronicAddressScheme || "—"}:${customer.electronicAddress}` : "Not provided"}</dd></div></dl></section>
+      {customFieldDefinitions.length > 0 && (
+        <section aria-label="Custom fields" className="rounded-lg border border-border bg-surface-raised p-5">
+          <div className="flex items-center gap-2">
+            <Tag className="size-4 text-muted-foreground" aria-hidden />
+            <h2 className="text-base font-semibold">Custom Fields</h2>
+          </div>
+          <dl className="mt-4 grid gap-x-6 gap-y-4 sm:grid-cols-2">
+            {customFieldDefinitions.map((definition) => (
+              <div key={definition.id} className="border-l-2 border-border-strong pl-3">
+                <dt className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+                  {definition.name}
+                </dt>
+                <dd className="mt-0.5 text-sm font-medium text-foreground">
+                  {formatCustomFieldValue(definition.fieldType, customFieldValues[definition.id])}
+                </dd>
+              </div>
+            ))}
+          </dl>
+        </section>
+      )}
+      </div>
       <section className="data-panel"><div className="flex h-12 items-center border-b border-border px-4"><h2 className="font-semibold">Recent Invoices</h2></div>{invoices.length ? <div className="overflow-x-auto"><table className="data-table min-w-[700px]"><thead><tr><th>Invoice</th><th>Date</th><th className="text-right!">Total</th><th className="text-right!">Balance</th><th>Status</th></tr></thead><tbody>{invoices.slice(0, 8).map((invoice) => <tr key={invoice.id}><td><Link href={`/b/${businessId}/sales/invoices/${invoice.id}`} className="tabular font-medium text-primary hover:underline">{invoice.invoiceNumber}</Link></td><td>{formatDate(invoice.invoiceDate)}</td><td className="money text-right">{formatMoney(invoice.totalMinor, invoice.currencyCode, invoice.currencyMinorUnit)}</td><td className="money text-right">{invoice.documentStatus === "posted" ? formatMoney(invoice.balanceMinor, invoice.currencyCode, invoice.currencyMinorUnit) : "—"}</td><td><div className="flex gap-1.5"><DocumentStatusBadge status={invoice.documentStatus} />{invoice.paymentStatus && <PaymentStatusBadge status={invoice.paymentStatus} />}</div></td></tr>)}</tbody></table></div> : <div className="p-8 text-center"><p className="font-medium">No invoices for this customer</p><p className="mt-1 text-sm text-muted-foreground">Create an invoice to begin the account history.</p></div>}</section>
     </div>
     {canViewProjects && <section className="data-panel mt-5">

@@ -1,8 +1,12 @@
-// Note: puppeteer and handlebars are retained because the "custom-html" 
-// template type is still actively reachable and used from the UI.
-import puppeteer from "puppeteer";
 import Handlebars from "handlebars";
 
+/**
+ * Renders a custom Handlebars HTML template to PDF through headless Chrome.
+ *
+ * Puppeteer is imported lazily: the module only loads when a business actually
+ * renders a custom-HTML template, so every other PDF route avoids the
+ * heavyweight Chromium dependency entirely.
+ */
 export async function renderHtmlTemplate(
   htmlTemplate: string,
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -13,15 +17,31 @@ export async function renderHtmlTemplate(
   const template = Handlebars.compile(htmlTemplate);
   const html = template({ ...data, settings });
 
+  const { default: puppeteer } = await import("puppeteer");
   const browser = await puppeteer.launch({
     headless: true,
     args: ["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage"],
   });
-  
+
   try {
     const page = await browser.newPage();
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    await page.setContent(html, { waitUntil: "networkidle0" as any });
+    // The template renders fully offline: block any external network request
+    // (images, fonts, scripts) so template HTML cannot exfiltrate data or
+    // make the server call arbitrary URLs.
+    await page.setRequestInterception(true);
+    page.on("request", (request) => {
+      const url = request.url();
+      const isLocal =
+        url.startsWith("data:") ||
+        url.startsWith("about:") ||
+        url.startsWith("blob:");
+      if (isLocal) {
+        request.continue();
+      } else {
+        request.abort();
+      }
+    });
+    await page.setContent(html, { waitUntil: "load" });
     const pdf = await page.pdf({
       format: "A4",
       printBackground: true,

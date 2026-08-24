@@ -41,9 +41,11 @@ export function clearAttempts(ip: string) {
 
 // Periodic cleanup of expired entries (every 5 minutes)
 // Safe here because this module only loads in the Node runtime (API routes).
-setInterval(() => {
+const cleanupTimer = setInterval(() => {
   const now = Date.now();
   for (const [ip, attempt] of attempts) {
     if (now > attempt.resetAt) attempts.delete(ip);
   }
 }, 5 * 60 * 1000);
+// Never keep the process alive just for this timer (CLI scripts import auth too).
+cleanupTimer.unref?.();

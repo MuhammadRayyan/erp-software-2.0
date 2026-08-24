@@ -9,18 +9,33 @@ import { useForm } from "react-hook-form";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { CustomFieldInputs, type CustomFieldInputDefinition } from "@/modules/custom-fields/custom-field-inputs";
+import { firstMissingRequiredCustomField } from "@/modules/custom-fields/custom-field-display";
 import { createSupplierAction, updateSupplierAction } from "./actions";
 import { supplierInputSchema, type SupplierInput } from "./supplier-input";
 
-export function SupplierForm({ businessId, supplierId, currencies, initial }: { businessId: string; supplierId?: string; currencies: { code: string; name: string }[]; initial: SupplierInput }) {
+export function SupplierForm({ businessId, supplierId, currencies, initial, customFields = [], customFieldValues }: { businessId: string; supplierId?: string; currencies: { code: string; name: string }[]; initial: SupplierInput; customFields?: CustomFieldInputDefinition[]; customFieldValues?: Record<string, string> }) {
   const [serverError, setServerError] = useState("");
+  const [customValues, setCustomValues] = useState<Record<string, string>>(() => {
+    const initialCustomValues: Record<string, string> = {};
+    for (const definition of customFields) {
+      initialCustomValues[definition.id] = customFieldValues?.[definition.id]
+        ?? (definition.fieldType === "checkbox" ? "false" : "");
+    }
+    return initialCustomValues;
+  });
   const form = useForm<SupplierInput>({ resolver: zodResolver(supplierInputSchema), defaultValues: initial });
   const { register, handleSubmit, setError, formState: { errors, isSubmitting } } = form;
   async function submit(values: SupplierInput) {
     setServerError("");
+    const missingCustomField = firstMissingRequiredCustomField(customFields, customValues);
+    if (missingCustomField) {
+      setServerError(`"${missingCustomField}" is required.`);
+      return;
+    }
     const result = supplierId
-      ? await updateSupplierAction(businessId, supplierId, values)
-      : await createSupplierAction(businessId, values);
+      ? await updateSupplierAction(businessId, supplierId, values, customValues)
+      : await createSupplierAction(businessId, values, customValues);
     if (result.fieldErrors) for (const [field, messages] of Object.entries(result.fieldErrors)) setError(field as keyof SupplierInput, { message: messages[0] });
     if (result.error) setServerError(result.error);
   }
@@ -53,6 +68,19 @@ export function SupplierForm({ businessId, supplierId, currencies, initial }: { 
         <div className="space-y-1.5"><Label htmlFor="countryCode">Country code <span className="font-normal text-muted-foreground">(optional)</span></Label><Input id="countryCode" maxLength={2} placeholder="AE" {...register("countryCode")} aria-invalid={!!errors.countryCode} />{errors.countryCode && <p className="field-error">{errors.countryCode.message}</p>}</div>
       </div>
     </section>
+    {customFields.length > 0 && (
+      <section className="border-b border-border pb-7">
+        <h2 className="text-base font-semibold">Custom Fields</h2>
+        <p className="mt-1 text-sm text-muted-foreground">Fields defined in Settings → Custom Fields.</p>
+        <CustomFieldInputs
+          definitions={customFields}
+          values={customValues}
+          onChange={(definitionId, value) => setCustomValues((current) => ({ ...current, [definitionId]: value }))}
+          className="mt-5 grid gap-5 md:grid-cols-2"
+          checkboxClassName="size-4 accent-[var(--primary)]"
+        />
+      </section>
+    )}
     <div className="flex justify-end gap-2"><Button asChild variant="ghost"><Link href={cancelHref}>Cancel</Link></Button><Button type="submit" disabled={isSubmitting}>{isSubmitting && <LoaderCircle className="size-4 animate-spin" />} {supplierId ? "Save changes" : "Create supplier"}</Button></div>
   </form>;
 }

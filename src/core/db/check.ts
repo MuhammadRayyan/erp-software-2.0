@@ -41,7 +41,7 @@ function discoverBusinessDatabases(registry: readonly RegistryBusiness[]) {
 
 export function checkDatabases() {
   if (!existsSync(SYSTEM_DB_PATH)) {
-    throw new Error(`System database is missing at ${SYSTEM_DB_PATH}; run pnpm db:migrate.`);
+    throw new Error(`System database is missing at ${SYSTEM_DB_PATH}; run npm run db:migrate.`);
   }
 
   const systemSqlite = new Database(SYSTEM_DB_PATH, { readonly: true, fileMustExist: true });

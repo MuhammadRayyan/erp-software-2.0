@@ -1,3 +1,5 @@
+> Historical record. Some referenced files were never created — see docs/CURRENT_STATE.md for the authoritative state.
+
 # Branch Changes: `antigravity-edits`
 
 ## Feature: Global Appearance Settings

@@ -4,6 +4,7 @@ import { formatDate, formatMoney } from "@/core/format";
 import { quantityMicrosToInput } from "@/modules/accounting/calculations/money";
 import { renderInvoicePdf } from "@/modules/document-templates/template-registry";
 import { getInvoice } from "@/modules/sales-invoices/invoice-service";
+import { getCustomFieldPairsForEntity } from "@/modules/custom-fields/custom-field-service";
 import type { InvoiceTemplateData } from "@/modules/document-templates/react-pdf/invoice-template";
 
 export const runtime = "nodejs";
@@ -18,6 +19,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ busi
   const currency = invoice.currencyCode;
   const foreignDetail = currency === access.business.currency ? "" : `Rate 1 ${currency} = ${invoice.exchangeRateToBase} ${access.business.currency} (${invoice.exchangeRateSource}, ${invoice.exchangeRateDate}) · Base ${formatMoney(invoice.baseTotalMinor, access.business.currency)} · ${access.business.currency} VAT ${formatMoney(invoice.baseTaxMinor, access.business.currency)}`;
   try {
+    const customFields = getCustomFieldPairsForEntity(businessId, session.user.id, "sales_invoice", invoice.id);
     const data: InvoiceTemplateData = {
       companyName: access.business.name,
       invoiceNumber: invoice.invoiceNumber,
@@ -36,6 +38,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ busi
       tax: formatMoney(invoice.taxMinor, currency),
       total: formatMoney(invoice.totalMinor, currency),
       foreignDetail: foreignDetail || undefined,
+      customFields,
     };
     const pdf = await renderInvoicePdf(businessId, session.user.id, data);
     return new NextResponse(new Uint8Array(pdf), {

@@ -232,9 +232,137 @@ const PAID_MINOR_FRAGMENT = `
     WHERE spa.purchase_invoice_id = pi.id), 0)
 `;
 
-export function listPurchaseInvoices(businessId: string, userId: string, supplierId?: string) {
+export type PurchaseInvoiceListFilters = {
+  /** Filter to one supplier (matches the legacy `supplierId` positional arg). */
+  supplierId?: string;
+  /** Inclusive lower bound on invoice_date (YYYY-MM-DD). Invalid values are ignored. */
+  from?: string;
+  /** Inclusive upper bound on invoice_date (YYYY-MM-DD). Invalid values are ignored. */
+  to?: string;
+  /** Maximum rows to return (server-side LIMIT). Used by the paginated list path. */
+  take?: number;
+  /** Number of rows to skip (server-side OFFSET). Used by the paginated list path. */
+  skip?: number;
+};
+
+function validDate(value?: string) {
+  return value && /^\d{4}-\d{2}-\d{2}$/.test(value) ? value : undefined;
+}
+
+const DEFAULT_PAGE_SIZE = 50;
+const MAX_PAGE_SIZE = 200;
+
+function clampPositiveInt(value: number | undefined, fallback: number, max: number): number {
+  if (value === undefined || !Number.isInteger(value) || value < 1) return fallback;
+  return Math.min(value, max);
+}
+
+/**
+ * Paginated purchase-invoice list result. The rows slice contains just the
+ * rows for the requested page; `total` is the unfiltered-over-rows count for
+ * the same `filters` so the UI can show "Page X of Y".
+ */
+export type PaginatedPurchaseInvoices = {
+  rows: ReturnType<typeof listPurchaseInvoices>;
+  total: number;
+  /** 1-indexed page number actually returned (clamped to the last valid page). */
+  page: number;
+  /** Rows per page that were requested. */
+  pageSize: number;
+  /** Total number of pages computed from `total` / `pageSize`. */
+  totalPages: number;
+};
+
+/**
+ * Count purchase invoices matching `filters` using the same WHERE-clause
+ * builder as `listPurchaseInvoiceRows`. Returns the row count used by
+ * `listPurchaseInvoicesPaginated` to compute total pages.
+ */
+function countPurchaseInvoiceRows(businessId: string, userId: string, filters?: PurchaseInvoiceListFilters): number {
   const { sqlite } = getBusinessDb(businessId, userId);
-  const where = supplierId ? "WHERE pi.supplier_id = ?" : "";
+  const conditions: string[] = [];
+  const values: string[] = [];
+  if (filters?.supplierId) {
+    conditions.push("pi.supplier_id = ?");
+    values.push(filters.supplierId);
+  }
+  const dateFrom = validDate(filters?.from);
+  const dateTo = validDate(filters?.to);
+  if (dateFrom) {
+    conditions.push("pi.invoice_date >= ?");
+    values.push(dateFrom);
+  }
+  if (dateTo) {
+    conditions.push("pi.invoice_date <= ?");
+    values.push(dateTo);
+  }
+  const where = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";
+  const row = sqlite.prepare(`SELECT COUNT(*) AS total FROM purchase_invoices pi ${where}`).get(...values) as { total: number };
+  return row.total;
+}
+
+/**
+ * Paginated list of purchase invoices for the list page. Server-side
+ * LIMIT/OFFSET keeps the query cheap as the table grows. The returned
+ * `total` is the count for the same `filters` excluding the page bounds.
+ *
+ * @param page 1-indexed page number (clamped to >= 1).
+ * @param pageSize rows per page (defaults to 50, capped at 200).
+ */
+export function listPurchaseInvoicesPaginated(
+  businessId: string,
+  userId: string,
+  filters: PurchaseInvoiceListFilters & { page?: number; pageSize?: number } = {},
+): PaginatedPurchaseInvoices {
+  const page = clampPositiveInt(filters.page, 1, Number.MAX_SAFE_INTEGER);
+  const pageSize = clampPositiveInt(filters.pageSize, DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE);
+  const total = countPurchaseInvoiceRows(businessId, userId, filters);
+  // Clamp the page number to the last valid page so out-of-range URLs
+  // (e.g. `?page=999`) still render the last page rather than 0 rows.
+  const maxPage = Math.max(1, Math.ceil(total / pageSize));
+  const effectivePage = Math.min(page, maxPage);
+  const offset = (effectivePage - 1) * pageSize;
+  const rows = listPurchaseInvoices(businessId, userId, undefined, { ...filters, take: pageSize, skip: offset });
+  return { rows, total, page: effectivePage, pageSize, totalPages: maxPage };
+}
+
+/**
+ * List purchase invoices. The legacy 3rd positional arg is `supplierId`
+ * (used by the supplier detail page); a `filters` object is also accepted
+ * for the paginated list path. Both are merged so existing call sites keep
+ * working while new ones can pass `take`/`skip`/`from`/`to`.
+ */
+export function listPurchaseInvoices(
+  businessId: string,
+  userId: string,
+  supplierId?: string,
+  filters?: PurchaseInvoiceListFilters,
+) {
+  const { sqlite } = getBusinessDb(businessId, userId);
+  const conditions: string[] = [];
+  const values: string[] = [];
+  const scopedSupplierId = supplierId ?? filters?.supplierId;
+  if (scopedSupplierId) {
+    conditions.push("pi.supplier_id = ?");
+    values.push(scopedSupplierId);
+  }
+  const dateFrom = validDate(filters?.from);
+  const dateTo = validDate(filters?.to);
+  if (dateFrom) {
+    conditions.push("pi.invoice_date >= ?");
+    values.push(dateFrom);
+  }
+  if (dateTo) {
+    conditions.push("pi.invoice_date <= ?");
+    values.push(dateTo);
+  }
+  const where = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";
+  // Server-side LIMIT/OFFSET supports the paginated list path. When both
+  // are undefined the query returns the full result set (used by the
+  // goods-receipt picker, supplier detail page, etc.).
+  const limitClause = filters?.take !== undefined && Number.isFinite(filters.take) && filters.take >= 0 ? `LIMIT ${Math.floor(filters.take)}` : "";
+  const offsetClause = filters?.skip !== undefined && Number.isFinite(filters.skip) && filters.skip >= 0 ? `OFFSET ${Math.floor(filters.skip)}` : "";
+  const pagination = `${limitClause} ${offsetClause}`.trim();
   const rows = sqlite.prepare(`
     SELECT pi.*, s.name AS supplier_name, cur.minor_unit AS currency_minor_unit,
       (SELECT GROUP_CONCAT(DISTINCT COALESCE(l.project_id, pi.project_id)) FROM purchase_invoice_lines l WHERE l.purchase_invoice_id = pi.id) AS project_ids,
@@ -244,7 +372,8 @@ export function listPurchaseInvoices(businessId: string, userId: string, supplie
     INNER JOIN currencies cur ON cur.code = pi.currency_code
     ${where}
     ORDER BY pi.invoice_date DESC, pi.created_at DESC
-  `).all(...(supplierId ? [supplierId] : [])) as {
+    ${pagination}
+  `).all(...values) as {
     id: string; internal_number: string; supplier_id: string; supplier_name: string;
     supplier_invoice_number: string; invoice_date: string; due_date: string;
     reference: string | null; purchase_order_id: string | null; project_id: string | null;

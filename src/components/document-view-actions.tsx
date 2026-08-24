@@ -13,7 +13,8 @@ type DocumentViewActionsProps = {
   editHref?: string;
   pdfHref?: string;
   xmlHref?: string;
-  emailHref?: string;
+  /** Optional email handler — when provided, the Email button is wired to this callback (e.g. opens a compose dialog). */
+  onEmail?: () => void;
   onDuplicate?: () => Promise<void>;
   onVoid?: { label: string; description: string; action: () => Promise<void> };
   onDelete?: { label: string; description: string; action: () => Promise<void> };
@@ -30,7 +31,7 @@ export function DocumentViewActions({
   editHref,
   pdfHref,
   xmlHref,
-  emailHref,
+  onEmail,
   onDuplicate,
   onVoid,
   onDelete,
@@ -66,12 +67,12 @@ export function DocumentViewActions({
             <Link href={editHref}><FileEdit className="size-4" /> Edit</Link>
           </Button>
         )}
-        
+
         {extraPrimaryActions}
 
-        {emailHref && (
-          <Button variant="secondary" className="hidden md:inline-flex" title="Email delivery is planned for a later phase" disabled>
-            <Mail className="size-4" /> Email (later)
+        {onEmail && (
+          <Button variant="secondary" className="hidden md:inline-flex" onClick={onEmail}>
+            <Mail className="size-4" /> Email
           </Button>
         )}
 
@@ -88,12 +89,17 @@ export function DocumentViewActions({
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="w-52">
-            {emailHref && (
-              <DropdownMenuItem className="md:hidden" disabled>
-                <Mail className="size-4" /> Email (later)
+            {onEmail && (
+              <DropdownMenuItem className="md:hidden" onSelect={(e) => { e.preventDefault(); onEmail(); }}>
+                <Mail className="size-4" /> Email
               </DropdownMenuItem>
             )}
-            
+            {xmlHref && (
+              <DropdownMenuItem asChild>
+                <Link href={xmlHref}><FileText className="size-4" /> View XML</Link>
+              </DropdownMenuItem>
+            )}
+
             {pdfHref && (
               <DropdownMenuItem asChild className="md:hidden">
                 <a href={pdfHref} target="_blank"><Download className="size-4" /> Print / PDF</a>
@@ -109,19 +115,19 @@ export function DocumentViewActions({
             {extraActions}
 
             {(onVoid || onDelete || onClose) && <DropdownMenuSeparator />}
-            
+
             {onClose && (
               <DropdownMenuItem onSelect={() => { setError(""); setConfirm("close"); }}>
                 <Ban className="size-4" /> {onClose.label}
               </DropdownMenuItem>
             )}
-            
+
             {onVoid && (
               <DropdownMenuItem className="text-danger focus:text-danger" onSelect={() => { setError(""); setConfirm("void"); }}>
                 <Ban className="size-4" /> {onVoid.label}
               </DropdownMenuItem>
             )}
-            
+
             {onDelete && (
               <DropdownMenuItem className="text-danger focus:text-danger" onSelect={() => { setError(""); setConfirm("delete"); }}>
                 <Trash2 className="size-4" /> {onDelete.label}

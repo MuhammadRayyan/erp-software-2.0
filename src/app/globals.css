@@ -130,10 +130,11 @@ button, a { -webkit-tap-highlight-color: transparent; }
 
 .data-panel { overflow-x: auto; overflow-y: hidden; border: 1px solid var(--border); border-radius: 8px; background: var(--surface-raised); }
 .data-table { width: 100%; border-collapse: collapse; font-size: 13.5px; }
-.data-table th { height: 39px; padding: 0 12px; background: var(--surface); color: var(--muted-foreground); font-size: 12px; font-weight: 600; text-align: left; white-space: nowrap; }
+.data-table th { height: 39px; padding: 0 12px; background: var(--surface); color: var(--muted-foreground); font-size: 12px; font-weight: 600; text-align: left; white-space: nowrap; border-bottom: 1px solid var(--border-strong); position: sticky; top: 0; z-index: 1; }
 .data-table td { height: 43px; border-top: 1px solid var(--border); padding: 0 12px; white-space: nowrap; }
 .data-table tbody tr { transition: background-color 120ms ease; }
 .data-table tbody tr:hover { background: var(--surface-muted); }
+.data-table tbody tr:active { background: color-mix(in srgb, var(--surface-muted) 80%, var(--border)); }
 
 @media (max-width: 767px) {
   .page-container { padding: 18px 16px 32px; }

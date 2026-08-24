@@ -1,15 +1,7 @@
 import { createSettlement, voidSettlement, type SettlementConfig } from "@/modules/settlement/settlement-service";
-import { randomUUID } from "node:crypto";
 import { getBusinessDb } from "@/core/db/business";
-import { allocateNumber } from "@/modules/accounting/services/numbering-service";
 import { postReceipt } from "@/modules/accounting/services/receipt-posting-service";
-import { reverseTransaction } from "@/modules/accounting/services/posting-service";
 import { receiptInputSchema, type ReceiptInput } from "./receipt-input";
-import { parseCurrencyAmountToMinor } from "@/modules/currency/conversion";
-import { calculateSettlementAllocation } from "@/modules/currency/settlement";
-import { resolveRateSnapshot } from "@/modules/currency/validation";
-
-type Sqlite = ReturnType<typeof getBusinessDb>["sqlite"];
 
 const receiptConfig: SettlementConfig = {
   partyType: "customer",
@@ -53,15 +45,138 @@ const receiptConfig: SettlementConfig = {
 export function createReceipt(businessId: string, userId: string, input: ReceiptInput) {
   const data = receiptInputSchema.parse(input);
   const context = getBusinessDb(businessId, userId);
-  let result: any;
+  let result!: ReturnType<typeof createSettlement>;
   context.sqlite.transaction(() => {
     result = createSettlement(context.sqlite, receiptConfig, data, userId);
   }).immediate();
   return result;
 }
 
-export function listReceipts(businessId: string, userId: string) {
+export type ReceiptListFilters = {
+  /** Inclusive lower bound on receipt date (YYYY-MM-DD). Invalid values are ignored. */
+  from?: string;
+  /** Inclusive upper bound on receipt date (YYYY-MM-DD). Invalid values are ignored. */
+  to?: string;
+  /** Maximum rows to return (server-side LIMIT). Used by the paginated list path. */
+  take?: number;
+  /** Number of rows to skip (server-side OFFSET). Used by the paginated list path. */
+  skip?: number;
+};
+
+function validDate(value?: string) {
+  return value && /^\d{4}-\d{2}-\d{2}$/.test(value) ? value : undefined;
+}
+
+const DEFAULT_PAGE_SIZE = 50;
+const MAX_PAGE_SIZE = 200;
+
+function clampPositiveInt(value: number | undefined, fallback: number, max: number): number {
+  if (value === undefined || !Number.isInteger(value) || value < 1) return fallback;
+  return Math.min(value, max);
+}
+
+type ReceiptListRow = {
+  id: string;
+  receipt_number: string;
+  date: string;
+  amount_minor: number;
+  base_amount_minor: number;
+  currency_code: string;
+  currency_minor_unit: number;
+  reference: string | null;
+  document_status: "posted" | "void";
+  created_at: string;
+  customer_id: string;
+  customer_name: string;
+  bank_account_id: string;
+  bank_account_code: string;
+  bank_account_name: string;
+};
+
+/**
+ * Paginated receipt list result. The rows slice contains just the rows for
+ * the requested page; `total` is the unfiltered-over-rows count for the same
+ * `filters` so the UI can show "Page X of Y".
+ */
+export type PaginatedReceipts = {
+  rows: ReceiptListRow[];
+  total: number;
+  /** 1-indexed page number actually returned (clamped to the last valid page). */
+  page: number;
+  /** Rows per page that were requested. */
+  pageSize: number;
+  /** Total number of pages computed from `total` / `pageSize`. */
+  totalPages: number;
+};
+
+/**
+ * Count receipts matching `filters` using the same WHERE-clause builder as
+ * `listReceipts`. Returns the row count used by `listReceiptsPaginated` to
+ * compute total pages.
+ */
+function countReceiptRows(businessId: string, userId: string, filters?: ReceiptListFilters): number {
   const { sqlite } = getBusinessDb(businessId, userId);
+  const conditions: string[] = [];
+  const values: string[] = [];
+  const dateFrom = validDate(filters?.from);
+  const dateTo = validDate(filters?.to);
+  if (dateFrom) {
+    conditions.push("r.date >= ?");
+    values.push(dateFrom);
+  }
+  if (dateTo) {
+    conditions.push("r.date <= ?");
+    values.push(dateTo);
+  }
+  const where = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";
+  const row = sqlite.prepare(`SELECT COUNT(*) AS total FROM receipts r ${where}`).get(...values) as { total: number };
+  return row.total;
+}
+
+/**
+ * Paginated list of receipts for the list page. Server-side LIMIT/OFFSET
+ * keeps the query cheap as the receipts table grows. The returned `total`
+ * is the count for the same `filters` excluding the page bounds.
+ *
+ * @param page 1-indexed page number (clamped to >= 1).
+ * @param pageSize rows per page (defaults to 50, capped at 200).
+ */
+export function listReceiptsPaginated(
+  businessId: string,
+  userId: string,
+  filters: ReceiptListFilters & { page?: number; pageSize?: number } = {},
+): PaginatedReceipts {
+  const page = clampPositiveInt(filters.page, 1, Number.MAX_SAFE_INTEGER);
+  const pageSize = clampPositiveInt(filters.pageSize, DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE);
+  const total = countReceiptRows(businessId, userId, filters);
+  const maxPage = Math.max(1, Math.ceil(total / pageSize));
+  const effectivePage = Math.min(page, maxPage);
+  const offset = (effectivePage - 1) * pageSize;
+  const rows = listReceipts(businessId, userId, { ...filters, take: pageSize, skip: offset });
+  return { rows, total, page: effectivePage, pageSize, totalPages: maxPage };
+}
+
+export function listReceipts(businessId: string, userId: string, filters?: ReceiptListFilters): ReceiptListRow[] {
+  const { sqlite } = getBusinessDb(businessId, userId);
+  const conditions: string[] = [];
+  const values: string[] = [];
+  const dateFrom = validDate(filters?.from);
+  const dateTo = validDate(filters?.to);
+  if (dateFrom) {
+    conditions.push("r.date >= ?");
+    values.push(dateFrom);
+  }
+  if (dateTo) {
+    conditions.push("r.date <= ?");
+    values.push(dateTo);
+  }
+  const where = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";
+  // Server-side LIMIT/OFFSET supports the paginated list path. When both
+  // are undefined the query returns the full result set (used by per-customer
+  // drill-downs, reports, etc.).
+  const limitClause = filters?.take !== undefined && Number.isFinite(filters.take) && filters.take >= 0 ? `LIMIT ${Math.floor(filters.take)}` : "";
+  const offsetClause = filters?.skip !== undefined && Number.isFinite(filters.skip) && filters.skip >= 0 ? `OFFSET ${Math.floor(filters.skip)}` : "";
+  const pagination = `${limitClause} ${offsetClause}`.trim();
   return sqlite.prepare(`
     SELECT r.id, r.receipt_number, r.date, r.amount_minor, r.base_amount_minor, r.currency_code,
       cur.minor_unit AS currency_minor_unit, r.reference,
@@ -71,24 +186,10 @@ export function listReceipts(businessId: string, userId: string) {
     INNER JOIN customers c ON c.id = r.customer_id
     INNER JOIN accounts a ON a.id = r.bank_account_id
     INNER JOIN currencies cur ON cur.code = r.currency_code
+    ${where}
     ORDER BY r.date DESC, r.created_at DESC
-  `).all() as {
-    id: string;
-    receipt_number: string;
-    date: string;
-    amount_minor: number;
-    base_amount_minor: number;
-    currency_code: string;
-    currency_minor_unit: number;
-    reference: string | null;
-    document_status: "posted" | "void";
-    created_at: string;
-    customer_id: string;
-    customer_name: string;
-    bank_account_id: string;
-    bank_account_code: string;
-    bank_account_name: string;
-  }[];
+    ${pagination}
+  `).all(...values) as ReceiptListRow[];
 }
 
 export function getReceipt(businessId: string, userId: string, receiptId: string) {

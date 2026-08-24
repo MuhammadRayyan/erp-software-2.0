@@ -9,12 +9,14 @@ import { useForm, useWatch } from "react-hook-form";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { CustomFieldInputs, type CustomFieldInputDefinition } from "@/modules/custom-fields/custom-field-inputs";
+import { firstMissingRequiredCustomField } from "@/modules/custom-fields/custom-field-display";
 import { createCustomerAction, updateCustomerAction } from "./actions";
 import { customerInputSchema, type CustomerInput } from "./customer-input";
 
 type Values = CustomerInput;
 
-export function CustomerForm({ businessId, customerId, currencies, initial }: { businessId: string; customerId?: string; currencies: { code: string; name: string }[]; initial?: Values }) {
+export function CustomerForm({ businessId, customerId, currencies, initial, customFields = [], customFieldValues }: { businessId: string; customerId?: string; currencies: { code: string; name: string }[]; initial?: Values; customFields?: CustomFieldInputDefinition[]; customFieldValues?: Record<string, string> }) {
   const [serverError, setServerError] = useState("");
   const { register, handleSubmit, setError, control, setValue, formState: { errors, isSubmitting } } = useForm<Values>({
     resolver: zodResolver(customerInputSchema),
@@ -33,6 +35,15 @@ export function CustomerForm({ businessId, customerId, currencies, initial }: { 
 
   const billingAddress = useWatch({ control, name: "billingAddress" });
 
+  const [customValues, setCustomValues] = useState<Record<string, string>>(() => {
+    const initialCustomValues: Record<string, string> = {};
+    for (const definition of customFields) {
+      initialCustomValues[definition.id] = customFieldValues?.[definition.id]
+        ?? (definition.fieldType === "checkbox" ? "false" : "");
+    }
+    return initialCustomValues;
+  });
+
   useEffect(() => {
     if (sameAsBilling) {
       setValue("deliveryAddress", billingAddress || "");
@@ -40,7 +51,12 @@ export function CustomerForm({ businessId, customerId, currencies, initial }: { 
   }, [sameAsBilling, billingAddress, setValue]);
   async function submit(values: Values) {
     setServerError("");
-    const result = customerId ? await updateCustomerAction(businessId, customerId, values) : await createCustomerAction(businessId, values);
+    const missingCustomField = firstMissingRequiredCustomField(customFields, customValues);
+    if (missingCustomField) {
+      setServerError(`"${missingCustomField}" is required.`);
+      return;
+    }
+    const result = customerId ? await updateCustomerAction(businessId, customerId, values, customValues) : await createCustomerAction(businessId, values, customValues);
     if (result.fieldErrors) for (const [field, messages] of Object.entries(result.fieldErrors)) setError(field as keyof Values, { message: messages[0] });
     if (result.error) setServerError(result.error);
   }
@@ -98,6 +114,19 @@ export function CustomerForm({ businessId, customerId, currencies, initial }: { 
           <div className="space-y-1.5"><Label htmlFor="buyerReference">Buyer reference <span className="font-normal text-muted-foreground">(optional)</span></Label><Input id="buyerReference" {...register("buyerReference")} /></div>
         </div>
       </details>
+      {customFields.length > 0 && (
+        <section className="border-b border-border pb-7">
+          <h2 className="text-base font-semibold">Custom Fields</h2>
+          <p className="mt-1 text-sm text-muted-foreground">Fields defined in Settings → Custom Fields.</p>
+          <CustomFieldInputs
+            definitions={customFields}
+            values={customValues}
+            onChange={(definitionId, value) => setCustomValues((current) => ({ ...current, [definitionId]: value }))}
+            className="mt-5 grid gap-5 sm:grid-cols-2"
+            checkboxClassName="size-4 rounded-[4px] border-border-strong accent-primary"
+          />
+        </section>
+      )}
       <div className="flex justify-end gap-2"><Button asChild variant="ghost"><Link href={cancelHref}>Cancel</Link></Button><Button type="submit" disabled={isSubmitting}>{isSubmitting && <LoaderCircle className="size-4 animate-spin" />} {customerId ? "Save changes" : "Save customer"}</Button></div>
     </form>
   );

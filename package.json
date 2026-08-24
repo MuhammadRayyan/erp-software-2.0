@@ -1,18 +1,20 @@
 {
   "name": "modern-erp",
-  "version": "0.1.0",
+  "version": "2.1.1",
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "next dev",
+    "dev": "next dev -p 3000 2>&1 | tee dev.log",
     "build": "next build",
     "start": "next start",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
-    "db:migrate": "tsx scripts/migrate.ts",
-    "db:check": "tsx scripts/check-db.ts",
-    "db:seed": "tsx scripts/seed.ts",
-    "test": "tsx --test tests/middleware-exists.test.ts tests/pre-phase-5.test.ts tests/phase-5.test.ts tests/phase-6.test.ts tests/phase-7.test.ts tests/phase-8.test.ts tests/phase-9.test.ts",
+    "db:migrate": "tsx --env-file=.env scripts/migrate.ts",
+    "db:push": "tsx --env-file=.env scripts/migrate.ts",
+    "db:bootstrap": "tsx --env-file=.env scripts/bootstrap.ts",
+    "db:check": "tsx --env-file=.env scripts/check-db.ts",
+    "db:seed": "tsx --env-file=.env scripts/seed.ts",
+    "test": "tsx --test-force-exit --test tests/middleware-exists.test.ts tests/pre-phase-5.test.ts tests/phase-5.test.ts tests/phase-6.test.ts tests/phase-7.test.ts tests/phase-8.test.ts tests/phase-9.test.ts tests/custom-fields.test.ts",
     "test:e2e": "playwright test"
   },
   "dependencies": {
@@ -40,6 +42,7 @@
     "saxon-js": "2.7.0",
     "sonner": "2.0.7",
     "tailwind-merge": "3.6.0",
+    "z-ai-web-dev-sdk": "^0.0.18",
     "zod": "4.4.3"
   },
   "devDependencies": {
@@ -55,8 +58,7 @@
     "eslint-config-next": "16.3.0",
     "tailwindcss": "4.3.3",
     "tsx": "4.23.11",
-    "typescript": "6.0.3",
-    "xslt3": "2.7.0"
+    "typescript": "6.0.3"
   },
   "_comment_puppeteer": "Kept for custom-html template rendering path"
 }

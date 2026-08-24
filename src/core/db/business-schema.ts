@@ -1479,3 +1479,84 @@ export const documentTemplates = sqliteTable("document_templates", {
   customHtml: text("custom_html"),
   updatedAt: text("updated_at").notNull(),
 });
+
+export const customFieldEntityTypes = ["customer", "supplier", "sales_invoice"] as const;
+export const customFieldFieldTypes = ["text", "number", "date", "select", "checkbox"] as const;
+
+export const customFieldDefinitions = sqliteTable(
+  "custom_field_definitions",
+  {
+    id: text("id").primaryKey(),
+    entityType: text("entity_type", { enum: customFieldEntityTypes }).notNull(),
+    name: text("name").notNull(),
+    fieldType: text("field_type", { enum: customFieldFieldTypes }).notNull(),
+    selectOptions: text("select_options").notNull().default("[]"),
+    position: integer("position").notNull().default(0),
+    isRequired: integer("is_required", { mode: "boolean" }).notNull().default(false),
+    showInList: integer("show_in_list", { mode: "boolean" }).notNull().default(false),
+    createdAt: text("created_at").notNull(),
+    updatedAt: text("updated_at").notNull(),
+  },
+  (table) => [index("custom_field_definitions_entity").on(table.entityType, table.position)],
+);
+
+export const customFieldValues = sqliteTable(
+  "custom_field_values",
+  {
+    id: text("id").primaryKey(),
+    definitionId: text("definition_id").notNull().references(() => customFieldDefinitions.id, { onDelete: "cascade" }),
+    entityId: text("entity_id").notNull(),
+    value: text("value").notNull().default(""),
+    updatedAt: text("updated_at").notNull(),
+  },
+  (table) => [
+    uniqueIndex("custom_field_values_definition_entity").on(table.definitionId, table.entityId),
+  ],
+);
+
+export const sentEmailStatuses = ["queued", "sent", "delivered", "failed"] as const;
+export type SentEmailStatus = (typeof sentEmailStatuses)[number];
+
+export const sentEmailRelatedEntityTypes = ["sales_invoice", "sales_receipt", "sales_credit_note", "purchase_order", "purchase_invoice", "statement"] as const;
+export type SentEmailRelatedEntityType = (typeof sentEmailRelatedEntityTypes)[number];
+
+/**
+ * Audit log of outgoing business emails. Each row records a "send" attempt:
+ * the rendered body, attachment metadata (PDF filename + byte size), the
+ * delivery status, and the optional related entity (e.g. which invoice the
+ * email was about). The body is stored verbatim so the user can preview the
+ * exact message the recipient received without having to reconstruct it.
+ *
+ * The `status` field is `queued` while the driver is mid-send, `sent` on
+ * successful hand-off, `delivered` on confirmation (e.g. SMTP accept), or
+ * `failed` with an `error_message` if the driver threw. The `logDriver`
+ * records `sent` immediately because there is no transport in the demo
+ * environment — production deployments wire a real SMTP driver in here.
+ */
+export const sentEmails = sqliteTable(
+  "sent_emails",
+  {
+    id: text("id").primaryKey(),
+    messageId: text("message_id").notNull(),
+    fromAddress: text("from_address").notNull(),
+    toAddresses: text("to_addresses").notNull(),
+    ccAddresses: text("cc_addresses").notNull().default(""),
+    subject: text("subject").notNull(),
+    bodyHtml: text("body_html").notNull(),
+    bodyText: text("body_text").notNull().default(""),
+    status: text("status", { enum: sentEmailStatuses }).notNull().default("queued"),
+    relatedEntityType: text("related_entity_type", { enum: sentEmailRelatedEntityTypes }),
+    relatedEntityId: text("related_entity_id"),
+    relatedDocumentNumber: text("related_document_number"),
+    attachmentFilename: text("attachment_filename"),
+    attachmentSizeBytes: integer("attachment_size_bytes"),
+    sentAt: text("sent_at"),
+    errorMessage: text("error_message"),
+    createdBy: text("created_by").notNull(),
+    createdAt: text("created_at").notNull(),
+  },
+  (table) => [
+    index("sent_emails_created_idx").on(table.createdAt),
+    index("sent_emails_related_idx").on(table.relatedEntityType, table.relatedEntityId),
+  ],
+);

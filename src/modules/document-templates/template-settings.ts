@@ -11,6 +11,7 @@ export const templateSettingsSchema = z.object({
   showTaxColumn: z.boolean().default(true),
   showCustomerTrn: z.boolean().default(false),
   showPaymentTerms: z.boolean().default(false),
+  showCustomFields: z.boolean().default(true),
   customHtml: z.string().max(50000).optional().default(""),
 });
 
@@ -27,5 +28,6 @@ export const defaultSettings: TemplateSettings = {
   showTaxColumn: true,
   showCustomerTrn: false,
   showPaymentTerms: false,
+  showCustomFields: true,
   customHtml: "",
 };
