@@ -4,7 +4,11 @@ All notable changes since the original `erp-software-2.0-antigravity-edits` uplo
 
 Full per-task detail (file lists, verification transcripts, QA walkthroughs) lives in `worklog.md` at the repository root.
 
-## v2.1.1 — Deployment & sandbox-boot fixes (current release)
+## v2.1.1
+
+### Observability & Infrastructure
+* **Sentry SDK Integration**: Successfully instrumented @sentry/nextjs across the application boundaries (Edge, Node server, and Client). Added global-error.tsx boundary and withSentryConfig to track unhandled server and client exceptions to the cloud dashboard.
+ — Deployment & sandbox-boot fixes (current release)
 
 Fixes "there was a problem deploying the code" / blank sandbox preview, all verified with a full production-build simulation:
 

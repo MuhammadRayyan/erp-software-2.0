@@ -311,3 +311,8 @@ ejected).
 - **Core Integrations**: Fixed deep TS discrepancies from the generated modules, explicitly removing raw expenseAccount properties in favor of salesAccountId in sales-side queries, injecting cancelled enum to salesQuotes, unifying customFields to accept sales_quote, sales_order, and debit_note.
 - **Pages**: Removed orphaned complex View pages in favor of Edit pages or lists to bypass extensive unbuilt SSR components and prevent TS compilation crashes.
 - **Verification**: Tests passing with 100% success; migrations successfully applied.
+
+### Sentry SDK Integration
+- **Next.js Observability**: Added @sentry/nextjs library, wrapping 
+ext.config.ts, generating edge/server/client instrumentation hooks, and applying a global error catch boundary to intercept layout routing crashes.
+- **Verification**: Verified using a local test route /sentry-example-page triggering dual captures successfully logged to the backend via the erp-20 project DSN.
