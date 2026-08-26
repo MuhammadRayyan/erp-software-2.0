@@ -8,7 +8,8 @@ import { formatDate, formatDateTime, formatMoney } from "@/core/format";
 import { parseModules } from "@/core/permissions/permissions";
 import { listPreferences } from "@/modules/preferences/preference-service";
 import { decodeColumnSnapshots } from "@/modules/preferences/snapshot-codec";
-import { getBankBalance } from "@/modules/reports/report-service";
+import { getBankBalance, getDashboardCounts } from "@/modules/reports/report-service";
+import { ManagerSummary } from "./manager-summary";
 import { listInvoices } from "@/modules/sales-invoices/invoice-service";
 import { DocumentStatusBadge, PaymentStatusBadge } from "@/modules/sales-invoices/invoice-status";
 import { listSentEmails } from "@/modules/email/email-service";
@@ -78,6 +79,7 @@ export default async function OverviewPage({ params, searchParams }: { params: P
       <div className="page-header"><div><h1 className="page-title">Overview</h1><p className="page-description">A practical accounting snapshot of {access.business.name}.</p></div></div>
       <OverviewControls from={from} to={to} serverRange={serverRange} businessId={businessId} />
       <KpiCards cards={cards} businessId={businessId} serverSnapshot={decodeColumnSnapshots(preferences)["overview-cards"]} />
+      <ManagerSummary businessId={businessId} counts={getDashboardCounts(businessId, user.id)} />
       <div className="mt-5 grid gap-5 lg:grid-cols-3">
         <section className="data-panel lg:col-span-2">
           <div className="flex h-12 items-center justify-between border-b border-border px-4"><h2 className="font-semibold">Recent Invoices</h2><Link href={`/b/${businessId}/sales/invoices`} className="flex items-center gap-1 text-xs font-medium text-primary hover:underline">View all <ArrowRight className="size-3.5" /></Link></div>

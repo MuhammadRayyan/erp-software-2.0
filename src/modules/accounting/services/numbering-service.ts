@@ -7,6 +7,8 @@ export type NumberKind =
   | "purchaseOrder"
   | "purchaseInvoice"
   | "supplierPayment"
+  | "salesQuote"
+  | "salesOrder"
   | "project"
   | "goodsReceipt"
   | "deliveryNote"
@@ -22,6 +24,8 @@ const columns: Record<NumberKind, { prefix: string; next: string; padding?: stri
   purchaseOrder: { prefix: "purchase_order_prefix", next: "purchase_order_next_number" },
   purchaseInvoice: { prefix: "purchase_invoice_prefix", next: "purchase_invoice_next_number" },
   supplierPayment: { prefix: "supplier_payment_prefix", next: "supplier_payment_next_number" },
+  salesQuote: { prefix: "sales_quote_prefix", next: "sales_quote_next_number", padding: "sales_quote_padding" },
+  salesOrder: { prefix: "sales_order_prefix", next: "sales_order_next_number", padding: "sales_order_padding" },
   project: { prefix: "project_prefix", next: "project_next_number", padding: "project_padding" },
   goodsReceipt: { prefix: "goods_receipt_prefix", next: "goods_receipt_next_number", padding: "goods_receipt_padding" },
   deliveryNote: { prefix: "delivery_note_prefix", next: "delivery_note_next_number", padding: "delivery_note_padding" },
@@ -51,6 +55,8 @@ export function allocateNumber(sqlite: Database.Database, kind: NumberKind) {
     purchaseOrder: { table: "purchase_orders", column: "order_number" },
     purchaseInvoice: { table: "purchase_invoices", column: "internal_number" },
     supplierPayment: { table: "supplier_payments", column: "payment_number" },
+    salesQuote: { table: "sales_quotes", column: "quote_number" },
+    salesOrder: { table: "sales_orders", column: "order_number" },
     project: { table: "projects", column: "code" },
     goodsReceipt: { table: "goods_receipts", column: "receipt_number" },
     deliveryNote: { table: "delivery_notes", column: "delivery_number" },

@@ -5,12 +5,14 @@ import {
   moneySchema,
   projectIdField,
   quantitySchema,
-} from "@/core/validation/document-schemas";
+amountsIncludeTaxSchema, discountTypeSchema, discountValueSchema } from "@/core/validation/document-schemas";
 
 export const purchaseOrderLineSchema = z.object({
   itemId: itemIdField,
   description: z.string().trim().min(1, "Enter a description").max(300),
   quantity: quantitySchema,
+  discountType: discountTypeSchema,
+  discountValue: discountValueSchema,
   unitPrice: moneySchema,
   expenseAccountId: z.string().optional().default(""),
   taxCodeId: z.string().min(1, "Choose a tax code"),
@@ -21,6 +23,7 @@ export const purchaseOrderInputSchema = z.object({
   ...exchangeRateInputShape,
   supplierId: z.string().uuid("Choose a supplier"),
   projectId: projectIdField,
+  amountsIncludeTax: amountsIncludeTaxSchema,
   date: z.iso.date("Enter a valid order date"),
   expectedDate: z.union([z.literal(""), z.iso.date("Enter a valid expected date")]).optional().default(""),
   reference: z.string().trim().max(100).optional().default(""),

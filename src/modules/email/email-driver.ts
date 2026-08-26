@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import nodemailer from "nodemailer";
 import type { EmailDriver, EmailRecipient, SendEmailInput } from "./email-types";
 
 /**
@@ -50,36 +51,51 @@ export function parseMailboxes(value: string): EmailRecipient[] {
   return out;
 }
 
-/**
- * Default driver for the demo environment: no transport is wired in. The
- * driver records the email to the audit table via the caller (the service
- * writes the row), and returns success immediately. This is the same shape
- * a real SMTP driver would return — services don't care which driver is
- * active, they just persist the result.
- *
- * When SMTP credentials are configured later, this default can be replaced
- * in `getEmailDriver()` with a Nodemailer-backed driver that opens a
- * transport pool and pipes the same `SendEmailInput` into it.
- */
 export const logDriver: EmailDriver = {
   name: "log",
   async send(input: SendEmailInput) {
-    // The log driver has no transport — it persists the audit row and returns
-    // success so the UI shows a green check. The `input` reference is kept
-    // here so future logging (e.g. writing to disk for debugging) can read
-    // from it without re-architecting the call signature. For now we just
-    // touch it via `void` to satisfy the unused-vars rule when there is no
-    // log target wired.
     void input;
+    console.log("[logDriver] Pretending to send email to", joinMailboxes(input.to));
     return { ok: true, messageId: randomUUID() };
   },
 };
 
-/**
- * Resolves the active email driver. Currently always returns the log driver;
- * a future PR can read SMTP env vars (e.g. SMTP_HOST/SMTP_PORT/SMTP_USER) and
- * return a real Nodemailer-backed driver here.
- */
 export function getEmailDriver(): EmailDriver {
+  if (process.env.SMTP_HOST && process.env.SMTP_PORT) {
+    const transporter = nodemailer.createTransport({
+      host: process.env.SMTP_HOST,
+      port: Number(process.env.SMTP_PORT),
+      secure: process.env.SMTP_SECURE === "true",
+      auth: process.env.SMTP_USER && process.env.SMTP_PASS ? {
+        user: process.env.SMTP_USER,
+        pass: process.env.SMTP_PASS,
+      } : undefined,
+    });
+    
+    return {
+      name: "smtp",
+      async send(input: SendEmailInput) {
+        try {
+          const info = await transporter.sendMail({
+            from: formatMailbox(input.from),
+            to: joinMailboxes(input.to),
+            cc: input.cc ? joinMailboxes(input.cc) : undefined,
+            subject: input.subject,
+            text: input.bodyText,
+            html: input.bodyHtml,
+            attachments: input.attachments?.map(att => ({
+              filename: att.filename,
+              content: Buffer.from(att.data),
+              contentType: att.contentType,
+            })),
+          });
+          return { ok: true, messageId: (info as any).messageId || randomUUID() };
+        } catch (error) {
+          console.error("SMTP send error:", error);
+          return { ok: false, error: error instanceof Error ? error.message : "Unknown SMTP error" };
+        }
+      }
+    };
+  }
   return logDriver;
 }

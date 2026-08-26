@@ -35,7 +35,7 @@ test("Phase 9 migration preserves Phase 8 data and installs business-local curre
   const now = new Date().toISOString();
   legacy.prepare("INSERT INTO customers (id, name, status, created_at, updated_at) VALUES ('legacy-customer', 'Legacy Customer', 'active', ?, ?)").run(now, now);
   runMigrations(legacy, { label: "Phase 9 migration fixture", migrations: businessMigrations });
-  assert.equal((legacy.prepare("SELECT MAX(version) AS version FROM schema_migrations").get() as { version: number }).version, 14);
+  assert.equal((legacy.prepare("SELECT MAX(version) AS version FROM schema_migrations").get() as { version: number }).version, 16);
   assert.deepEqual(legacy.prepare("SELECT base_currency_code, metadata_source FROM business_currency_settings WHERE id = 'default'").get(), { base_currency_code: "AED", metadata_source: "migration_default" });
   assert.deepEqual(legacy.prepare("SELECT code, minor_unit, is_base FROM currencies ORDER BY code").all(), [
     { code: "AED", minor_unit: 2, is_base: 1 },

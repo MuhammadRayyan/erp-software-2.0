@@ -88,6 +88,14 @@ Fixes "there was a problem deploying the code" / blank sandbox preview, all veri
 - **Overview date-range server preference**: server snapshot seeds the URL on fresh navigation; changes PUT to the preferences API (debounced 600 ms) with localStorage as fast-cache mirror.
 - Styling polish: Filter-button consistency, double-border removal in customer/supplier tables, normalized in-table empty states.
 
+## Manager.io Architecture Refactor
+
+- **Global Math Engine Refactor**: Updated line-level calculations to support Manager.io-style mechanics (dynamic Discount subtractions as percentage/fixed, and complex tax inclusivity splitting via mountsIncludeTax).
+- **Core Form UI Remodel**: Overhauled Sales Invoices, Credit Notes, Purchase Orders, and Purchase Invoices forms to a full-width tabular experience mimicking Manager.io. Added a global Default Tax selector, bottom-left line toggles (showDescription, showLineNumber, showDiscounts), and dynamic amount/tax columns driven by the mountsIncludeTax state.
+- **New Modules (Sales Quotes & Orders)**: Cloned and fully spun up Sales Quotes and Sales Orders modules, including DB schemas, tracking preferences in usinessSettings, NumberKind registrations, and full TS integration.
+- **Enhanced PDF Generation Engine**: Added support for configuring full-width headerImageUrl and ooterImageUrl banners in Template Settings. Modern and Classic PDF layouts now dynamically render Discount and Tax columns if they are utilized on the specific form. Added Sales Quotes and Sales Orders to the PDF service.
+- **Strict Type Safety**: Deep codebase scrub enforcing documentStatus typing (draft | sent | accepted | rejected | cancelled vs issued | closed) and SQL schema exactness across all clones, achieving 0 errors on un run typecheck.
+
 ## Applying this archive to a new branch
 
 1. Unzip into your repository worktree on a new branch.

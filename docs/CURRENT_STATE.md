@@ -15,8 +15,8 @@ This is the compact source of truth for the code that exists now. Historical pha
 
 - Foundation: authentication, business create/switch/rename/archive/delete, memberships and module permissions, responsive app shell, themes, seed data, backup/import, project attachments, and permission-checked file/PDF/XML/CSV routes.
 - Master data/settings: customers and suppliers with legal, tax, registration, electronic-address, registered-address identity fields, and optional default currencies; business-local currency master/rates; realized FX account mappings; Chart of Accounts; accounting mappings; tax codes; document numbering; UAE VAT registration; Electronic Invoicing settings; and a @react-pdf/renderer and Puppeteer-based document-template designer.
-- Sales/AR: base- or foreign-currency draft/posted/void Sales Invoices, same-currency Receipts with base Bank/Cash postings and allocations/reversals, inherited-rate Sales Credit Notes and allocations, multi-currency customer statements, base-carrying AR ageing, PDFs, and source/eInvoice views.
-- Purchases/AP: base- or foreign-currency non-posting Purchase Orders, draft/posted/void Purchase Invoices, same-currency Supplier Payments with base Bank/Cash postings and reversals, multi-currency supplier statements, base-carrying AP ageing, and PDFs.
+- Sales/AR: base- or foreign-currency non-posting Sales Quotes, non-posting Sales Orders, draft/posted/void Sales Invoices, same-currency Receipts with base Bank/Cash postings and allocations/reversals, inherited-rate Sales Credit Notes and allocations, multi-currency customer statements, base-carrying AR ageing, PDFs, and source/eInvoice views.
+- Purchases/AP: base- or foreign-currency non-posting Purchase Orders, draft/posted/void Purchase Invoices, Debit Notes, same-currency Supplier Payments with base Bank/Cash postings and reversals, multi-currency supplier statements, base-carrying AP ageing, and PDFs.
 - Accounting/reporting: base-currency source-generated journal entries/lines, journal drill-down, General Ledger with pre-period opening balances, Trial Balance, bank/cash balance reporting, and mapped Realized FX Gain/Loss. There is no manual journal-entry workflow.
 - Projects: customer-linked projects, numbering/status/dates/budgets/manager, notes/files, header and line tagging, linked operational documents, commitments, payment attribution, and ledger-derived profitability.
 - Inventory: items, locations, Goods Receipts, Delivery Notes, Stock Adjustments/opening balances, movement-derived history, moving-average valuation, Stock on Hand, Inventory Movement, Items to Receive, and Items to Deliver.
@@ -25,6 +25,13 @@ This is the compact source of truth for the code that exists now. Historical pha
 - Outbound UAE Electronic Invoicing: posted Sales Invoices/Credit Notes to a provider-neutral canonical model, versioned PINT-AE UBL XML, official Schematron validation, immutable payload archive/hash, register/detail/status UI, append-only submission history, and a local Mock ASP.
 - Inbound UAE Electronic Invoicing: a purchases inbox and review detail for Mock-received PINT-AE supplier Invoices/Credit Notes, safe XML parsing and official validation, immutable originals/hashes/canonical snapshots/history, hard and likely duplicate controls, server-verified buyer/Supplier identities, deterministic PO/Goods Receipt/line matching, comparison views, and human-reviewed Purchase Invoice Draft creation.
 - Multi-currency foundation: per-business currency master, configurable minor units, one pre-activity base currency, dated Manual/CBUAE-labelled rates, immutable posting snapshots, deterministic base conversion, foreign AR/AP carrying values, realized settlement FX, base-valued inventory/projects/reports/VAT, currency-aware PDFs, and demo USD/EUR workflows. There are no live-rate calls.
+
+
+- **Line Calculations & Tax Inclusivity**: All commercial forms (Invoices, Credit Notes, Purchase Orders, etc.) now support Manager.io-style line-level calculations via the mountsIncludeTax flag, dynamically extracting tax vs adding it on top. Added dynamic percentage and fixed value Discount applications at the line level.
+- **Form UI Redesign**: Transitioned core modules (Sales Quotes, Sales Orders, Sales Invoices, Sales Credit Notes, Purchase Orders, Purchase Invoices) to a unified, full-width spreadsheet-like UI. Incorporates global Default Tax dropdowns, context-sensitive Amount/Tax column visibilities, and toggles for showLineNumber, showDescription, and showDiscounts. 
+- **Module Expansion**: Sales Quotes and Sales Orders exist as distinct domains with draft | sent | accepted | rejected | cancelled lifecycles and dedicated NumberKind prefixes/counters via the usinessSettings table.
+- **PDF Configuration**: React-PDF configurations track headerImageUrl and ooterImageUrl uploads. Core generic templates (classic and modern) parse document lines and inject Discount and Tax columns perfectly mapped back to the DB discountValue, discountType, and 	axCodeId references when requested.
+- **Code Health**: Stronger adherence to strict typing inside queries/routes, removing unneeded raw SQL string injections, resolving cross-module inconsistencies.
 
 ## Important domain rules
 
@@ -166,3 +173,9 @@ Last verified on 24 August 2026 (review round 7 + v2.1.0 packaging): explicit mi
 - Electronic Invoicing has no real ASP adapter, direct FTA/Corner-5/TDD call, credential/certificate/key management, endpoint discovery, webhooks, background retry policy, self-billing, B2C eReceipts, automatic AP posting, or broader PINT-AE FX scenarios. Mock acceptance/receipt is never government acceptance or production network receipt.
 - Inbound Credit Notes are validated, archived, identity-matched, and reviewable but cannot create a Purchase Credit Note because that accounting document does not exist. The current Purchase Invoice model also cannot represent source-level allowances/charges or a payable amount different from the invoice total, so those documents remain in review. Prior-invoiced comparison uses deterministic linked-PO line position because Purchase Invoice lines have no PO-line foreign key.
 - There are no queues, Redis, PostgreSQL, microservices, GraphQL/NestJS backend, production deployment, or production observability.
+
+## Manager.io Architecture Refactor (Latest Updates)
+- Implemented unified Manager.io-inspired UX and calculation engine for Document Forms (Sales Quotes, Sales Orders, Sales Invoices, Purchase Orders, Purchase Invoices, Credit Notes, Debit Notes).
+- Upgraded Drizzle DB Schema to support Sales Quotes, Sales Orders, Debit Notes, and fully integrated them into the accounting posting systems.
+- Standardized line items layout with hidden/visible columns (Description, Account, Discount) and Amounts Are Tax Inclusive global form checkboxes.
+- Verified type-safety across forms and core calculation engine, extending the test suite to validate phase-10 new features.

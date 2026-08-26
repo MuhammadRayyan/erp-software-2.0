@@ -1,3 +1,4 @@
+import { SettingsShell } from "@/components/settings-shell";
 import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
 import { requireModule } from "@/core/permissions/require-module";
@@ -16,10 +17,8 @@ export default async function TaxCodesPage({ params }: { params: Promise<{ busin
     (account) => account.isActive && account.type === "asset",
   );
   return (
-    <div className="page-container">
-      <Link href={`/b/${businessId}/settings`} className="mb-5 inline-flex items-center gap-1.5 text-[13px] text-muted-foreground hover:text-foreground"><ArrowLeft className="size-4" /> Settings</Link>
-      <div className="page-header"><div><h1 className="page-title">Tax Codes</h1><p className="page-description">Explicit direction, VAT category, recoverability, and isolated control-account mappings.</p></div></div>
+    <SettingsShell businessId={businessId} title="Tax Codes" description="Explicit direction, VAT category, recoverability, and isolated control-account mappings.">
       <TaxCodeManager businessId={businessId} taxCodes={taxCodes} liabilityAccounts={liabilityAccounts} assetAccounts={assetAccounts} />
-    </div>
+    </SettingsShell>
   );
 }

@@ -113,7 +113,7 @@ export function saveCreditNote(businessId: string, userId: string, input: Credit
   }
   const rate = storedRateSnapshot(context.sqlite, invoice);
   validateProjectReferences(context.sqlite, { headerProjectId: data.projectId, lineProjectIds: data.lines.map((line) => line.projectId), customerId: data.customerId, customerFacing: true });
-  const lines = calculateLines(context.sqlite, data.lines, rate.currencyMinorUnit, { accountTypeFilter: "income", taxDirection: "sales", supportItems: false, accountFieldOnLine: "salesAccountId" });
+  const lines = calculateLines(context.sqlite, data.lines, rate.currencyMinorUnit, { accountTypeFilter: "income", taxDirection: "sales", supportItems: false, accountFieldOnLine: "salesAccountId", amountsIncludeTax: data.amountsIncludeTax });
   const amounts = totalsForLines(lines);
   const available = remainingInvoiceBalance(context.sqlite, invoice.id, noteId);
   if (amounts.totalMinor > available) throw new Error("Credit note cannot exceed the remaining invoice balance.");

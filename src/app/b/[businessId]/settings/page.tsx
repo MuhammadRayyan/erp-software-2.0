@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { ArrowRight, Coins, FileText, LayoutGrid, ListOrdered, ListPlus, Percent, ReceiptText, Send, ShieldCheck } from "lucide-react";
+import { ArrowRight, Coins, FileText, LayoutGrid, ListOrdered, ListPlus, Percent, ReceiptText, Send, ShieldCheck, FileInput } from "lucide-react";
 import { requireModule } from "@/core/permissions/require-module";
 
 export default async function SettingsPage({ params }: { params: Promise<{ businessId: string }> }) {
@@ -11,6 +11,7 @@ export default async function SettingsPage({ params }: { params: Promise<{ busin
     { title: "Currencies & exchange rates", description: "Base currency, minor units, dated rates, and realized FX account mappings.", href: `/b/${businessId}/settings/currencies`, icon: Coins },
     { title: "UAE VAT settings", description: "Registration, TRN, effective dates, default Emirate, and the current tax lock.", href: `/b/${businessId}/settings/tax`, icon: ReceiptText },
     { title: "Electronic Invoicing", description: "PINT-AE readiness, seller identity, specification version, and Mock ASP settings.", href: `/b/${businessId}/settings/einvoicing`, icon: Send },
+    { title: "Form defaults", description: "Configure default fields and layouts for new documents.", href: `/b/${businessId}/settings/form-defaults`, icon: FileInput },
     { title: "Tax codes", description: "Maintain output VAT and recoverable Input VAT mappings.", href: `/b/${businessId}/settings/tax-codes`, icon: Percent },
     { title: "Custom Fields", description: "Add extra fields to customers, suppliers, and sales invoices.", href: `/b/${businessId}/settings/custom-fields`, icon: ListPlus },
     { title: "Display preferences", description: "Per-account column and KPI card toggles synced across devices. Reset to defaults.", href: `/b/${businessId}/settings/preferences`, icon: LayoutGrid },

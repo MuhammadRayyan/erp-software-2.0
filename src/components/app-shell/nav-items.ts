@@ -31,7 +31,10 @@ export const primaryNav: { label?: string; items: NavItem[] }[] = [
     label: "Sales",
     items: [
       { label: "Customers", path: "/customers", icon: ContactRound, module: "sales" },
+      { label: "Quotes", path: "/sales/quotes", icon: FileText, module: "sales" },
+      { label: "Orders", path: "/sales/orders", icon: ShoppingCart, module: "sales" },
       { label: "Invoices", path: "/sales/invoices", icon: ReceiptText, module: "sales" },
+      { label: "Credit Notes", path: "/sales/credit-notes", icon: ReceiptText, module: "sales" },
       { label: "Electronic Invoices", path: "/einvoicing", icon: FileCode2, module: "sales" },
       { label: "Sent Emails", path: "/emails", icon: Mail, module: "sales" },
     ],

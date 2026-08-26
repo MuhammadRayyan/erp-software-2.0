@@ -7,11 +7,13 @@ import {
   moneySchema,
   projectIdField,
   quantitySchema,
-} from "@/core/validation/document-schemas";
+amountsIncludeTaxSchema, discountTypeSchema, discountValueSchema } from "@/core/validation/document-schemas";
 
 export const creditNoteLineSchema = z.object({
   description: z.string().trim().min(1, "Enter a description").max(300),
   quantity: quantitySchema,
+  discountType: discountTypeSchema,
+  discountValue: discountValueSchema,
   unitPrice: moneySchema,
   salesAccountId: z.string().min(1, "Choose a sales account"),
   taxCodeId: z.string().min(1, "Choose a tax code"),
@@ -23,6 +25,7 @@ export const creditNoteInputSchema = z.object({
   customerId: z.string().uuid("Choose a customer"),
   projectId: projectIdField,
   sourceInvoiceId: z.string().uuid("Choose a posted invoice"),
+  amountsIncludeTax: amountsIncludeTaxSchema,
   date: z.iso.date("Enter a valid credit note date"),
   taxDate: z.union([z.literal(""), z.iso.date("Enter a valid VAT tax date")]).optional().default(""),
   supplyEmirate: z.union([z.literal(""), z.enum(emirates)]).optional().default(""),

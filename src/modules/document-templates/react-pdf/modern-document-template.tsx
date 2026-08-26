@@ -15,6 +15,8 @@ export interface DocumentTemplateData {
     quantity: string;
     unitPrice: string;
     amount: string;
+    discount?: string;
+    tax?: string;
   }>;
   subtotal: string;
   tax: string;
@@ -45,6 +47,7 @@ export function ModernDocumentTemplate({ data, settings, variant }: { data: Docu
   return (
     <Document>
       <Page size="A4" style={[styles.page, { fontFamily: settings.fontName }]}>
+        {settings.headerImageUrl && <Image src={settings.headerImageUrl} style={{ width: "100%", height: "auto", marginBottom: 20 }} />}
         <View style={styles.header}>
           <View>
             {/* eslint-disable-next-line jsx-a11y/alt-text */}
@@ -69,22 +72,32 @@ export function ModernDocumentTemplate({ data, settings, variant }: { data: Docu
           )}
         </View>
 
-        <View style={styles.table}>
-          <View style={styles.tableHeaderRow}>
-            <Text style={[styles.tableCell, { flex: 3, fontWeight: "heavy" }]}>Description</Text>
-            <Text style={[styles.tableCell, { flex: 1, textAlign: "right", fontWeight: "heavy" }]}>Qty</Text>
-            <Text style={[styles.tableCell, { flex: 1, textAlign: "right", fontWeight: "heavy" }]}>Rate</Text>
-            <Text style={[styles.tableCell, { flex: 1, textAlign: "right", fontWeight: "heavy" }]}>Amount</Text>
-          </View>
-          {data.lines.map((line, i) => (
-            <View key={i} style={styles.tableRow} wrap={false}>
-              <Text style={[styles.tableCell, { flex: 3 }]}>{line.description}</Text>
-              <Text style={[styles.tableCell, { flex: 1, textAlign: "right" }]}>{line.quantity}</Text>
-              <Text style={[styles.tableCell, { flex: 1, textAlign: "right" }]}>{line.unitPrice}</Text>
-              <Text style={[styles.tableCell, { flex: 1, textAlign: "right" }]}>{line.amount}</Text>
-            </View>
-          ))}
-        </View>
+          {(() => {
+            const hasDiscount = data.lines.some(l => l.discount);
+            const hasTax = data.lines.some(l => l.tax);
+            return (
+              <View style={styles.table}>
+                <View style={styles.tableHeaderRow}>
+                  <Text style={[styles.tableCell, { flex: 3, fontWeight: "heavy" }]}>Description</Text>
+                  <Text style={[styles.tableCell, { flex: 1, textAlign: "right", fontWeight: "heavy" }]}>Qty</Text>
+                  <Text style={[styles.tableCell, { flex: 1, textAlign: "right", fontWeight: "heavy" }]}>Rate</Text>
+                  {hasDiscount && <Text style={[styles.tableCell, { flex: 1, textAlign: "right", fontWeight: "heavy" }]}>Discount</Text>}
+                  {hasTax && <Text style={[styles.tableCell, { flex: 1, textAlign: "right", fontWeight: "heavy" }]}>Tax</Text>}
+                  <Text style={[styles.tableCell, { flex: 1, textAlign: "right", fontWeight: "heavy" }]}>Amount</Text>
+                </View>
+                {data.lines.map((line, i) => (
+                  <View key={i} style={styles.tableRow} wrap={false}>
+                    <Text style={[styles.tableCell, { flex: 3 }]}>{line.description}</Text>
+                    <Text style={[styles.tableCell, { flex: 1, textAlign: "right" }]}>{line.quantity}</Text>
+                    <Text style={[styles.tableCell, { flex: 1, textAlign: "right" }]}>{line.unitPrice}</Text>
+                    {hasDiscount && <Text style={[styles.tableCell, { flex: 1, textAlign: "right" }]}>{line.discount || "-"}</Text>}
+                    {hasTax && <Text style={[styles.tableCell, { flex: 1, textAlign: "right" }]}>{line.tax || "-"}</Text>}
+                    <Text style={[styles.tableCell, { flex: 1, textAlign: "right" }]}>{line.amount}</Text>
+                  </View>
+                ))}
+              </View>
+            );
+          })()}
 
         <View style={styles.totals}>
           <View style={styles.totalsRow}>

@@ -52,3 +52,8 @@ export const itemIdField = z
   .union([z.literal(""), z.string().uuid("Choose a valid inventory item")])
   .optional()
   .default("");
+
+export const amountsIncludeTaxSchema = z.boolean().default(false);
+
+export const discountTypeSchema = z.enum(["none", "percentage", "fixed"]).default("none");
+export const discountValueSchema = z.string().trim().default("0");

@@ -2,7 +2,9 @@ import { z } from "zod";
 
 export const templateSettingsSchema = z.object({
   templateType: z.enum(["modern", "classic", "custom-html"]).default("modern"),
-  logoUrl: z.string().url().nullable().optional(),
+  logoUrl: z.string().nullable().optional(),
+  headerImageUrl: z.string().nullable().optional(),
+  footerImageUrl: z.string().nullable().optional(),
   primaryColor: z.string().regex(/^#[0-9a-fA-F]{6}$/).default("#356fd0"),
   fontName: z.enum(["Inter", "Roboto", "Open Sans", "Lato"]).default("Inter"),
   headerText: z.string().max(200).optional().default(""),
@@ -20,6 +22,8 @@ export type TemplateSettings = z.infer<typeof templateSettingsSchema>;
 export const defaultSettings: TemplateSettings = {
   templateType: "modern",
   logoUrl: null,
+  headerImageUrl: null,
+  footerImageUrl: null,
   primaryColor: "#356fd0",
   fontName: "Inter",
   headerText: "",

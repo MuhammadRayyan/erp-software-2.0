@@ -289,3 +289,20 @@ All 10 tasks from `PHASE_3_STANDARDIZATION.md` have been completed. These are de
 - Added `Content-Security-Policy: "default-src 'none'; sandbox"` to the outbound eInvoice XML route (`src/app/api/businesses/[businessId]/einvoicing/[documentId]/xml/route.ts`).
 - Added regression guard tests: `selectClass` elimination, CSP header consistency, `requireApiAuth` coverage, and `runtime = "nodejs"` declarations.
 - Updated `docs/CURRENT_STATE.md`: migration range 0-12, headline through Phase 3, Migration 12 description, last-verified text.
+
+## Manager.io Architecture Refactor & Module Expansion
+
+### Added
+- **Sales Quotes** (src/modules/sales-quotes): Added complete module logic, UI, API routing, and DB schema modeling.
+- **Sales Orders** (src/modules/sales-orders): Added complete module logic, UI, API routing, and DB schema modeling.
+- **Form Columns**: Added mountsIncludeTax at the header level and discountType, discountValue at the line level.
+- **PDF Configuration**: Image upload support for headerImageUrl and ooterImageUrl.
+- **Navigation**: Inserted Sales Quotes, Orders, and Credit Notes directly into the main sidebar.
+
+### Changed
+- **Form UI Redesign**: Sales Invoices, Credit Notes, Purchase Orders, and Purchase Invoices are now full-width arrays with advanced bottom-left toggles and inline dynamic calculation states.
+- **Math Engine**: Deeply updated calculations/document-line-calculator.ts and money.ts to seamlessly manage Manager.io-inspired subtractive discounts and inclusive tax splits.
+- **PDF Engine**: The template mapper conditionally renders Discount and Tax columns when applicable values are supplied by lines.
+- **Database Schema**: Unified tracking of Numbering parameters for quotes and orders inside the usinessSettings table. Standardized documentStatus values (sent, ccepted, 
+ejected).
+- **Code Health**: Executed massive search-and-replace to strip raw SQL artifacts stemming from previous duplications. un run typecheck produces 0 errors.

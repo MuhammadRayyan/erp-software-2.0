@@ -1,9 +1,8 @@
-import Link from "next/link";
-import { ArrowLeft } from "lucide-react";
 import { getCurrentSession } from "@/core/auth/session";
 import { requireModule } from "@/core/permissions/require-module";
 import { listPreferences } from "@/modules/preferences/preference-service";
 import { PreferencesResetCard } from "@/modules/preferences/preferences-reset-card";
+import { SettingsShell } from "@/components/settings-shell";
 
 export const metadata = { title: "Display preferences" };
 
@@ -13,7 +12,7 @@ export const metadata = { title: "Display preferences" };
  * destructive "Reset to defaults" affordance — useful when a user wants
  * to start fresh after experimenting with column toggles.
  *
- * Re-uses the existing `page-container` shell from the
+ * Re-uses the existing \`page-container\` shell from the
  * other settings sub-pages so the visual language stays consistent.
  */
 export default async function PreferencesSettingsPage({ params }: { params: Promise<{ businessId: string }> }) {
@@ -37,17 +36,7 @@ export default async function PreferencesSettingsPage({ params }: { params: Prom
   });
 
   return (
-    <div className="page-container">
-      <Link href={`/b/${businessId}/settings`} className="mb-5 inline-flex items-center gap-1.5 text-[13px] text-muted-foreground hover:text-foreground">
-        <ArrowLeft className="size-4" /> Settings
-      </Link>
-      <div className="page-header">
-        <div>
-          <h1 className="page-title">Display preferences</h1>
-          <p className="page-description">Per-account UI state synced across devices for this business (column toggles, KPI cards).</p>
-        </div>
-      </div>
-
+    <SettingsShell businessId={businessId} title="Display preferences" description="Per-account UI state synced across devices for this business (column toggles, KPI cards).">
       <PreferencesResetCard businessId={businessId} count={entries.length} />
 
       <section aria-label="Stored preference keys" className="mt-6">
@@ -84,6 +73,6 @@ export default async function PreferencesSettingsPage({ params }: { params: Prom
           </ul>
         )}
       </section>
-    </div>
+    </SettingsShell>
   );
 }

@@ -1,3 +1,4 @@
+import { SettingsShell } from "@/components/settings-shell";
 import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
 import { requireModule } from "@/core/permissions/require-module";
@@ -9,9 +10,7 @@ export default async function NumberingPage({ params }: { params: Promise<{ busi
   const { user } = await requireModule(businessId, "settings");
   const settings = getAccountingSettings(businessId, user.id);
   return (
-    <div className="page-container">
-      <Link href={`/b/${businessId}/settings`} className="mb-5 inline-flex items-center gap-1.5 text-[13px] text-muted-foreground hover:text-foreground"><ArrowLeft className="size-4" /> Settings</Link>
-      <div className="page-header"><div><h1 className="page-title">Numbering</h1><p className="page-description">Business-specific document numbering controlled on the server.</p></div></div>
+    <SettingsShell businessId={businessId} title="Numbering" description="Business-specific document numbering controlled on the server.">
       <NumberingForm businessId={businessId} initial={{
         prefix: settings.invoicePrefix,
         nextNumber: settings.invoiceNextNumber,
@@ -43,6 +42,6 @@ export default async function NumberingPage({ params }: { params: Promise<{ busi
         bankTransferNextNumber: settings.bankTransferNextNumber,
         bankTransferPadding: settings.bankTransferPadding,
       }} />
-    </div>
+    </SettingsShell>
   );
 }

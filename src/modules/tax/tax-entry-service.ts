@@ -20,7 +20,7 @@ export type TaxPostingLine = {
 };
 
 type TaxDocument = {
-  sourceType: "sales_invoice" | "sales_credit_note" | "purchase_invoice" | "bank_transaction";
+  sourceType: "sales_invoice" | "sales_credit_note" | "purchase_invoice" | "debit_note" | "bank_transaction";
   sourceId: string;
   sourceNumber: string;
   partyName?: string | null;

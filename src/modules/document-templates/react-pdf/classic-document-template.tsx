@@ -9,6 +9,7 @@ export function ClassicDocumentTemplate({ data, settings, variant }: { data: Doc
   return (
     <Document>
       <Page size="A4" style={[styles.page, { fontFamily: settings.fontName }]}>
+        {settings.headerImageUrl && <Image src={settings.headerImageUrl} style={{ width: "100%", height: "auto", marginBottom: 20 }} />}
         <View style={styles.header}>
           <View style={{ flex: 1 }}>
             {/* eslint-disable-next-line jsx-a11y/alt-text */}
@@ -46,12 +47,17 @@ export function ClassicDocumentTemplate({ data, settings, variant }: { data: Doc
           )}
         </View>
 
-        {data.lines.length > 0 && (
+        {data.lines.length > 0 && (() => {
+          const hasDiscount = data.lines.some(l => l.discount);
+          const hasTax = data.lines.some(l => l.tax);
+          return (
           <View style={styles.table}>
             <View style={styles.tableHeaderRow}>
               <Text style={[styles.tableCell, { flex: 3, fontWeight: "heavy" }]}>Description</Text>
               <Text style={[styles.tableCell, { flex: 1, textAlign: "right", fontWeight: "heavy" }]}>Qty</Text>
               <Text style={[styles.tableCell, { flex: 1, textAlign: "right", fontWeight: "heavy" }]}>Rate</Text>
+              {hasDiscount && <Text style={[styles.tableCell, { flex: 1, textAlign: "right", fontWeight: "heavy" }]}>Discount</Text>}
+              {hasTax && <Text style={[styles.tableCell, { flex: 1, textAlign: "right", fontWeight: "heavy" }]}>Tax</Text>}
               <Text style={[styles.tableCell, { flex: 1, textAlign: "right", fontWeight: "heavy" }]}>Amount</Text>
             </View>
             {data.lines.map((line, i) => (
@@ -59,11 +65,13 @@ export function ClassicDocumentTemplate({ data, settings, variant }: { data: Doc
                 <Text style={[styles.tableCell, { flex: 3 }]}>{line.description}</Text>
                 <Text style={[styles.tableCell, { flex: 1, textAlign: "right" }]}>{line.quantity}</Text>
                 <Text style={[styles.tableCell, { flex: 1, textAlign: "right" }]}>{line.unitPrice}</Text>
+                {hasDiscount && <Text style={[styles.tableCell, { flex: 1, textAlign: "right" }]}>{line.discount || "-"}</Text>}
+                {hasTax && <Text style={[styles.tableCell, { flex: 1, textAlign: "right" }]}>{line.tax || "-"}</Text>}
                 <Text style={[styles.tableCell, { flex: 1, textAlign: "right" }]}>{line.amount}</Text>
               </View>
             ))}
           </View>
-        )}
+        )})()}
 
         <View style={styles.totals}>
           <View style={[styles.boxedDetails, { minWidth: 250, padding: 0 }]}>

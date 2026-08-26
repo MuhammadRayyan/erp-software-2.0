@@ -4,6 +4,8 @@ import type { ModuleKey } from "./module-access";
 const documentModules = {
   "sales-invoice": "sales",
   "sales-credit-note": "sales",
+  "sales-quote": "sales",
+  "sales-order": "sales",
   "delivery-note": "inventory",
   "purchase-order": "purchases",
   "purchase-invoice": "purchases",

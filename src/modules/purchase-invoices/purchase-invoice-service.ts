@@ -496,7 +496,7 @@ export function savePurchaseInvoice(
     if (!order || order.supplier_id !== data.supplierId) throw new Error("Choose a purchase order for the selected supplier.");
     if (order.status === "cancelled") throw new Error("A cancelled purchase order cannot be billed.");
   }
-  const lines = calculateLines(context.sqlite, data.lines, rate.currencyMinorUnit, { accountTypeFilter: "expense", taxDirection: "purchases", supportItems: true, accountFieldOnLine: "expenseAccountId" });
+  const lines = calculateLines(context.sqlite, data.lines, rate.currencyMinorUnit, { accountTypeFilter: "expense", taxDirection: "purchases", supportItems: true, accountFieldOnLine: "expenseAccountId", amountsIncludeTax: data.amountsIncludeTax });
   const amounts = totalsForLines(lines);
   const base = convertDocumentLinesToBase(lines, rate);
   const now = new Date().toISOString();

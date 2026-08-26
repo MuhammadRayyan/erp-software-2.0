@@ -1,8 +1,7 @@
-import Link from "next/link";
-import { ArrowLeft } from "lucide-react";
 import { requireModule } from "@/core/permissions/require-module";
 import { TemplateEditor } from "@/modules/document-templates/template-editor";
 import { getTemplateSettings } from "@/modules/document-templates/template-service";
+import { SettingsShell } from "@/components/settings-shell";
 
 export default async function DocumentTemplatesPage({ params }: { params: Promise<{ businessId: string }> }) {
   const { businessId } = await params;
@@ -15,17 +14,8 @@ export default async function DocumentTemplatesPage({ params }: { params: Promis
   const settings = getTemplateSettings(businessId, user.id, "sales-invoice");
   
   return (
-    <div className="page-container">
-      <Link href={`/b/${businessId}/settings`} className="mb-5 inline-flex items-center gap-1.5 text-[13px] text-muted-foreground hover:text-foreground">
-        <ArrowLeft className="size-4" /> Settings
-      </Link>
-      <div className="page-header">
-        <div>
-          <h1 className="page-title">Invoice Template</h1>
-          <p className="page-description">Customize the appearance of your sales invoice PDFs.</p>
-        </div>
-      </div>
+    <SettingsShell businessId={businessId} title="Invoice Template" description="Customize the appearance of your sales invoice PDFs.">
       <TemplateEditor businessId={businessId} initialSettings={settings} />
-    </div>
+    </SettingsShell>
   );
 }

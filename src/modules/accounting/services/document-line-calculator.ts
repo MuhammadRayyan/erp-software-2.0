@@ -1,6 +1,6 @@
 import type { BaseStoredLine } from "@/modules/documents/document-types";
 
-import { addMinor, calculateTax, multiplyMoneyByQuantity, parseQuantityToMicros } from "@/modules/accounting/calculations/money";
+import { addMinor, calculateTax, multiplyMoneyByQuantity, parseQuantityToMicros, splitTaxInclusive, calculateDiscount } from "@/modules/accounting/calculations/money";
 import { parseCurrencyAmountToMinor } from "@/modules/currency/conversion";
 import { randomUUID } from "node:crypto";
 
@@ -10,6 +10,8 @@ export type StoredLine = BaseStoredLine & {
   description: string;
   quantityMicros: number;
   unitPriceMinor: number;
+  discountType: "none" | "percentage" | "fixed";
+  discountValue: string;
   salesAccountId: string;
   expenseAccountId: string;
   taxCodeId: string;
@@ -25,6 +27,7 @@ type Config = {
   taxDirection: "sales" | "purchases";
   supportItems: boolean;
   accountFieldOnLine: "salesAccountId" | "expenseAccountId";
+  amountsIncludeTax: boolean;
 };
 
 export function calculateLines(
@@ -66,8 +69,35 @@ export function calculateLines(
 
     const quantityMicros = parseQuantityToMicros(line.quantity);
     const unitPriceMinor = parseCurrencyAmountToMinor(line.unitPrice, minorUnit, "Unit price");
-    const netAmountMinor = multiplyMoneyByQuantity(unitPriceMinor, quantityMicros);
-    const taxAmountMinor = calculateTax(netAmountMinor, taxCode.rate_basis_points);
+    
+    // Calculate un-discounted line total based on price * qty
+    const lineTotalMinor = multiplyMoneyByQuantity(unitPriceMinor, quantityMicros);
+    
+    // Apply discount
+    const discountMinor = calculateDiscount(lineTotalMinor, line.discountType || "none", line.discountValue || "0", minorUnit);
+    const discountedTotalMinor = lineTotalMinor - discountMinor;
+
+    let netAmountMinor = 0;
+    let taxAmountMinor = 0;
+    let grossAmountMinor = 0;
+
+    if (config.amountsIncludeTax) {
+      // The discounted total is the GROSS amount
+      grossAmountMinor = discountedTotalMinor;
+      if (taxCode.vat_category === "reverse_charge") {
+        netAmountMinor = grossAmountMinor;
+        taxAmountMinor = 0; // Reverse charge does not add to gross, but in inclusive, gross is net
+      } else {
+        const split = splitTaxInclusive(grossAmountMinor, taxCode.rate_basis_points);
+        netAmountMinor = split.netMinor;
+        taxAmountMinor = split.taxMinor;
+      }
+    } else {
+      // The discounted total is the NET amount
+      netAmountMinor = discountedTotalMinor;
+      taxAmountMinor = calculateTax(netAmountMinor, taxCode.rate_basis_points);
+      grossAmountMinor = taxCode.vat_category === "reverse_charge" ? netAmountMinor : addMinor([netAmountMinor, taxAmountMinor]);
+    }
 
     return {
       id: randomUUID(),
@@ -75,13 +105,15 @@ export function calculateLines(
       description: line.description,
       quantityMicros,
       unitPriceMinor,
+      discountType: line.discountType || "none",
+      discountValue: line.discountValue || "0",
       salesAccountId: accountId,
       expenseAccountId: accountId,
       taxCodeId: line.taxCodeId,
       projectId: line.projectId || null,
       netAmountMinor,
       taxAmountMinor,
-      grossAmountMinor: taxCode.vat_category === "reverse_charge" ? netAmountMinor : addMinor([netAmountMinor, taxAmountMinor]),
+      grossAmountMinor,
       lineIndex: position,
     };
   });

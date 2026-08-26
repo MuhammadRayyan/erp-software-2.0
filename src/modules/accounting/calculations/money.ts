@@ -92,6 +92,33 @@ export function addMinor(values: number[]) {
   return toSafeNumber(total, "Total");
 }
 
+export function calculateDiscount(
+  amountMinor: number,
+  discountType: "none" | "percentage" | "fixed",
+  discountValue: string,
+  minorUnit: number
+) {
+  if (discountType === "none") return 0;
+  if (discountType === "fixed") {
+    const parsed = parseScaledDecimal(discountValue, minorUnit, "Discount amount");
+    const minor = toSafeNumber(parsed, "Discount amount");
+    return Math.min(minor, amountMinor); // Cannot discount more than the amount
+  }
+  if (discountType === "percentage") {
+    const percent = parseFloat(discountValue);
+    if (isNaN(percent) || percent < 0 || percent > 100) {
+      throw new Error("Invalid discount percentage.");
+    }
+    const percentScale = 10_000n; // 100.00%
+    const rateBasisPoints = BigInt(Math.round(percent * 100));
+    return toSafeNumber(
+      divideAndRound(BigInt(amountMinor) * rateBasisPoints, percentScale),
+      "Discount amount"
+    );
+  }
+  return 0;
+}
+
 export function rateBasisPointsToPercent(rateBasisPoints: number) {
   const value = rateBasisPoints / Number(MONEY_SCALE);
   return Number.isInteger(value) ? String(value) : value.toFixed(2).replace(/0+$/, "");

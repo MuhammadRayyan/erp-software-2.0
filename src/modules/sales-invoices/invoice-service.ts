@@ -445,7 +445,7 @@ export function createInvoice(
     enforceVatPolicy: true,
   });
   validateProjectReferences(context.sqlite, { headerProjectId: data.projectId, lineProjectIds: data.lines.map((line) => line.projectId), customerId: data.customerId, customerFacing: true });
-  const lines = calculateLines(context.sqlite, data.lines, rate.currencyMinorUnit, { accountTypeFilter: "income", taxDirection: "sales", supportItems: true, accountFieldOnLine: "salesAccountId" });
+  const lines = calculateLines(context.sqlite, data.lines, rate.currencyMinorUnit, { accountTypeFilter: "income", taxDirection: "sales", supportItems: true, accountFieldOnLine: "salesAccountId", amountsIncludeTax: data.amountsIncludeTax });
   const totals = totalsForLines(lines);
   const base = convertDocumentLinesToBase(lines, rate);
   const id = randomUUID();
@@ -558,7 +558,7 @@ export function updateInvoice(
   if (allocatedMinor > 0 && current.customerId !== data.customerId) {
     throw new Error("Cannot change the customer after receipts have been allocated.");
   }
-  const lines = calculateLines(context.sqlite, data.lines, rate.currencyMinorUnit, { accountTypeFilter: "income", taxDirection: "sales", supportItems: true, accountFieldOnLine: "salesAccountId" });
+  const lines = calculateLines(context.sqlite, data.lines, rate.currencyMinorUnit, { accountTypeFilter: "income", taxDirection: "sales", supportItems: true, accountFieldOnLine: "salesAccountId", amountsIncludeTax: data.amountsIncludeTax });
   const totals = totalsForLines(lines);
   const base = convertDocumentLinesToBase(lines, rate);
   if (totals.totalMinor < allocatedMinor) {

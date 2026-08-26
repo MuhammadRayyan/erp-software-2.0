@@ -166,6 +166,12 @@ export const accountingSettings = sqliteTable("business_accounting_settings", {
   purchaseInvoiceNextNumber: integer("purchase_invoice_next_number").notNull(),
   supplierPaymentPrefix: text("supplier_payment_prefix").notNull(),
   supplierPaymentNextNumber: integer("supplier_payment_next_number").notNull(),
+  salesQuotePrefix: text("sales_quote_prefix").notNull().default("SQ-"),
+  salesQuoteNextNumber: integer("sales_quote_next_number").notNull().default(1),
+  salesQuotePadding: integer("sales_quote_padding").notNull().default(4),
+  salesOrderPrefix: text("sales_order_prefix").notNull().default("SO-"),
+  salesOrderNextNumber: integer("sales_order_next_number").notNull().default(1),
+  salesOrderPadding: integer("sales_order_padding").notNull().default(4),
   projectPrefix: text("project_prefix").notNull().default("PRJ-"),
   projectNextNumber: integer("project_next_number").notNull().default(1),
   projectPadding: integer("project_padding").notNull().default(4),
@@ -344,7 +350,9 @@ export const salesInvoices = sqliteTable(
     updatedAt: text("updated_at").notNull(),
     postedAt: text("posted_at"),
     voidedAt: text("voided_at"),
-  },
+  
+    amountsIncludeTax: integer("amounts_include_tax", { mode: "boolean" }).notNull().default(false),
+    salesOrderId: text("sales_order_id"),},
   (table) => [
     uniqueIndex("sales_invoice_number_idx").on(table.invoiceNumber),
     index("sales_invoice_customer_idx").on(table.customerId),
@@ -374,7 +382,9 @@ export const salesInvoiceLines = sqliteTable(
     taxAmountMinor: integer("tax_amount_minor").notNull(),
     grossAmountMinor: integer("gross_amount_minor").notNull(),
     position: integer("position").notNull(),
-  },
+  
+    discountType: text("discount_type", { enum: ["none", "percentage", "fixed"] }).notNull().default("none"),
+    discountValue: text("discount_value").notNull().default("0"),},
   (table) => [
     index("sales_invoice_lines_invoice_idx").on(table.invoiceId),
     index("sales_invoice_lines_project_idx").on(table.projectId),
@@ -522,7 +532,8 @@ export const purchaseOrders = sqliteTable(
     issuedAt: text("issued_at"),
     closedAt: text("closed_at"),
     cancelledAt: text("cancelled_at"),
-  },
+  
+    amountsIncludeTax: integer("amounts_include_tax", { mode: "boolean" }).notNull().default(false),},
   (table) => [
     uniqueIndex("purchase_order_number_idx").on(table.orderNumber),
     index("purchase_order_supplier_idx").on(table.supplierId),
@@ -546,7 +557,9 @@ export const purchaseOrderLines = sqliteTable(
     taxAmountMinor: integer("tax_amount_minor").notNull(),
     grossAmountMinor: integer("gross_amount_minor").notNull(),
     position: integer("position").notNull(),
-  },
+  
+    discountType: text("discount_type", { enum: ["none", "percentage", "fixed"] }).notNull().default("none"),
+    discountValue: text("discount_value").notNull().default("0"),},
   (table) => [
     index("purchase_order_lines_order_idx").on(table.purchaseOrderId),
     index("purchase_order_lines_project_idx").on(table.projectId),
@@ -584,7 +597,8 @@ export const purchaseInvoices = sqliteTable(
     postedAt: text("posted_at"),
     voidedAt: text("voided_at"),
     inboundEInvoiceDocumentId: text("inbound_einvoice_document_id"),
-  },
+  
+    amountsIncludeTax: integer("amounts_include_tax", { mode: "boolean" }).notNull().default(false),},
   (table) => [
     uniqueIndex("purchase_invoice_number_idx").on(table.internalNumber),
     index("purchase_invoice_supplier_idx").on(table.supplierId),
@@ -611,7 +625,9 @@ export const purchaseInvoiceLines = sqliteTable(
     taxAmountMinor: integer("tax_amount_minor").notNull(),
     grossAmountMinor: integer("gross_amount_minor").notNull(),
     position: integer("position").notNull(),
-  },
+  
+    discountType: text("discount_type", { enum: ["none", "percentage", "fixed"] }).notNull().default("none"),
+    discountValue: text("discount_value").notNull().default("0"),},
   (table) => [
     index("purchase_invoice_lines_invoice_idx").on(table.purchaseInvoiceId),
     index("purchase_invoice_lines_project_idx").on(table.projectId),
@@ -703,7 +719,8 @@ export const salesCreditNotes = sqliteTable(
     updatedAt: text("updated_at").notNull(),
     postedAt: text("posted_at"),
     voidedAt: text("voided_at"),
-  },
+  
+    amountsIncludeTax: integer("amounts_include_tax", { mode: "boolean" }).notNull().default(false),},
   (table) => [
     uniqueIndex("sales_credit_note_number_idx").on(table.creditNoteNumber),
     index("sales_credit_note_customer_idx").on(table.customerId),
@@ -727,7 +744,9 @@ export const salesCreditNoteLines = sqliteTable(
     taxAmountMinor: integer("tax_amount_minor").notNull(),
     grossAmountMinor: integer("gross_amount_minor").notNull(),
     position: integer("position").notNull(),
-  },
+  
+    discountType: text("discount_type", { enum: ["none", "percentage", "fixed"] }).notNull().default("none"),
+    discountValue: text("discount_value").notNull().default("0"),},
   (table) => [
     index("sales_credit_note_lines_note_idx").on(table.creditNoteId),
     index("sales_credit_note_lines_project_idx").on(table.projectId),
@@ -1480,44 +1499,61 @@ export const documentTemplates = sqliteTable("document_templates", {
   updatedAt: text("updated_at").notNull(),
 });
 
-export const customFieldEntityTypes = ["customer", "supplier", "sales_invoice"] as const;
+export const customFieldEntityTypes = ["customer", "supplier", "sales_invoice", "sales_quote", "sales_order"] as const;
 export const customFieldFieldTypes = ["text", "number", "date", "select", "checkbox"] as const;
-
 export const customFieldDefinitions = sqliteTable(
   "custom_field_definitions",
   {
     id: text("id").primaryKey(),
     entityType: text("entity_type", { enum: customFieldEntityTypes }).notNull(),
-    name: text("name").notNull(),
     fieldType: text("field_type", { enum: customFieldFieldTypes }).notNull(),
-    selectOptions: text("select_options").notNull().default("[]"),
-    position: integer("position").notNull().default(0),
+    key: text("key").notNull(),
+    label: text("label").notNull(),
+    description: text("description"),
     isRequired: integer("is_required", { mode: "boolean" }).notNull().default(false),
-    showInList: integer("show_in_list", { mode: "boolean" }).notNull().default(false),
+    optionsJson: text("options_json"),
+    position: integer("position").notNull().default(0),
+    isActive: integer("is_active", { mode: "boolean" }).notNull().default(true),
     createdAt: text("created_at").notNull(),
     updatedAt: text("updated_at").notNull(),
   },
-  (table) => [index("custom_field_definitions_entity").on(table.entityType, table.position)],
+  (table) => [
+    uniqueIndex("custom_field_def_entity_key_idx").on(table.entityType, table.key),
+    index("custom_field_def_entity_idx").on(table.entityType),
+  ],
 );
 
 export const customFieldValues = sqliteTable(
   "custom_field_values",
   {
     id: text("id").primaryKey(),
-    definitionId: text("definition_id").notNull().references(() => customFieldDefinitions.id, { onDelete: "cascade" }),
+    definitionId: text("definition_id")
+      .notNull()
+      .references(() => customFieldDefinitions.id, { onDelete: "cascade" }),
     entityId: text("entity_id").notNull(),
-    value: text("value").notNull().default(""),
+    textValue: text("text_value"),
+    numberValue: text("number_value"),
+    createdAt: text("created_at").notNull(),
     updatedAt: text("updated_at").notNull(),
   },
   (table) => [
-    uniqueIndex("custom_field_values_definition_entity").on(table.definitionId, table.entityId),
+    uniqueIndex("custom_field_val_def_entity_idx").on(table.definitionId, table.entityId),
+    index("custom_field_val_entity_idx").on(table.entityId),
   ],
 );
 
 export const sentEmailStatuses = ["queued", "sent", "delivered", "failed"] as const;
 export type SentEmailStatus = (typeof sentEmailStatuses)[number];
-
-export const sentEmailRelatedEntityTypes = ["sales_invoice", "sales_receipt", "sales_credit_note", "purchase_order", "purchase_invoice", "statement"] as const;
+export const sentEmailRelatedEntityTypes = [
+  "sales_invoice",
+  "sales_receipt",
+  "sales_credit_note",
+  "purchase_order",
+  "purchase_invoice",
+  "statement",
+  "sales_quote",
+  "sales_order"
+] as const;
 export type SentEmailRelatedEntityType = (typeof sentEmailRelatedEntityTypes)[number];
 
 /**
@@ -1560,3 +1596,217 @@ export const sentEmails = sqliteTable(
     index("sent_emails_related_idx").on(table.relatedEntityType, table.relatedEntityId),
   ],
 );
+
+
+export const salesQuotes = sqliteTable(
+  "sales_quotes",
+  {
+    id: text("id").primaryKey(),
+    quoteNumber: text("quote_number").notNull(),
+    customerId: text("customer_id")
+      .notNull()
+      .references(() => customers.id),
+    projectId: text("project_id").references(() => projects.id),
+    quoteDate: text("quote_date").notNull(),
+    expiryDate: text("expiry_date").notNull(),
+    reference: text("reference"),
+    documentStatus: text("document_status", { enum: ["draft", "sent", "accepted", "rejected", "cancelled"] })
+      .notNull()
+      .default("draft"),
+    amountsIncludeTax: integer("amounts_include_tax", { mode: "boolean" }).notNull().default(false),
+    subtotalMinor: integer("subtotal_minor").notNull(),
+    taxMinor: integer("tax_minor").notNull(),
+    totalMinor: integer("total_minor").notNull(),
+    currencyCode: text("currency_code").notNull().default("AED").references(() => currencies.code),
+    exchangeRateToBase: text("exchange_rate_to_base").notNull().default("1"),
+    exchangeRateDate: text("exchange_rate_date").notNull(),
+    exchangeRateSource: text("exchange_rate_source").notNull().default("Base"),
+    baseSubtotalMinor: integer("base_subtotal_minor").notNull(),
+    baseTaxMinor: integer("base_tax_minor").notNull(),
+    baseTotalMinor: integer("base_total_minor").notNull(),
+    createdBy: text("created_by").notNull(),
+    createdAt: text("created_at").notNull(),
+    updatedAt: text("updated_at").notNull(),
+  },
+  (table) => [
+    uniqueIndex("sales_quote_number_idx").on(table.quoteNumber),
+    index("sales_quote_customer_idx").on(table.customerId),
+    index("sales_quote_project_idx").on(table.projectId),
+  ],
+);
+
+export const salesQuoteLines = sqliteTable(
+  "sales_quote_lines",
+  {
+    id: text("id").primaryKey(),
+    quoteId: text("quote_id")
+      .notNull()
+      .references(() => salesQuotes.id, { onDelete: "cascade" }),
+    description: text("description").notNull(),
+    quantityMicros: integer("quantity_micros").notNull(),
+    unitPriceMinor: integer("unit_price_minor").notNull(),
+    discountType: text("discount_type", { enum: ["none", "percentage", "fixed"] }).notNull().default("none"),
+    discountValue: text("discount_value").notNull().default("0"),
+    salesAccountId: text("sales_account_id")
+      .notNull()
+      .references(() => accounts.id),
+    taxCodeId: text("tax_code_id")
+      .notNull()
+      .references(() => taxCodes.id),
+    projectId: text("project_id").references(() => projects.id),
+    itemId: text("item_id").references(() => inventoryItems.id),
+    netAmountMinor: integer("net_amount_minor").notNull(),
+    taxAmountMinor: integer("tax_amount_minor").notNull(),
+    grossAmountMinor: integer("gross_amount_minor").notNull(),
+    position: integer("position").notNull(),
+  },
+  (table) => [
+    index("sales_quote_lines_quote_idx").on(table.quoteId),
+  ],
+);
+
+export const salesOrders = sqliteTable(
+  "sales_orders",
+  {
+    id: text("id").primaryKey(),
+    orderNumber: text("order_number").notNull(),
+    customerId: text("customer_id")
+      .notNull()
+      .references(() => customers.id),
+    salesQuoteId: text("sales_quote_id").references(() => salesQuotes.id),
+    projectId: text("project_id").references(() => projects.id),
+    orderDate: text("order_date").notNull(),
+    deliveryDate: text("delivery_date").notNull(),
+    reference: text("reference"),
+    documentStatus: text("document_status", { enum: ["draft", "active", "completed", "cancelled"] })
+      .notNull()
+      .default("draft"),
+    amountsIncludeTax: integer("amounts_include_tax", { mode: "boolean" }).notNull().default(false),
+    subtotalMinor: integer("subtotal_minor").notNull(),
+    taxMinor: integer("tax_minor").notNull(),
+    totalMinor: integer("total_minor").notNull(),
+    currencyCode: text("currency_code").notNull().default("AED").references(() => currencies.code),
+    exchangeRateToBase: text("exchange_rate_to_base").notNull().default("1"),
+    exchangeRateDate: text("exchange_rate_date").notNull(),
+    exchangeRateSource: text("exchange_rate_source").notNull().default("Base"),
+    baseSubtotalMinor: integer("base_subtotal_minor").notNull(),
+    baseTaxMinor: integer("base_tax_minor").notNull(),
+    baseTotalMinor: integer("base_total_minor").notNull(),
+    createdBy: text("created_by").notNull(),
+    createdAt: text("created_at").notNull(),
+    updatedAt: text("updated_at").notNull(),
+  },
+  (table) => [
+    uniqueIndex("sales_order_number_idx").on(table.orderNumber),
+    index("sales_order_customer_idx").on(table.customerId),
+    index("sales_order_project_idx").on(table.projectId),
+  ],
+);
+
+export const salesOrderLines = sqliteTable(
+  "sales_order_lines",
+  {
+    id: text("id").primaryKey(),
+    orderId: text("order_id")
+      .notNull()
+      .references(() => salesOrders.id, { onDelete: "cascade" }),
+    description: text("description").notNull(),
+    quantityMicros: integer("quantity_micros").notNull(),
+    unitPriceMinor: integer("unit_price_minor").notNull(),
+    discountType: text("discount_type", { enum: ["none", "percentage", "fixed"] }).notNull().default("none"),
+    discountValue: text("discount_value").notNull().default("0"),
+    salesAccountId: text("sales_account_id")
+      .notNull()
+      .references(() => accounts.id),
+    taxCodeId: text("tax_code_id")
+      .notNull()
+      .references(() => taxCodes.id),
+    projectId: text("project_id").references(() => projects.id),
+    itemId: text("item_id").references(() => inventoryItems.id),
+    netAmountMinor: integer("net_amount_minor").notNull(),
+    taxAmountMinor: integer("tax_amount_minor").notNull(),
+    grossAmountMinor: integer("gross_amount_minor").notNull(),
+    position: integer("position").notNull(),
+  },
+  (table) => [
+    index("sales_order_lines_order_idx").on(table.orderId),
+  ],
+);
+
+export const debitNotes = sqliteTable(
+  "debit_notes",
+  {
+    id: text("id").primaryKey(),
+    debitNoteNumber: text("debit_note_number").notNull(),
+    supplierId: text("supplier_id")
+      .notNull()
+      .references(() => suppliers.id),
+    purchaseInvoiceId: text("purchase_invoice_id").references(() => purchaseInvoices.id),
+    projectId: text("project_id").references(() => projects.id),
+    debitNoteDate: text("debit_note_date").notNull(),
+    taxDate: text("tax_date").notNull(),
+    reference: text("reference"),
+    documentStatus: text("document_status", { enum: ["draft", "posted", "void"] })
+      .notNull()
+      .default("draft"),
+    amountsIncludeTax: integer("amounts_include_tax", { mode: "boolean" }).notNull().default(false),
+    subtotalMinor: integer("subtotal_minor").notNull(),
+    taxMinor: integer("tax_minor").notNull(),
+    totalMinor: integer("total_minor").notNull(),
+    currencyCode: text("currency_code").notNull().default("AED").references(() => currencies.code),
+    exchangeRateToBase: text("exchange_rate_to_base").notNull().default("1"),
+    exchangeRateDate: text("exchange_rate_date").notNull(),
+    exchangeRateSource: text("exchange_rate_source").notNull().default("Base"),
+    baseSubtotalMinor: integer("base_subtotal_minor").notNull(),
+    baseTaxMinor: integer("base_tax_minor").notNull(),
+    baseTotalMinor: integer("base_total_minor").notNull(),
+    createdBy: text("created_by").notNull(),
+    createdAt: text("created_at").notNull(),
+    updatedAt: text("updated_at").notNull(),
+    postedAt: text("posted_at"),
+    voidedAt: text("voided_at"),
+  },
+  (table) => [
+    uniqueIndex("debit_note_number_idx").on(table.debitNoteNumber),
+    index("debit_note_supplier_idx").on(table.supplierId),
+    index("debit_note_project_idx").on(table.projectId),
+  ],
+);
+
+export const debitNoteLines = sqliteTable(
+  "debit_note_lines",
+  {
+    id: text("id").primaryKey(),
+    debitNoteId: text("debit_note_id")
+      .notNull()
+      .references(() => debitNotes.id, { onDelete: "cascade" }),
+    description: text("description").notNull(),
+    quantityMicros: integer("quantity_micros").notNull(),
+    unitPriceMinor: integer("unit_price_minor").notNull(),
+    discountType: text("discount_type", { enum: ["none", "percentage", "fixed"] }).notNull().default("none"),
+    discountValue: text("discount_value").notNull().default("0"),
+    expenseAccountId: text("expense_account_id")
+      .notNull()
+      .references(() => accounts.id),
+    taxCodeId: text("tax_code_id")
+      .notNull()
+      .references(() => taxCodes.id),
+    projectId: text("project_id").references(() => projects.id),
+    itemId: text("item_id").references(() => inventoryItems.id),
+    netAmountMinor: integer("net_amount_minor").notNull(),
+    taxAmountMinor: integer("tax_amount_minor").notNull(),
+    grossAmountMinor: integer("gross_amount_minor").notNull(),
+    position: integer("position").notNull(),
+  },
+  (table) => [
+    index("debit_note_lines_note_idx").on(table.debitNoteId),
+  ],
+);
+
+
+export const formDefaults = sqliteTable("form_defaults", {
+  id: text("id").primaryKey(),
+  formType: text("form_type").notNull(), // 'sales-invoice', 'purchase-order', etc.
+  payloadJson: text("payload_json").notNull(), // JSON representation of the form default values
+  updatedAt: text("updated_at").notNull(),
+});

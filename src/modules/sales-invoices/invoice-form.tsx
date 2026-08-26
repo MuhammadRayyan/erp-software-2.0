@@ -40,6 +40,7 @@ function previewLine(line: InvoiceInput["lines"][number] | undefined, taxCodes: 
 }
 
 export function InvoiceForm({
+  onDefaultSave,
   businessId,
   invoiceId,
   documentStatus = "draft",
@@ -55,6 +56,7 @@ export function InvoiceForm({
   customFields = [],
   customFieldValues,
 }: {
+  onDefaultSave?: (values: any, customValues: Record<string, string>) => Promise<{ error?: string; fieldErrors?: any } | undefined>;
   businessId: string;
   invoiceId?: string;
   documentStatus?: DocumentStatus;
@@ -120,6 +122,18 @@ export function InvoiceForm({
       setServerError(`"${missingCustomField}" is required.`);
       return;
     }
+    
+    if (onDefaultSave) {
+      const result = await onDefaultSave(values, customValues);
+      if (result?.fieldErrors) {
+        for (const [field, messages] of Object.entries(result.fieldErrors)) {
+          setError(field as keyof InvoiceInput, { message: (messages as string[])[0] });
+        }
+      }
+      if (result?.error) setServerError(result.error);
+      return;
+    }
+
     const result = invoiceId
       ? await updateInvoiceAction(businessId, invoiceId, values, intent, customValues)
       : await createInvoiceAction(businessId, values, intent, customValues);

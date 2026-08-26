@@ -78,7 +78,7 @@ export function savePurchaseOrder(businessId: string, userId: string, input: Pur
     enforceVatPolicy: false,
   });
   validateProjectReferences(context.sqlite, { headerProjectId: data.projectId, lineProjectIds: data.lines.map((line) => line.projectId) });
-  const lines = calculateLines(context.sqlite, data.lines, rate.currencyMinorUnit, { accountTypeFilter: "expense", taxDirection: "purchases", supportItems: true, accountFieldOnLine: "expenseAccountId" });
+  const lines = calculateLines(context.sqlite, data.lines, rate.currencyMinorUnit, { accountTypeFilter: "expense", taxDirection: "purchases", supportItems: true, accountFieldOnLine: "expenseAccountId", amountsIncludeTax: data.amountsIncludeTax });
   const amounts = totalsForLines(lines);
   const base = convertDocumentLinesToBase(lines, rate);
   const now = new Date().toISOString();
