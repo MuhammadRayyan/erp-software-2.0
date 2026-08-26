@@ -1,4 +1,5 @@
 import type { NextConfig } from "next";
+import { withSentryConfig } from "@sentry/nextjs";
 
 const nextConfig: NextConfig = {
   // Standalone output for container deployment (server.js + traced node_modules).
@@ -49,4 +50,14 @@ const nextConfig: NextConfig = {
   },
 };
 
-export default nextConfig;
+
+export default withSentryConfig(nextConfig, {
+  org: "personal-bv0",
+  project: "erp-20",
+  authToken: process.env.SENTRY_AUTH_TOKEN, // from CI env or a gitignored .env
+  widenClientFileUpload: true,
+  tunnelRoute: "/monitoring",
+  silent: !process.env.CI,
+  // Disable webpack tree-shaking options if using Turbopack, or just omit them as per Next 15+
+});
+
