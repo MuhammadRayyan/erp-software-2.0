@@ -6,26 +6,6 @@ import { z } from "zod";
  * redefining identical quantity/money/flag/project schemas locally.
  */
 
-export const eInvoiceTransactionFlagsSchema = z.object({
-  freeTradeZone: z.boolean().optional().default(false),
-  deemedSupply: z.boolean().optional().default(false),
-  marginScheme: z.boolean().optional().default(false),
-  summaryInvoice: z.boolean().optional().default(false),
-  continuousSupply: z.boolean().optional().default(false),
-  agentBilling: z.boolean().optional().default(false),
-  eCommerce: z.boolean().optional().default(false),
-  export: z.boolean().optional().default(false),
-}).optional().default({
-  freeTradeZone: false,
-  deemedSupply: false,
-  marginScheme: false,
-  summaryInvoice: false,
-  continuousSupply: false,
-  agentBilling: false,
-  eCommerce: false,
-  export: false,
-});
-
 export const quantitySchema = z
   .string()
   .trim()

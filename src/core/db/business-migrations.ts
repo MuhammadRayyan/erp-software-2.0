@@ -1995,6 +1995,20 @@ export const businessMigrations = [
         `);
       },
     },
+    {
+      version: 17,
+      name: "sales_invoice_quote_link",
+      up: (sqlite) => {
+        // Add quote_id column to sales_invoices if missing (links an invoice to
+        // its source sales quote). Guarded so re-runs on already-migrated DBs
+        // don't throw.
+        const cols = sqlite.prepare("PRAGMA table_info(sales_invoices)").all() as { name: string }[];
+        if (!cols.some((c) => c.name === "quote_id")) {
+          sqlite.exec(`ALTER TABLE sales_invoices ADD COLUMN quote_id TEXT;`);
+          sqlite.exec(`CREATE INDEX IF NOT EXISTS sales_invoices_quote_idx ON sales_invoices(quote_id) WHERE quote_id IS NOT NULL;`);
+        }
+      },
+    },
 ] satisfies readonly SqliteMigration[];
 
 

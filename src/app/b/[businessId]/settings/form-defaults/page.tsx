@@ -11,6 +11,7 @@ const FORMS = [
   { id: "sales-credit-note", label: "Sales Credit Note", description: "Default fields for new sales credit notes.", icon: ReceiptText },
   { id: "purchase-order", label: "Purchase Order", description: "Default fields for new purchase orders.", icon: ShoppingCart },
   { id: "purchase-invoice", label: "Purchase Invoice", description: "Default fields for new purchase invoices.", icon: FileInput },
+  { id: "debit-note", label: "Debit Note", description: "Default fields for new supplier debit notes.", icon: ReceiptText },
 ];
 
 export default async function FormDefaultsListPage({ params }: { params: Promise<{ businessId: string }> }) {

@@ -100,7 +100,7 @@ export function SalesQuoteForm({ businessId, quoteId, status = "draft", customer
   const cancelHref = quoteId ? `/b/${businessId}/purchases/quotes/${quoteId}` : `/b/${businessId}/purchases/quotes`;
   return <form className="space-y-7 max-w-none" noValidate>
     {serverError && <FormError message={serverError} />}
-    <section className="bquote-b bquote-bquote pb-7"><h2 className="text-base font-semibold">Quote details</h2><p className="mt-1 text-sm text-muted-foreground">Purchase quotes are operational documents and never post to the ledger.</p><div className="mt-5 grid gap-5 md:grid-cols-3">
+    <section className="border-b border-border pb-7"><h2 className="text-base font-semibold">Quote details</h2><p className="mt-1 text-sm text-muted-foreground">Purchase quotes are operational documents and never post to the ledger.</p><div className="mt-5 grid gap-5 md:grid-cols-3">
       <div className="space-y-1.5"><Label htmlFor="customerId">Customer</Label><SelectNative id="customerId"  {...register("customerId", { onChange: (event) => { if (status === "draft") { const code = customers.find((customer) => customer.id === event.target.value)?.defaultCurrencyCode ?? currency; setValue("currencyCode", code); setValue("exchangeRateToBase", code === currency ? "1" : ""); setValue("exchangeRateDate", code === currency ? quoteDate : ""); setValue("exchangeRateSource", code === currency ? "Base" : ""); } } })} aria-invalid={!!errors.customerId}><option value="">Choose a customer…</option>{customers.map((customer) => <option key={customer.id} value={customer.id}>{customer.name}</option>)}</SelectNative>{errors.customerId && <p className="field-error">{errors.customerId.message}</p>}</div>
       <div className="space-y-1.5"><Label htmlFor="date">Quote date</Label><Input id="date" type="date" {...register("date")} aria-invalid={!!errors.date} />{errors.date && <p className="field-error">{errors.date.message}</p>}</div>
       <div className="space-y-1.5"><Label htmlFor="expectedDate">Expected date <span className="font-normal text-muted-foreground">(optional)</span></Label><Input id="expectedDate" type="date" {...register("expectedDate")} /></div>
@@ -108,7 +108,7 @@ export function SalesQuoteForm({ businessId, quoteId, status = "draft", customer
       <div className="space-y-1.5"><Label htmlFor="reference">Reference <span className="font-normal text-muted-foreground">(optional)</span></Label><Input id="reference" {...register("reference")} /></div>
       <div className="space-y-1.5"><Label htmlFor="notes">Notes <span className="font-normal text-muted-foreground">(optional)</span></Label><Input id="notes" {...register("notes")} /></div>
     </div></section>
-    <section className="bquote-b bquote-bquote pb-7"><h2 className="mb-4 text-base font-semibold">Commitment currency</h2><DocumentCurrencyFields baseCurrencyCode={currency} currencies={currencies} rates={rates} currencyCode={currencyCode} exchangeRateToBase={exchangeRateToBase} exchangeRateDate={exchangeRateDate} exchangeRateSource={exchangeRateSource} relevantDate={quoteDate} disabled={status === "sent"} onChange={(field, value) => setValue(field, value)} /><p className="mt-3 text-xs text-muted-foreground">This is an operational commitment snapshot only. A later Purchase Invoice uses its own posting and VAT rate.</p></section>
+    <section className="border-b border-border pb-7"><h2 className="mb-4 text-base font-semibold">Commitment currency</h2><DocumentCurrencyFields baseCurrencyCode={currency} currencies={currencies} rates={rates} currencyCode={currencyCode} exchangeRateToBase={exchangeRateToBase} exchangeRateDate={exchangeRateDate} exchangeRateSource={exchangeRateSource} relevantDate={quoteDate} disabled={status === "sent"} onChange={(field, value) => setValue(field, value)} /><p className="mt-3 text-xs text-muted-foreground">This is an operational commitment snapshot only. A later Purchase Invoice uses its own posting and VAT rate.</p></section>
     <section><div className="mb-3 flex flex-wrap items-end justify-between gap-3">
           <div>
             <h2 className="text-base font-semibold">Line items</h2>
@@ -117,7 +117,7 @@ export function SalesQuoteForm({ businessId, quoteId, status = "draft", customer
           <div className="flex gap-4 items-center">
             <div className="flex items-center gap-2">
               <label htmlFor="globalTax" className="text-sm font-medium">Default Tax:</label>
-              <select id="globalTax" className="w-40 flex h-9 w-full items-center justify-between rounded-md bquote bquote-input bg-transparent px-3 py-2 text-sm shadow-sm ring-offset-background placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-50" value={globalTaxCodeId} onChange={(e) => updateGlobalTax(e.target.value)}>
+              <select id="globalTax" className="w-40 flex h-9 w-full items-center justify-between rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-sm ring-offset-background placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-50" value={globalTaxCodeId} onChange={(e) => updateGlobalTax(e.target.value)}>
                 {taxCodes.map((taxCode) => <option key={taxCode.id} value={taxCode.id}>{taxCode.name}</option>)}
               </select>
             </div>
@@ -127,7 +127,7 @@ export function SalesQuoteForm({ businessId, quoteId, status = "draft", customer
           </div>
         </div>
         {typeof errors.lines?.message === "string" && <p className="field-error mb-2">{errors.lines.message}</p>}
-        <div className="rounded-lg bquote bquote-bquote bg-surface-raised w-full overflow-x-auto">
+        <div className="rounded-lg border border-border bg-surface-raised w-full overflow-x-auto">
           <table className="data-table w-full whitespace-nowrap min-w-max">
             <thead>
               <tr>
@@ -150,7 +150,7 @@ export function SalesQuoteForm({ businessId, quoteId, status = "draft", customer
                 <tr key={field.id} className="hover:bg-transparent!">
                   {showLineNumber && <td className="py-2 text-center text-muted-foreground">{index + 1}</td>}
                   <td>
-                    <select aria-label={`Line ${index + 1} inventory item`} className="flex h-9 w-full items-center justify-between rounded-md bquote bquote-input bg-transparent px-3 py-2 text-sm shadow-sm ring-offset-background placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-50" {...register(`lines.${index}.itemId`, { onChange: (event) => selectItem(index, event.target.value) })}>
+                    <select aria-label={`Line ${index + 1} inventory item`} className="flex h-9 w-full items-center justify-between rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-sm ring-offset-background placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-50" {...register(`lines.${index}.itemId`, { onChange: (event) => selectItem(index, event.target.value) })}>
                       <option value="">Service / free text</option>
                       {items.map((item) => <option key={item.id} value={item.id}>{item.sku ? `${item.sku} � ` : ""}{item.name}</option>)}
                     </select>
@@ -170,7 +170,7 @@ export function SalesQuoteForm({ businessId, quoteId, status = "draft", customer
                   {showDiscounts && (
                     <td className="py-2">
                       <div className="flex gap-1 justify-end">
-                        <select aria-label={`Line ${index + 1} discount type`} className="w-[70px] px-2 py-1 h-9 flex items-center justify-between rounded-md bquote bquote-input bg-transparent text-sm shadow-sm ring-offset-background placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-50" {...register(`lines.${index}.discountType`)}>
+                        <select aria-label={`Line ${index + 1} discount type`} className="w-[70px] px-2 py-1 h-9 flex items-center justify-between rounded-md border border-input bg-transparent text-sm shadow-sm ring-offset-background placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-50" {...register(`lines.${index}.discountType`)}>
                           <option value="none">None</option>
                           <option value="percentage">%</option>
                           <option value="fixed">Fixed</option>
@@ -185,7 +185,7 @@ export function SalesQuoteForm({ businessId, quoteId, status = "draft", customer
                     {lines[index]?.itemId ? (
                       <><input type="hidden" {...register(`lines.${index}.salesAccountId`)} /><span className="text-sm text-muted-foreground">From item</span></>
                     ) : (
-                      <select aria-label={`Line ${index + 1} expense account`} className="flex h-9 w-full items-center justify-between rounded-md bquote bquote-input bg-transparent px-3 py-2 text-sm shadow-sm ring-offset-background placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-50" {...register(`lines.${index}.salesAccountId`)}>
+                      <select aria-label={`Line ${index + 1} expense account`} className="flex h-9 w-full items-center justify-between rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-sm ring-offset-background placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-50" {...register(`lines.${index}.salesAccountId`)}>
                         {expenseAccounts.map((account) => <option key={account.id} value={account.id}>{account.code} {account.name}</option>)}
                       </select>
                     )}
@@ -193,7 +193,7 @@ export function SalesQuoteForm({ businessId, quoteId, status = "draft", customer
                   </td>
                   {showLineProjects && (
                     <td className="py-2">
-                      <select aria-label={`Line ${index + 1} project`} className="flex h-9 w-full items-center justify-between rounded-md bquote bquote-input bg-transparent px-3 py-2 text-sm shadow-sm ring-offset-background placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-50" {...register(`lines.${index}.projectId`)}>
+                      <select aria-label={`Line ${index + 1} project`} className="flex h-9 w-full items-center justify-between rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-sm ring-offset-background placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-50" {...register(`lines.${index}.projectId`)}>
                         <option value="">Use document Project</option>
                         {projects.map((project) => <option key={project.id} value={project.id}>{project.code} � {project.name}</option>)}
                       </select>
@@ -218,23 +218,23 @@ export function SalesQuoteForm({ businessId, quoteId, status = "draft", customer
         <div className="mt-5 flex flex-col md:flex-row items-start justify-between gap-6">
           <div className="flex flex-col gap-3 pt-2">
             <label className="flex items-center gap-2 text-sm cursor-pointer">
-              <input type="checkbox" className="size-4 rounded-[4px] bquote-bquote-strong accent-primary" checked={showLineNumber} onChange={(e) => setShowLineNumber(e.target.checked)} />
+              <input type="checkbox" className="size-4 rounded-[4px] border-border-strong accent-primary" checked={showLineNumber} onChange={(e) => setShowLineNumber(e.target.checked)} />
               Column � Line number
             </label>
             <label className="flex items-center gap-2 text-sm cursor-pointer">
-              <input type="checkbox" className="size-4 rounded-[4px] bquote-bquote-strong accent-primary" checked={showDescription} onChange={(e) => setShowDescription(e.target.checked)} />
+              <input type="checkbox" className="size-4 rounded-[4px] border-border-strong accent-primary" checked={showDescription} onChange={(e) => setShowDescription(e.target.checked)} />
               Column � Description
             </label>
             <label className="flex items-center gap-2 text-sm cursor-pointer">
-              <input type="checkbox" className="size-4 rounded-[4px] bquote-bquote-strong accent-primary" checked={showDiscounts} onChange={(e) => setShowDiscounts(e.target.checked)} />
+              <input type="checkbox" className="size-4 rounded-[4px] border-border-strong accent-primary" checked={showDiscounts} onChange={(e) => setShowDiscounts(e.target.checked)} />
               Column � Discount
             </label>
             <label className="flex items-center gap-2 text-sm cursor-pointer">
-              <input type="checkbox" className="size-4 rounded-[4px] bquote-bquote-strong accent-primary" checked={showLineProjects} onChange={(e) => setShowLineProjects(e.target.checked)} />
+              <input type="checkbox" className="size-4 rounded-[4px] border-border-strong accent-primary" checked={showLineProjects} onChange={(e) => setShowLineProjects(e.target.checked)} />
               Column � Project
             </label>
-            <label className="flex items-center gap-2 text-sm cursor-pointer mt-2 bquote-t pt-2 bquote-bquote">
-              <input type="checkbox" className="size-4 rounded-[4px] bquote-bquote-strong accent-primary" {...register("amountsIncludeTax")} />
+            <label className="flex items-center gap-2 text-sm cursor-pointer mt-2 border-t pt-2 border-border">
+              <input type="checkbox" className="size-4 rounded-[4px] border-border-strong accent-primary" {...register("amountsIncludeTax")} />
               Amounts are tax inclusive
             </label>
           </div>
@@ -248,7 +248,7 @@ export function SalesQuoteForm({ businessId, quoteId, status = "draft", customer
               <dt className="text-muted-foreground">VAT</dt>
               <dd className="money">{formatMoney(taxMinor, currencyCode, minorUnit)}</dd>
             </div>
-            <div className="flex justify-between bquote-t bquote-bquote pt-2 text-base font-semibold">
+            <div className="flex justify-between border-t border-border pt-2 text-base font-semibold">
               <dt>Total</dt>
               <dd className="money">{formatMoney(subtotalMinor + taxMinor, currencyCode, minorUnit)}</dd>
             </div>

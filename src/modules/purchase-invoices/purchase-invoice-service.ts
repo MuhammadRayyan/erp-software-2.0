@@ -11,14 +11,13 @@ import { replaceTaxEntries, reverseTaxEntries } from "@/modules/tax/tax-entry-se
 import { assertVatDateUnlocked, assertVatSourceUnlocked } from "@/modules/tax/tax-lock-service";
 import { purchaseInvoiceInputSchema, type PurchaseInvoiceInput } from "./purchase-invoice-input";
 import { convertDocumentLinesToBase, minorToCurrencyInput, parseCurrencyAmountToMinor } from "@/modules/currency/conversion";
-import { getBaseCurrency, getCurrency } from "@/modules/currency/currency";
+import { getCurrency } from "@/modules/currency/currency";
 import { resolveRateSnapshot } from "@/modules/currency/validation";
 import { calculateLines, totalsForLines, type StoredLine } from "@/modules/accounting/services/document-line-calculator";
 
 export type PurchaseInvoiceStatus = "draft" | "posted" | "void";
 export type PurchasePaymentStatus = "unpaid" | "partially_paid" | "paid" | "overdue";
 export type PurchaseInvoiceIntent = "draft" | "post";
-export type PurchaseInvoiceSourceOptions = { inboundDocumentId?: string };
 
 function deriveStatus(documentStatus: PurchaseInvoiceStatus, totalMinor: number, paidMinor: number, dueDate: string): PurchasePaymentStatus | null {
   if (documentStatus !== "posted") return null;
@@ -57,162 +56,6 @@ function assertSupplierInvoiceNumberAvailable(
   if (duplicate) {
     throw new Error(`Supplier invoice number already exists on Purchase Invoice ${duplicate.internal_number}.`);
   }
-}
-
-function assertInboundSource(
-  sqlite: ReturnType<typeof getBusinessDb>["sqlite"],
-  inboundDocumentId: string,
-  invoiceId: string,
-  data: ReturnType<typeof purchaseInvoiceInputSchema.parse>,
-  lines: StoredLine[],
-  amounts: ReturnType<typeof totalsForLines>,
-  requireExactMonetaryFacts: boolean,
-  creating: boolean,
-) {
-  const source = sqlite.prepare(`
-    SELECT * FROM inbound_einvoice_documents WHERE id = ?
-  `).get(inboundDocumentId) as {
-    id: string;
-    document_type: string;
-    document_number: string;
-    issue_date: string;
-    tax_date: string | null;
-    due_date: string | null;
-    currency_code: string;
-    status: string;
-    buyer_identity_verified: number;
-    supplier_id: string | null;
-    purchase_order_id: string | null;
-    purchase_invoice_id: string | null;
-    duplicate_kind: string | null;
-    subtotal_minor: number;
-    tax_minor: number;
-    total_minor: number;
-    amount_due_minor: number;
-    allowance_total_minor: number;
-    charge_total_minor: number;
-    validation_result_json: string | null;
-  } | undefined;
-  if (!source) throw new Error("The inbound electronic source was not found.");
-  if (source.document_type !== "invoice") throw new Error("Inbound Credit Notes cannot be converted into Purchase Invoices.");
-  if (creating && source.status !== "ReadyForDraft") throw new Error("The inbound eInvoice is not ready to create a draft.");
-  if (!creating && !["DraftCreated", "Processed"].includes(source.status)) {
-    throw new Error("The inbound eInvoice is no longer linked to an editable Purchase Invoice workflow.");
-  }
-  if (source.purchase_invoice_id && source.purchase_invoice_id !== invoiceId) {
-    throw new Error("The inbound eInvoice is already linked to another Purchase Invoice.");
-  }
-  if (!source.buyer_identity_verified) throw new Error("The inbound buyer identity has not been verified.");
-  if (source.duplicate_kind) throw new Error("Resolve the possible inbound duplicate before continuing.");
-  const baseCurrency = getBaseCurrency(sqlite);
-  if (source.currency_code !== baseCurrency.code || data.currencyCode !== source.currency_code) {
-    throw new Error("Unsupported Currency Scenario: this inbound foreign-currency eInvoice cannot be converted safely.");
-  }
-  if (!source.supplier_id || source.supplier_id !== data.supplierId) {
-    throw new Error("The Purchase Invoice Supplier must match the confirmed electronic source Supplier.");
-  }
-  if (source.document_number !== data.supplierInvoiceNumber) {
-    throw new Error("The supplier invoice number must match the immutable electronic source.");
-  }
-  if (source.issue_date !== data.invoiceDate || (source.tax_date ?? source.issue_date) !== (data.taxDate || data.invoiceDate)) {
-    throw new Error("Invoice and VAT dates must match the electronic source.");
-  }
-  if (source.due_date !== data.dueDate) throw new Error("Due date must match the electronic source.");
-  if ((source.purchase_order_id ?? "") !== (data.purchaseOrderId || "")) {
-    throw new Error("Purchase Order provenance must match the reviewed electronic source.");
-  }
-  if (!requireExactMonetaryFacts) return;
-  type InboundReport = {
-    layers?: {
-      parsing?: { valid: boolean };
-      pintUbl?: { valid: boolean };
-      pintAe?: { valid: boolean };
-    };
-  };
-  let report: InboundReport | null = null;
-  try {
-    report = source.validation_result_json ? JSON.parse(source.validation_result_json) as InboundReport : null;
-  } catch {
-    report = null;
-  }
-  if (!report?.layers?.parsing?.valid || !report.layers.pintUbl?.valid || !report.layers.pintAe?.valid) {
-    throw new Error("The inbound PINT-AE validation evidence is not acceptable for posting.");
-  }
-  if (source.allowance_total_minor !== 0 || source.charge_total_minor !== 0) {
-    throw new Error("Inbound allowances or charges are not supported by the Purchase Invoice model.");
-  }
-  if (source.amount_due_minor !== source.total_minor) {
-    throw new Error("Inbound amount due must equal the invoice total before posting.");
-  }
-  if (
-    amounts.subtotalMinor !== source.subtotal_minor
-    || amounts.taxMinor !== source.tax_minor
-    || amounts.totalMinor !== source.total_minor
-  ) {
-    throw new Error("Purchase Invoice monetary and VAT totals must equal the inbound electronic invoice.");
-  }
-  const sourceLines = sqlite.prepare(`
-    SELECT position, quantity_micros, unit_price_minor, net_amount_minor, tax_amount_minor,
-      gross_amount_minor, tax_category, tax_rate_basis_points
-    FROM inbound_einvoice_lines WHERE inbound_document_id = ? ORDER BY position
-  `).all(inboundDocumentId) as Array<{
-    position: number;
-    quantity_micros: number;
-    unit_price_minor: number;
-    net_amount_minor: number;
-    tax_amount_minor: number;
-    gross_amount_minor: number;
-    tax_category: string;
-    tax_rate_basis_points: number;
-  }>;
-  if (sourceLines.length !== lines.length) throw new Error("Purchase Invoice lines must correspond one-to-one with the electronic source.");
-  const taxCodes = sqlite.prepare("SELECT id, vat_category, rate_basis_points FROM tax_codes")
-    .all() as Array<{ id: string; vat_category: string | null; rate_basis_points: number }>;
-  const taxById = new Map(taxCodes.map((tax) => [tax.id, tax]));
-  for (const [position, line] of lines.entries()) {
-    const original = sourceLines[position];
-    const tax = taxById.get(line.taxCodeId);
-    const expectedCategory = original?.tax_category === "S"
-      ? "standard"
-      : original?.tax_category === "Z"
-        ? "zero_rated"
-        : null;
-    if (
-      !original
-      || line.quantityMicros !== original.quantity_micros
-      || line.unitPriceMinor !== original.unit_price_minor
-      || line.netAmountMinor !== original.net_amount_minor
-      || line.taxAmountMinor !== original.tax_amount_minor
-      || line.grossAmountMinor !== original.gross_amount_minor
-      || !tax
-      || tax.vat_category !== expectedCategory
-      || tax.rate_basis_points !== original.tax_rate_basis_points
-    ) {
-      throw new Error(`Purchase Invoice line ${position + 1} monetary or VAT facts differ from the electronic source.`);
-    }
-  }
-}
-
-function appendInboundPurchaseEvent(
-  sqlite: ReturnType<typeof getBusinessDb>["sqlite"],
-  inboundDocumentId: string,
-  eventType: string,
-  status: string,
-  userId: string,
-  invoiceId: string,
-) {
-  const provider = sqlite.prepare("SELECT provider_key FROM inbound_einvoice_documents WHERE id = ?")
-    .get(inboundDocumentId) as { provider_key: string };
-  sqlite.prepare(`
-    INSERT INTO inbound_einvoice_events (
-      id, inbound_document_id, provider_key, event_type, status, raw_response,
-      created_by, created_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-  `).run(
-    randomUUID(), inboundDocumentId, provider.provider_key, eventType, status,
-    JSON.stringify({ mock: provider.provider_key === "mock", purchaseInvoiceId: invoiceId }),
-    userId, new Date().toISOString(),
-  );
 }
 
 function insertLines(sqlite: ReturnType<typeof getBusinessDb>["sqlite"], invoiceId: string, lines: StoredLine[]) {
@@ -419,17 +262,6 @@ export function getPurchaseInvoice(businessId: string, userId: string, invoiceId
   const payments = context.sqlite.prepare(`SELECT sp.id, sp.payment_number, sp.date, sp.reference, spa.amount_minor AS allocated_minor FROM supplier_payment_allocations spa INNER JOIN supplier_payments sp ON sp.id = spa.payment_id WHERE spa.purchase_invoice_id = ? AND sp.document_status = 'posted' ORDER BY sp.date DESC, sp.created_at DESC`).all(invoiceId) as { id: string; payment_number: string; date: string; reference: string | null; allocated_minor: number }[];
   const journal = context.sqlite.prepare("SELECT id, entry_number FROM journal_entries WHERE source_type = 'purchase_invoice' AND source_id = ?").get(invoiceId) as { id: string; entry_number: string } | undefined;
   const order = header.invoice.purchaseOrderId ? context.sqlite.prepare("SELECT id, order_number FROM purchase_orders WHERE id = ?").get(header.invoice.purchaseOrderId) as { id: string; order_number: string } | undefined : undefined;
-  const inboundSource = header.invoice.inboundEInvoiceDocumentId
-    ? context.sqlite.prepare(`
-        SELECT id, document_uuid, document_number, specification_version, received_at,
-          status, validation_result_json, subtotal_minor, tax_minor, total_minor
-        FROM inbound_einvoice_documents WHERE id = ?
-      `).get(header.invoice.inboundEInvoiceDocumentId) as {
-        id: string; document_uuid: string; document_number: string; specification_version: string;
-        received_at: string; status: string; validation_result_json: string | null;
-        subtotal_minor: number; tax_minor: number; total_minor: number;
-      } | undefined
-    : undefined;
   return {
     ...header,
     project: header.invoice.projectId ? projectById.get(header.invoice.projectId) ?? null : null,
@@ -443,18 +275,6 @@ export function getPurchaseInvoice(businessId: string, userId: string, invoiceId
     payments: payments.map((row) => ({ id: row.id, paymentNumber: row.payment_number, date: row.date, reference: row.reference, allocatedMinor: row.allocated_minor })),
     journal: journal ? { id: journal.id, entryNumber: journal.entry_number } : null,
     order: order ? { id: order.id, orderNumber: order.order_number } : null,
-    inboundSource: inboundSource ? {
-      id: inboundSource.id,
-      documentUuid: inboundSource.document_uuid,
-      documentNumber: inboundSource.document_number,
-      specificationVersion: inboundSource.specification_version,
-      receivedAt: inboundSource.received_at,
-      status: inboundSource.status,
-      validation: inboundSource.validation_result_json ? JSON.parse(inboundSource.validation_result_json) as unknown : null,
-      totalsMatch: inboundSource.subtotal_minor === header.invoice.subtotalMinor
-        && inboundSource.tax_minor === header.invoice.taxMinor
-        && inboundSource.total_minor === header.invoice.totalMinor,
-    } : null,
     goodsReceipts: context.sqlite.prepare("SELECT id, receipt_number, date, document_status FROM goods_receipts WHERE purchase_invoice_id = ? ORDER BY date DESC, created_at DESC").all(invoiceId) as { id: string; receipt_number: string; date: string; document_status: string }[],
   };
 }
@@ -465,7 +285,6 @@ export function savePurchaseInvoice(
   input: PurchaseInvoiceInput,
   intent: PurchaseInvoiceIntent,
   invoiceId?: string,
-  sourceOptions: PurchaseInvoiceSourceOptions = {},
 ) {
   const data = purchaseInvoiceInputSchema.parse(input);
   const context = getBusinessDb(businessId, userId);
@@ -517,22 +336,7 @@ export function savePurchaseInvoice(
       internalNumber = current.internalNumber;
       shouldPost = current.documentStatus === "posted" || intent === "post";
       replace = current.documentStatus === "posted";
-      if (sourceOptions.inboundDocumentId && sourceOptions.inboundDocumentId !== current.inboundEInvoiceDocumentId) {
-        throw new Error("Electronic source provenance cannot be replaced.");
-      }
       assertSupplierInvoiceNumberAvailable(context.sqlite, data.supplierId, data.supplierInvoiceNumber, invoiceId);
-      if (current.inboundEInvoiceDocumentId) {
-        assertInboundSource(
-          context.sqlite,
-          current.inboundEInvoiceDocumentId,
-          id,
-          data,
-          lines,
-          amounts,
-          shouldPost,
-          false,
-        );
-      }
       context.sqlite.prepare(`
         UPDATE purchase_invoices SET supplier_id = ?, project_id = ?, supplier_invoice_number = ?,
           invoice_date = ?, tax_date = ?, due_date = ?, reference = ?, purchase_order_id = ?, subtotal_minor = ?,
@@ -544,43 +348,17 @@ export function savePurchaseInvoice(
     } else {
       internalNumber = allocateNumber(context.sqlite, "purchaseInvoice");
       assertSupplierInvoiceNumberAvailable(context.sqlite, data.supplierId, data.supplierInvoiceNumber);
-      if (sourceOptions.inboundDocumentId) {
-        if (intent === "post") {
-          throw new Error("Create and review the inbound Purchase Invoice Draft before posting it.");
-        }
-        assertInboundSource(
-          context.sqlite,
-          sourceOptions.inboundDocumentId,
-          id,
-          data,
-          lines,
-          amounts,
-          true,
-          true,
-        );
-      }
       context.sqlite.prepare(`
         INSERT INTO purchase_invoices (
           id, internal_number, supplier_id, project_id, supplier_invoice_number, invoice_date, tax_date,
           due_date, reference, purchase_order_id, document_status, subtotal_minor, tax_minor,
           total_minor, created_by, created_at, updated_at, posted_at, voided_at,
-          inbound_einvoice_document_id, currency_code, exchange_rate_to_base, exchange_rate_date,
+          currency_code, exchange_rate_to_base, exchange_rate_date,
           exchange_rate_source, base_subtotal_minor, base_tax_minor, base_total_minor
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'draft', ?, ?, ?, ?, ?, ?, NULL, NULL, ?, ?, ?, ?, ?, ?, ?, ?)
-      `).run(id, internalNumber, data.supplierId, data.projectId || null, data.supplierInvoiceNumber, data.invoiceDate, taxDate, data.dueDate, data.reference || null, data.purchaseOrderId || null, amounts.subtotalMinor, amounts.taxMinor, amounts.totalMinor, userId, now, now, sourceOptions.inboundDocumentId ?? null, rate.currencyCode, rate.exchangeRateToBase, rate.exchangeRateDate, rate.exchangeRateSource, base.baseSubtotalMinor, base.baseTaxMinor, base.baseTotalMinor);
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'draft', ?, ?, ?, ?, ?, ?, NULL, NULL, ?, ?, ?, ?, ?, ?, ?)
+      `).run(id, internalNumber, data.supplierId, data.projectId || null, data.supplierInvoiceNumber, data.invoiceDate, taxDate, data.dueDate, data.reference || null, data.purchaseOrderId || null, amounts.subtotalMinor, amounts.taxMinor, amounts.totalMinor, userId, now, now, rate.currencyCode, rate.exchangeRateToBase, rate.exchangeRateDate, rate.exchangeRateSource, base.baseSubtotalMinor, base.baseTaxMinor, base.baseTotalMinor);
     }
     insertLines(context.sqlite, id, lines);
-    const inboundDocumentId = invoiceId
-      ? (context.sqlite.prepare("SELECT inbound_einvoice_document_id AS id FROM purchase_invoices WHERE id = ?").get(id) as { id: string | null }).id
-      : sourceOptions.inboundDocumentId ?? null;
-    if (inboundDocumentId && !invoiceId) {
-      context.sqlite.prepare(`
-        UPDATE inbound_einvoice_documents
-        SET status = 'DraftCreated', purchase_invoice_id = ?, reviewed_by = ?, reviewed_at = ?,
-          last_error = NULL WHERE id = ?
-      `).run(id, userId, now, inboundDocumentId);
-      appendInboundPurchaseEvent(context.sqlite, inboundDocumentId, "PurchaseInvoiceDraftCreated", "DraftCreated", userId, id);
-    }
     if (shouldPost) {
       assertVatDateUnlocked(context.sqlite, taxDate, lines.map((line) => line.taxCodeId));
       const postingLines = lines.map((line) => ({ ...line, projectId: effectiveProjectId(line.projectId, data.projectId) }));
@@ -590,14 +368,6 @@ export function savePurchaseInvoice(
         partyName: supplier.name, taxDate, direction: "purchases", rate,
       }, postingLines);
       context.sqlite.prepare("UPDATE purchase_invoices SET document_status = 'posted', posted_at = COALESCE(posted_at, ?) WHERE id = ?").run(now, id);
-      if (inboundDocumentId) {
-        context.sqlite.prepare(`
-          UPDATE inbound_einvoice_documents
-          SET status = 'Processed', purchase_invoice_id = ?, reviewed_by = ?, reviewed_at = ?,
-            last_error = NULL WHERE id = ?
-        `).run(id, userId, now, inboundDocumentId);
-        appendInboundPurchaseEvent(context.sqlite, inboundDocumentId, "PurchaseInvoicePosted", "Processed", userId, id);
-      }
     }
   }).immediate();
   return id;
@@ -626,16 +396,7 @@ export function deletePurchaseInvoice(businessId: string, userId: string, invoic
   if (!invoice) throw new Error("Purchase invoice not found.");
   if (invoice.documentStatus !== "draft") throw new Error("Only draft purchase invoices can be deleted.");
   context.sqlite.transaction(() => {
-    const inboundDocumentId = invoice.inboundEInvoiceDocumentId;
     context.db.delete(purchaseInvoices).where(eq(purchaseInvoices.id, invoiceId)).run();
-    if (inboundDocumentId) {
-      context.sqlite.prepare(`
-        UPDATE inbound_einvoice_documents
-        SET status = 'ReadyForDraft', purchase_invoice_id = NULL, reviewed_by = ?, reviewed_at = ?
-        WHERE id = ? AND status = 'DraftCreated'
-      `).run(userId, new Date().toISOString(), inboundDocumentId);
-      appendInboundPurchaseEvent(context.sqlite, inboundDocumentId, "PurchaseInvoiceDraftDeleted", "ReadyForDraft", userId, invoiceId);
-    }
   }).immediate();
 }
 

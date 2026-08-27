@@ -14,7 +14,7 @@ export function moduleForBusinessPath(pathname: string): { businessId: string; m
   const [, root, businessId, section, subsection] = pathname.split("/");
   if (root !== "b" || !businessId) return null;
 
-  if (section === "customers" || section === "einvoicing") return { businessId, module: "sales" };
+  if (section === "customers") return { businessId, module: "sales" };
   if (section === "sales") {
     return { businessId, module: subsection === "delivery-notes" ? "inventory" : "sales" };
   }

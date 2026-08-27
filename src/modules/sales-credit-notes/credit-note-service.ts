@@ -9,8 +9,6 @@ import { reverseTransaction } from "@/modules/accounting/services/posting-servic
 import { effectiveProjectId, validateProjectReferences } from "@/modules/projects/project-validation";
 import { replaceTaxEntries, reverseTaxEntries } from "@/modules/tax/tax-entry-service";
 import { assertVatDateUnlocked, assertVatSourceUnlocked } from "@/modules/tax/tax-lock-service";
-import { assertEInvoiceSourceEditable, invalidatePreparedEInvoice } from "@/modules/einvoicing/einvoice-service";
-import { creditNoteReasonCodeValues, parseTransactionFlags, type CreditNoteReasonCode } from "@/modules/einvoicing/einvoice-types";
 import { creditNoteInputSchema, type CreditNoteInput } from "./credit-note-input";
 import { convertDocumentLinesToBase, minorToCurrencyInput, parseCurrencyAmountToMinor, proportionalCarryingRelease } from "@/modules/currency/conversion";
 import { storedRateSnapshot } from "@/modules/currency/validation";
@@ -133,28 +131,25 @@ export function saveCreditNote(businessId: string, userId: string, input: Credit
       const current = context.db.select().from(salesCreditNotes).where(eq(salesCreditNotes.id, noteId)).get();
       if (!current) throw new Error("Credit note not found.");
       if (current.documentStatus === "void") throw new Error("A void credit note cannot be edited.");
-      assertEInvoiceSourceEditable(context.sqlite, "sales_credit_note", noteId);
-      invalidatePreparedEInvoice(context.sqlite, "sales_credit_note", noteId);
       if (current.documentStatus === "posted") assertVatSourceUnlocked(context.sqlite, "sales_credit_note", noteId, current.taxDate);
       if (current.sourceInvoiceId !== data.sourceInvoiceId && current.documentStatus === "posted") throw new Error("Cannot change the source invoice after posting.");
       number = current.creditNoteNumber; shouldPost = current.documentStatus === "posted" || intent === "post"; replace = current.documentStatus === "posted";
-      context.sqlite.prepare(`UPDATE sales_credit_notes SET customer_id = ?, project_id = ?, source_invoice_id = ?, date = ?, tax_date = ?, supply_emirate = ?, reference = ?, reason = ?, einvoice_reason_code = ?, einvoice_transaction_flags_json = ?, subtotal_minor = ?, tax_minor = ?, total_minor = ?, currency_code = ?, exchange_rate_to_base = ?, exchange_rate_date = ?, exchange_rate_source = ?, base_subtotal_minor = ?, base_tax_minor = ?, base_total_minor = ?, updated_at = ? WHERE id = ?`).run(data.customerId, data.projectId || null, data.sourceInvoiceId, data.date, taxDate, data.supplyEmirate || null, data.reference || null, data.reason || null, data.eInvoiceReasonCode || null, JSON.stringify(data.eInvoiceTransactionFlags), amounts.subtotalMinor, amounts.taxMinor, amounts.totalMinor, rate.currencyCode, rate.exchangeRateToBase, rate.exchangeRateDate, rate.exchangeRateSource, base.baseSubtotalMinor, base.baseTaxMinor, baseCarryingAmountReleased, now, noteId);
+      context.sqlite.prepare(`UPDATE sales_credit_notes SET customer_id = ?, project_id = ?, source_invoice_id = ?, date = ?, tax_date = ?, supply_emirate = ?, reference = ?, reason = ?, subtotal_minor = ?, tax_minor = ?, total_minor = ?, currency_code = ?, exchange_rate_to_base = ?, exchange_rate_date = ?, exchange_rate_source = ?, base_subtotal_minor = ?, base_tax_minor = ?, base_total_minor = ?, updated_at = ? WHERE id = ?`).run(data.customerId, data.projectId || null, data.sourceInvoiceId, data.date, taxDate, data.supplyEmirate || null, data.reference || null, data.reason || null, amounts.subtotalMinor, amounts.taxMinor, amounts.totalMinor, rate.currencyCode, rate.exchangeRateToBase, rate.exchangeRateDate, rate.exchangeRateSource, base.baseSubtotalMinor, base.baseTaxMinor, baseCarryingAmountReleased, now, noteId);
       context.sqlite.prepare("DELETE FROM sales_credit_note_lines WHERE credit_note_id = ?").run(noteId);
     } else {
       number = allocateNumber(context.sqlite, "creditNote");
       context.sqlite.prepare(`
         INSERT INTO sales_credit_notes (
           id, credit_note_number, customer_id, project_id, source_invoice_id, date,
-          tax_date, supply_emirate, reference, reason, einvoice_reason_code,
-          einvoice_transaction_flags_json, document_status, subtotal_minor, tax_minor,
+          tax_date, supply_emirate, reference, reason, document_status, subtotal_minor, tax_minor,
           total_minor, currency_code, exchange_rate_to_base, exchange_rate_date,
           exchange_rate_source, base_subtotal_minor, base_tax_minor, base_total_minor,
           created_by, created_at, updated_at, posted_at, voided_at
         ) VALUES (
-          ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'draft',
+          ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'draft',
           ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL
         )
-      `).run(id, number, data.customerId, data.projectId || null, data.sourceInvoiceId, data.date, taxDate, data.supplyEmirate || null, data.reference || null, data.reason || null, data.eInvoiceReasonCode || null, JSON.stringify(data.eInvoiceTransactionFlags), amounts.subtotalMinor, amounts.taxMinor, amounts.totalMinor, rate.currencyCode, rate.exchangeRateToBase, rate.exchangeRateDate, rate.exchangeRateSource, base.baseSubtotalMinor, base.baseTaxMinor, baseCarryingAmountReleased, userId, now, now);
+      `).run(id, number, data.customerId, data.projectId || null, data.sourceInvoiceId, data.date, taxDate, data.supplyEmirate || null, data.reference || null, data.reason || null, amounts.subtotalMinor, amounts.taxMinor, amounts.totalMinor, rate.currencyCode, rate.exchangeRateToBase, rate.exchangeRateDate, rate.exchangeRateSource, base.baseSubtotalMinor, base.baseTaxMinor, baseCarryingAmountReleased, userId, now, now);
     }
     insertLines(context.sqlite, id, lines);
     if (shouldPost) {
@@ -177,11 +172,7 @@ export function duplicateCreditNote(businessId: string, userId: string, noteId: 
   const record = getCreditNote(businessId, userId, noteId);
   if (!record) throw new Error("Credit note not found.");
   const rate = storedRateSnapshot(getBusinessDb(businessId, userId).sqlite, record.note);
-  const storedReasonCode = record.note.eInvoiceReasonCode ?? "";
-  const eInvoiceReasonCode = creditNoteReasonCodeValues.includes(storedReasonCode as CreditNoteReasonCode)
-    ? storedReasonCode as CreditNoteReasonCode
-    : "";
-  return saveCreditNote(businessId, userId, { currencyCode: rate.currencyCode, exchangeRateToBase: rate.exchangeRateToBase, exchangeRateDate: rate.exchangeRateDate, exchangeRateSource: rate.exchangeRateSource, customerId: record.note.customerId, projectId: record.note.projectId ?? "", sourceInvoiceId: record.note.sourceInvoiceId, date: record.note.date, taxDate: record.note.taxDate, supplyEmirate: record.note.supplyEmirate ?? "", reference: record.note.reference ?? "", reason: record.note.reason ?? "", eInvoiceReasonCode, eInvoiceTransactionFlags: parseTransactionFlags(record.note.eInvoiceTransactionFlagsJson), lines: record.lines.map((line) => ({ description: line.description, quantity: quantityMicrosToInput(line.quantityMicros), unitPrice: minorToCurrencyInput(line.unitPriceMinor, rate.currencyMinorUnit), salesAccountId: line.salesAccountId, taxCodeId: line.taxCodeId, projectId: line.projectId ?? "" })) }, "draft");
+  return saveCreditNote(businessId, userId, { currencyCode: rate.currencyCode, exchangeRateToBase: rate.exchangeRateToBase, exchangeRateDate: rate.exchangeRateDate, exchangeRateSource: rate.exchangeRateSource, customerId: record.note.customerId, projectId: record.note.projectId ?? "", sourceInvoiceId: record.note.sourceInvoiceId, date: record.note.date, taxDate: record.note.taxDate, supplyEmirate: record.note.supplyEmirate ?? "", reference: record.note.reference ?? "", reason: record.note.reason ?? "", lines: record.lines.map((line) => ({ description: line.description, quantity: quantityMicrosToInput(line.quantityMicros), unitPrice: minorToCurrencyInput(line.unitPriceMinor, rate.currencyMinorUnit), salesAccountId: line.salesAccountId, taxCodeId: line.taxCodeId, projectId: line.projectId ?? "" })) }, "draft");
 }
 
 export function deleteCreditNote(businessId: string, userId: string, noteId: string) {
@@ -193,7 +184,6 @@ export function deleteCreditNote(businessId: string, userId: string, noteId: str
 export function voidCreditNote(businessId: string, userId: string, noteId: string) {
   const context = getBusinessDb(businessId, userId); const note = context.db.select().from(salesCreditNotes).where(eq(salesCreditNotes.id, noteId)).get();
   if (!note) throw new Error("Credit note not found."); if (note.documentStatus !== "posted") throw new Error("Only posted credit notes can be voided.");
-  assertEInvoiceSourceEditable(context.sqlite, "sales_credit_note", noteId);
   const now = new Date().toISOString();
-  context.sqlite.transaction(() => { invalidatePreparedEInvoice(context.sqlite, "sales_credit_note", noteId); assertVatSourceUnlocked(context.sqlite, "sales_credit_note", noteId, note.taxDate); reverseTransaction(context.sqlite, { originalSourceType: "sales_credit_note", originalSourceId: noteId, reversalSourceType: "sales_credit_note_void", reversalSourceId: noteId, date: now.slice(0, 10), description: `Void Sales Credit Note ${note.creditNoteNumber}` }); reverseTaxEntries(context.sqlite, { originalSourceType: "sales_credit_note", sourceId: noteId, reversalSourceType: "sales_credit_note_void", taxDate: note.taxDate }); context.sqlite.prepare("UPDATE sales_credit_notes SET document_status = 'void', voided_at = ?, updated_at = ? WHERE id = ?").run(now, now, noteId); }).immediate();
+  context.sqlite.transaction(() => { assertVatSourceUnlocked(context.sqlite, "sales_credit_note", noteId, note.taxDate); reverseTransaction(context.sqlite, { originalSourceType: "sales_credit_note", originalSourceId: noteId, reversalSourceType: "sales_credit_note_void", reversalSourceId: noteId, date: now.slice(0, 10), description: `Void Sales Credit Note ${note.creditNoteNumber}` }); reverseTaxEntries(context.sqlite, { originalSourceType: "sales_credit_note", sourceId: noteId, reversalSourceType: "sales_credit_note_void", taxDate: note.taxDate }); context.sqlite.prepare("UPDATE sales_credit_notes SET document_status = 'void', voided_at = ?, updated_at = ? WHERE id = ?").run(now, now, noteId); }).immediate();
 }

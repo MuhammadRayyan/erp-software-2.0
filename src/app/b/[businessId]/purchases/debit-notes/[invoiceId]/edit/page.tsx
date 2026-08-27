@@ -9,8 +9,6 @@ import { getPurchaseAccountOptions } from "@/modules/accounting/services/account
 import { getActiveTaxCodes } from "@/modules/accounting/services/tax-code-service";
 import { listCustomers } from "@/modules/customers/customer-service";
 import { getCustomFieldValuesForEntities, listCustomFieldDefinitions } from "@/modules/custom-fields/custom-field-service";
-import { getEDebitNoteForSource } from "@/modules/einvoicing/edebitNote-service";
-import { parseTransactionFlags } from "@/modules/einvoicing/edebitNote-types";
 import { listInventoryItemOptions } from "@/modules/inventory/inventory-item-service";
 import { listProjectOptions } from "@/modules/projects/project-service";
 import { DebitNoteForm } from "@/modules/purchase-debit-notes/debitNote-form";
@@ -26,10 +24,6 @@ export default async function EditDebitNotePage({ params }: { params: Promise<{ 
   if (record.debitNote.documentStatus === "void") {
     return <div className="page-container"><h1 className="page-title">Void debitNote</h1><p className="page-description">Void debitNotes are retained for history and cannot be edited.</p><Button asChild className="mt-5"><Link href={`/b/${businessId}/purchases/debit-notes/${debitNoteId}`}>Return to debitNote</Link></Button></div>;
   }
-  const eDebitNote = getEDebitNoteForSource(businessId, user.id, "purchases_debitNote", debitNoteId);
-  if (eDebitNote && ["Submitted", "Accepted", "Rejected"].includes(eDebitNote.status)) {
-    return <div className="page-container"><h1 className="page-title">Submitted eDebitNote snapshot</h1><p className="page-description">This source is immutable after submission. For an accepted debitNote, create a Purchase Credit Note to correct the accounting and eDebitNote trail.</p><div className="mt-5 flex gap-2"><Button asChild><Link href={`/b/${businessId}/purchases/debit-notes/${debitNoteId}`}>Return to debitNote</Link></Button>{eDebitNote.status === "Accepted" && record.balanceMinor > 0 && <Button asChild variant="secondary"><Link href={`/b/${businessId}/purchases/credit-notes/new?debitNoteId=${debitNoteId}`}>Create Credit Note</Link></Button>}</div></div>;
-  }
   const customers = listCustomers(businessId, user.id);
   const purchasesAccounts = getPurchaseAccountOptions(businessId, user.id);
   const taxCodes = getActiveTaxCodes(businessId, user.id).filter((code) => code.vatCategory && ["purchases", "both"].includes(code.direction));
@@ -43,7 +37,7 @@ export default async function EditDebitNotePage({ params }: { params: Promise<{ 
     : {};
   return <div className="page-container">
     <Link href={`/b/${businessId}/purchases/debit-notes/${debitNoteId}`} className="mb-5 inline-flex items-center gap-1.5 text-[13px] text-muted-foreground hover:text-foreground"><ArrowLeft className="size-4" /> {record.debitNote.debitNoteNumber}</Link>
-    <div className="mb-7"><h1 className="page-title">Edit Debit Note</h1><p className="page-description">{record.debitNote.documentStatus === "posted" ? "Financial changes rebuild the journal and invalidate any unsubmitted eDebitNote snapshot atomically." : "Update the draft, or post it when ready."}</p></div>
+    <div className="mb-7"><h1 className="page-title">Edit Debit Note</h1><p className="page-description">{record.debitNote.documentStatus === "posted" ? "Financial changes rebuild the journal atomically." : "Update the draft, or post it when ready."}</p></div>
     <DebitNoteForm
       businessId={businessId}
       debitNoteId={debitNoteId}
@@ -70,7 +64,6 @@ export default async function EditDebitNotePage({ params }: { params: Promise<{ 
         supplyEmirate: record.debitNote.supplyEmirate ?? "",
         dueDate: record.debitNote.dueDate,
         reference: record.debitNote.reference ?? "",
-        eDebitNoteTransactionFlags: parseTransactionFlags(record.debitNote.eDebitNoteTransactionFlagsJson),
         lines: record.lines.map((line) => ({ itemId: line.itemId ?? "", description: line.description, quantity: quantityMicrosToInput(line.quantityMicros), unitPrice: minorToCurrencyInput(line.unitPriceMinor, documentMinorUnit), purchasesAccountId: line.purchasesAccountId, taxCodeId: line.taxCodeId, projectId: line.projectId ?? "" })),
       }}
     />

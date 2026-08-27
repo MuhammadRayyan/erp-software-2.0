@@ -22,16 +22,34 @@ function insertLines(sqlite: ReturnType<typeof getBusinessDb>["sqlite"], quoteId
   for (const line of lines) statement.run(line.id, quoteId, line.itemId, line.description, line.quantityMicros, line.unitPriceMinor, line.salesAccountId, line.taxCodeId, line.projectId, line.netAmountMinor, line.taxAmountMinor, line.grossAmountMinor, line.lineIndex);
 }
 
-export function listSalesQuotes(businessId: string, userId: string, customerId?: string) {
+export function listSalesQuotes(
+  businessId: string,
+  userId: string,
+  filters?: { customerId?: string; from?: string; to?: string },
+) {
   const { sqlite } = getBusinessDb(businessId, userId);
-  const where = customerId ? "WHERE po.customer_id = ?" : "";
+  const where: string[] = [];
+  const params: string[] = [];
+  if (filters?.customerId) {
+    where.push("po.customer_id = ?");
+    params.push(filters.customerId);
+  }
+  if (filters?.from) {
+    where.push("po.date >= ?");
+    params.push(filters.from);
+  }
+  if (filters?.to) {
+    where.push("po.date <= ?");
+    params.push(filters.to);
+  }
+  const whereClause = where.length ? `WHERE ${where.join(" AND ")}` : "";
   const rows = sqlite.prepare(`SELECT po.*, s.name AS customer_name,
     (SELECT GROUP_CONCAT(DISTINCT COALESCE(l.project_id, po.project_id)) FROM sales_quote_lines l WHERE l.quote_id = po.id) AS project_ids,
     (SELECT COUNT(*) FROM sales_invoices pi WHERE pi.quote_id = po.id) AS invoice_count,
     cur.minor_unit AS currency_minor_unit
     FROM sales_quotes po INNER JOIN customers s ON s.id = po.customer_id
-    INNER JOIN currencies cur ON cur.code = po.currency_code ${where}
-    ORDER BY po.date DESC, po.created_at DESC`).all(...(customerId ? [customerId] : [])) as {
+    INNER JOIN currencies cur ON cur.code = po.currency_code ${whereClause}
+    ORDER BY po.date DESC, po.created_at DESC`).all(...params) as {
       id: string; quote_number: string; customer_id: string; customer_name: string; date: string;
       expected_date: string | null; reference: string | null; notes: string | null;
       documentStatus: SalesQuoteStatus; subtotal_minor: number; tax_minor: number; total_minor: number; currency_code: string; currency_minor_unit: number;

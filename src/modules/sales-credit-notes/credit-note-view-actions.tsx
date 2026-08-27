@@ -15,14 +15,12 @@ export function CreditNoteViewActions({
   creditNoteNumber,
   documentStatus,
   journalEntryId,
-  eInvoiceLocked,
 }: {
   businessId: string;
   noteId: string;
   creditNoteNumber: string;
   documentStatus: CreditNoteStatus;
   journalEntryId: string | null;
-  eInvoiceLocked: boolean;
 }) {
   const router = useRouter();
 
@@ -30,13 +28,13 @@ export function CreditNoteViewActions({
     <DocumentViewActions
       documentNumber={creditNoteNumber}
       documentType="Credit Note"
-      editHref={documentStatus !== "void" && !eInvoiceLocked ? `/b/${businessId}/sales/credit-notes/${noteId}/edit` : undefined}
+      editHref={documentStatus !== "void" ? `/b/${businessId}/sales/credit-notes/${noteId}/edit` : undefined}
       pdfHref={`/api/businesses/${businessId}/credit-notes/${noteId}/pdf`}
       onDuplicate={async () => {
         const result = await duplicateCreditNoteAction(businessId, noteId);
         if (result?.error) throw new Error(result.error);
       }}
-      onVoid={documentStatus === "posted" && !eInvoiceLocked ? {
+      onVoid={documentStatus === "posted" ? {
         label: "Void",
         description: "This retains the credit note and creates a balanced reversing journal entry. A credit note with refund allocations cannot be voided.",
         action: async () => {

@@ -99,9 +99,9 @@ export function CustomerForm({ businessId, customerId, currencies, initial, cust
         </div>
       </div></section>
       <details className="rounded-lg border border-border bg-surface-raised">
-        <summary className="cursor-pointer px-4 py-3 text-sm font-semibold">Electronic Invoicing details</summary>
+        <summary className="cursor-pointer px-4 py-3 text-sm font-semibold">Legal identity details</summary>
         <div className="grid gap-5 border-t border-border p-4 sm:grid-cols-2">
-          <p className="text-sm text-muted-foreground sm:col-span-2">Required only when this customer receives a PINT-AE eInvoice. UAE scheme 0235 electronic addresses are 10 digits beginning with 1.</p>
+          <p className="text-sm text-muted-foreground sm:col-span-2">Optional legal-name and tax-identifier details. UAE scheme 0235 electronic addresses are 10 digits beginning with 1.</p>
           <div className="space-y-1.5 sm:col-span-2"><Label htmlFor="legalName">Legal name</Label><Input id="legalName" {...register("legalName")} /></div>
           <div className="space-y-1.5"><Label htmlFor="trn">TRN</Label><Input id="trn" inputMode="numeric" {...register("trn")} aria-invalid={!!errors.trn} />{errors.trn && <p className="field-error">{errors.trn.message}</p>}</div>
           <div className="space-y-1.5"><Label htmlFor="legalRegistrationIdentifier">Trade-license identifier</Label><Input id="legalRegistrationIdentifier" {...register("legalRegistrationIdentifier")} /></div>

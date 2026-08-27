@@ -4,7 +4,6 @@ import path from "node:path";
 import { eq } from "drizzle-orm";
 import JSZip from "jszip";
 import { z } from "zod";
-import Database from "better-sqlite3";
 import { closeBusinessConnection, getBusinessDb, openBusinessDatabase } from "@/core/db/business";
 import { getBusinessPaths } from "@/core/db/paths";
 import { businesses, memberships } from "@/core/db/system-schema";
@@ -60,15 +59,6 @@ export async function exportBusinessBackup(businessId: string, userId: string) {
   const temporaryDatabase = path.join(context.paths.directory, `.backup-${randomUUID()}.sqlite`);
   try {
     await context.sqlite.backup(temporaryDatabase);
-    const portable = new Database(temporaryDatabase);
-    try {
-      portable.prepare(`
-        UPDATE business_einvoice_settings SET asp_provider_key = NULL, asp_environment = 'disabled'
-        WHERE id = 'default'
-      `).run();
-    } finally {
-      portable.close();
-    }
     const database = readFileSync(temporaryDatabase);
     const currencyConfiguration = context.sqlite.prepare(`
       SELECT code, name, symbol, minor_unit, is_base, is_active FROM currencies ORDER BY code
@@ -132,11 +122,6 @@ export async function importBusinessBackup(buffer: ArrayBuffer, userId: string) 
         throw new Error("Backup base-currency metadata does not match its business database.");
       }
     }
-    context.sqlite.prepare(`
-      UPDATE business_einvoice_settings
-      SET asp_provider_key = NULL, asp_environment = 'disabled', updated_at = ?
-      WHERE id = 'default'
-    `).run(now);
     for (const [name, entry] of Object.entries(zip.files)) {
       if (entry.dir || !name.startsWith("attachments/")) continue;
       const relative = name.slice("attachments/".length).replaceAll("\\", "/");

@@ -9,8 +9,6 @@ import { getSalesAccountOptions } from "@/modules/accounting/services/account-se
 import { getActiveTaxCodes } from "@/modules/accounting/services/tax-code-service";
 import { listCustomers } from "@/modules/customers/customer-service";
 import { getCustomFieldValuesForEntities, listCustomFieldDefinitions } from "@/modules/custom-fields/custom-field-service";
-import { getEQuoteForSource } from "@/modules/einvoicing/equote-service";
-import { parseTransactionFlags } from "@/modules/einvoicing/equote-types";
 import { listInventoryItemOptions } from "@/modules/inventory/inventory-item-service";
 import { listProjectOptions } from "@/modules/projects/project-service";
 import { SalesQuoteForm } from "@/modules/sales-quotes/quote-form";
@@ -26,10 +24,6 @@ export default async function EditQuotePage({ params }: { params: Promise<{ busi
   if (record.quote.documentStatus === "void") {
     return <div className="page-container"><h1 className="page-title">Void quote</h1><p className="page-description">Void quotes are retained for history and cannot be edited.</p><Button asChild className="mt-5"><Link href={`/b/${businessId}/sales/quotes/${quoteId}`}>Return to quote</Link></Button></div>;
   }
-  const eQuote = getEQuoteForSource(businessId, user.id, "sales_quote" as any, quoteId);
-  if (eQuote && ["Submitted", "Accepted", "Rejected"].includes(eQuote.status)) {
-    return <div className="page-container"><h1 className="page-title">Submitted eQuote snapshot</h1><p className="page-description">This source is immutable after submission. For an accepted quote, create a Sales Credit Note to correct the accounting and eQuote trail.</p><div className="mt-5 flex gap-2"><Button asChild><Link href={`/b/${businessId}/sales/quotes/${quoteId}`}>Return to quote</Link></Button>{eQuote.status === "Accepted" && record.balanceMinor > 0 && <Button asChild variant="secondary"><Link href={`/b/${businessId}/sales/credit-notes/new?quoteId=${quoteId}`}>Create Credit Note</Link></Button>}</div></div>;
-  }
   const customers = listCustomers(businessId, user.id);
   const salesAccounts = getSalesAccountOptions(businessId, user.id);
   const taxCodes = getActiveTaxCodes(businessId, user.id).filter((code) => code.vatCategory && ["sales", "both"].includes(code.direction));
@@ -43,7 +37,7 @@ export default async function EditQuotePage({ params }: { params: Promise<{ busi
     : {};
   return <div className="page-container">
     <Link href={`/b/${businessId}/sales/quotes/${quoteId}`} className="mb-5 inline-flex items-center gap-1.5 text-[13px] text-muted-foreground hover:text-foreground"><ArrowLeft className="size-4" /> {record.quote.quoteNumber}</Link>
-    <div className="mb-7"><h1 className="page-title">Edit Sales Quote</h1><p className="page-description">{record.quote.documentStatus === "posted" ? "Financial changes rebuild the journal and invalidate any unsubmitted eQuote snapshot atomically." : "Update the draft, or post it when ready."}</p></div>
+    <div className="mb-7"><h1 className="page-title">Edit Sales Quote</h1><p className="page-description">{record.quote.documentStatus === "posted" ? "Financial changes rebuild the journal atomically." : "Update the draft, or post it when ready."}</p></div>
     <SalesQuoteForm
       businessId={businessId}
       quoteId={quoteId}
@@ -70,7 +64,6 @@ export default async function EditQuotePage({ params }: { params: Promise<{ busi
         supplyEmirate: record.quote.supplyEmirate ?? "",
         dueDate: record.quote.dueDate,
         reference: record.quote.reference ?? "",
-        eQuoteTransactionFlags: parseTransactionFlags(record.quote.eQuoteTransactionFlagsJson),
         lines: record.lines.map((line) => ({ itemId: line.itemId ?? "", description: line.description, quantity: quantityMicrosToInput(line.quantityMicros), unitPrice: minorToCurrencyInput(line.unitPriceMinor, documentMinorUnit), salesAccountId: line.salesAccountId, taxCodeId: line.taxCodeId, projectId: line.projectId ?? "" })),
       }}
     />

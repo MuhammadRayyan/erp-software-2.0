@@ -39,6 +39,65 @@ type StoredLine = {
 
 export type DebitNoteStatus = "draft" | "posted" | "void";
 export type DebitNoteIntent = "draft" | "post";
+
+/** List all debit notes for a business, newest first, with optional date range. */
+export function listDebitNotes(
+  businessId: string,
+  userId: string,
+  filters?: { from?: string; to?: string },
+) {
+  const { sqlite } = getBusinessDb(businessId, userId);
+  const where: string[] = [];
+  const params: string[] = [];
+  if (filters?.from) {
+    where.push("n.debit_note_date >= ?");
+    params.push(filters.from);
+  }
+  if (filters?.to) {
+    where.push("n.debit_note_date <= ?");
+    params.push(filters.to);
+  }
+  const whereClause = where.length ? `WHERE ${where.join(" AND ")}` : "";
+  const rows = sqlite
+    .prepare(
+      `SELECT n.id, n.debit_note_number, n.supplier_id, s.name AS supplier_name,
+        n.debit_note_date, n.reference, n.document_status,
+        n.subtotal_minor, n.tax_minor, n.total_minor,
+        n.currency_code, cur.minor_unit AS currency_minor_unit,
+        (SELECT GROUP_CONCAT(DISTINCT COALESCE(l.project_id, n.project_id)) FROM debit_note_lines l WHERE l.debit_note_id = n.id) AS project_ids
+       FROM debit_notes n
+       INNER JOIN suppliers s ON s.id = n.supplier_id
+       INNER JOIN currencies cur ON cur.code = n.currency_code
+       ${whereClause}
+       ORDER BY n.debit_note_date DESC, n.created_at DESC`,
+    )
+    .all(...params) as {
+    id: string;
+    debit_note_number: string;
+    supplier_id: string;
+    supplier_name: string;
+    debit_note_date: string;
+    reference: string | null;
+    document_status: DebitNoteStatus;
+    subtotal_minor: number;
+    tax_minor: number;
+    total_minor: number;
+    currency_code: string;
+    currency_minor_unit: number;
+    project_ids: string | null;
+  }[];
+  const projects = sqlite.prepare("SELECT id, name FROM projects").all() as { id: string; name: string }[];
+  const projectById = new Map(projects.map((p) => [p.id, p.name]));
+  return rows.map((row) => {
+    const projectIds = row.project_ids?.split(",").filter(Boolean) ?? [];
+    return {
+      ...row,
+      projectIds,
+      projectNames: projectIds.map((id) => projectById.get(id) ?? id),
+    };
+  });
+}
+
 export function saveDebitNote(businessId: string, userId: string, data: DebitNoteInput, intent: DebitNoteIntent, noteId?: string) {
   const context = getBusinessDb(businessId, userId);
   const status = intent === "post" ? "posted" : "draft";

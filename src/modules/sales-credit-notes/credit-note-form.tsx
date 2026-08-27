@@ -18,7 +18,6 @@ import {
 } from "./credit-note-input";
 import type { CreditNoteStatus } from "./credit-note-service";
 import { emirateLabels, emirates } from "@/modules/tax/uae-vat-config";
-import { creditNoteReasonCodes } from "@/modules/einvoicing/einvoice-types";
 import { DocumentFormFooter } from "@/components/document-form-footer";
 import { SelectNative } from "@/components/ui/select-native";
 
@@ -363,20 +362,6 @@ export function CreditNoteForm({
             </Label>
             <Input id="reason" {...register("reason")} />
           </div>
-          <div className="space-y-1.5 md:col-span-2">
-            <Label htmlFor="eInvoiceReasonCode">PINT-AE credit reason</Label>
-            <SelectNative
-              id="eInvoiceReasonCode"
-              {...register("eInvoiceReasonCode")}
-            >
-              <option value="">Choose before eInvoice preparation</option>
-              {creditNoteReasonCodes.map((reason) => (
-                <option key={reason.value} value={reason.value}>
-                  {reason.value} · {reason.label}
-                </option>
-              ))}
-            </SelectNative>
-          </div>
         </div>
       </section>
       <section className="border-b border-border pb-7">
@@ -406,69 +391,6 @@ export function CreditNoteForm({
           </div>
         </dl>
       </section>
-      <details className="rounded-lg border border-border bg-surface-raised">
-        <summary className="cursor-pointer px-4 py-3 text-sm font-semibold">
-          Advanced Electronic Invoicing transaction types
-        </summary>
-        <div className="grid gap-3 border-t border-border p-4 sm:grid-cols-2 lg:grid-cols-4">
-          <label className="flex items-center gap-2 text-sm">
-            <input
-              type="checkbox"
-              {...register("eInvoiceTransactionFlags.freeTradeZone")}
-            />{" "}
-            Free Trade Zone
-          </label>
-          <label className="flex items-center gap-2 text-sm">
-            <input
-              type="checkbox"
-              {...register("eInvoiceTransactionFlags.deemedSupply")}
-            />{" "}
-            Deemed supply
-          </label>
-          <label className="flex items-center gap-2 text-sm">
-            <input
-              type="checkbox"
-              {...register("eInvoiceTransactionFlags.marginScheme")}
-            />{" "}
-            Margin scheme
-          </label>
-          <label className="flex items-center gap-2 text-sm">
-            <input
-              type="checkbox"
-              {...register("eInvoiceTransactionFlags.summaryInvoice")}
-            />{" "}
-            Summary invoice
-          </label>
-          <label className="flex items-center gap-2 text-sm">
-            <input
-              type="checkbox"
-              {...register("eInvoiceTransactionFlags.continuousSupply")}
-            />{" "}
-            Continuous supply
-          </label>
-          <label className="flex items-center gap-2 text-sm">
-            <input
-              type="checkbox"
-              {...register("eInvoiceTransactionFlags.agentBilling")}
-            />{" "}
-            Agent billing
-          </label>
-          <label className="flex items-center gap-2 text-sm">
-            <input
-              type="checkbox"
-              {...register("eInvoiceTransactionFlags.eCommerce")}
-            />{" "}
-            E-commerce
-          </label>
-          <label className="flex items-center gap-2 text-sm">
-            <input
-              type="checkbox"
-              {...register("eInvoiceTransactionFlags.export")}
-            />{" "}
-            Export
-          </label>
-        </div>
-      </details>
       
       <section>
         <div className="mb-3 flex flex-wrap items-end justify-between gap-3">

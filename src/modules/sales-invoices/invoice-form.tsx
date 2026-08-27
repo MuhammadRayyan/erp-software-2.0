@@ -165,22 +165,6 @@ export function InvoiceForm({
         <DocumentCurrencyFields baseCurrencyCode={currency} currencies={currencies} rates={rates} currencyCode={currencyCode} exchangeRateToBase={exchangeRateToBase} exchangeRateDate={exchangeRateDate} exchangeRateSource={exchangeRateSource} relevantDate={taxDate || invoiceDate} disabled={documentStatus === "posted"} onChange={(field, value) => setValue(field, value)} />
         {currencyCode !== currency && <p className="mt-3 text-xs text-muted-foreground">UAE VAT-relevant invoices require a stored CBUAE-labelled rate for the VAT tax date. Posting preserves this exact snapshot.</p>}
       </section>
-      <details className="rounded-lg border border-border bg-surface-raised">
-        <summary className="cursor-pointer px-4 py-3 text-sm font-semibold">Advanced Electronic Invoicing transaction types</summary>
-        <div className="border-t border-border p-4">
-          <p className="mb-4 text-sm text-muted-foreground">These flags form the eight-character PINT-AE Profile Execution ID. Phase 7 validates the standard 00000000 subset; flagged scenarios are retained but reported as unsupported.</p>
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-            <label className="flex items-center gap-2 text-sm"><input type="checkbox" {...register("eInvoiceTransactionFlags.freeTradeZone")} /> Free Trade Zone</label>
-            <label className="flex items-center gap-2 text-sm"><input type="checkbox" {...register("eInvoiceTransactionFlags.deemedSupply")} /> Deemed supply</label>
-            <label className="flex items-center gap-2 text-sm"><input type="checkbox" {...register("eInvoiceTransactionFlags.marginScheme")} /> Margin scheme</label>
-            <label className="flex items-center gap-2 text-sm"><input type="checkbox" {...register("eInvoiceTransactionFlags.summaryInvoice")} /> Summary invoice</label>
-            <label className="flex items-center gap-2 text-sm"><input type="checkbox" {...register("eInvoiceTransactionFlags.continuousSupply")} /> Continuous supply</label>
-            <label className="flex items-center gap-2 text-sm"><input type="checkbox" {...register("eInvoiceTransactionFlags.agentBilling")} /> Agent billing</label>
-            <label className="flex items-center gap-2 text-sm"><input type="checkbox" {...register("eInvoiceTransactionFlags.eCommerce")} /> E-commerce</label>
-            <label className="flex items-center gap-2 text-sm"><input type="checkbox" {...register("eInvoiceTransactionFlags.export")} /> Export</label>
-          </div>
-        </div>
-      </details>
       <section>
         <div className="mb-3 flex flex-wrap items-end justify-between gap-3"><div><h2 className="text-base font-semibold">Line items</h2><p className="mt-1 text-sm text-muted-foreground">Select an item for inventory sales, or leave it blank for a service line.</p></div><div className="flex gap-2"><Button type="button" variant="ghost" size="sm" onClick={() => setShowLineProjects((value) => !value)} aria-pressed={showLineProjects}><Columns3 className="size-4" /> {showLineProjects ? "Hide line Projects" : "Show Project per line"}</Button><Button type="button" variant="secondary" size="sm" onClick={() => append({ itemId: "", description: "", quantity: "1", unitPrice: "0.00", salesAccountId: defaultSalesAccountId, taxCodeId: defaultTaxCodeId, projectId: "" })}><Plus className="size-4" /> Add line</Button></div></div>
         {typeof errors.lines?.message === "string" && <p className="field-error mb-2">{errors.lines.message}</p>}

@@ -23,7 +23,6 @@ import { saveBankTransaction } from "@/modules/banking/bank-transaction-service"
 import { createBankTransfer } from "@/modules/banking/bank-transfer-service";
 import { importBankStatement } from "@/modules/banking/statement-service";
 import { updateTaxSettings } from "@/modules/tax/tax-settings-service";
-import { updateEInvoiceSettings } from "@/modules/einvoicing/settings-service";
 import { saveExchangeRate } from "@/modules/currency/exchange-rate";
 import { memberships, users } from "./system-schema";
 import { getSystemDb } from "./system";
@@ -214,22 +213,6 @@ export async function seedDemoData() {
     vatDeregistrationDate: "",
     defaultSupplyEmirate: "dubai",
   });
-  updateEInvoiceSettings(business.id, admin.id, {
-    enabled: true,
-    legalName: "Northstar Technical Services LLC",
-    legalRegistrationIdentifier: "112345678900003",
-    addressLine1: "22 Innovation Avenue",
-    city: "Dubai",
-    countrySubdivision: "DXB",
-    countryCode: "AE",
-    participantIdentifier: "",
-    participantIdentifierScheme: "",
-    endpointIdentifier: "1357902468",
-    endpointIdentifierScheme: "0235",
-    aspProviderKey: "mock",
-    aspEnvironment: "mock",
-    specificationVersion: "1.0.4",
-  });
   updateCustomer(business.id, admin.id, emberlineId, {
     name: "Emberline Trading LLC",
     email: "accounts@emberline.example",
@@ -247,7 +230,7 @@ export async function seedDemoData() {
     buyerReference: "EMBER-AP",
   });
   const eInvoiceDemoInvoiceId = ensureInvoice("DEMO-EINVOICE-INVOICE", emberlineId, "post", 14, [
-    { description: "PINT-AE implementation services", quantity: "1", unitPrice: "1200.00", taxCodeId: vatSales.id },
+    { description: "Implementation services", quantity: "1", unitPrice: "1200.00", taxCodeId: vatSales.id },
   ]);
   const receiptExists = (reference: string) => Boolean(
     context.sqlite.prepare("SELECT 1 FROM receipts WHERE reference = ? LIMIT 1").get(reference),
@@ -375,7 +358,6 @@ export async function seedDemoData() {
       date: isoOffset(0),
       reference: "DEMO-EINVOICE-CREDIT",
       reason: "Returned service component",
-      eInvoiceReasonCode: "DL8.61.1.D",
       lines: [{ description: "Returned service component", quantity: "1", unitPrice: "100.00", salesAccountId: settings.defaultSalesAccountId, taxCodeId: vatSales.id }],
     }, "post");
   }
@@ -421,7 +403,7 @@ export async function seedDemoData() {
     saveGoodsReceipt(business.id, admin.id, {
       supplierId: atlasId, purchaseOrderId: inboundReceiptOrderId, purchaseInvoiceId: "", date: isoOffset(-4),
       locationId: mainLocation.id, reference: "DEMO-INVENTORY-PO-RECEIPT", projectId: "",
-      notes: "Partial receipt used for deterministic inbound eInvoice matching",
+      notes: "Partial receipt used for inbound supplier matching",
       lines: [{ itemId: inboundFixtureId, description: "Inbound Matching Fixture", quantity: "20", unitCost: "8.00", projectId: "", purchaseOrderLineId: inventoryOrderLine.id, purchaseInvoiceLineId: "" }],
     }, "post");
   }

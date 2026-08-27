@@ -12,9 +12,11 @@ import {
   ShoppingCart,
   Truck,
   FileInput,
-  FileCode2,
   MapPin,
   Package,
+  PackageCheck,
+  Receipt,
+  HandCoins,
 } from "lucide-react";
 import type { ModuleKey } from "@/core/permissions/permissions";
 
@@ -32,10 +34,11 @@ export const primaryNav: { label?: string; items: NavItem[] }[] = [
     items: [
       { label: "Customers", path: "/customers", icon: ContactRound, module: "sales" },
       { label: "Quotes", path: "/sales/quotes", icon: FileText, module: "sales" },
-      { label: "Orders", path: "/sales/orders", icon: ShoppingCart, module: "sales" },
+      { label: "Sales Orders", path: "/sales/orders", icon: ShoppingCart, module: "sales" },
       { label: "Invoices", path: "/sales/invoices", icon: ReceiptText, module: "sales" },
+      { label: "Receipts", path: "/sales/receipts", icon: Receipt, module: "sales" },
       { label: "Credit Notes", path: "/sales/credit-notes", icon: ReceiptText, module: "sales" },
-      { label: "Electronic Invoices", path: "/einvoicing", icon: FileCode2, module: "sales" },
+      { label: "Delivery Notes", path: "/sales/delivery-notes", icon: Truck, module: "sales" },
       { label: "Sent Emails", path: "/emails", icon: Mail, module: "sales" },
     ],
   },
@@ -45,7 +48,9 @@ export const primaryNav: { label?: string; items: NavItem[] }[] = [
       { label: "Suppliers", path: "/suppliers", icon: Truck, module: "purchases" },
       { label: "Purchase Orders", path: "/purchases/orders", icon: ShoppingCart, module: "purchases" },
       { label: "Purchase Invoices", path: "/purchases/invoices", icon: FileInput, module: "purchases" },
-      { label: "Supplier eInvoices", path: "/purchases/einvoices", icon: FileCode2, module: "purchases" },
+      { label: "Supplier Payments", path: "/purchases/payments", icon: HandCoins, module: "purchases" },
+      { label: "Debit Notes", path: "/purchases/debit-notes", icon: ReceiptText, module: "purchases" },
+      { label: "Goods Receipts", path: "/purchases/goods-receipts", icon: PackageCheck, module: "purchases" },
     ],
   },
   {

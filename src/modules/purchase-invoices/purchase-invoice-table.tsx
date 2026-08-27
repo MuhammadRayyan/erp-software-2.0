@@ -2,13 +2,13 @@
 
 import { useMemo, useState } from "react";
 import Link from "next/link";
-import { Columns3, MoreHorizontal } from "lucide-react";
+import { MoreHorizontal } from "lucide-react";
 import { StatusBadge, statusLabel } from "@/components/status-badge";
 import { ListToolbar, SearchInput, ToolbarSelect } from "@/components/list-toolbar";
 import { Button } from "@/components/ui/button";
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { FilterChip } from "@/components/ui/filter-chip";
-import { useColumnVisibility, type ColumnVisibility } from "@/components/use-column-visibility";
+import { StatusFilterSelect } from "@/components/status-filter-select";
+import { useColumns } from "@/components/columns-dropdown";
 import { formatDate, formatMoney } from "@/core/format";
 import type { PurchaseInvoiceStatus, PurchasePaymentStatus } from "./purchase-invoice-service";
 
@@ -53,7 +53,7 @@ export function PurchaseInvoiceTable({
   businessId: string;
   invoices: Row[];
   /** Server-loaded snapshot for the "purchase-invoices" storage key. */
-  serverSnapshot?: ColumnVisibility;
+  serverSnapshot?: import("@/components/use-column-visibility").ColumnVisibility;
 }) {
   const [query, setQuery] = useState("");
   const [status, setStatus] = useState("");
@@ -72,11 +72,11 @@ export function PurchaseInvoiceTable({
       ).sort((a, b) => a[1].localeCompare(b[1])),
     [invoices],
   );
-  // Memoized so the shared visibility hook sees a stable defaults reference.
-  // All listed columns default to visible — the snapshot only stores
-  // explicitly-toggled entries.
-  const initialColumns = useMemo(
-    () => ({
+  const { columns, dropdown } = useColumns({
+    storageKey: "purchase-invoices",
+    businessId,
+    serverSnapshot,
+    initial: {
       supplierInvoice: true,
       date: true,
       due: true,
@@ -84,14 +84,9 @@ export function PurchaseInvoiceTable({
       balance: true,
       payment: true,
       document: true,
-    }),
-    [],
-  );
-  const { visibility: columns, toggle: toggleColumn } = useColumnVisibility("purchase-invoices", initialColumns, {
-    businessId,
-    serverSnapshot,
+    },
+    labels: COLUMN_LABELS,
   });
-  const columnLabel = (column: string) => COLUMN_LABELS[column] ?? column;
   const rows = useMemo(
     () =>
       invoices.filter((invoice) => {
@@ -137,46 +132,26 @@ export function PurchaseInvoiceTable({
           className="min-w-44"
           options={[{ value: "", label: "All projects" }, ...projectOptions.map(([id, name]) => ({ value: id, label: name }))]}
         />
-        <select
+        <StatusFilterSelect
           value={status}
-          onChange={(event) => setStatus(event.target.value)}
-          aria-label="Filter invoices"
-          className="h-9 rounded-[6px] border border-border-strong bg-surface-raised px-3 text-sm"
-        >
-          <option value="">All statuses</option>
-          <optgroup label="Document">
-            <option value="document:draft">Draft</option>
-            <option value="document:posted">Posted</option>
-            <option value="document:void">Void</option>
-          </optgroup>
-          <optgroup label="Payment">
-            <option value="payment:unpaid">Unpaid</option>
-            <option value="payment:partially_paid">Partially Paid</option>
-            <option value="payment:paid">Paid</option>
-            <option value="payment:overdue">Overdue</option>
-          </optgroup>
-        </select>
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button variant="secondary">
-              <Columns3 className="size-4" /> Columns
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end">
-            {Object.entries(columns).map(([column, visible]) => (
-              <DropdownMenuItem
-                key={column}
-                onSelect={(event) => {
-                  event.preventDefault();
-                  toggleColumn(column);
-                }}
-              >
-                <span className="w-4">{visible ? "✓" : ""}</span>
-                {columnLabel(column)}
-              </DropdownMenuItem>
-            ))}
-          </DropdownMenuContent>
-        </DropdownMenu>
+          onChange={setStatus}
+          ariaLabel="Filter invoices"
+          options={[
+            { value: "", label: "All statuses" },
+            { label: "Document", options: [
+              { value: "document:draft", label: "Draft" },
+              { value: "document:posted", label: "Posted" },
+              { value: "document:void", label: "Void" },
+            ]},
+            { label: "Payment", options: [
+              { value: "payment:unpaid", label: "Unpaid" },
+              { value: "payment:partially_paid", label: "Partially Paid" },
+              { value: "payment:paid", label: "Paid" },
+              { value: "payment:overdue", label: "Overdue" },
+            ]},
+          ]}
+        />
+        {dropdown}
       </ListToolbar>
       {hasActiveFilter && (
         <ListToolbar>

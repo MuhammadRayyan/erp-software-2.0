@@ -8,8 +8,6 @@ import { getSalesAccountOptions } from "@/modules/accounting/services/account-se
 import { getActiveTaxCodes } from "@/modules/accounting/services/tax-code-service";
 import { listCustomers } from "@/modules/customers/customer-service";
 import { getCustomFieldValuesForEntities, listCustomFieldDefinitions } from "@/modules/custom-fields/custom-field-service";
-import { getEInvoiceForSource } from "@/modules/einvoicing/einvoice-service";
-import { parseTransactionFlags } from "@/modules/einvoicing/einvoice-types";
 import { listInventoryItemOptions } from "@/modules/inventory/inventory-item-service";
 import { listProjectOptions } from "@/modules/projects/project-service";
 import { InvoiceForm } from "@/modules/sales-invoices/invoice-form";
@@ -25,10 +23,6 @@ export default async function EditInvoicePage({ params }: { params: Promise<{ bu
   if (record.invoice.documentStatus === "void") {
     return <div className="page-container"><h1 className="page-title">Void invoice</h1><p className="page-description">Void invoices are retained for history and cannot be edited.</p><Button asChild className="mt-5"><Link href={`/b/${businessId}/sales/invoices/${invoiceId}`}>Return to invoice</Link></Button></div>;
   }
-  const eInvoice = getEInvoiceForSource(businessId, user.id, "sales_invoice", invoiceId);
-  if (eInvoice && ["Submitted", "Accepted", "Rejected"].includes(eInvoice.status)) {
-    return <div className="page-container"><h1 className="page-title">Submitted eInvoice snapshot</h1><p className="page-description">This source is immutable after submission. For an accepted invoice, create a Sales Credit Note to correct the accounting and eInvoice trail.</p><div className="mt-5 flex gap-2"><Button asChild><Link href={`/b/${businessId}/sales/invoices/${invoiceId}`}>Return to invoice</Link></Button>{eInvoice.status === "Accepted" && record.balanceMinor > 0 && <Button asChild variant="secondary"><Link href={`/b/${businessId}/sales/credit-notes/new?invoiceId=${invoiceId}`}>Create Credit Note</Link></Button>}</div></div>;
-  }
   const customers = listCustomers(businessId, user.id);
   const salesAccounts = getSalesAccountOptions(businessId, user.id);
   const taxCodes = getActiveTaxCodes(businessId, user.id).filter((code) => code.vatCategory && ["sales", "both"].includes(code.direction));
@@ -42,7 +36,7 @@ export default async function EditInvoicePage({ params }: { params: Promise<{ bu
     : {};
   return <div className="page-container">
     <Link href={`/b/${businessId}/sales/invoices/${invoiceId}`} className="mb-5 inline-flex items-center gap-1.5 text-[13px] text-muted-foreground hover:text-foreground"><ArrowLeft className="size-4" /> {record.invoice.invoiceNumber}</Link>
-    <div className="mb-7"><h1 className="page-title">Edit Sales Invoice</h1><p className="page-description">{record.invoice.documentStatus === "posted" ? "Financial changes rebuild the journal and invalidate any unsubmitted eInvoice snapshot atomically." : "Update the draft, or post it when ready."}</p></div>
+    <div className="mb-7"><h1 className="page-title">Edit Sales Invoice</h1><p className="page-description">{record.invoice.documentStatus === "posted" ? "Financial changes rebuild the journal atomically." : "Update the draft, or post it when ready."}</p></div>
     <InvoiceForm
       businessId={businessId}
       invoiceId={invoiceId}
@@ -69,7 +63,6 @@ export default async function EditInvoicePage({ params }: { params: Promise<{ bu
         supplyEmirate: record.invoice.supplyEmirate ?? "",
         dueDate: record.invoice.dueDate,
         reference: record.invoice.reference ?? "",
-        eInvoiceTransactionFlags: parseTransactionFlags(record.invoice.eInvoiceTransactionFlagsJson),
         lines: record.lines.map((line) => ({ itemId: line.itemId ?? "", description: line.description, quantity: quantityMicrosToInput(line.quantityMicros), unitPrice: minorToCurrencyInput(line.unitPriceMinor, documentMinorUnit), salesAccountId: line.salesAccountId, taxCodeId: line.taxCodeId, projectId: line.projectId ?? "" })),
       }}
     />

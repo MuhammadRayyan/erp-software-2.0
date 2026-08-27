@@ -19,7 +19,6 @@ const { businessMigrations } = await import("../src/core/db/business-migrations"
 const { runMigrations } = await import("../src/core/db/migrations/runner");
 const { changeBaseCurrency, getCurrencySettings, saveCurrency, saveExchangeRate } = await import("../src/modules/currency/exchange-rate");
 const { convertFromBase, convertToBase, parseCurrencyAmountToMinor, proportionalCarryingRelease, roundCurrencyAmount, validateExchangeRate } = await import("../src/modules/currency/conversion");
-const { mapSourceToCanonical } = await import("../src/modules/einvoicing/canonical-mapper");
 const { createInvoice } = await import("../src/modules/sales-invoices/invoice-service");
 const { createReceipt, voidReceipt } = await import("../src/modules/receipts/receipt-service");
 const { savePurchaseInvoice } = await import("../src/modules/purchase-invoices/purchase-invoice-service");
@@ -35,7 +34,7 @@ test("Phase 9 migration preserves Phase 8 data and installs business-local curre
   const now = new Date().toISOString();
   legacy.prepare("INSERT INTO customers (id, name, status, created_at, updated_at) VALUES ('legacy-customer', 'Legacy Customer', 'active', ?, ?)").run(now, now);
   runMigrations(legacy, { label: "Phase 9 migration fixture", migrations: businessMigrations });
-  assert.equal((legacy.prepare("SELECT MAX(version) AS version FROM schema_migrations").get() as { version: number }).version, 16);
+  assert.equal((legacy.prepare("SELECT MAX(version) AS version FROM schema_migrations").get() as { version: number }).version, 17);
   assert.deepEqual(legacy.prepare("SELECT base_currency_code, metadata_source FROM business_currency_settings WHERE id = 'default'").get(), { base_currency_code: "AED", metadata_source: "migration_default" });
   assert.deepEqual(legacy.prepare("SELECT code, minor_unit, is_base FROM currencies ORDER BY code").all(), [
     { code: "AED", minor_unit: 2, is_base: 1 },
@@ -123,12 +122,6 @@ test("Phase 9 foreign Sales posting, VAT snapshot, settlement, and immutability"
       journal: sqlite.prepare("SELECT SUM(debit_minor) AS debit, SUM(credit_minor) AS credit FROM journal_lines WHERE journal_entry_id = (SELECT id FROM journal_entries WHERE source_type = 'sales_invoice' AND source_id = ?)").get(invoice.id),
     });
     assert.equal(after, before);
-  });
-
-  await suite.test("foreign outbound PINT-AE fails honestly at the existing provider-neutral boundary", () => {
-    const mapped = mapSourceToCanonical(sqlite, "sales_invoice", String(invoice.id), "00000000-0000-4000-8000-000000000009", "1.0.4");
-    assert.equal(mapped.canonical, null);
-    assert.ok(mapped.issues.some((issue) => issue.ruleId === "UNSUPPORTED-FOREIGN-CURRENCY" && /Unsupported in current PINT-AE ERP subset/.test(issue.message)));
   });
 });
 
@@ -321,8 +314,6 @@ test("Phase 9 backup v2 preserves fiscal/base currency configuration and exclude
   changeBaseCurrency(portable.id, adminId, "USD");
   saveCurrency(portable.id, adminId, { code: "KWD", name: "Kuwaiti Dinar", symbol: "KD", minorUnit: 3, isActive: true });
   saveExchangeRate(portable.id, adminId, { currencyCode: "EUR", rateDate: "2036-01-01", rateToBase: "1.090000", source: "Manual", sourceReference: "Portable backup fixture" });
-  const source = getBusinessDb(portable.id, adminId).sqlite;
-  source.prepare("UPDATE business_einvoice_settings SET asp_provider_key = 'mock-secret', asp_environment = 'mock' WHERE id = 'default'").run();
   const backup = await exportBusinessBackup(portable.id, adminId);
   const restoredId = await importBusinessBackup(backup.buffer.slice(backup.byteOffset, backup.byteOffset + backup.byteLength) as ArrayBuffer, adminId);
   const restoredRegistry = listBusinessesForUser(adminId).find((entry) => entry.business.id === restoredId)!.business;
@@ -333,5 +324,4 @@ test("Phase 9 backup v2 preserves fiscal/base currency configuration and exclude
   assert.deepEqual(restored.prepare("SELECT base_currency_code FROM business_currency_settings WHERE id = 'default'").get(), { base_currency_code: "USD" });
   assert.deepEqual(restored.prepare("SELECT minor_unit, is_active FROM currencies WHERE code = 'KWD'").get(), { minor_unit: 3, is_active: 1 });
   assert.deepEqual(restored.prepare("SELECT rate_to_base, source_reference FROM exchange_rates WHERE currency_code = 'EUR'").get(), { rate_to_base: "1.090000", source_reference: "Portable backup fixture" });
-  assert.deepEqual(restored.prepare("SELECT asp_provider_key, asp_environment FROM business_einvoice_settings WHERE id = 'default'").get(), { asp_provider_key: null, asp_environment: "disabled" });
 });

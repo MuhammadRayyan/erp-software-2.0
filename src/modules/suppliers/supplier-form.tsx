@@ -56,8 +56,8 @@ export function SupplierForm({ businessId, supplierId, currencies, initial, cust
       </div>
     </section>
     <section className="border-b border-border pb-7">
-      <h2 className="text-base font-semibold">Electronic Invoicing</h2>
-      <p className="mt-1 text-sm text-muted-foreground">Strong identifiers are used for deterministic inbound PINT-AE Supplier matching. Names alone never auto-confirm a match.</p>
+      <h2 className="text-base font-semibold">Legal identity</h2>
+      <p className="mt-1 text-sm text-muted-foreground">Strong identifiers (TRN, electronic address) help with supplier matching and tax reporting.</p>
       <div className="mt-5 grid gap-5 md:grid-cols-2">
         <div className="space-y-1.5 md:col-span-2"><Label htmlFor="legalName">Legal name <span className="font-normal text-muted-foreground">(optional)</span></Label><Input id="legalName" {...register("legalName")} /></div>
         <div className="space-y-1.5"><Label htmlFor="trn">TRN <span className="font-normal text-muted-foreground">(optional)</span></Label><Input id="trn" {...register("trn")} /></div>

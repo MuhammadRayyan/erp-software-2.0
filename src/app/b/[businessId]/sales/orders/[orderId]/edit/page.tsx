@@ -9,8 +9,6 @@ import { getSalesAccountOptions } from "@/modules/accounting/services/account-se
 import { getActiveTaxCodes } from "@/modules/accounting/services/tax-code-service";
 import { listCustomers } from "@/modules/customers/customer-service";
 import { getCustomFieldValuesForEntities, listCustomFieldDefinitions } from "@/modules/custom-fields/custom-field-service";
-import { getEOrderForSource } from "@/modules/einvoicing/esales-order-service";
-import { parseTransactionFlags } from "@/modules/einvoicing/eorder-types";
 import { listInventoryItemOptions } from "@/modules/inventory/inventory-item-service";
 import { listProjectOptions } from "@/modules/projects/project-service";
 import { SalesOrderForm } from "@/modules/sales-orders/sales-order-form";
@@ -26,10 +24,6 @@ export default async function EditOrderPage({ params }: { params: Promise<{ busi
   if (record.order.documentStatus === "void") {
     return <div className="page-container"><h1 className="page-title">Void order</h1><p className="page-description">Void orders are retained for history and cannot be edited.</p><Button asChild className="mt-5"><Link href={`/b/${businessId}/sales/orders/${orderId}`}>Return to order</Link></Button></div>;
   }
-  const eOrder = getEOrderForSource(businessId, user.id, "sales_order" as any, orderId);
-  if (eOrder && ["Submitted", "Accepted", "Rejected"].includes(eOrder.status)) {
-    return <div className="page-container"><h1 className="page-title">Submitted eOrder snapshot</h1><p className="page-description">This source is immutable after submission. For an accepted order, create a Sales Credit Note to correct the accounting and eOrder trail.</p><div className="mt-5 flex gap-2"><Button asChild><Link href={`/b/${businessId}/sales/orders/${orderId}`}>Return to order</Link></Button>{eOrder.status === "Accepted" && record.balanceMinor > 0 && <Button asChild variant="secondary"><Link href={`/b/${businessId}/sales/credit-notes/new?orderId=${orderId}`}>Create Credit Note</Link></Button>}</div></div>;
-  }
   const customers = listCustomers(businessId, user.id);
   const salesAccounts = getSalesAccountOptions(businessId, user.id);
   const taxCodes = getActiveTaxCodes(businessId, user.id).filter((code) => code.vatCategory && ["sales", "both"].includes(code.direction));
@@ -43,7 +37,7 @@ export default async function EditOrderPage({ params }: { params: Promise<{ busi
     : {};
   return <div className="page-container">
     <Link href={`/b/${businessId}/sales/orders/${orderId}`} className="mb-5 inline-flex items-center gap-1.5 text-[13px] text-muted-foreground hover:text-foreground"><ArrowLeft className="size-4" /> {record.order.orderNumber}</Link>
-    <div className="mb-7"><h1 className="page-title">Edit Sales Order</h1><p className="page-description">{record.order.documentStatus === "posted" ? "Financial changes rebuild the journal and invalidate any unsubmitted eOrder snapshot atomically." : "Update the draft, or post it when ready."}</p></div>
+    <div className="mb-7"><h1 className="page-title">Edit Sales Order</h1><p className="page-description">{record.order.documentStatus === "posted" ? "Financial changes rebuild the journal atomically." : "Update the draft, or post it when ready."}</p></div>
     <SalesOrderForm
       businessId={businessId}
       orderId={orderId}
@@ -70,7 +64,6 @@ export default async function EditOrderPage({ params }: { params: Promise<{ busi
         supplyEmirate: record.order.supplyEmirate ?? "",
         dueDate: record.order.dueDate,
         reference: record.order.reference ?? "",
-        eOrderTransactionFlags: parseTransactionFlags(record.order.eOrderTransactionFlagsJson),
         lines: record.lines.map((line) => ({ itemId: line.itemId ?? "", description: line.description, quantity: quantityMicrosToInput(line.quantityMicros), unitPrice: minorToCurrencyInput(line.unitPriceMinor, documentMinorUnit), salesAccountId: line.salesAccountId, taxCodeId: line.taxCodeId, projectId: line.projectId ?? "" })),
       }}
     />

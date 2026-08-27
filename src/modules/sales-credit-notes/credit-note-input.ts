@@ -1,9 +1,7 @@
 import { z } from "zod";
 import { exchangeRateInputShape } from "@/modules/currency/currency-input";
-import { creditNoteReasonCodeValues } from "@/modules/einvoicing/einvoice-types";
 import { emirates } from "@/modules/tax/uae-vat-config";
 import {
-  eInvoiceTransactionFlagsSchema,
   moneySchema,
   projectIdField,
   quantitySchema,
@@ -31,8 +29,6 @@ export const creditNoteInputSchema = z.object({
   supplyEmirate: z.union([z.literal(""), z.enum(emirates)]).optional().default(""),
   reference: z.string().trim().max(100).optional().default(""),
   reason: z.string().trim().max(500).optional().default(""),
-  eInvoiceReasonCode: z.union([z.literal(""), z.enum(creditNoteReasonCodeValues)]).optional().default(""),
-  eInvoiceTransactionFlags: eInvoiceTransactionFlagsSchema,
   lines: z.array(creditNoteLineSchema).min(1, "Add at least one line").max(100),
 });
 

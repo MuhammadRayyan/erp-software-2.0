@@ -21,7 +21,6 @@ export function InvoiceViewActions({
   journalEntryId,
   inventoryEnabled,
   hasDeliverableItems,
-  eInvoiceLocked,
   emailDefaults,
 }: {
   businessId: string;
@@ -32,7 +31,6 @@ export function InvoiceViewActions({
   journalEntryId: string | null;
   inventoryEnabled: boolean;
   hasDeliverableItems: boolean;
-  eInvoiceLocked: boolean;
   emailDefaults: InvoiceEmailDefaults;
 }) {
   const router = useRouter();
@@ -44,14 +42,14 @@ export function InvoiceViewActions({
       <DocumentViewActions
         documentNumber={invoiceNumber}
         documentType="Invoice"
-        editHref={documentStatus !== "void" && !eInvoiceLocked ? `/b/${businessId}/sales/invoices/${invoiceId}/edit` : undefined}
+        editHref={documentStatus !== "void" ? `/b/${businessId}/sales/invoices/${invoiceId}/edit` : undefined}
         pdfHref={`/api/businesses/${businessId}/invoices/${invoiceId}/pdf`}
         onEmail={() => { setEmailOpen(true); }}
         onDuplicate={async () => {
           const result = await duplicateInvoiceAction(businessId, invoiceId);
           if (result?.error) throw new Error(result.error);
         }}
-        onVoid={documentStatus === "posted" && !eInvoiceLocked ? {
+        onVoid={documentStatus === "posted" ? {
           label: "Void",
           description: "This retains the invoice and creates a balanced reversing journal entry. An invoice with receipt allocations cannot be voided.",
           action: async () => {

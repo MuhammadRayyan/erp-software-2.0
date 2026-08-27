@@ -2,7 +2,6 @@ import { z } from "zod";
 import { emirates } from "@/modules/tax/uae-vat-config";
 import { exchangeRateInputShape } from "@/modules/currency/currency-input";
 import {
-  eInvoiceTransactionFlagsSchema,
   itemIdField,
   moneySchema,
   projectIdField,
@@ -31,7 +30,6 @@ export const invoiceInputSchema = z.object({
   amountsIncludeTax: amountsIncludeTaxSchema,
   dueDate: z.iso.date("Enter a valid due date"),
   reference: z.string().trim().max(100).optional().default(""),
-  eInvoiceTransactionFlags: eInvoiceTransactionFlagsSchema,
   lines: z.array(invoiceLineSchema).min(1, "Add at least one line").max(100),
 });
 

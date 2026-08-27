@@ -13,8 +13,6 @@ import { reverseTransaction } from "@/modules/accounting/services/posting-servic
 import { effectiveProjectId, validateProjectReferences } from "@/modules/projects/project-validation";
 import { replaceTaxEntries, reverseTaxEntries } from "@/modules/tax/tax-entry-service";
 import { assertVatDateUnlocked, assertVatSourceUnlocked } from "@/modules/tax/tax-lock-service";
-import { assertEInvoiceSourceEditable, invalidatePreparedEInvoice } from "@/modules/einvoicing/einvoice-service";
-import { parseTransactionFlags } from "@/modules/einvoicing/einvoice-types";
 import { saveCustomFieldValuesInTransaction } from "@/modules/custom-fields/custom-field-service";
 import { invoiceInputSchema, type InvoiceInput } from "./invoice-input";
 import { convertDocumentLinesToBase, minorToCurrencyInput } from "@/modules/currency/conversion";
@@ -458,11 +456,11 @@ export function createInvoice(
       .prepare(`
         INSERT INTO sales_invoices (
           id, invoice_number, customer_id, invoice_date, tax_date, supply_emirate, due_date, reference,
-          einvoice_transaction_flags_json, project_id, document_status, subtotal_minor, tax_minor, total_minor,
+          project_id, document_status, subtotal_minor, tax_minor, total_minor,
           currency_code, exchange_rate_to_base, exchange_rate_date, exchange_rate_source,
           base_subtotal_minor, base_tax_minor, base_total_minor,
           created_by, created_at, updated_at, posted_at, voided_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'draft', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL)
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'draft', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL)
       `)
       .run(
         id,
@@ -473,7 +471,6 @@ export function createInvoice(
         data.supplyEmirate || null,
         data.dueDate,
         data.reference || null,
-        JSON.stringify(data.eInvoiceTransactionFlags),
         data.projectId || null,
         totals.subtotalMinor,
         totals.taxMinor,
@@ -533,7 +530,6 @@ export function updateInvoice(
   const current = context.db.select().from(salesInvoices).where(eq(salesInvoices.id, invoiceId)).get();
   if (!current) throw new Error("Invoice not found.");
   if (current.documentStatus === "void") throw new Error("A void invoice cannot be edited.");
-  assertEInvoiceSourceEditable(context.sqlite, "sales_invoice", invoiceId);
   if (context.sqlite.prepare("SELECT 1 FROM delivery_notes WHERE sales_invoice_id = ? LIMIT 1").get(invoiceId)) throw new Error("A Sales Invoice cannot be edited after a Delivery Note has been created from it.");
   const customer = context.db.select().from(customers).where(eq(customers.id, data.customerId)).get();
   if (!customer) throw new Error("Customer not found.");
@@ -568,7 +564,6 @@ export function updateInvoice(
   const shouldPost = current.documentStatus === "posted" || intent === "post";
 
   context.sqlite.transaction(() => {
-    invalidatePreparedEInvoice(context.sqlite, "sales_invoice", invoiceId);
     if (current.documentStatus === "posted") {
       assertVatSourceUnlocked(context.sqlite, "sales_invoice", invoiceId, current.taxDate);
     }
@@ -577,7 +572,7 @@ export function updateInvoice(
       .prepare(`
         UPDATE sales_invoices
         SET customer_id = ?, project_id = ?, invoice_date = ?, tax_date = ?, supply_emirate = ?, due_date = ?, reference = ?,
-            einvoice_transaction_flags_json = ?, subtotal_minor = ?, tax_minor = ?, total_minor = ?,
+            subtotal_minor = ?, tax_minor = ?, total_minor = ?,
             currency_code = ?, exchange_rate_to_base = ?, exchange_rate_date = ?, exchange_rate_source = ?,
             base_subtotal_minor = ?, base_tax_minor = ?, base_total_minor = ?, updated_at = ?
         WHERE id = ?
@@ -590,7 +585,6 @@ export function updateInvoice(
         data.supplyEmirate || null,
         data.dueDate,
         data.reference || null,
-        JSON.stringify(data.eInvoiceTransactionFlags),
         totals.subtotalMinor,
         totals.taxMinor,
         totals.totalMinor,
@@ -669,7 +663,6 @@ export function duplicateInvoice(businessId: string, userId: string, invoiceId: 
       supplyEmirate: record.invoice.supplyEmirate ?? "",
       dueDate: record.invoice.dueDate,
       reference: record.invoice.reference ?? "",
-      eInvoiceTransactionFlags: parseTransactionFlags(record.invoice.eInvoiceTransactionFlagsJson),
       lines: record.lines.map((line) => ({
         itemId: line.itemId ?? "",
         description: line.description,
@@ -689,13 +682,11 @@ export function voidInvoice(businessId: string, userId: string, invoiceId: strin
   const invoice = context.db.select().from(salesInvoices).where(eq(salesInvoices.id, invoiceId)).get();
   if (!invoice) throw new Error("Invoice not found.");
   if (invoice.documentStatus !== "posted") throw new Error("Only posted invoices can be voided.");
-  assertEInvoiceSourceEditable(context.sqlite, "sales_invoice", invoiceId);
   if (allocatedForInvoice(context.sqlite, invoiceId) > 0) {
     throw new Error("Cannot void an invoice that has receipt allocations.");
   }
   const now = new Date().toISOString();
   context.sqlite.transaction(() => {
-    invalidatePreparedEInvoice(context.sqlite, "sales_invoice", invoiceId);
     assertVatSourceUnlocked(context.sqlite, "sales_invoice", invoiceId, invoice.taxDate);
     reverseTransaction(context.sqlite, {
       originalSourceType: "sales_invoice",
