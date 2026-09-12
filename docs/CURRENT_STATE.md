@@ -183,3 +183,8 @@ Last verified on 24 August 2026 (review round 7 + v2.1.0 packaging): explicit mi
 - Enforced new accounting/process states where finalizing a revision transitions the previous active iteration to a `'superseded'` status, tracking lineage securely with `root_order_id`, `base_order_number`, `revision_number`, and `is_latest_revision` flags.
 - Validated via standalone manual E2E test suites bypassing Next.js edge constraints for deep Service Layer integrity.
 
+## Universal Document Email System (Latest Updates)
+- Abstracted the previously monolithic PDF generation out of the Next.js API route into a flexible `pdf-service.ts`.
+- Rewrote the email server action from `sendInvoiceEmailAction` into a generic `sendDocumentEmailAction` that handles permissions and dynamically attaches PDFs using `generateDocumentPdf`.
+- Refactored `InvoiceEmailDialog` into a reusable `DocumentEmailDialog`.
+- Extended one-click emailing capability with inline PDF attachments directly from the view pages for Sales Quotes, Sales Orders, Purchase Quotes, and Purchase Orders.

@@ -367,3 +367,10 @@ ext.config.ts, generating edge/server/client instrumentation hooks, and applying
 - **Bug Fixes**: Removed deprecated `headers()` context usage in backend standalone testing and Next.js middleware deprecations.
 
 
+## v2.4.1 - Universal Document Email System
+- Extracted PDF generation logic from `app/api/businesses/[businessId]/documents/[documentType]/[documentId]/pdf/route.ts` into a new `src/modules/document-templates/pdf-service.ts`.
+- Refactored `sendInvoiceEmailAction` into `sendDocumentEmailAction` in `src/modules/email/actions.ts`.
+- Transformed `InvoiceEmailDialog` into `DocumentEmailDialog`.
+- Updated `SalesQuoteViewActions`, `SalesOrderViewActions`, `PurchaseQuoteViewActions`, and `PurchaseOrderViewActions` to include an Email dropdown/button.
+- Added `purchase_quote` to `sentEmailRelatedEntityTypes` in `src/core/db/business-schema.ts`.
+- Verified type-safety via extensive `tsc` compilation.

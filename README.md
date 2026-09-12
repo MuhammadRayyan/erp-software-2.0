@@ -2,7 +2,7 @@
 
 A compact, Manager.io-inspired multi-business accounting/ERP application for local and self-hosted use.
 
-**Current release: v2.4.0** — Centralized Document Revision Engine (Orders & Quotes), Complete Sales & Procurement parity, Purchase Quotes (RFQ) module, Sequential Document Revisions & Versioning with interactive dropdown switcher and superseded state management, One-Click Document Conversions (Quote $\rightarrow$ Order $\rightarrow$ Invoice), Form Defaults configuration, Manager.io-inspired subtractive discounts and inclusive tax splitting, sent emails with PDF attachments, multi-currency foundation, and UAE VAT. See `docs/CHANGELOG.md` for the full history and `docs/CURRENT_STATE.md` for authoritative behavior.
+**Current release: v2.4.1** — Centralized Document Revision Engine (Orders & Quotes), Complete Sales & Procurement parity, Purchase Quotes (RFQ) module, Sequential Document Revisions & Versioning with interactive dropdown switcher and superseded state management, One-Click Document Conversions (Quote $\rightarrow$ Order $\rightarrow$ Invoice), Form Defaults configuration, Manager.io-inspired subtractive discounts and inclusive tax splitting, sent emails with PDF attachments, multi-currency foundation, and UAE VAT. See `docs/CHANGELOG.md` for the full history and `docs/CURRENT_STATE.md` for authoritative behavior.
 
 ## Working context for future phases
 
