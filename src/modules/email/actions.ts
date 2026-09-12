@@ -1,4 +1,4 @@
-﻿"use server";
+"use server";
 
 import { z } from "zod";
 import { requireApiAuth } from "@/core/auth/api-auth";
@@ -99,8 +99,9 @@ export async function sendDocumentEmailAction(
     }
   }
 
-  // Determine entity type for the email relationship
-  const entityType = documentType.replace("-", "_") as any;
+  // Determine entity type for the email relationship (replace ALL hyphens so
+  // e.g. "sales-credit-note" → "sales_credit_note", not "sales_credit-note").
+  const entityType = documentType.replaceAll("-", "_") as any;
 
   try {
     const result = await sendEmail(businessId, session.user.id, {

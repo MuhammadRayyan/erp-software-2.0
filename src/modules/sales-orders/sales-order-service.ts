@@ -11,7 +11,7 @@ import { convertDocumentLinesToBase, parseCurrencyAmountToMinor } from "@/module
 import { resolveRateSnapshot } from "@/modules/currency/validation";
 import { calculateLines, totalsForLines, type StoredLine } from "@/modules/accounting/services/document-line-calculator";
 
-export type SalesOrderStatus = "draft" | "active" | "completed" | "cancelled";
+export type SalesOrderStatus = "draft" | "active" | "completed" | "cancelled" | "superseded";
 export type SalesOrderIntent = "draft" | "issue";
 
 

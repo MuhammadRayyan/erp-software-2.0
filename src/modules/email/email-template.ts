@@ -77,7 +77,7 @@ export function renderDocumentEmailBody(ctx: DocumentEmailContext): string {
           ${attachmentNote}
           <table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="border:1px solid #e2e8f0;border-radius:8px;overflow:hidden;font-size:14px;">
             <tr><td style="padding:6px 12px;background:#f8fafc;color:#475569;">Date</td><td style="padding:6px 12px;text-align:right;">${escapeHtml(ctx.documentDate)}</td></tr>
-            <tr><td style="padding:6px 12px;background:#f8fafc;color:#475569;">Due date</td><td style="padding:6px 12px;text-align:right;">${escapeHtml(ctx.dueDate)}</td></tr>
+            ${ctx.dueDate && ctx.dueDate !== "-" ? `<tr><td style="padding:6px 12px;background:#f8fafc;color:#475569;">Due / Expiry</td><td style="padding:6px 12px;text-align:right;">${escapeHtml(ctx.dueDate)}</td></tr>` : ""}
             <tr><td style="padding:8px 12px;background:#f8fafc;color:#0f172a;font-weight:600;">${totalLabel}</td><td style="padding:8px 12px;text-align:right;font-weight:700;">${escapeHtml(ctx.total)}</td></tr>
             ${balanceRow}
           </table>
@@ -99,15 +99,15 @@ export function renderDocumentEmailBody(ctx: DocumentEmailContext): string {
  */
 export function renderDocumentEmailText(ctx: DocumentEmailContext): string {
   const lines = [
-    `Invoice ${ctx.documentNumber} from ${ctx.businessName}`,
+    `${ctx.documentName} ${ctx.documentNumber} from ${ctx.businessName}`,
     ``,
     `Hello ${ctx.customerName},`,
     ``,
     `Please find your ${ctx.documentName.toLowerCase()} below.`,
     ctx.hasPdfAttachment ? `A copy of ${ctx.documentNumber}.pdf is attached.` : ``,
     ``,
-    `Invoice date: ${ctx.documentDate}`,
-    `Due date: ${ctx.dueDate}`,
+    `Date: ${ctx.documentDate}`,
+    ctx.dueDate && ctx.dueDate !== "-" ? `Due/Expiry: ${ctx.dueDate}` : ``,
     `Total: ${ctx.total}`,
     ctx.balance != null ? `Balance due: ${ctx.balance}` : ``,
     ``,

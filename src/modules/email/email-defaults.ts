@@ -1,4 +1,4 @@
-﻿import { formatDate, formatMoney } from "@/core/format";
+import { formatDate, formatMoney } from "@/core/format";
 import type { getInvoice } from "@/modules/sales-invoices/invoice-service";
 import {
   defaultDocumentSubject,
@@ -23,12 +23,16 @@ export function buildDocumentEmailContext(
   const totalMinor = record.invoice?.totalMinor ?? record.quote?.totalMinor ?? record.order?.totalMinor ?? record.note?.totalMinor ?? 0;
   const balance = record.invoice?.documentStatus === "posted" ? formatMoney(record.balanceMinor, currency) : null;
 
+  const ISO_DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+
   return {
     businessName,
     documentName,
     documentNumber,
     documentDate: documentDate ? formatDate(documentDate) : "-",
-    dueDate: dueDate !== "-" ? (dueDate.includes("-") ? formatDate(dueDate) : dueDate) : "-",
+    // Only call formatDate if the raw value looks like an ISO date (YYYY-MM-DD).
+    // If it's already a human label like "Expiry Date: 2026-08-15" just pass through.
+    dueDate: dueDate !== "-" ? (ISO_DATE_RE.test(dueDate) ? formatDate(dueDate) : dueDate) : "-",
     customerName,
     total: formatMoney(totalMinor, currency),
     balance,
