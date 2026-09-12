@@ -10,6 +10,7 @@ import { StatusBadge } from "@/components/status-badge";
 import { PurchaseQuoteViewActions } from "@/modules/purchase-quotes/purchase-quote-view-actions";
 import { PurchaseQuoteRevisionSwitcher } from "@/modules/purchase-quotes/purchase-quote-revision-switcher";
 import { ProjectLinks } from "@/modules/projects/project-links";
+import { buildDocumentEmailContext, buildDocumentEmailDefaults } from "@/modules/email/email-defaults";
 
 export default async function PurchaseQuoteViewPage({
   params,
@@ -33,6 +34,8 @@ export default async function PurchaseQuoteViewPage({
   const revisions = listPurchaseQuoteRevisions(businessId, user.id, quoteId);
   const latestRevision = revisions.find((r) => r.is_latest_revision);
   const isViewingOlderRevision = !quote.isLatestRevision || quote.documentStatus === "superseded";
+  const emailContext = buildDocumentEmailContext(access.business.name, "Purchase Quote", record, record.supplier.email ?? "");
+  const emailDefaults = buildDocumentEmailDefaults(emailContext, record.supplier.email ?? "");
 
   return (
     <div className="page-container">
@@ -86,6 +89,7 @@ export default async function PurchaseQuoteViewPage({
           quoteId={quote.id}
           quoteNumber={quote.quoteNumber}
           documentStatus={quote.documentStatus}
+          emailDefaults={emailDefaults}
         />
       </div>
 

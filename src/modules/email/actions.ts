@@ -1,28 +1,18 @@
-"use server";
+﻿"use server";
 
 import { z } from "zod";
-import { requireModule } from "@/core/permissions/require-module";
-import { formatDate, formatMoney } from "@/core/format";
-import { quantityMicrosToInput } from "@/modules/accounting/calculations/money";
-import { getInvoice } from "@/modules/sales-invoices/invoice-service";
-import { renderInvoicePdf } from "@/modules/document-templates/template-registry";
-import { getCustomFieldPairsForEntity } from "@/modules/custom-fields/custom-field-service";
+import { requireApiAuth } from "@/core/auth/api-auth";
 import { defaultSender } from "./email-template";
 import { parseRecipientList, sendEmail } from "./email-service";
-import type { InvoiceRecord } from "./email-defaults";
+import { generateDocumentPdf } from "@/modules/document-templates/pdf-service";
 
-// NOTE: `buildInvoiceEmailContext` + `buildInvoiceEmailDefaults` are sync
-// helpers that live in `./email-defaults.ts` — DO NOT re-export them from
-// this "use server" module. Next.js forbids non-async exports from "use
-// server" files (even re-exports). Import them directly from email-defaults.
-
-export type SendInvoiceEmailResult =
+export type SendDocumentEmailResult =
   | { ok: true; emailId: string; status: "sent" | "failed"; errorMessage?: string }
   | { ok: false; error: string; fieldErrors?: Record<string, string[]> };
 
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
-const sendInvoiceEmailSchema = z.object({
+const sendDocumentEmailSchema = z.object({
   to: z
     .string()
     .trim()
@@ -47,23 +37,27 @@ const sendInvoiceEmailSchema = z.object({
 });
 
 /**
- * Server action invoked by the "Email" modal on the invoice view. Validates
+ * Server action invoked by the "Email" modal on the document view. Validates
  * the form, generates the PDF attachment (if requested), composes the email,
  * and hands off to `sendEmail` for persistence + driver dispatch.
- *
- * Returns the email id so the client can show a "Sent" toast with a link to
- * the audit-log row.
  */
-export async function sendInvoiceEmailAction(
+export async function sendDocumentEmailAction(
   businessId: string,
-  invoiceId: string,
+  documentType: string,
+  documentId: string,
+  documentNumber: string,
   input: unknown,
-): Promise<SendInvoiceEmailResult> {
-  const { user, access } = await requireModule(businessId, "sales");
-  const record = getInvoice(businessId, user.id, invoiceId);
-  if (!record) return { ok: false, error: "Invoice not found." };
+): Promise<SendDocumentEmailResult> {
+  // Use requireApiAuth to easily resolve access for any document type without manually mapping
+  // the documentType to a specific module name (e.g., "sales" vs "purchases").
+  // Since server actions run on POST, we pass a dummy Request object.
+  const req = new Request("http://localhost/api/dummy", { method: "POST" });
+  const { session, access } = await requireApiAuth(req, { businessId });
+  if (!session || !access) {
+    return { ok: false, error: "Unauthorized" };
+  }
 
-  const parsed = sendInvoiceEmailSchema.safeParse(input);
+  const parsed = sendDocumentEmailSchema.safeParse(input);
   if (!parsed.success) {
     return {
       ok: false,
@@ -72,25 +66,26 @@ export async function sendInvoiceEmailAction(
     };
   }
 
-  const { invoice } = record;
   const to = parseRecipientList(parsed.data.to);
   const cc = parsed.data.cc ? parseRecipientList(parsed.data.cc) : [];
 
   let attachment:
     | { filename: string; data: Buffer; contentType: string; }
     | undefined;
+    
   if (parsed.data.attachPdf) {
     try {
-      const data = await buildInvoicePdfAttachment(
+      const { pdf, filename } = await generateDocumentPdf(
         businessId,
-        user.id,
-        record,
+        session.user.id,
         access.business.name,
         access.business.currency,
+        documentType,
+        documentId
       );
       attachment = {
-        filename: `${invoice.invoiceNumber}.pdf`,
-        data,
+        filename,
+        data: pdf,
         contentType: "application/pdf",
       };
     } catch (error) {
@@ -104,8 +99,11 @@ export async function sendInvoiceEmailAction(
     }
   }
 
+  // Determine entity type for the email relationship
+  const entityType = documentType.replace("-", "_") as any;
+
   try {
-    const result = await sendEmail(businessId, user.id, {
+    const result = await sendEmail(businessId, session.user.id, {
       from: defaultSender(access.business.name),
       to,
       cc,
@@ -113,9 +111,9 @@ export async function sendInvoiceEmailAction(
       bodyHtml: parsed.data.bodyHtml,
       bodyText: parsed.data.bodyText || undefined,
       attachments: attachment ? [attachment] : undefined,
-      relatedEntityType: "sales_invoice",
-      relatedEntityId: invoice.id,
-      relatedDocumentNumber: invoice.invoiceNumber,
+      relatedEntityType: entityType,
+      relatedEntityId: documentId,
+      relatedDocumentNumber: documentNumber,
     });
     const status: "sent" | "failed" = result.status === "sent" || result.status === "delivered" ? "sent" : "failed";
     return {
@@ -130,55 +128,4 @@ export async function sendInvoiceEmailAction(
       error: error instanceof Error ? error.message : "Failed to send email.",
     };
   }
-}
-
-/**
- * Build the PDF bytes for an invoice email attachment. Mirrors the API PDF
- * route's data shape so the attachment matches what the user would download.
- */
-async function buildInvoicePdfAttachment(
-  businessId: string,
-  userId: string,
-  record: InvoiceRecord,
-  businessName: string,
-  baseCurrency: string,
-): Promise<Buffer> {
-  const { invoice, customer, lines } = record;
-  const currency = invoice.currencyCode;
-  const foreignDetail =
-    currency === baseCurrency
-      ? ""
-      : `Rate 1 ${currency} = ${invoice.exchangeRateToBase} ${baseCurrency} (${invoice.exchangeRateSource}, ${invoice.exchangeRateDate}) · Base ${formatMoney(invoice.baseTotalMinor, baseCurrency)} · ${baseCurrency} VAT ${formatMoney(invoice.baseTaxMinor, baseCurrency)}`;
-  const customFields = getCustomFieldPairsForEntity(
-    businessId,
-    userId,
-    "sales_invoice",
-    invoice.id,
-  );
-  const data = {
-    companyName: businessName,
-    invoiceNumber: invoice.invoiceNumber,
-    invoiceDate: formatDate(invoice.invoiceDate),
-    dueDate: formatDate(invoice.dueDate),
-    customerName: customer.name,
-    customerAddress:
-      customer.billingAddress ||
-      [customer.addressLine1, customer.city, customer.countrySubdivision]
-        .filter(Boolean)
-        .join(", ") ||
-      undefined,
-    customerTrn: customer.taxReference || undefined,
-    lines: lines.map((line) => ({
-      description: line.description,
-      quantity: quantityMicrosToInput(line.quantityMicros),
-      unitPrice: formatMoney(line.unitPriceMinor, currency),
-      amount: formatMoney(line.grossAmountMinor, currency),
-    })),
-    subtotal: formatMoney(invoice.subtotalMinor, currency),
-    tax: formatMoney(invoice.taxMinor, currency),
-    total: formatMoney(invoice.totalMinor, currency),
-    foreignDetail: foreignDetail || undefined,
-    customFields,
-  };
-  return renderInvoicePdf(businessId, userId, data);
 }

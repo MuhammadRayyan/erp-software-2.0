@@ -14,6 +14,7 @@ import { PaymentStatusBadge } from "@/modules/sales-invoices/invoice-status";
 import { SalesOrderViewActions } from "@/modules/sales-orders/sales-order-view-actions";
 import { OrderRevisionSwitcher } from "@/modules/sales-orders/order-revision-switcher";
 import { ProjectLinks } from "@/modules/projects/project-links";
+import { buildDocumentEmailContext, buildDocumentEmailDefaults } from "@/modules/email/email-defaults";
 import { emirateLabels, type Emirate } from "@/modules/tax/uae-vat-config";
 
 

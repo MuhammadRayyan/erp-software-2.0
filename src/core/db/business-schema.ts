@@ -1568,7 +1568,8 @@ export const sentEmailRelatedEntityTypes = [
   "purchase_invoice",
   "statement",
   "sales_quote",
-  "sales_order"
+  "sales_order",
+  "purchase_quote"
 ] as const;
 export type SentEmailRelatedEntityType = (typeof sentEmailRelatedEntityTypes)[number];
 

@@ -12,6 +12,7 @@ import { StatusBadge } from "@/components/status-badge";
 import { SalesQuoteViewActions } from "@/modules/sales-quotes/quote-view-actions";
 import { QuoteRevisionSwitcher } from "@/modules/sales-quotes/quote-revision-switcher";
 import { ProjectLinks } from "@/modules/projects/project-links";
+import { buildDocumentEmailContext, buildDocumentEmailDefaults } from "@/modules/email/email-defaults";
 import { emirateLabels, type Emirate } from "@/modules/tax/uae-vat-config";
 
 
@@ -32,6 +33,8 @@ export default async function QuoteViewPage({ params, searchParams }: { params: 
   const revisions = listSalesQuoteRevisions(businessId, user.id, quoteId);
   const latestRevision = revisions.find((r) => r.is_latest_revision);
   const isViewingOlderRevision = !quote.isLatestRevision || quote.documentStatus === "superseded";
+  const emailContext = buildDocumentEmailContext(access.business.name, "Sales Quote", record, record.customer.email ?? "");
+  const emailDefaults = buildDocumentEmailDefaults(emailContext, record.customer.email ?? "");
   
   return (
     <div className="page-container">
@@ -72,7 +75,7 @@ export default async function QuoteViewPage({ params, searchParams }: { params: 
             <span className="money text-xl font-semibold">{formatMoney(quote.totalMinor, currency)}</span>
           </div>
         </div>
-        <SalesQuoteViewActions businessId={businessId} quoteId={quote.id} quoteNumber={quote.quoteNumber} documentStatus={quote.documentStatus} />
+        <SalesQuoteViewActions businessId={businessId} quoteId={quote.id} quoteNumber={quote.quoteNumber} documentStatus={quote.documentStatus} emailDefaults={emailDefaults} />
       </div>
       {currency !== access.business.currency && <section aria-label="Currency snapshot" className="mb-5 rounded-lg border border-border bg-surface-raised p-4"><dl className="grid gap-4 text-sm sm:grid-cols-2 lg:grid-cols-4"><div><dt className="text-xs text-muted-foreground">Stored rate</dt><dd className="money mt-1">1 {currency} = {quote.exchangeRateToBase} {access.business.currency}</dd></div><div><dt className="text-xs text-muted-foreground">Rate date</dt><dd className="mt-1">{formatDate(quote.exchangeRateDate)}</dd></div><div><dt className="text-xs text-muted-foreground">Rate source</dt><dd className="mt-1">{quote.exchangeRateSource}</dd></div><div><dt className="text-xs text-muted-foreground">Base equivalent</dt><dd className="money mt-1 font-semibold">{formatMoney(quote.baseTotalMinor, access.business.currency)}</dd></div></dl><p className="mt-3 text-xs text-muted-foreground">Base VAT {formatMoney(quote.baseTaxMinor, access.business.currency)} · Posted snapshots never follow later rate-table changes.</p></section>}
       <article className="rounded-lg border border-border bg-surface-raised p-5 sm:p-7">

@@ -23,6 +23,7 @@ export function SalesOrderViewActions({
   const [converting, setConverting] = useState(false);
 
   const [revising, setRevising] = useState(false);
+  const [emailOpen, setEmailOpen] = useState(false);
 
   const handleRevise = async () => {
     setRevising(true);
@@ -56,6 +57,7 @@ export function SalesOrderViewActions({
       documentType="Sales Order"
       editHref={editable ? `/b/${businessId}/sales/orders/${orderId}/edit` : undefined}
       pdfHref={`/api/businesses/${businessId}/documents/sales-order/${orderId}/pdf`}
+      onEmail={() => setEmailOpen(true)}
       onClose={documentStatus === "active" ? {
         label: "Close order",
         description: "The order remains available for history.",
@@ -86,6 +88,11 @@ export function SalesOrderViewActions({
           router.push(`/b/${businessId}/sales/orders`);
         }
       } : undefined}
+      extraActions={
+          <DropdownMenuItem onSelect={() => setEmailOpen(true)}>
+            <Mail className="size-4 mr-2" /> Email
+          </DropdownMenuItem>
+      }
       extraPrimaryActions={
         <>
           {inventoryEnabled && hasReceivableItems && documentStatus !== "cancelled" && (

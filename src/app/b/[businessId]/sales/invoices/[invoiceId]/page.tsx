@@ -12,7 +12,7 @@ import { DocumentStatusBadge, PaymentStatusBadge } from "@/modules/sales-invoice
 import { InvoiceViewActions } from "@/modules/sales-invoices/invoice-view-actions";
 import { ProjectLinks } from "@/modules/projects/project-links";
 import { emirateLabels, type Emirate } from "@/modules/tax/uae-vat-config";
-import { buildInvoiceEmailContext, buildInvoiceEmailDefaults } from "@/modules/email/email-defaults";
+import { buildDocumentEmailContext, buildDocumentEmailDefaults } from "@/modules/email/email-defaults";
 
 export default async function InvoiceViewPage({ params, searchParams }: { params: Promise<{ businessId: string; invoiceId: string }>; searchParams: Promise<{ notice?: string }> }) {
   const { businessId, invoiceId } = await params;
@@ -28,8 +28,8 @@ export default async function InvoiceViewPage({ params, searchParams }: { params
   const customFieldValues = customFieldDefinitions.length
     ? getCustomFieldValuesForEntities(businessId, user.id, "sales_invoice", [invoiceId]).get(invoiceId) ?? {}
     : {};
-  const emailContext = buildInvoiceEmailContext(access.business.name, record);
-  const emailDefaults = buildInvoiceEmailDefaults(emailContext, emailContext.to);
+  const emailContext = buildDocumentEmailContext(access.business.name, "Invoice", record, record.customer.email ?? "");
+  const emailDefaults = buildDocumentEmailDefaults(emailContext, emailContext.to);
   return (
     <div className="page-container">
       <NoticeToast message={notice} />

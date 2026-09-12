@@ -15,9 +15,9 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { FormError } from "@/components/form-error";
 import { cn } from "@/lib/cn";
-import { sendInvoiceEmailAction } from "./actions";
+import { sendDocumentEmailAction } from "./actions";
 
-export interface InvoiceEmailDefaults {
+export interface DocumentEmailDefaults {
   to: string;
   subject: string;
   bodyHtml: string;
@@ -25,31 +25,33 @@ export interface InvoiceEmailDefaults {
 }
 
 /**
- * Compose-and-send dialog for sales invoice emails. The page passes the
- * prefilled defaults (computed server-side from the invoice record); the
+ * Compose-and-send dialog for sales document emails. The page passes the
+ * prefilled defaults (computed server-side from the document record); the
  * dialog owns the editing state, validates client-side first (cheap checks),
  * then calls the server action which validates again, generates the PDF
  * attachment (if requested), and dispatches via `sendEmail`.
  *
  * The dialog re-syncs local state when `defaults` changes (e.g. when the
- * user opens the modal on a different invoice) using the React-recommended
+ * user opens the modal on a different document) using the React-recommended
  * "adjust state during render" pattern with a `key` guard.
  */
-export function InvoiceEmailDialog({
+export function DocumentEmailDialog({
   open,
   onOpenChange,
   businessId,
-  invoiceId,
-  invoiceNumber,
+  documentType,
+  documentId,
+  documentNumber,
   defaults,
   pdfAvailable,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   businessId: string;
-  invoiceId: string;
-  invoiceNumber: string;
-  defaults: InvoiceEmailDefaults;
+  documentType: string;
+  documentId: string;
+  documentNumber: string;
+  defaults: DocumentEmailDefaults;
   /** Whether the PDF attachment checkbox is enabled. Defaults to true. */
   pdfAvailable?: boolean;
 }) {
@@ -64,9 +66,9 @@ export function InvoiceEmailDialog({
   const [pending, startTransition] = useTransition();
   const withPdf = pdfAvailable !== false;
 
-  // Re-sync when defaults change (page passes new defaults on invoice change).
+  // Re-sync when defaults change (page passes new defaults on document change).
   // React-recommended "adjust state during render" pattern with a key guard so
-  // the dialog resets cleanly when re-opened for a different invoice.
+  // the dialog resets cleanly when re-opened for a different document.
   const [defaultsKey, setDefaultsKey] = useState(defaults);
   if (defaults !== defaultsKey) {
     setDefaultsKey(defaults);
@@ -102,7 +104,7 @@ export function InvoiceEmailDialog({
     setFieldErrors({});
     startTransition(async () => {
       try {
-        const result = await sendInvoiceEmailAction(businessId, invoiceId, {
+        const result = await sendDocumentEmailAction(businessId, documentType, documentId, documentNumber, {
           to,
           cc,
           subject,
@@ -116,7 +118,7 @@ export function InvoiceEmailDialog({
           return;
         }
         if (result.status === "sent") {
-          toast.success(`Email sent for ${invoiceNumber}.`, {
+          toast.success(`Email sent for ${documentNumber}.`, {
             description: "A copy is saved in Sent Emails.",
             action: {
               label: "View",
@@ -124,7 +126,7 @@ export function InvoiceEmailDialog({
             },
           });
         } else {
-          toast.error(`Email delivery failed for ${invoiceNumber}.`, {
+          toast.error(`Email delivery failed for ${documentNumber}.`, {
             description: result.errorMessage ?? "Unknown error.",
           });
         }
@@ -140,10 +142,10 @@ export function InvoiceEmailDialog({
       <DialogContent className="max-w-2xl">
         <DialogTitle className="flex items-center gap-2">
           <Mail className="size-4 text-muted-foreground" />
-          Email Invoice {invoiceNumber}
+          Email Document {documentNumber}
         </DialogTitle>
         <DialogDescription>
-          Send this invoice and a PDF copy to the customer. A copy is saved to the Sent Emails log for audit.
+          Send this document and a PDF copy to the customer. A copy is saved to the Sent Emails log for audit.
         </DialogDescription>
 
         <div className="mt-4 space-y-4">
@@ -217,8 +219,8 @@ export function InvoiceEmailDialog({
                 className="size-4 rounded border-border text-primary focus-visible:ring-2 focus-visible:ring-ring"
               />
               <Paperclip className="size-4 text-muted-foreground" />
-              <span>Attach <strong>{invoiceNumber}.pdf</strong></span>
-              <span className="ml-auto text-xs text-muted-foreground">PDF copy of the invoice</span>
+              <span>Attach <strong>{documentNumber}.pdf</strong></span>
+              <span className="ml-auto text-xs text-muted-foreground">PDF copy of the document</span>
             </label>
           )}
 

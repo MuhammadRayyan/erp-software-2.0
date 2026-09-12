@@ -10,7 +10,7 @@ import { DropdownMenuItem } from "@/components/ui/dropdown-menu";
 import { deleteInvoiceAction, duplicateInvoiceAction, voidInvoiceAction } from "./actions";
 import type { DocumentStatus } from "./invoice-service";
 import { DocumentViewActions } from "@/components/document-view-actions";
-import { InvoiceEmailDialog, type InvoiceEmailDefaults } from "@/modules/email/email-compose-dialog";
+import { DocumentEmailDialog, type DocumentEmailDefaults } from "@/modules/email/email-compose-dialog";
 
 export function InvoiceViewActions({
   businessId,
@@ -31,7 +31,7 @@ export function InvoiceViewActions({
   journalEntryId: string | null;
   inventoryEnabled: boolean;
   hasDeliverableItems: boolean;
-  emailDefaults: InvoiceEmailDefaults;
+  emailDefaults: DocumentEmailDefaults;
 }) {
   const router = useRouter();
   const [emailOpen, setEmailOpen] = useState(false);
@@ -104,12 +104,13 @@ export function InvoiceViewActions({
           </>
         }
       />
-      <InvoiceEmailDialog
+      <DocumentEmailDialog
         open={emailOpen}
         onOpenChange={setEmailOpen}
         businessId={businessId}
-        invoiceId={invoiceId}
-        invoiceNumber={invoiceNumber}
+        documentId={invoiceId}
+        documentType="sales-invoice"
+        documentNumber={invoiceNumber}
         defaults={emailDefaults}
         pdfAvailable
       />
