@@ -5,7 +5,7 @@ import nextTypescript from "eslint-config-next/typescript";
 export default defineConfig([
   ...nextVitals,
   ...nextTypescript,
-  globalIgnores([".next/**", "node_modules/**", "data/**", "scripts/**", "**/*.cjs"]),
+  globalIgnores([".next/**", "node_modules/**", "data/**", "scripts/**", "**/*.cjs", "*.js"]),
   {
     rules: {
       "@typescript-eslint/no-explicit-any": "off",

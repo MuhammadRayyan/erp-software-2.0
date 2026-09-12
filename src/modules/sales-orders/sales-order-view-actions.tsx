@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { ReceiptText, Truck, RefreshCw, GitBranch, Mail } from "lucide-react";
+import { Truck, RefreshCw, GitBranch, Mail } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
