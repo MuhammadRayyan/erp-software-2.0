@@ -4,6 +4,55 @@ All notable changes since the original `erp-software-2.0-antigravity-edits` uplo
 
 Full per-task detail (file lists, verification transcripts, QA walkthroughs) lives in `worklog.md` at the repository root.
 
+## v2.4.0 - Centralized Revision Engine for Orders & Quotes
+
+### Universal Revision Engine
+- **Centralized Engine (`src/core/versioning/revision-engine.ts`)**: Extracted custom revision logic into a highly robust, database-transactional engine that supports any document with headers and lines.
+- **Support for Orders**: Extended the `-R1`, `-R2` sequential revision numbering system to Sales Orders and Purchase Orders (e.g., `SO-XXXX-R1`, `PO-XXXX-R1`).
+- **Draft Concurrency Locks**: Engine safely rejects simultaneous draft branching (locking a document from revisions if an unfinalized draft already exists).
+- **Line & Custom Field Cloning**: Automatically carries forward all document lines, item foreign keys, descriptions, and dynamic `custom_field_values` seamlessly using schema-agnostic extraction.
+- **Superseding State Verification**: When an order revision transitions out of `draft`, previous active orders automatically degrade to a `superseded` state, releasing the `is_latest_revision` flag securely.
+- **Database Migrations (`order_revisions` Phase 21)**: Retroactively patched legacy `CHECK` constraints on `sales_orders.document_status` and `purchase_orders.status` to safely accept the `'superseded'` lifecycle stage.
+
+### UI Reusability
+- **Order Revision Switchers**: Built `OrderRevisionSwitcher` components for both Sales and Purchase orders mimicking the exact visual functionality of the Quote Revision Switchers (dropdown histories, superseded banners, etc).
+- **Bug Fixes**: Removed deprecated `headers()` context usage in backend standalone testing and Next.js middleware deprecations.
+
+
+## v2.3.0 — Purchase Quotes (RFQ) Module & Full Procurement Parity
+
+### Purchase Quotes (Supplier Quotes / RFQ)
+- **Full Procurement Parity**: Complete supplier quote lifecycle mirroring sales quotes: Purchase Quote (RFQ) $\rightarrow$ Purchase Order (PO) $\rightarrow$ Purchase Invoice (PI) $\rightarrow$ Supplier Payment / Debit Note.
+- **Sequential Revision Numbering & Versioning**: Quotes allocate `PQ-XXXX` (`Rev 0`) and increment cleanly to `PQ-XXXX-R1`, `PQ-XXXX-R2`, etc.
+- **Interactive Revision Switcher**: Built `PurchaseQuoteRevisionSwitcher` dropdown component displaying full family version history with statuses, dates, and amounts.
+- **Superseded Alert Banner**: Automatic transition of prior issued quote versions to `superseded` when a new revision is created, with an alert banner and 1-click switcher.
+- **One-Click Conversion (PQ $\rightarrow$ PO)**: "Convert to Order" action duplicates line items, carrying forward unit prices, fixed/percentage discounts, expense accounts, and tax codes into draft Purchase Orders, and auto-marks the quote as `accepted`.
+- **Manager.io-Style Form Controls**: Full-width quote editor with bottom-left toggle controls (`amountsIncludeTax`, `showDiscounts`, `showLineNumber`, `showDescription`, `showLineProjects`).
+- **Database Migration 19 (`purchase_quotes`)**: Added `purchase_quotes` and `purchase_quote_lines` tables, `purchase_quote_id` foreign key on `purchase_orders`, and `purchase_quote_prefix`/`next_number` in settings.
+- **Sidebar & Settings Integration**: Added Purchase Quotes to the primary sidebar navigation (`/purchases/quotes`), Form Defaults settings (`/settings/form-defaults/purchase-quote`), PDF generation endpoint, and "New Purchase Quote" button on supplier details.
+
+## v2.2.0 — Sales Quote Revisions, One-Click Conversions & Clean Architecture
+
+### Sales Quote Revisions & Versioning
+- **Sequential Revision Numbering**: Quotes start as `SQ-XXXX` (`Rev 0`) and increment cleanly to `SQ-XXXX-R1`, `SQ-XXXX-R2`, etc. when revised.
+- **Quote Family State Management**: Creating a new revision automatically marks older active family versions as `superseded` (`is_latest_revision = false`) and opens the new revision in `draft` (`is_latest_revision = true`).
+- **Interactive Revision Switcher**: Added `QuoteRevisionSwitcher` dropdown in document view headers to review version history, dates, and amounts with 1-click navigation.
+- **Superseded Warning Banner**: Displays an alert banner on historical versions with a direct link to jump to the latest revision.
+- **Quote List Badging**: Renders `Rev {n}` pill badges on multi-revision quotes in `/sales/quotes`.
+- **Database Migration 18 (`sales_quote_revisions`)**: Added `base_quote_number`, `root_quote_id`, `revision_number`, `is_latest_revision` columns to `sales_quotes` and `"superseded"` status.
+
+### One-Click Document Conversions & Status Automations
+- **Sales Quote to Sales Order**: "Convert to Order" action duplicates line items, preserving discounts and tax configurations, updates quote status to `accepted`, and creates draft Sales Order.
+- **Sales Order to Sales Invoice**: "Convert to Invoice" action maps orders into draft Sales Invoices with linked reference and marks order `completed`.
+- **Purchase Order to Purchase Invoice**: "Convert to Invoice" action maps POs into draft Purchase Invoices and closes the purchase order.
+- **Document Linking**: Linked `salesOrderId` and `salesQuoteId` through Drizzle schema, Zod validation, and SQL queries.
+
+### Navigation & Architecture Streamlining
+- **E-Invoicing Removal**: Removed outbound/inbound e-invoicing modules, routes, and `saxon-js` dependency.
+- **Sidebar Restoration**: Restored missing navigation links for Receipts, Supplier Payments, Delivery Notes, Goods Receipts, and Debit Notes.
+- **Form Defaults Sub-Pages**: Added `/settings/form-defaults/[formId]` page with toggle controls for amountsIncludeTax, showDiscounts, showLineNumber, and showDescription.
+- **Mathematical Accuracy**: Ensured accurate decimal and micro scaling (`quantityMicrosToInput`, minor currency conversion) across document generation.
+
 ## v2.1.1
 
 ### Observability & Infrastructure
@@ -112,3 +161,4 @@ Fixes "there was a problem deploying the code" / blank sandbox preview, all veri
 Seeded demo accounts: `admin@demo.local / demo12345` (all modules) and `standard@demo.local / demo12345` (Sales + Projects only).
 
 Runtime data (SQLite databases, attachments) lives under `data/` and is created by the migrate/seed scripts; it is intentionally absent from this archive. The `public/downloads/` folder is a delivery artifact for the hosted preview and can be deleted safely — the login page download link auto-hides when the archive file is not present.
+

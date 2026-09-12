@@ -316,3 +316,54 @@ ejected).
 - **Next.js Observability**: Added @sentry/nextjs library, wrapping 
 ext.config.ts, generating edge/server/client instrumentation hooks, and applying a global error catch boundary to intercept layout routing crashes.
 - **Verification**: Verified using a local test route /sentry-example-page triggering dual captures successfully logged to the backend via the erp-20 project DSN.
+
+## Sales Quote Revisions & One-Click Conversions (Branch zlm-test-2)
+
+### Sales Quote Revisions & Versioning
+- **Family Grouping & Tracking**: Added `root_quote_id`, `base_quote_number`, `revision_number`, and `is_latest_revision` columns to `sales_quotes` via Migration 18 (`sales_quote_revisions`).
+- **Sequential Revisioning**: When a user clicks "+ New Revision" (`createSalesQuoteRevisionAction`), a new revision is spawned with standard `-R1`, `-R2` sequential numbering, marking older sent/draft versions as `superseded`.
+- **Revision Switcher UI**: Built `QuoteRevisionSwitcher` dropdown component displaying all family versions with badges, dates, and amounts for fast switching between quote iterations.
+- **Superseded Warning Banner**: Displays an alert banner on older revisions with a direct link to jump to the latest version.
+- **Quote Table Badges**: Display `Rev {n}` pill badges in the main sales quotes list table.
+- **Automated Lifecycle Tests**: Added `tests/sales-quote-revisions.test.ts` verifying creation, modification, superseding, discounting, and conversion.
+
+### One-Click Document Conversions
+- **Quote -> Sales Order**: Convert action maps quotes directly to draft Sales Orders (`convertSalesQuoteToOrderAction`), marks quote as `accepted`, and links `salesQuoteId`.
+- **Sales Order -> Sales Invoice**: Convert action maps orders directly to draft Sales Invoices (`convertSalesOrderToInvoiceAction`), marks order as `completed`, and links `salesOrderId`.
+- **Purchase Order -> Purchase Invoice**: Convert action maps POs directly to draft Purchase Invoices (`convertPurchaseOrderToInvoiceAction`) and marks PO as `closed`.
+- **Mathematical Scaling**: Ensured line quantities (`quantityMicrosToInput`) and unit prices are converted with exact precision across downstream documents.
+
+### Cleanups & Navigation
+- **E-Invoicing Removal**: Removed outbound/inbound e-invoicing modules, routes, and `saxon-js` dependency.
+- **Sidebar Restoration**: Restored missing navigation routes: Receipts, Supplier Payments, Delivery Notes, Goods Receipts, Debit Notes.
+- **Form Defaults Sub-Pages**: Added `/settings/form-defaults/[formId]` page with toggle controls for amountsIncludeTax, showDiscounts, showLineNumber, and showDescription.
+
+## Purchase Quotes (RFQ) Module & Full Procurement Parity
+
+### Purchase Quotes & Supplier Revision System
+- **Procurement Parity**: Implemented complete RFQ/Purchase Quote lifecycle mirroring the sales cycle: Purchase Quote (RFQ) $\rightarrow$ Purchase Order (PO) $\rightarrow$ Goods Receipt $\rightarrow$ Purchase Invoice (PI) $\rightarrow$ Supplier Payment / Debit Note.
+- **Schema & Migration 19 (`purchase_quotes`)**: Added `purchase_quotes` and `purchase_quote_lines` tables, `purchase_quote_id` foreign key on `purchase_orders`, and `purchase_quote_prefix`/`next_number` in settings.
+- **Sequential Revision Numbering**: Sequential numbering (`PQ-0001`, `PQ-0001-R1`, `PQ-0001-R2`) with automatic `is_latest_revision` tracking and `"superseded"` status updates on prior family iterations.
+- **Interactive Revision Switcher**: Built `PurchaseQuoteRevisionSwitcher` dropdown component displaying full family version history with statuses, dates, and amounts.
+- **Superseded Warning Banner**: Displays alert banner on older revisions with 1-click link to jump to the latest revision.
+- **One-Click Conversion (PQ $\rightarrow$ PO)**: Direct conversion action duplicating line items, carrying forward unit prices, fixed/percentage discounts, expense accounts, and tax codes into draft Purchase Orders, while auto-transitioning quote status to `accepted`.
+- **Manager.io-Style Form Controls**: Full-width quote editor with bottom-left toggle controls (`amountsIncludeTax`, `showDiscounts`, `showLineNumber`, `showDescription`, `showLineProjects`).
+- **Sidebar, Settings & PDF**: Added to primary sidebar navigation (`/purchases/quotes`), Form Defaults settings (`/settings/form-defaults/purchase-quote`), PDF generation endpoint, and "New Purchase Quote" button on supplier details.
+- **Automated Lifecycle Tests**: Added `tests/purchase-quotes.test.ts` verifying creation, revisions, discounts, conversions, and status updates (52/52 tests pass).
+
+
+## Centralized Document Revision Engine (Branch zlm-test-2)
+
+### Universal Revision Engine
+- **Centralized Engine (`src/core/versioning/revision-engine.ts`)**: Extracted custom revision logic into a highly robust, database-transactional engine that supports any document with headers and lines.
+- **Support for Orders**: Extended the `-R1`, `-R2` sequential revision numbering system to Sales Orders and Purchase Orders (e.g., `SO-XXXX-R1`, `PO-XXXX-R1`).
+- **Draft Concurrency Locks**: Engine safely rejects simultaneous draft branching (locking a document from revisions if an unfinalized draft already exists).
+- **Line & Custom Field Cloning**: Automatically carries forward all document lines, item foreign keys, descriptions, and dynamic `custom_field_values` seamlessly using schema-agnostic extraction.
+- **Superseding State Verification**: When an order revision transitions out of `draft`, previous active orders automatically degrade to a `superseded` state, releasing the `is_latest_revision` flag securely.
+- **Database Migrations (`order_revisions` Phase 21)**: Retroactively patched legacy `CHECK` constraints on `sales_orders.document_status` and `purchase_orders.status` to safely accept the `'superseded'` lifecycle stage.
+
+### UI Reusability
+- **Order Revision Switchers**: Built `OrderRevisionSwitcher` components for both Sales and Purchase orders mimicking the exact visual functionality of the Quote Revision Switchers (dropdown histories, superseded banners, etc).
+- **Bug Fixes**: Removed deprecated `headers()` context usage in backend standalone testing and Next.js middleware deprecations.
+
+

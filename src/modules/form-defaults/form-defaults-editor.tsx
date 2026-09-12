@@ -8,6 +8,39 @@ import { Label } from "@/components/ui/label";
 import { saveFormDefaultsAction } from "@/modules/form-defaults/actions";
 import type { FormDefaultValues } from "@/modules/form-defaults/form-defaults-service";
 
+function Toggle({
+  id,
+  label,
+  description,
+  checked,
+  onChange,
+}: {
+  id: string;
+  label: string;
+  description: string;
+  checked: boolean;
+  onChange: (value: boolean) => void;
+}) {
+  return (
+    <div className="flex items-center justify-between gap-4">
+      <div>
+        <Label htmlFor={id} className="text-sm font-medium">{label}</Label>
+        <p className="text-xs text-muted-foreground">{description}</p>
+      </div>
+      <button
+        type="button"
+        id={id}
+        role="switch"
+        aria-checked={checked}
+        onClick={() => onChange(!checked)}
+        className={`relative inline-flex h-5 w-9 shrink-0 items-center rounded-full border border-transparent transition-colors ${checked ? "bg-primary" : "bg-muted"}`}
+      >
+        <span className={`inline-block size-4 transform rounded-full bg-white shadow transition-transform ${checked ? "translate-x-4" : "translate-x-0.5"}`} />
+      </button>
+    </div>
+  );
+}
+
 export function FormDefaultsEditor({
   businessId,
   formType,
@@ -46,36 +79,6 @@ export function FormDefaultsEditor({
     }
   };
 
-  const Toggle = ({
-    id,
-    label,
-    description,
-    checked,
-    onChange,
-  }: {
-    id: string;
-    label: string;
-    description: string;
-    checked: boolean;
-    onChange: (value: boolean) => void;
-  }) => (
-    <div className="flex items-center justify-between gap-4">
-      <div>
-        <Label htmlFor={id} className="text-sm font-medium">{label}</Label>
-        <p className="text-xs text-muted-foreground">{description}</p>
-      </div>
-      <button
-        type="button"
-        id={id}
-        role="switch"
-        aria-checked={checked}
-        onClick={() => onChange(!checked)}
-        className={`relative inline-flex h-5 w-9 shrink-0 items-center rounded-full border border-transparent transition-colors ${checked ? "bg-primary" : "bg-muted"}`}
-      >
-        <span className={`inline-block size-4 transform rounded-full bg-white shadow transition-transform ${checked ? "translate-x-4" : "translate-x-0.5"}`} />
-      </button>
-    </div>
-  );
 
   return (
     <div className="space-y-6">

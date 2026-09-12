@@ -28,19 +28,19 @@ export function DebitNoteViewActions({
     <DocumentViewActions
       documentNumber={debitNoteNumber}
       documentType="Debit Note"
-      editHref={documentStatus !== "void" ? `/b/${businessId}/sales/debit-notes/${noteId}/edit` : undefined}
-      pdfHref={`/api/businesses/${businessId}/debit-notes/${noteId}/pdf`}
+      editHref={documentStatus !== "void" ? `/b/${businessId}/purchases/debit-notes/${noteId}/edit` : undefined}
+      pdfHref={`/api/businesses/${businessId}/documents/debit-note/${noteId}/pdf`}
       onDuplicate={async () => {
         const result = await duplicateDebitNoteAction(businessId, noteId);
         if (result?.error) throw new Error(result.error);
       }}
       onVoid={documentStatus === "posted" ? {
         label: "Void",
-        description: "This retains the credit note and creates a balanced reversing journal entry. A credit note with refund allocations cannot be voided.",
+        description: "This retains the debit note and creates a balanced reversing journal entry.",
         action: async () => {
           const result = await voidDebitNoteAction(businessId, noteId);
           if (result.error) throw new Error(result.error);
-          toast.success("Credit note voided.");
+          toast.success("Debit note voided.");
           router.refresh();
         }
       } : undefined}
@@ -50,8 +50,8 @@ export function DebitNoteViewActions({
         action: async () => {
           const result = await deleteDebitNoteAction(businessId, noteId);
           if (result.error) throw new Error(result.error);
-          toast.success("Draft credit note deleted.");
-          router.push(`/b/${businessId}/sales/debit-notes`);
+          toast.success("Draft debit note deleted.");
+          router.push(`/b/${businessId}/purchases/debit-notes`);
         }
       } : undefined}
       extraActions={

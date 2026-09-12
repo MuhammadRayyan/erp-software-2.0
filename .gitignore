@@ -1,60 +1,58 @@
-# ─── Dependencies ────────────────────────────────────────────────────────────
-node_modules/
-.pnpm-store/
-.npm-cache/
-.node-gyp/
+# See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
 
-# ─── Next.js build output ────────────────────────────────────────────────────
-.next/
-out/
+# dependencies
+node_modules
+/.pnp
+.pnp.*
+.yarn/*
+!.yarn/patches
+!.yarn/plugins
+!.yarn/releases
+!.yarn/versions
 
-# ─── TypeScript build cache ───────────────────────────────────────────────────
-*.tsbuildinfo
-tsconfig.tsbuildinfo
+# testing
+/coverage
 
-# ─── Drizzle migrations (generated, not hand-authored) ────────────────────────
-# Remove this line if you want to commit migrations
-drizzle/
+# next.js
+/.next/
+/out/
 
-# ─── Runtime data (SQLite databases, uploads, etc.) ──────────────────────────
-data/
+# production
+/build
 
-# ─── Environment / secrets ───────────────────────────────────────────────────
-.env
-.env.local
-.env.*.local
-# Keep .env.example committed (it has no secrets)
-!.env.example
+# misc
+.DS_Store
+*.pem
 
-# ─── Logs ────────────────────────────────────────────────────────────────────
-*.log
+# debug
 npm-debug.log*
-pnpm-debug.log*
 yarn-debug.log*
 yarn-error.log*
-compose-watch*.log
-compose-watch-error*.log
+.pnpm-debug.log*
 
-# ─── OS artifacts ────────────────────────────────────────────────────────────
-.DS_Store
-Thumbs.db
-desktop.ini
+# env files (can opt-in for committing if needed)
+.env*
 
-# ─── Editor / IDE ────────────────────────────────────────────────────────────
-.vscode/settings.json
-.idea/
-*.suo
-*.ntvs*
-*.njsproj
-*.sln
-*.sw?
+# vercel
+.vercel
 
-# ─── Test / coverage output ──────────────────────────────────────────────────
-coverage/
-.nyc_output/
 
-# --- Playwright ---
-test-results/
-playwright-report/
-blob-report/
-playwright/.cache/
+# typescript
+*.tsbuildinfo
+next-env.d.ts
+local-*
+.claude
+.z-ai-config
+*.log
+dev.log
+dev.out.log
+test
+prompt
+
+server.log
+# Skills directory
+/skills/
+.npm-cache
+.node-gyp
+.pnpm-store
+/data/

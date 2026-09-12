@@ -11,6 +11,7 @@ const FORM_LABELS: Record<string, string> = {
   "sales-order": "Sales Order",
   "sales-invoice": "Sales Invoice",
   "sales-credit-note": "Sales Credit Note",
+  "purchase-quote": "Purchase Quote",
   "purchase-order": "Purchase Order",
   "purchase-invoice": "Purchase Invoice",
   "debit-note": "Debit Note",

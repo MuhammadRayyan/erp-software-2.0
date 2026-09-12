@@ -171,6 +171,7 @@ Sales
 
 Purchases
   Suppliers
+  Purchase Quotes
   Purchase Orders
   Purchase Invoices
   Debit Notes

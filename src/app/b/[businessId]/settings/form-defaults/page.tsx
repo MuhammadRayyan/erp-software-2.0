@@ -9,6 +9,7 @@ const FORMS = [
   { id: "sales-order", label: "Sales Order", description: "Default fields for new sales orders.", icon: ShoppingCart },
   { id: "sales-invoice", label: "Sales Invoice", description: "Default fields for new sales invoices.", icon: ReceiptText },
   { id: "sales-credit-note", label: "Sales Credit Note", description: "Default fields for new sales credit notes.", icon: ReceiptText },
+  { id: "purchase-quote", label: "Purchase Quote", description: "Default fields for new purchase quotes and RFQs.", icon: FileText },
   { id: "purchase-order", label: "Purchase Order", description: "Default fields for new purchase orders.", icon: ShoppingCart },
   { id: "purchase-invoice", label: "Purchase Invoice", description: "Default fields for new purchase invoices.", icon: FileInput },
   { id: "debit-note", label: "Debit Note", description: "Default fields for new supplier debit notes.", icon: ReceiptText },

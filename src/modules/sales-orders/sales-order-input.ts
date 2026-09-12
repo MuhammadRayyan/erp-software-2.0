@@ -27,9 +27,11 @@ export const salesOrderInputSchema = z.object({
   date: z.iso.date("Enter a valid order date"),
   expectedDate: z.union([z.literal(""), z.iso.date("Enter a valid expected date")]).optional().default(""),
   reference: z.string().trim().max(100).optional().default(""),
-  salesQuoteId: z.string().uuid().optional().nullable(),
+  salesQuoteId: z.union([z.literal(""), z.string().uuid()]).optional().default(""),
   notes: z.string().trim().max(1_000).optional().default(""),
+  terms: z.string().trim().max(10_000).optional().default(""),
   lines: z.array(salesOrderLineSchema).min(1, "Add at least one line").max(100),
 });
 
 export type SalesOrderInput = z.input<typeof salesOrderInputSchema>;
+

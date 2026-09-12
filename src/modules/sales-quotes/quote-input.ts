@@ -28,6 +28,7 @@ export const salesQuoteInputSchema = z.object({
   expectedDate: z.union([z.literal(""), z.iso.date("Enter a valid expected date")]).optional().default(""),
   reference: z.string().trim().max(100).optional().default(""),
   notes: z.string().trim().max(1_000).optional().default(""),
+  terms: z.string().trim().max(10_000).optional().default(""),
   lines: z.array(salesQuoteLineSchema).min(1, "Add at least one line").max(100),
 });
 

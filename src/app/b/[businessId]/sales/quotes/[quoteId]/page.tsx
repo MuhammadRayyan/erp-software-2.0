@@ -1,6 +1,5 @@
-// @ts-nocheck
 import Link from "next/link";
-import { ArrowLeft, Tag } from "lucide-react";
+import { AlertCircle, ArrowLeft, Tag } from "lucide-react";
 import { notFound } from "next/navigation";
 import { NoticeToast } from "@/components/notice-toast";
 import { requireModule } from "@/core/permissions/require-module";
@@ -8,12 +7,13 @@ import { formatDate, formatMoney } from "@/core/format";
 import { quantityMicrosToInput, rateBasisPointsToPercent } from "@/modules/accounting/calculations/money";
 import { getCustomFieldValuesForEntities, listCustomFieldDefinitions } from "@/modules/custom-fields/custom-field-service";
 import { formatCustomFieldValue } from "@/modules/custom-fields/custom-field-display";
-import { getSalesQuote } from "@/modules/sales-quotes/quote-service";
-import { DocumentStatusBadge, PaymentStatusBadge } from "@/modules/sales-quotes/quote-status";
+import { getSalesQuote, listSalesQuoteRevisions } from "@/modules/sales-quotes/quote-service";
+import { StatusBadge } from "@/components/status-badge";
 import { SalesQuoteViewActions } from "@/modules/sales-quotes/quote-view-actions";
+import { QuoteRevisionSwitcher } from "@/modules/sales-quotes/quote-revision-switcher";
 import { ProjectLinks } from "@/modules/projects/project-links";
 import { emirateLabels, type Emirate } from "@/modules/tax/uae-vat-config";
-import { buildQuoteEmailContext, buildQuoteEmailDefaults } from "@/modules/email/email-defaults";
+
 
 export default async function QuoteViewPage({ params, searchParams }: { params: Promise<{ businessId: string; quoteId: string }>; searchParams: Promise<{ notice?: string }> }) {
   const { businessId, quoteId } = await params;
@@ -29,21 +29,56 @@ export default async function QuoteViewPage({ params, searchParams }: { params: 
   const customFieldValues = customFieldDefinitions.length
     ? getCustomFieldValuesForEntities(businessId, user.id, "sales_quote" as any, [quoteId]).get(quoteId) ?? {}
     : {};
-  const emailContext = buildQuoteEmailContext(access.business.name, record);
-  const emailDefaults = buildQuoteEmailDefaults(emailContext, emailContext.to);
+  const revisions = listSalesQuoteRevisions(businessId, user.id, quoteId);
+  const latestRevision = revisions.find((r) => r.is_latest_revision);
+  const isViewingOlderRevision = !quote.isLatestRevision || quote.documentStatus === "superseded";
+  
   return (
     <div className="page-container">
       <NoticeToast message={notice} />
       <Link href={`/b/${businessId}/sales/quotes`} className="mb-5 inline-flex items-center gap-1.5 text-[13px] text-muted-foreground hover:text-foreground"><ArrowLeft className="size-4" /> Sales Quotes</Link>
+      
+      {isViewingOlderRevision && latestRevision && latestRevision.id !== quote.id && (
+        <div className="mb-5 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-amber-500/30 bg-amber-500/10 p-3.5 text-sm text-amber-900 dark:text-amber-200">
+          <div className="flex items-center gap-2">
+            <AlertCircle className="size-4 shrink-0 text-amber-600 dark:text-amber-400" />
+            <span>
+              You are viewing <strong>Revision {quote.revisionNumber}</strong> ({quote.documentStatus}).
+            </span>
+          </div>
+          <Link
+            href={`/b/${businessId}/sales/quotes/${latestRevision.id}`}
+            className="font-semibold underline hover:text-foreground"
+          >
+            Switch to Latest ({latestRevision.quote_number}) →
+          </Link>
+        </div>
+      )}
+
       <div className="mb-5 flex flex-col justify-between gap-4 lg:flex-row lg:items-start">
-        <div><div className="flex flex-wrap items-center gap-2"><h1 className="page-title tabular">{quote.quoteNumber}</h1><DocumentStatusBadge status={quote.documentStatus} />{record.paymentStatus && <PaymentStatusBadge status={record.paymentStatus} />}</div><p className="mt-2 text-base font-medium">{customer.name}</p><p className="mt-1 text-sm text-muted-foreground">Quote date: {formatDate(quote.quoteDate)} · Due: {formatDate(quote.dueDate)}</p><div className="mt-3 flex flex-wrap items-baseline gap-x-5 gap-y-1"><span className="money text-xl font-semibold">{formatMoney(quote.totalMinor, currency)}</span>{quote.documentStatus === "posted" ? <span className="money text-sm text-muted-foreground">Balance <strong className="font-semibold text-foreground">{formatMoney(record.balanceMinor, currency)}</strong></span> : <span className="text-sm text-muted-foreground">No ledger impact</span>}</div></div>
-        <SalesQuoteViewActions businessId={businessId} quoteId={quote.id} quoteNumber={quote.quoteNumber} documentStatus={quote.documentStatus} balanceMinor={record.balanceMinor} journalEntryId={record.journal?.id ?? null} inventoryEnabled={access.modules.includes("inventory")} hasDeliverableItems={lines.some((line) => Boolean(line.itemId) && line.remainingToDeliverMicros > 0)} emailDefaults={emailDefaults} />
+        <div>
+          <div className="flex flex-wrap items-center gap-2.5">
+            <h1 className="page-title tabular">{quote.quoteNumber}</h1>
+            <QuoteRevisionSwitcher
+              businessId={businessId}
+              currentQuoteId={quote.id}
+              revisions={revisions}
+            />
+            <StatusBadge status={quote.documentStatus} />
+          </div>
+          <p className="mt-2 text-base font-medium">{customer.name}</p>
+          <p className="mt-1 text-sm text-muted-foreground">Quote date: {formatDate(quote.quoteDate)}{quote.expiryDate ? ` · Expiry: ${formatDate(quote.expiryDate)}` : ""}</p>
+          <div className="mt-3 flex flex-wrap items-baseline gap-x-5 gap-y-1">
+            <span className="money text-xl font-semibold">{formatMoney(quote.totalMinor, currency)}</span>
+          </div>
+        </div>
+        <SalesQuoteViewActions businessId={businessId} quoteId={quote.id} quoteNumber={quote.quoteNumber} documentStatus={quote.documentStatus} />
       </div>
       {currency !== access.business.currency && <section aria-label="Currency snapshot" className="mb-5 rounded-lg border border-border bg-surface-raised p-4"><dl className="grid gap-4 text-sm sm:grid-cols-2 lg:grid-cols-4"><div><dt className="text-xs text-muted-foreground">Stored rate</dt><dd className="money mt-1">1 {currency} = {quote.exchangeRateToBase} {access.business.currency}</dd></div><div><dt className="text-xs text-muted-foreground">Rate date</dt><dd className="mt-1">{formatDate(quote.exchangeRateDate)}</dd></div><div><dt className="text-xs text-muted-foreground">Rate source</dt><dd className="mt-1">{quote.exchangeRateSource}</dd></div><div><dt className="text-xs text-muted-foreground">Base equivalent</dt><dd className="money mt-1 font-semibold">{formatMoney(quote.baseTotalMinor, access.business.currency)}</dd></div></dl><p className="mt-3 text-xs text-muted-foreground">Base VAT {formatMoney(quote.baseTaxMinor, access.business.currency)} · Posted snapshots never follow later rate-table changes.</p></section>}
       <article className="rounded-lg border border-border bg-surface-raised p-5 sm:p-7">
-        <div className="grid gap-6 border-b border-border pb-6 sm:grid-cols-2"><div><p className="text-xs font-semibold tracking-[0.08em] text-muted-foreground uppercase">Bill to</p><p className="mt-2 font-semibold">{customer.name}</p>{customer.email && <p className="mt-1 text-sm text-muted-foreground">{customer.email}</p>}{customer.phone && <p className="text-sm text-muted-foreground">{customer.phone}</p>}</div><dl className="grid grid-cols-2 gap-x-5 gap-y-3 text-sm sm:justify-self-end"><dt className="text-muted-foreground">Quote date</dt><dd className="text-right">{formatDate(quote.quoteDate)}</dd><dt className="text-muted-foreground">VAT tax date</dt><dd className="text-right">{formatDate(quote.taxDate)}</dd><dt className="text-muted-foreground">Supply Emirate</dt><dd className="text-right">{quote.supplyEmirate ? emirateLabels[quote.supplyEmirate as Emirate] : "Business default"}</dd><dt className="text-muted-foreground">Due date</dt><dd className="text-right">{formatDate(quote.dueDate)}</dd><dt className="text-muted-foreground">Reference</dt><dd className="text-right">{quote.reference || "—"}</dd><dt className="text-muted-foreground">Project</dt><dd className="text-right"><ProjectLinks businessId={businessId} projects={linkedProjects} /></dd></dl></div>
-        <div className="mt-6 overflow-x-auto"><table className={`data-table ${showLineProjects ? "min-w-[1020px]" : "min-w-[880px]"}`}><thead><tr><th>Item / Description</th><th className="text-right!">Qty</th><th className="text-right!">Delivered</th><th className="text-right!">Remaining</th><th className="text-right!">Rate</th><th>VAT</th>{showLineProjects && <th>Project</th>}<th className="text-right!">Amount</th></tr></thead><tbody>{lines.map((line) => <tr key={line.id}><td><span className="font-medium">{line.item ? `${line.item.sku ? `${line.item.sku} · ` : ""}${line.item.name}` : line.description}</span>{line.item && <span className="mt-0.5 block text-xs text-muted-foreground">{line.description}</span>}<span className="mt-0.5 block text-xs text-muted-foreground">{line.salesAccount ? `${line.salesAccount.code} ${line.salesAccount.name}` : "Sales account unavailable"}</span></td><td className="money text-right">{quantityMicrosToInput(line.quantityMicros)}</td><td className="money text-right">{line.item ? quantityMicrosToInput(line.deliveredMicros) : "—"}</td><td className="money text-right">{line.item ? quantityMicrosToInput(line.remainingToDeliverMicros) : "—"}</td><td className="money text-right">{formatMoney(line.unitPriceMinor, currency)}</td><td>{line.taxCode ? `${line.taxCode.name} (${rateBasisPointsToPercent(line.taxCode.rate_basis_points)}%)` : "—"}</td>{showLineProjects && <td><ProjectLinks businessId={businessId} projects={line.project ? [line.project] : []} empty="—" /></td>}<td className="money text-right">{formatMoney(line.grossAmountMinor, currency)}</td></tr>)}</tbody></table></div>
-        <dl className="mt-6 ml-auto w-full max-w-xs space-y-2 text-sm"><div className="flex justify-between"><dt className="text-muted-foreground">Subtotal</dt><dd className="money">{formatMoney(quote.subtotalMinor, currency)}</dd></div><div className="flex justify-between"><dt className="text-muted-foreground">VAT</dt><dd className="money">{formatMoney(quote.taxMinor, currency)}</dd></div><div className="flex justify-between border-t border-border pt-2 text-base font-semibold"><dt>Total</dt><dd className="money">{formatMoney(quote.totalMinor, currency)}</dd></div>{quote.documentStatus === "posted" && <div className="flex justify-between border-t border-border pt-2"><dt className="text-muted-foreground">Balance due</dt><dd className="money font-semibold">{formatMoney(record.balanceMinor, currency)}</dd></div>}</dl>
+        <div className="grid gap-6 border-b border-border pb-6 sm:grid-cols-2"><div><p className="text-xs font-semibold tracking-[0.08em] text-muted-foreground uppercase">Bill to</p><p className="mt-2 font-semibold">{customer.name}</p>{customer.email && <p className="mt-1 text-sm text-muted-foreground">{customer.email}</p>}{customer.phone && <p className="text-sm text-muted-foreground">{customer.phone}</p>}</div><dl className="grid grid-cols-2 gap-x-5 gap-y-3 text-sm sm:justify-self-end"><dt className="text-muted-foreground">Quote date</dt><dd className="text-right">{formatDate(quote.quoteDate)}</dd>{quote.expiryDate && <><dt className="text-muted-foreground">Expiry date</dt><dd className="text-right">{formatDate(quote.expiryDate)}</dd></>}<dt className="text-muted-foreground">Reference</dt><dd className="text-right">{quote.reference || "—"}</dd><dt className="text-muted-foreground">Project</dt><dd className="text-right"><ProjectLinks businessId={businessId} projects={linkedProjects} /></dd></dl></div>
+        <div className="mt-6 overflow-x-auto"><table className={`data-table ${showLineProjects ? "min-w-[800px]" : "min-w-[700px]"}`}><thead><tr><th>Item / Description</th><th className="text-right!">Qty</th><th className="text-right!">Rate</th><th>VAT</th>{showLineProjects && <th>Project</th>}<th className="text-right!">Amount</th></tr></thead><tbody>{lines.map((line) => <tr key={line.id}><td><span className="font-medium">{line.item ? `${line.item.sku ? `${line.item.sku} · ` : ""}${line.item.name}` : line.description}</span>{line.item && <span className="mt-0.5 block text-xs text-muted-foreground">{line.description}</span>}<span className="mt-0.5 block text-xs text-muted-foreground">{line.salesAccount ? `${line.salesAccount.code} ${line.salesAccount.name}` : "Sales account unavailable"}</span></td><td className="money text-right">{quantityMicrosToInput(line.quantityMicros)}</td><td className="money text-right">{formatMoney(line.unitPriceMinor, currency)}</td><td>{line.taxCode ? `${line.taxCode.name} (${rateBasisPointsToPercent(line.taxCode.rate_basis_points)}%)` : "—"}</td>{showLineProjects && <td><ProjectLinks businessId={businessId} projects={line.project ? [line.project] : []} empty="—" /></td>}<td className="money text-right">{formatMoney(line.grossAmountMinor, currency)}</td></tr>)}</tbody></table></div>
+        <dl className="mt-6 ml-auto w-full max-w-xs space-y-2 text-sm"><div className="flex justify-between"><dt className="text-muted-foreground">Subtotal</dt><dd className="money">{formatMoney(quote.subtotalMinor, currency)}</dd></div><div className="flex justify-between"><dt className="text-muted-foreground">VAT</dt><dd className="money">{formatMoney(quote.taxMinor, currency)}</dd></div><div className="flex justify-between border-t border-border pt-2 text-base font-semibold"><dt>Total</dt><dd className="money">{formatMoney(quote.totalMinor, currency)}</dd></div></dl>
 {customFieldDefinitions.length > 0 && (
   <section aria-label="Custom fields" className="mt-8 border-t border-border pt-5">
     <div className="flex items-center gap-2">
@@ -64,9 +99,7 @@ export default async function QuoteViewPage({ params, searchParams }: { params: 
     </dl>
   </section>
 )}
-        <section className="mt-8 border-t border-border pt-5"><h2 className="text-sm font-semibold">Related Credit Notes</h2>{record.creditNotes.length ? <div className="mt-3 overflow-x-auto rounded-md border border-border"><table className="data-table min-w-[560px]"><thead><tr><th>Credit note</th><th>Date</th><th>Status</th><th className="text-right!">Allocated</th></tr></thead><tbody>{record.creditNotes.map((note) => <tr key={note.id}><td><Link href={`/b/${businessId}/sales/credit-notes/${note.id}`} className="tabular font-medium text-primary hover:underline">{note.creditNoteNumber}</Link></td><td>{formatDate(note.date)}</td><td className="capitalize">{note.documentStatus}</td><td className="money text-right">{formatMoney(note.allocatedMinor, currency)}</td></tr>)}</tbody></table></div> : <p className="mt-2 text-sm text-muted-foreground">No credit notes linked.</p>}</section>
-        <section className="mt-8 border-t border-border pt-5"><h2 className="text-sm font-semibold">Delivery Notes</h2>{record.deliveryNotes.length ? <div className="mt-3 overflow-x-auto rounded-md border border-border"><table className="data-table min-w-[520px]"><thead><tr><th>Delivery</th><th>Date</th><th>Status</th></tr></thead><tbody>{record.deliveryNotes.map((delivery) => <tr key={delivery.id}><td><Link href={`/b/${businessId}/sales/delivery-notes/${delivery.id}`} className="tabular font-medium text-primary hover:underline">{delivery.delivery_number}</Link></td><td>{formatDate(delivery.date)}</td><td className="capitalize">{delivery.document_status}</td></tr>)}</tbody></table></div> : <p className="mt-2 text-sm text-muted-foreground">No delivery notes linked yet.</p>}</section>
-        <section className="mt-8 border-t border-border pt-5"><h2 className="text-sm font-semibold">Receipts</h2>{record.receipts.length ? <div className="mt-3 overflow-x-auto rounded-md border border-border"><table className="data-table min-w-[560px]"><thead><tr><th>Receipt</th><th>Date</th><th>Reference</th><th className="text-right!">Allocated</th></tr></thead><tbody>{record.receipts.map((receipt) => <tr key={receipt.id}><td><Link href={`/b/${businessId}/sales/receipts/${receipt.id}`} className="tabular font-medium text-primary hover:underline">{receipt.receiptNumber}</Link></td><td>{formatDate(receipt.date)}</td><td className="text-muted-foreground">{receipt.reference || "—"}</td><td className="money text-right">{formatMoney(receipt.allocatedMinor, currency)}</td></tr>)}</tbody></table></div> : <p className="mt-2 text-sm text-muted-foreground">{quote.documentStatus === "posted" ? "No receipts recorded." : "Receipts become available after posting."}</p>}</section>
+
       </article>
     </div>
   );

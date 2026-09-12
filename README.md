@@ -2,7 +2,7 @@
 
 A compact, Manager.io-inspired multi-business accounting/ERP application for local and self-hosted use.
 
-**Current release: v2.1.1** — Phases 0-9 (foundation through multi-currency + UAE eInvoicing), the Phase 10 code-health/security/customizability pass, plus seven QA/feature review rounds: Custom Fields on customers/suppliers/invoices/PDFs, per-account server-side preferences, server-side pagination with date filters on every major list, email delivery with PDF attachments, and a responsive command palette with a mobile trigger. See `docs/CHANGELOG.md` for the full history and `docs/CURRENT_STATE.md` for authoritative behavior.
+**Current release: v2.4.0** — Centralized Document Revision Engine (Orders & Quotes), Complete Sales & Procurement parity, Purchase Quotes (RFQ) module, Sequential Document Revisions & Versioning with interactive dropdown switcher and superseded state management, One-Click Document Conversions (Quote $\rightarrow$ Order $\rightarrow$ Invoice), Form Defaults configuration, Manager.io-inspired subtractive discounts and inclusive tax splitting, sent emails with PDF attachments, multi-currency foundation, and UAE VAT. See `docs/CHANGELOG.md` for the full history and `docs/CURRENT_STATE.md` for authoritative behavior.
 
 ## Working context for future phases
 

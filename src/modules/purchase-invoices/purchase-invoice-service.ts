@@ -62,11 +62,11 @@ function insertLines(sqlite: ReturnType<typeof getBusinessDb>["sqlite"], invoice
   const statement = sqlite.prepare(`
     INSERT INTO purchase_invoice_lines (
       id, purchase_invoice_id, item_id, description, quantity_micros, unit_price_minor,
-      expense_account_id, tax_code_id, project_id, net_amount_minor, tax_amount_minor,
+      discount_type, discount_value, expense_account_id, tax_code_id, project_id, net_amount_minor, tax_amount_minor,
       gross_amount_minor, position
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `);
-  for (const line of lines) statement.run(line.id, invoiceId, line.itemId, line.description, line.quantityMicros, line.unitPriceMinor, line.expenseAccountId, line.taxCodeId, line.projectId, line.netAmountMinor, line.taxAmountMinor, line.grossAmountMinor, line.lineIndex);
+  for (const line of lines) statement.run(line.id, invoiceId, line.itemId, line.description, line.quantityMicros, line.unitPriceMinor, line.discountType || "none", line.discountValue || "0", line.expenseAccountId, line.taxCodeId, line.projectId, line.netAmountMinor, line.taxAmountMinor, line.grossAmountMinor, line.lineIndex);
 }
 
 const PAID_MINOR_FRAGMENT = `
@@ -221,7 +221,9 @@ export function listPurchaseInvoices(
     supplier_invoice_number: string; invoice_date: string; due_date: string;
     reference: string | null; purchase_order_id: string | null; project_id: string | null;
     project_ids: string | null; document_status: PurchaseInvoiceStatus; subtotal_minor: number;
-    tax_minor: number; total_minor: number; base_total_minor: number; currency_code: string; currency_minor_unit: number; created_at: string; updated_at: string; paid_minor: number;
+    tax_minor: number; total_minor: number; base_total_minor: number; currency_code: string; currency_minor_unit: number;
+    exchange_rate_to_base: string; exchange_rate_date: string; exchange_rate_source: string;
+    created_at: string; updated_at: string; paid_minor: number;
   }[];
   const projects = sqlite.prepare("SELECT id, name FROM projects").all() as { id: string; name: string }[];
   const projectById = new Map(projects.map((project) => [project.id, project.name]));
@@ -342,8 +344,8 @@ export function savePurchaseInvoice(
           invoice_date = ?, tax_date = ?, due_date = ?, reference = ?, purchase_order_id = ?, subtotal_minor = ?,
           tax_minor = ?, total_minor = ?, currency_code = ?, exchange_rate_to_base = ?,
           exchange_rate_date = ?, exchange_rate_source = ?, base_subtotal_minor = ?,
-          base_tax_minor = ?, base_total_minor = ?, updated_at = ? WHERE id = ?
-      `).run(data.supplierId, data.projectId || null, data.supplierInvoiceNumber, data.invoiceDate, taxDate, data.dueDate, data.reference || null, data.purchaseOrderId || null, amounts.subtotalMinor, amounts.taxMinor, amounts.totalMinor, rate.currencyCode, rate.exchangeRateToBase, rate.exchangeRateDate, rate.exchangeRateSource, base.baseSubtotalMinor, base.baseTaxMinor, base.baseTotalMinor, now, invoiceId);
+          base_tax_minor = ?, base_total_minor = ?, updated_at = ?, notes = ?, terms = ? WHERE id = ?
+      `).run(data.supplierId, data.projectId || null, data.supplierInvoiceNumber, data.invoiceDate, taxDate, data.dueDate, data.reference || null, data.purchaseOrderId || null, amounts.subtotalMinor, amounts.taxMinor, amounts.totalMinor, rate.currencyCode, rate.exchangeRateToBase, rate.exchangeRateDate, rate.exchangeRateSource, base.baseSubtotalMinor, base.baseTaxMinor, base.baseTotalMinor, now, data.notes || null, data.terms || null, invoiceId);
       context.sqlite.prepare("DELETE FROM purchase_invoice_lines WHERE purchase_invoice_id = ?").run(invoiceId);
     } else {
       internalNumber = allocateNumber(context.sqlite, "purchaseInvoice");
@@ -354,9 +356,9 @@ export function savePurchaseInvoice(
           due_date, reference, purchase_order_id, document_status, subtotal_minor, tax_minor,
           total_minor, created_by, created_at, updated_at, posted_at, voided_at,
           currency_code, exchange_rate_to_base, exchange_rate_date,
-          exchange_rate_source, base_subtotal_minor, base_tax_minor, base_total_minor
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'draft', ?, ?, ?, ?, ?, ?, NULL, NULL, ?, ?, ?, ?, ?, ?, ?)
-      `).run(id, internalNumber, data.supplierId, data.projectId || null, data.supplierInvoiceNumber, data.invoiceDate, taxDate, data.dueDate, data.reference || null, data.purchaseOrderId || null, amounts.subtotalMinor, amounts.taxMinor, amounts.totalMinor, userId, now, now, rate.currencyCode, rate.exchangeRateToBase, rate.exchangeRateDate, rate.exchangeRateSource, base.baseSubtotalMinor, base.baseTaxMinor, base.baseTotalMinor);
+          exchange_rate_source, base_subtotal_minor, base_tax_minor, base_total_minor, notes, terms
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'draft', ?, ?, ?, ?, ?, ?, NULL, NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `).run(id, internalNumber, data.supplierId, data.projectId || null, data.supplierInvoiceNumber, data.invoiceDate, taxDate, data.dueDate, data.reference || null, data.purchaseOrderId || null, amounts.subtotalMinor, amounts.taxMinor, amounts.totalMinor, userId, now, now, rate.currencyCode, rate.exchangeRateToBase, rate.exchangeRateDate, rate.exchangeRateSource, base.baseSubtotalMinor, base.baseTaxMinor, base.baseTotalMinor, data.notes || null, data.terms || null);
     }
     insertLines(context.sqlite, id, lines);
     if (shouldPost) {

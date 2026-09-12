@@ -12,7 +12,7 @@ test.describe('Navigation & Rendering', () => {
   });
 
   test('Sales Customers page loads', async ({ page }) => {
-    await page.getByRole('link', { name: 'Customers' }).click();
+    await page.getByRole('link', { name: 'Customers', exact: true }).click();
     await expect(page.getByRole('heading', { name: 'Customers', exact: true })).toBeVisible();
   });
 

@@ -52,7 +52,7 @@ function previewLine(line: SalesQuoteInput["lines"][number] | undefined, taxCode
   } catch { return { netMinor: 0, taxMinor: 0, grossMinor: 0 }; }
 }
 
-export function SalesQuoteForm({ businessId, quoteId, status = "draft", customers, expenseAccounts, taxCodes, projects, items, currency, currencies, rates, initial }: { businessId: string; quoteId?: string; status?: SalesQuoteStatus; customers: Option[]; expenseAccounts: AccountOption[]; taxCodes: TaxOption[]; projects: ProjectOption[]; items: ItemOption[]; currency: string; currencies: DocumentCurrencyOption[]; rates: DocumentRateOption[]; initial: SalesQuoteInput }) {
+export function SalesQuoteForm({ businessId, quoteId, status = "draft", customers, salesAccounts, taxCodes, projects, items, currency, currencies, rates, initial }: { businessId: string; quoteId?: string; status?: SalesQuoteStatus; customers: Option[]; salesAccounts: AccountOption[]; taxCodes: TaxOption[]; projects: ProjectOption[]; items: ItemOption[]; currency: string; currencies: DocumentCurrencyOption[]; rates: DocumentRateOption[]; initial: SalesQuoteInput }) {
   const router = useRouter();
   const [serverError, setServerError] = useState("");
   const [showLineProjects, setShowLineProjects] = useState(() => initial.lines.some((line) => Boolean(line.projectId)));
@@ -76,11 +76,11 @@ export function SalesQuoteForm({ businessId, quoteId, status = "draft", customer
     lines.forEach((_, i) => form.setValue(`lines.${i}.taxCodeId`, newTaxId));
   }
 
-  const defaultExpense = expenseAccounts[0]?.id ?? "";
+  const defaultSalesAccount = salesAccounts[0]?.id ?? "";
   function selectItem(index: number, itemId: string) {
     const item = items.find((i) => i.id === itemId);
     if (!item) {
-      form.setValue(`lines.${index}.salesAccountId`, defaultExpense);
+      form.setValue(`lines.${index}.salesAccountId`, defaultSalesAccount);
       return;
     }
     form.setValue(`lines.${index}.description`, item.name);
@@ -97,10 +97,10 @@ export function SalesQuoteForm({ businessId, quoteId, status = "draft", customer
     if (result.fieldErrors) for (const [field, messages] of Object.entries(result.fieldErrors)) setError(field as keyof SalesQuoteInput, { message: messages[0] });
     if (result.error) setServerError(result.error);
   }
-  const cancelHref = quoteId ? `/b/${businessId}/purchases/quotes/${quoteId}` : `/b/${businessId}/purchases/quotes`;
+  const cancelHref = quoteId ? `/b/${businessId}/sales/quotes/${quoteId}` : `/b/${businessId}/sales/quotes`;
   return <form className="space-y-7 max-w-none" noValidate>
     {serverError && <FormError message={serverError} />}
-    <section className="border-b border-border pb-7"><h2 className="text-base font-semibold">Quote details</h2><p className="mt-1 text-sm text-muted-foreground">Purchase quotes are operational documents and never post to the ledger.</p><div className="mt-5 grid gap-5 md:grid-cols-3">
+    <section className="border-b border-border pb-7"><h2 className="text-base font-semibold">Quote details</h2><p className="mt-1 text-sm text-muted-foreground">Sales quotes are operational documents and never post to the ledger.</p><div className="mt-5 grid gap-5 md:grid-cols-3">
       <div className="space-y-1.5"><Label htmlFor="customerId">Customer</Label><SelectNative id="customerId"  {...register("customerId", { onChange: (event) => { if (status === "draft") { const code = customers.find((customer) => customer.id === event.target.value)?.defaultCurrencyCode ?? currency; setValue("currencyCode", code); setValue("exchangeRateToBase", code === currency ? "1" : ""); setValue("exchangeRateDate", code === currency ? quoteDate : ""); setValue("exchangeRateSource", code === currency ? "Base" : ""); } } })} aria-invalid={!!errors.customerId}><option value="">Choose a customer…</option>{customers.map((customer) => <option key={customer.id} value={customer.id}>{customer.name}</option>)}</SelectNative>{errors.customerId && <p className="field-error">{errors.customerId.message}</p>}</div>
       <div className="space-y-1.5"><Label htmlFor="date">Quote date</Label><Input id="date" type="date" {...register("date")} aria-invalid={!!errors.date} />{errors.date && <p className="field-error">{errors.date.message}</p>}</div>
       <div className="space-y-1.5"><Label htmlFor="expectedDate">Expected date <span className="font-normal text-muted-foreground">(optional)</span></Label><Input id="expectedDate" type="date" {...register("expectedDate")} /></div>
@@ -108,7 +108,7 @@ export function SalesQuoteForm({ businessId, quoteId, status = "draft", customer
       <div className="space-y-1.5"><Label htmlFor="reference">Reference <span className="font-normal text-muted-foreground">(optional)</span></Label><Input id="reference" {...register("reference")} /></div>
       <div className="space-y-1.5"><Label htmlFor="notes">Notes <span className="font-normal text-muted-foreground">(optional)</span></Label><Input id="notes" {...register("notes")} /></div>
     </div></section>
-    <section className="border-b border-border pb-7"><h2 className="mb-4 text-base font-semibold">Commitment currency</h2><DocumentCurrencyFields baseCurrencyCode={currency} currencies={currencies} rates={rates} currencyCode={currencyCode} exchangeRateToBase={exchangeRateToBase} exchangeRateDate={exchangeRateDate} exchangeRateSource={exchangeRateSource} relevantDate={quoteDate} disabled={status === "sent"} onChange={(field, value) => setValue(field, value)} /><p className="mt-3 text-xs text-muted-foreground">This is an operational commitment snapshot only. A later Purchase Invoice uses its own posting and VAT rate.</p></section>
+    <section className="border-b border-border pb-7"><h2 className="mb-4 text-base font-semibold">Commitment currency</h2><DocumentCurrencyFields baseCurrencyCode={currency} currencies={currencies} rates={rates} currencyCode={currencyCode} exchangeRateToBase={exchangeRateToBase} exchangeRateDate={exchangeRateDate} exchangeRateSource={exchangeRateSource} relevantDate={quoteDate} disabled={status === "sent"} onChange={(field, value) => setValue(field, value)} /><p className="mt-3 text-xs text-muted-foreground">This is an operational commitment snapshot only. A later Sales Invoice uses its own posting and VAT rate.</p></section>
     <section><div className="mb-3 flex flex-wrap items-end justify-between gap-3">
           <div>
             <h2 className="text-base font-semibold">Line items</h2>
@@ -121,7 +121,7 @@ export function SalesQuoteForm({ businessId, quoteId, status = "draft", customer
                 {taxCodes.map((taxCode) => <option key={taxCode.id} value={taxCode.id}>{taxCode.name}</option>)}
               </select>
             </div>
-            <Button type="button" variant="secondary" size="sm" onClick={() => append({ itemId: "", description: "", quantity: "1", unitPrice: "0.00", discountType: "none", discountValue: "0", salesAccountId: defaultExpense, taxCodeId: globalTaxCodeId, projectId: "" })}>
+            <Button type="button" variant="secondary" size="sm" onClick={() => append({ itemId: "", description: "", quantity: "1", unitPrice: "0.00", discountType: "none", discountValue: "0", salesAccountId: defaultSalesAccount, taxCodeId: globalTaxCodeId, projectId: "" })}>
               <Plus className="size-4" /> Add line
             </Button>
           </div>
@@ -185,8 +185,8 @@ export function SalesQuoteForm({ businessId, quoteId, status = "draft", customer
                     {lines[index]?.itemId ? (
                       <><input type="hidden" {...register(`lines.${index}.salesAccountId`)} /><span className="text-sm text-muted-foreground">From item</span></>
                     ) : (
-                      <select aria-label={`Line ${index + 1} expense account`} className="flex h-9 w-full items-center justify-between rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-sm ring-offset-background placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-50" {...register(`lines.${index}.salesAccountId`)}>
-                        {expenseAccounts.map((account) => <option key={account.id} value={account.id}>{account.code} {account.name}</option>)}
+                      <select aria-label={`Line ${index + 1} sales account`} className="flex h-9 w-full items-center justify-between rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-sm ring-offset-background placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-50" {...register(`lines.${index}.salesAccountId`)}>
+                        {salesAccounts.map((account) => <option key={account.id} value={account.id}>{account.code} {account.name}</option>)}
                       </select>
                     )}
                     <input type="hidden" {...register(`lines.${index}.taxCodeId`)} />

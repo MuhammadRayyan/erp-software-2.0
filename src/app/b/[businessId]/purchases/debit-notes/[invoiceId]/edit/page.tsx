@@ -1,71 +1,117 @@
-// @ts-nocheck
-import Link from "next/link";
+﻿import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
 import { notFound } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { requireModule } from "@/core/permissions/require-module";
-import { quantityMicrosToInput } from "@/modules/accounting/calculations/money";
-import { getPurchaseAccountOptions } from "@/modules/accounting/services/account-service";
+import { getExpenseAccountOptions } from "@/modules/accounting/services/account-service";
 import { getActiveTaxCodes } from "@/modules/accounting/services/tax-code-service";
-import { listCustomers } from "@/modules/customers/customer-service";
-import { getCustomFieldValuesForEntities, listCustomFieldDefinitions } from "@/modules/custom-fields/custom-field-service";
-import { listInventoryItemOptions } from "@/modules/inventory/inventory-item-service";
+import { listActiveSuppliers } from "@/modules/suppliers/supplier-service";
+import { listPurchaseInvoices } from "@/modules/purchase-invoices/purchase-invoice-service";
 import { listProjectOptions } from "@/modules/projects/project-service";
-import { DebitNoteForm } from "@/modules/purchase-debit-notes/debitNote-form";
-import { getDebitNote } from "@/modules/purchase-debit-notes/debitNote-service";
+import { DebitNoteForm } from "@/modules/debit-notes/debit-note-form";
+import { getDebitNote } from "@/modules/debit-notes/debit-note-service";
+import { quantityMicrosToInput } from "@/modules/accounting/calculations/money";
 import { minorToCurrencyInput } from "@/modules/currency/conversion";
 import { getCurrencySettings } from "@/modules/currency/exchange-rate";
 
-export default async function EditDebitNotePage({ params }: { params: Promise<{ businessId: string; debitNoteId: string }> }) {
-  const { businessId, debitNoteId } = await params;
+export default async function EditDebitNotePage({
+  params,
+}: {
+  params: Promise<{ businessId: string; invoiceId: string }>;
+}) {
+  const { businessId, invoiceId } = await params;
   const { user, access } = await requireModule(businessId, "purchases");
-  const record = getDebitNote(businessId, user.id, debitNoteId);
+  const record = getDebitNote(businessId, user.id, invoiceId);
   if (!record) notFound();
-  if (record.debitNote.documentStatus === "void") {
-    return <div className="page-container"><h1 className="page-title">Void debitNote</h1><p className="page-description">Void debitNotes are retained for history and cannot be edited.</p><Button asChild className="mt-5"><Link href={`/b/${businessId}/purchases/debit-notes/${debitNoteId}`}>Return to debitNote</Link></Button></div>;
+  if (record.note.documentStatus === "void") {
+    return (
+      <div className="page-container">
+        <h1 className="page-title">Void Debit Note</h1>
+        <p className="page-description">Void debit notes are retained for history and cannot be edited.</p>
+        <Button asChild className="mt-5">
+          <Link href={`/b/${businessId}/purchases/debit-notes/${invoiceId}`}>Return to Debit Note</Link>
+        </Button>
+      </div>
+    );
   }
-  const customers = listCustomers(businessId, user.id);
-  const purchasesAccounts = getPurchaseAccountOptions(businessId, user.id);
-  const taxCodes = getActiveTaxCodes(businessId, user.id).filter((code) => code.vatCategory && ["purchases", "both"].includes(code.direction));
+
+  const suppliers = listActiveSuppliers(businessId, user.id);
+  const expenseAccounts = getExpenseAccountOptions(businessId, user.id);
+  const taxCodes = getActiveTaxCodes(businessId, user.id).filter(
+    (code) => code.vatCategory && ["purchases", "both"].includes(code.direction),
+  );
   const projects = listProjectOptions(businessId, user.id);
-  const items = listInventoryItemOptions(businessId, user.id);
+  const allInvoices = listPurchaseInvoices(businessId, user.id);
+  const eligibleInvoices = allInvoices.filter((inv) => inv.document_status === "posted");
   const currencySettings = getCurrencySettings(businessId, user.id);
-  const documentMinorUnit = currencySettings.currencies.find((entry) => entry.code === record.debitNote.currencyCode)?.minor_unit ?? 2;
-  const customFields = listCustomFieldDefinitions(businessId, user.id, "purchases_debitNote").map(({ id, name, fieldType, selectOptions, isRequired }) => ({ id, name, fieldType, selectOptions, isRequired }));
-  const customFieldValues = customFields.length
-    ? getCustomFieldValuesForEntities(businessId, user.id, "purchases_debitNote", [debitNoteId]).get(debitNoteId) ?? {}
-    : {};
-  return <div className="page-container">
-    <Link href={`/b/${businessId}/purchases/debit-notes/${debitNoteId}`} className="mb-5 inline-flex items-center gap-1.5 text-[13px] text-muted-foreground hover:text-foreground"><ArrowLeft className="size-4" /> {record.debitNote.debitNoteNumber}</Link>
-    <div className="mb-7"><h1 className="page-title">Edit Debit Note</h1><p className="page-description">{record.debitNote.documentStatus === "posted" ? "Financial changes rebuild the journal atomically." : "Update the draft, or post it when ready."}</p></div>
-    <DebitNoteForm
-      businessId={businessId}
-      debitNoteId={debitNoteId}
-      documentStatus={record.debitNote.documentStatus}
-      customFields={customFields}
-      customFieldValues={customFieldValues}
-      customers={customers.map(({ id, name, defaultCurrencyCode }) => ({ id, name, defaultCurrencyCode }))}
-      purchasesAccounts={purchasesAccounts.map(({ id, code, name }) => ({ id, code, name }))}
-      taxCodes={taxCodes.map(({ id, name, rateBasisPoints }) => ({ id, name, rateBasisPoints }))}
-      projects={projects.map((project) => ({ id: project.id, code: project.code, name: project.name, customerId: project.customer_id }))}
-      items={items.map(({ id, sku, name, purchasesPriceMinor, purchasesAccountId }) => ({ id, sku, name, purchasesPriceMinor, purchasesAccountId }))}
-      currency={access.business.currency}
-      currencies={currencySettings.currencies.filter((entry) => entry.is_active || entry.code === record.debitNote.currencyCode).map((entry) => ({ code: entry.code, name: entry.name, minorUnit: entry.minor_unit }))}
-      rates={currencySettings.rates.map((entry) => ({ id: entry.id, currencyCode: entry.currency_code, rateDate: entry.rate_date, rateToBase: entry.rate_to_base, source: entry.source, sourceReference: entry.source_reference }))}
-      initial={{
-        currencyCode: record.debitNote.currencyCode,
-        exchangeRateToBase: record.debitNote.exchangeRateToBase,
-        exchangeRateDate: record.debitNote.exchangeRateDate,
-        exchangeRateSource: record.debitNote.exchangeRateSource as "Base" | "Manual" | "CBUAE",
-        customerId: record.debitNote.customerId,
-        projectId: record.debitNote.projectId ?? "",
-        debitNoteDate: record.debitNote.debitNoteDate,
-        taxDate: record.debitNote.taxDate,
-        supplyEmirate: record.debitNote.supplyEmirate ?? "",
-        dueDate: record.debitNote.dueDate,
-        reference: record.debitNote.reference ?? "",
-        lines: record.lines.map((line) => ({ itemId: line.itemId ?? "", description: line.description, quantity: quantityMicrosToInput(line.quantityMicros), unitPrice: minorToCurrencyInput(line.unitPriceMinor, documentMinorUnit), purchasesAccountId: line.purchasesAccountId, taxCodeId: line.taxCodeId, projectId: line.projectId ?? "" })),
-      }}
-    />
-  </div>;
+  const documentMinorUnit =
+    currencySettings.currencies.find((entry) => entry.code === record.note.currencyCode)?.minor_unit ?? 2;
+
+  return (
+    <div className="page-container">
+      <Link
+        href={`/b/${businessId}/purchases/debit-notes/${invoiceId}`}
+        className="mb-5 inline-flex items-center gap-1.5 text-[13px] text-muted-foreground hover:text-foreground"
+      >
+        <ArrowLeft className="size-4" /> {record.note.debitNoteNumber}
+      </Link>
+      <div className="mb-7">
+        <h1 className="page-title">Edit Debit Note</h1>
+        <p className="page-description">
+          {record.note.documentStatus === "posted"
+            ? "Financial changes rebuild the journal atomically."
+            : "Update the draft, or post it when ready."}
+        </p>
+      </div>
+      <DebitNoteForm
+        businessId={businessId}
+        noteId={invoiceId}
+        documentStatus={record.note.documentStatus}
+        suppliers={suppliers.map(({ id, name }) => ({ id, name }))}
+        invoices={eligibleInvoices.map((inv) => ({
+          id: inv.id,
+          invoiceNumber: inv.internal_number,
+          supplierId: inv.supplier_id,
+          balanceMinor: inv.total_minor,
+          currencyCode: inv.currency_code,
+          minorUnit: 2,
+          exchangeRateToBase: String(inv.exchange_rate_to_base ?? "1"),
+          exchangeRateDate: inv.exchange_rate_date ?? "",
+          exchangeRateSource: inv.exchange_rate_source ?? "Base",
+        }))}
+        salesAccounts={expenseAccounts.map(({ id, code, name }) => ({ id, code, name }))}
+        taxCodes={taxCodes.map(({ id, name, rateBasisPoints }) => ({ id, name, rateBasisPoints }))}
+        projects={projects.map((p) => ({
+          id: p.id,
+          code: p.code,
+          name: p.name,
+          supplierId: null,
+        }))}
+        currency={access.business.currency}
+        initial={{
+          currencyCode: record.note.currencyCode,
+          exchangeRateToBase: record.note.exchangeRateToBase,
+          exchangeRateDate: record.note.exchangeRateDate,
+          exchangeRateSource: record.note.exchangeRateSource as "Base" | "Manual" | "CBUAE",
+          supplierId: record.note.supplierId,
+          projectId: record.note.projectId ?? "",
+          purchaseInvoiceId: record.note.purchaseInvoiceId ?? "",
+          amountsIncludeTax: record.note.amountsIncludeTax,
+          date: record.note.debitNoteDate,
+          taxDate: record.note.taxDate,
+          reference: record.note.reference ?? "",
+          lines: record.lines.map((line) => ({
+            description: line.description,
+            quantity: quantityMicrosToInput(line.quantityMicros),
+            unitPrice: minorToCurrencyInput(line.unitPriceMinor, documentMinorUnit),
+            discountType: line.discountType,
+            discountValue: line.discountValue || "0",
+            expenseAccountId: line.expenseAccountId,
+            taxCodeId: line.taxCodeId,
+            projectId: line.projectId ?? "",
+          })),
+        }}
+      />
+    </div>
+  );
 }

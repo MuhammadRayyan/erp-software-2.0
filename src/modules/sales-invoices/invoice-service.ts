@@ -62,9 +62,9 @@ function insertLines(
   const statement = sqlite.prepare(`
     INSERT INTO sales_invoice_lines (
       id, invoice_id, description, quantity_micros, unit_price_minor,
-      sales_account_id, tax_code_id, net_amount_minor, tax_amount_minor,
+      discount_type, discount_value, sales_account_id, tax_code_id, net_amount_minor, tax_amount_minor,
       gross_amount_minor, project_id, item_id, position
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `);
   for (const line of lines) {
     statement.run(
@@ -73,6 +73,8 @@ function insertLines(
       line.description,
       line.quantityMicros,
       line.unitPriceMinor,
+      line.discountType || "none",
+      line.discountValue || "0",
       line.salesAccountId,
       line.taxCodeId,
       line.netAmountMinor,
@@ -458,9 +460,9 @@ export function createInvoice(
           id, invoice_number, customer_id, invoice_date, tax_date, supply_emirate, due_date, reference,
           project_id, document_status, subtotal_minor, tax_minor, total_minor,
           currency_code, exchange_rate_to_base, exchange_rate_date, exchange_rate_source,
-          base_subtotal_minor, base_tax_minor, base_total_minor,
+          base_subtotal_minor, base_tax_minor, base_total_minor, notes, terms,
           created_by, created_at, updated_at, posted_at, voided_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'draft', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL)
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'draft', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL)
       `)
       .run(
         id,
@@ -482,6 +484,8 @@ export function createInvoice(
         base.baseSubtotalMinor,
         base.baseTaxMinor,
         base.baseTotalMinor,
+        data.notes || null,
+        data.terms || null,
         userId,
         now,
         now,

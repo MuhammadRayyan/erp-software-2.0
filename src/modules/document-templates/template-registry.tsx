@@ -42,7 +42,9 @@ export async function renderDocumentPdf(
   }
 
   if (settings.templateType === "classic") {
-    if (documentType === "sales-credit-note") {
+    if (documentType === "sales-invoice") {
+      return renderReactPdf(<ClassicInvoiceDocument data={data} settings={settings} />);
+    } else if (documentType === "sales-credit-note") {
       return renderReactPdf(<ClassicCreditNoteDocument data={data} settings={settings} />);
     } else if (documentType === "purchase-order") {
       return renderReactPdf(<ClassicPurchaseOrderDocument data={data} settings={settings} />);
@@ -51,7 +53,9 @@ export async function renderDocumentPdf(
     }
   }
 
-  if (documentType === "sales-credit-note") {
+  if (documentType === "sales-invoice") {
+    return renderReactPdf(<InvoiceDocument data={data} settings={settings} />);
+  } else if (documentType === "sales-credit-note") {
     return renderReactPdf(<CreditNoteDocument data={data} settings={settings} />);
   } else if (documentType === "purchase-order") {
     return renderReactPdf(<PurchaseOrderDocument data={data} settings={settings} />);

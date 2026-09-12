@@ -33,6 +33,7 @@ export const FORM_TYPES = [
   "sales-order",
   "sales-invoice",
   "sales-credit-note",
+  "purchase-quote",
   "purchase-order",
   "purchase-invoice",
   "debit-note",

@@ -433,7 +433,7 @@ function upgradeToPhase2(sqlite: Database.Database) {
       "expected_date" TEXT,
       "reference" TEXT,
       "notes" TEXT,
-      "status" TEXT NOT NULL DEFAULT 'draft' CHECK (status IN ('draft', 'issued', 'closed', 'cancelled')),
+      "status" TEXT NOT NULL DEFAULT 'draft' CHECK (status IN ('draft', 'issued', 'closed', 'cancelled', 'superseded')),
       "subtotal_minor" INTEGER NOT NULL CHECK (subtotal_minor >= 0),
       "tax_minor" INTEGER NOT NULL CHECK (tax_minor >= 0),
       "total_minor" INTEGER NOT NULL CHECK (total_minor >= 0),
@@ -2009,6 +2009,141 @@ export const businessMigrations = [
         }
       },
     },
+    {
+      version: 18,
+      name: "sales_quote_revisions",
+      up: (sqlite) => {
+        const cols = sqlite.prepare("PRAGMA table_info(sales_quotes)").all() as { name: string }[];
+        if (!cols.some((c) => c.name === "base_quote_number")) {
+          sqlite.exec(`ALTER TABLE sales_quotes ADD COLUMN base_quote_number TEXT;`);
+          sqlite.exec(`ALTER TABLE sales_quotes ADD COLUMN root_quote_id TEXT;`);
+          sqlite.exec(`ALTER TABLE sales_quotes ADD COLUMN revision_number INTEGER NOT NULL DEFAULT 0;`);
+          sqlite.exec(`ALTER TABLE sales_quotes ADD COLUMN is_latest_revision INTEGER NOT NULL DEFAULT 1;`);
+          sqlite.exec(`UPDATE sales_quotes SET base_quote_number = quote_number, root_quote_id = id WHERE base_quote_number IS NULL;`);
+          sqlite.exec(`CREATE INDEX IF NOT EXISTS sales_quotes_root_idx ON sales_quotes(root_quote_id);`);
+          sqlite.exec(`CREATE INDEX IF NOT EXISTS sales_quotes_base_number_idx ON sales_quotes(base_quote_number);`);
+        }
+      },
+    },
+    {
+      version: 19,
+      name: "purchase_quotes",
+      up: (sqlite) => {
+        // 1. Create purchase_quotes table
+        sqlite.exec(`
+          CREATE TABLE IF NOT EXISTS "purchase_quotes" (
+            "id" TEXT PRIMARY KEY NOT NULL,
+            "quote_number" TEXT NOT NULL UNIQUE,
+            "base_quote_number" TEXT,
+            "root_quote_id" TEXT,
+            "revision_number" INTEGER NOT NULL DEFAULT 0,
+            "is_latest_revision" INTEGER NOT NULL DEFAULT 1,
+            "supplier_id" TEXT NOT NULL REFERENCES suppliers(id),
+            "project_id" TEXT REFERENCES projects(id),
+            "quote_date" TEXT NOT NULL,
+            "expiry_date" TEXT NOT NULL,
+            "reference" TEXT,
+            "document_status" TEXT NOT NULL DEFAULT 'draft' CHECK (document_status IN ('draft', 'sent', 'accepted', 'rejected', 'superseded', 'cancelled')),
+            "amounts_include_tax" INTEGER NOT NULL DEFAULT 0,
+            "subtotal_minor" INTEGER NOT NULL,
+            "tax_minor" INTEGER NOT NULL,
+            "total_minor" INTEGER NOT NULL,
+            "currency_code" TEXT NOT NULL DEFAULT 'AED' REFERENCES currencies(code),
+            "exchange_rate_to_base" TEXT NOT NULL DEFAULT '1',
+            "exchange_rate_date" TEXT NOT NULL,
+            "exchange_rate_source" TEXT NOT NULL DEFAULT 'Base',
+            "base_subtotal_minor" INTEGER NOT NULL,
+            "base_tax_minor" INTEGER NOT NULL,
+            "base_total_minor" INTEGER NOT NULL,
+            "notes" TEXT,
+            "terms" TEXT,
+            "created_by" TEXT NOT NULL,
+            "created_at" TEXT NOT NULL,
+            "updated_at" TEXT NOT NULL
+          );
+          CREATE INDEX IF NOT EXISTS purchase_quote_supplier_idx ON purchase_quotes(supplier_id);
+          CREATE INDEX IF NOT EXISTS purchase_quote_project_idx ON purchase_quotes(project_id);
+          CREATE INDEX IF NOT EXISTS purchase_quote_root_idx ON purchase_quotes(root_quote_id);
+          CREATE INDEX IF NOT EXISTS purchase_quote_base_number_idx ON purchase_quotes(base_quote_number);
+
+          CREATE TABLE IF NOT EXISTS "purchase_quote_lines" (
+            "id" TEXT PRIMARY KEY NOT NULL,
+            "quote_id" TEXT NOT NULL REFERENCES purchase_quotes(id) ON DELETE CASCADE,
+            "description" TEXT NOT NULL,
+            "quantity_micros" INTEGER NOT NULL,
+            "unit_price_minor" INTEGER NOT NULL,
+            "discount_type" TEXT NOT NULL DEFAULT 'none' CHECK (discount_type IN ('none', 'percentage', 'fixed')),
+            "discount_value" TEXT NOT NULL DEFAULT '0',
+            "expense_account_id" TEXT NOT NULL REFERENCES accounts(id),
+            "tax_code_id" TEXT NOT NULL REFERENCES tax_codes(id),
+            "project_id" TEXT REFERENCES projects(id),
+            "item_id" TEXT REFERENCES inventory_items(id),
+            "net_amount_minor" INTEGER NOT NULL,
+            "tax_amount_minor" INTEGER NOT NULL,
+            "gross_amount_minor" INTEGER NOT NULL,
+            "position" INTEGER NOT NULL
+          );
+          CREATE INDEX IF NOT EXISTS purchase_quote_lines_quote_idx ON purchase_quote_lines(quote_id);
+        `);
+
+        // 2. Add purchase_quote_id to purchase_orders if missing
+        const poCols = sqlite.prepare("PRAGMA table_info(purchase_orders)").all() as { name: string }[];
+        if (!poCols.some((c) => c.name === "purchase_quote_id")) {
+          sqlite.exec(`ALTER TABLE purchase_orders ADD COLUMN purchase_quote_id TEXT;`);
+          sqlite.exec(`CREATE INDEX IF NOT EXISTS purchase_orders_quote_idx ON purchase_orders(purchase_quote_id) WHERE purchase_quote_id IS NOT NULL;`);
+        }
+
+        // 3. Add numbering columns to business_accounting_settings if missing
+        const settingsCols = sqlite.prepare("PRAGMA table_info(business_accounting_settings)").all() as { name: string }[];
+        if (!settingsCols.some((c) => c.name === "purchase_quote_prefix")) {
+          sqlite.exec(`
+            ALTER TABLE business_accounting_settings ADD COLUMN purchase_quote_prefix TEXT NOT NULL DEFAULT 'PQ-';
+            ALTER TABLE business_accounting_settings ADD COLUMN purchase_quote_next_number INTEGER NOT NULL DEFAULT 1;
+            ALTER TABLE business_accounting_settings ADD COLUMN purchase_quote_padding INTEGER NOT NULL DEFAULT 4;
+          `);
+        }
+      },
+    },
+    {
+      version: 20,
+      name: "notes_and_terms",
+      up: (sqlite) => {
+        const tables = [
+          "sales_quotes", "sales_orders", "sales_invoices", "sales_credit_notes",
+          "purchase_orders", "purchase_invoices", "debit_notes", "receipts"
+        ];
+        for (const table of tables) {
+          const cols = sqlite.prepare(`PRAGMA table_info(${table})`).all() as { name: string }[];
+          if (!cols.some((c) => c.name === "notes")) {
+            sqlite.exec(`ALTER TABLE ${table} ADD COLUMN notes TEXT;`);
+          }
+          if (!cols.some((c) => c.name === "terms")) {
+            sqlite.exec(`ALTER TABLE ${table} ADD COLUMN terms TEXT;`);
+          }
+        }
+      },
+    },
+    {
+      version: 21,
+      name: "order_revisions",
+      up: (sqlite) => {
+        const soCols = sqlite.prepare("PRAGMA table_info(sales_orders)").all() as { name: string }[];
+        if (!soCols.some((c) => c.name === "base_order_number")) {
+          sqlite.exec(`ALTER TABLE sales_orders ADD COLUMN base_order_number TEXT;`);
+          sqlite.exec(`ALTER TABLE sales_orders ADD COLUMN root_order_id TEXT;`);
+          sqlite.exec(`ALTER TABLE sales_orders ADD COLUMN revision_number INTEGER NOT NULL DEFAULT 0;`);
+          sqlite.exec(`ALTER TABLE sales_orders ADD COLUMN is_latest_revision INTEGER NOT NULL DEFAULT 1;`);
+        }
+
+        const poCols = sqlite.prepare("PRAGMA table_info(purchase_orders)").all() as { name: string }[];
+        if (!poCols.some((c) => c.name === "base_order_number")) {
+          sqlite.exec(`ALTER TABLE purchase_orders ADD COLUMN base_order_number TEXT;`);
+          sqlite.exec(`ALTER TABLE purchase_orders ADD COLUMN root_order_id TEXT;`);
+          sqlite.exec(`ALTER TABLE purchase_orders ADD COLUMN revision_number INTEGER NOT NULL DEFAULT 0;`);
+          sqlite.exec(`ALTER TABLE purchase_orders ADD COLUMN is_latest_revision INTEGER NOT NULL DEFAULT 1;`);
+        }
+      },
+    },
 ] satisfies readonly SqliteMigration[];
 
 
@@ -2209,3 +2344,4 @@ export function migrateBusinessDatabase(sqlite: Database.Database, label = "busi
     baselineVersion: detectAndValidateBusinessBaseline,
   });
 }
+

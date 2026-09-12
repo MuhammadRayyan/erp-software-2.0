@@ -2,13 +2,16 @@
 "use client";
 
 import Link from "next/link";
-import { FilePlus2, PackagePlus } from "lucide-react";
+import { ReceiptText, Truck, RefreshCw } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
-import { cancelSalesOrderAction, closeSalesOrderAction, deleteSalesOrderAction } from "./actions";
+import { cancelSalesOrderAction, closeSalesOrderAction, deleteSalesOrderAction, convertSalesOrderToInvoiceAction } from "./actions";
 import type { SalesOrderStatus } from "./sales-order-service";
 import { DocumentViewActions } from "@/components/document-view-actions";
+import { useState } from "react";
+import { GitBranch } from "lucide-react";
+import { createSalesOrderRevisionAction } from "./actions";
 
 export function SalesOrderViewActions({
   businessId, orderId, orderNumber, documentStatus, inventoryEnabled, hasReceivableItems
@@ -16,54 +19,84 @@ export function SalesOrderViewActions({
   businessId: string; orderId: string; orderNumber: string; documentStatus: SalesOrderStatus; inventoryEnabled: boolean; hasReceivableItems: boolean
 }) {
   const router = useRouter();
-  const editable = documentStatus === "draft" || documentStatus === "issued";
+  const editable = documentStatus === "draft" || documentStatus === "active";
+  const [converting, setConverting] = useState(false);
+
+  const [revising, setRevising] = useState(false);
+
+  const handleRevise = async () => {
+    setRevising(true);
+    try {
+      const result = await createSalesOrderRevisionAction(businessId, orderId);
+      if (result.error) throw new Error(result.error);
+      toast.success("New order revision created.");
+      router.push(`/b/${businessId}/sales/orders/${result.orderId}`);
+    } catch (err: any) {
+      toast.error(err.message);
+      setRevising(false);
+    }
+  };
+
+  const handleConvert = async () => {
+    setConverting(true);
+    try {
+      const result = await convertSalesOrderToInvoiceAction(businessId, orderId);
+      if (result.error) throw new Error(result.error);
+      toast.success("Sales invoice created.");
+      router.push(`/b/${businessId}/sales/invoices/${result.invoiceId}`);
+    } catch (err: any) {
+      toast.error(err.message);
+      setConverting(false);
+    }
+  };
 
   return (
     <DocumentViewActions
       documentNumber={orderNumber}
-      documentType="Purchase Order"
-      editHref={editable ? `/b/${businessId}/purchases/orders/${orderId}/edit` : undefined}
+      documentType="Sales Order"
+      editHref={editable ? `/b/${businessId}/sales/orders/${orderId}/edit` : undefined}
       pdfHref={`/api/businesses/${businessId}/documents/sales-order/${orderId}/pdf`}
-      onClose={documentStatus === "issued" ? {
+      onClose={documentStatus === "active" ? {
         label: "Close order",
-        description: "The order remains available for history and linked bills.",
+        description: "The order remains available for history.",
         action: async () => {
           const result = await closeSalesOrderAction(businessId, orderId);
           if (result.error) throw new Error(result.error);
-          toast.success("Purchase order closed.");
+          toast.success("Sales order closed.");
           router.refresh();
         }
       } : undefined}
       onVoid={editable ? {
         label: "Cancel order",
-        description: "The order will be retained without any ledger impact.",
+        description: "The order will be retained as cancelled.",
         action: async () => {
           const result = await cancelSalesOrderAction(businessId, orderId);
           if (result.error) throw new Error(result.error);
-          toast.success("Purchase order cancelled.");
+          toast.success("Sales order cancelled.");
           router.refresh();
         }
       } : undefined}
       onDelete={documentStatus === "draft" ? {
         label: "Delete draft",
-        description: "This permanently removes the draft purchase order.",
+        description: "This permanently removes the draft sales order.",
         action: async () => {
           const result = await deleteSalesOrderAction(businessId, orderId);
           if (result.error) throw new Error(result.error);
-          toast.success("Draft purchase order deleted.");
-          router.push(`/b/${businessId}/purchases/orders`);
+          toast.success("Draft sales order deleted.");
+          router.push(`/b/${businessId}/sales/orders`);
         }
       } : undefined}
       extraPrimaryActions={
         <>
           {inventoryEnabled && hasReceivableItems && documentStatus !== "cancelled" && (
             <Button asChild variant="secondary">
-              <Link href={`/b/${businessId}/purchases/goods-receipts/new?orderId=${orderId}`}><PackagePlus className="size-4" /> Receive Goods</Link>
+              <Link href={`/b/${businessId}/sales/delivery-notes/new?orderId=${orderId}`}><Truck className="size-4" /> Ship Goods</Link>
             </Button>
           )}
-          {documentStatus !== "cancelled" && (
-            <Button asChild variant="secondary">
-              <Link href={`/b/${businessId}/purchases/invoices/new?orderId=${orderId}`}><FilePlus2 className="size-4" /> Create Purchase Invoice</Link>
+          {(documentStatus === "active" || documentStatus === "completed") && (
+            <Button variant="secondary" onClick={handleConvert} disabled={converting}>
+              <RefreshCw className={`size-4 ${converting ? "animate-spin" : ""}`} /> 
+              Convert to Invoice
             </Button>
           )}
         </>

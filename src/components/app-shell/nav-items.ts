@@ -33,9 +33,9 @@ export const primaryNav: { label?: string; items: NavItem[] }[] = [
     label: "Sales",
     items: [
       { label: "Customers", path: "/customers", icon: ContactRound, module: "sales" },
-      { label: "Quotes", path: "/sales/quotes", icon: FileText, module: "sales" },
+      { label: "Sales Quotes", path: "/sales/quotes", icon: FileText, module: "sales" },
       { label: "Sales Orders", path: "/sales/orders", icon: ShoppingCart, module: "sales" },
-      { label: "Invoices", path: "/sales/invoices", icon: ReceiptText, module: "sales" },
+      { label: "Sales Invoices", path: "/sales/invoices", icon: ReceiptText, module: "sales" },
       { label: "Receipts", path: "/sales/receipts", icon: Receipt, module: "sales" },
       { label: "Credit Notes", path: "/sales/credit-notes", icon: ReceiptText, module: "sales" },
       { label: "Delivery Notes", path: "/sales/delivery-notes", icon: Truck, module: "sales" },
@@ -46,6 +46,7 @@ export const primaryNav: { label?: string; items: NavItem[] }[] = [
     label: "Purchases",
     items: [
       { label: "Suppliers", path: "/suppliers", icon: Truck, module: "purchases" },
+      { label: "Purchase Quotes", path: "/purchases/quotes", icon: FileText, module: "purchases" },
       { label: "Purchase Orders", path: "/purchases/orders", icon: ShoppingCart, module: "purchases" },
       { label: "Purchase Invoices", path: "/purchases/invoices", icon: FileInput, module: "purchases" },
       { label: "Supplier Payments", path: "/purchases/payments", icon: HandCoins, module: "purchases" },

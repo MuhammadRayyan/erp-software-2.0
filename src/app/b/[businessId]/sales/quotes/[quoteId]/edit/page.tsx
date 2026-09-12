@@ -41,9 +41,7 @@ export default async function EditQuotePage({ params }: { params: Promise<{ busi
     <SalesQuoteForm
       businessId={businessId}
       quoteId={quoteId}
-      documentStatus={record.quote.documentStatus}
-      customFields={customFields}
-      customFieldValues={customFieldValues}
+      status={record.quote.documentStatus as any}
       customers={customers.map(({ id, name, defaultCurrencyCode }) => ({ id, name, defaultCurrencyCode }))}
       salesAccounts={salesAccounts.map(({ id, code, name }) => ({ id, code, name }))}
       taxCodes={taxCodes.map(({ id, name, rateBasisPoints }) => ({ id, name, rateBasisPoints }))}
@@ -59,12 +57,13 @@ export default async function EditQuotePage({ params }: { params: Promise<{ busi
         exchangeRateSource: record.quote.exchangeRateSource as "Base" | "Manual" | "CBUAE",
         customerId: record.quote.customerId,
         projectId: record.quote.projectId ?? "",
-        quoteDate: record.quote.quoteDate,
-        taxDate: record.quote.taxDate,
-        supplyEmirate: record.quote.supplyEmirate ?? "",
-        dueDate: record.quote.dueDate,
+        date: record.quote.quoteDate,
+        expectedDate: record.quote.expiryDate ?? "",
         reference: record.quote.reference ?? "",
-        lines: record.lines.map((line) => ({ itemId: line.itemId ?? "", description: line.description, quantity: quantityMicrosToInput(line.quantityMicros), unitPrice: minorToCurrencyInput(line.unitPriceMinor, documentMinorUnit), salesAccountId: line.salesAccountId, taxCodeId: line.taxCodeId, projectId: line.projectId ?? "" })),
+        notes: record.quote.notes ?? "",
+        terms: record.quote.terms ?? "",
+        amountsIncludeTax: record.quote.amountsIncludeTax ?? false,
+        lines: record.lines.map((line) => ({ itemId: line.itemId ?? "", description: line.description, quantity: quantityMicrosToInput(line.quantityMicros), unitPrice: minorToCurrencyInput(line.unitPriceMinor, documentMinorUnit), discountType: line.discountType ?? "none", discountValue: line.discountValue ?? "0", salesAccountId: line.salesAccountId ?? "", taxCodeId: line.taxCodeId, projectId: line.projectId ?? "" })),
       }}
     />
   </div>;

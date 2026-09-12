@@ -29,8 +29,12 @@ export const purchaseInvoiceInputSchema = z.object({
   amountsIncludeTax: amountsIncludeTaxSchema,
   dueDate: z.iso.date("Enter a valid due date"),
   reference: z.string().trim().max(100).optional().default(""),
+  notes: z.string().trim().max(1_000).optional().default(""),
+  terms: z.string().trim().max(10_000).optional().default(""),
   purchaseOrderId: z.union([z.literal(""), z.string().uuid()]).optional().default(""),
   lines: z.array(purchaseInvoiceLineSchema).min(1, "Add at least one line").max(100),
 });
 
 export type PurchaseInvoiceInput = z.input<typeof purchaseInvoiceInputSchema>;
+
+

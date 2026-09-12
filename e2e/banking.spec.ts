@@ -15,7 +15,7 @@ test.describe('Banking Module', () => {
   test('can open new bank account form', async ({ page }) => {
     await page.getByRole('link', { name: 'Bank Accounts', exact: true }).click();
     await expect(page.getByRole('heading', { name: 'Bank Accounts', exact: true })).toBeVisible();
-    await page.getByRole('link', { name: /new/i }).first().click();
+    await page.getByRole('link', { name: 'New Bank Account' }).first().click();
     await expect(page.getByRole('heading', { name: 'New Bank Account' })).toBeVisible();
     await expect(page.getByLabel(/name/i).first()).toBeVisible();
   });

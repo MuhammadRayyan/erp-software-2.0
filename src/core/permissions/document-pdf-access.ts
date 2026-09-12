@@ -7,6 +7,7 @@ const documentModules = {
   "sales-quote": "sales",
   "sales-order": "sales",
   "delivery-note": "inventory",
+  "purchase-quote": "purchases",
   "purchase-order": "purchases",
   "purchase-invoice": "purchases",
   "goods-receipt": "inventory",

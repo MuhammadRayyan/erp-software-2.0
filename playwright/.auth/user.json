@@ -2,24 +2,14 @@
   "cookies": [
     {
       "name": "better-auth.session_token",
-      "value": "BlAazBaVQeOxQADi0h5JkYcpdl8LUajf.LBPuClM3qucqQdWgIubhNWxiW9xemFOlJEFe0Bj9%2B%2Bc%3D",
+      "value": "XUMbedRCbr4gDzn83uvKb42bV1hOOIXC.NyorqhWlINgt2owaW2labJYinL%2FWeuH26Mj%2BGTcl%2F0Y%3D",
       "domain": "localhost",
       "path": "/",
-      "expires": 1788201779.798762,
+      "expires": 1789150896.0213,
       "httpOnly": true,
       "secure": false,
       "sameSite": "Lax"
     }
   ],
-  "origins": [
-    {
-      "origin": "http://localhost:3000",
-      "localStorage": [
-        {
-          "name": "ledgerly.cols.overview-cards",
-          "value": "{\"posted-sales\":true,\"outstanding\":true,\"overdue\":true,\"bank\":true}"
-        }
-      ]
-    }
-  ]
+  "origins": []
 }

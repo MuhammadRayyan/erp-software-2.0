@@ -1,3 +1,4 @@
+import { createDocumentRevision, deleteDraftRevision } from "@/core/versioning/revision-engine";
 import { randomUUID } from "node:crypto";
 import { asc, eq } from "drizzle-orm";
 import { getBusinessDb } from "@/core/db/business";
@@ -16,10 +17,10 @@ export type PurchaseOrderIntent = "draft" | "issue";
 
 function insertLines(sqlite: ReturnType<typeof getBusinessDb>["sqlite"], orderId: string, lines: StoredLine[]) {
   const statement = sqlite.prepare(`INSERT INTO purchase_order_lines
-    (id, purchase_order_id, item_id, description, quantity_micros, unit_price_minor, expense_account_id,
+    (id, purchase_order_id, item_id, description, quantity_micros, unit_price_minor, discount_type, discount_value, expense_account_id,
      tax_code_id, project_id, net_amount_minor, tax_amount_minor, gross_amount_minor, position)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
-  for (const line of lines) statement.run(line.id, orderId, line.itemId, line.description, line.quantityMicros, line.unitPriceMinor, line.expenseAccountId, line.taxCodeId, line.projectId, line.netAmountMinor, line.taxAmountMinor, line.grossAmountMinor, line.lineIndex);
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
+  for (const line of lines) statement.run(line.id, orderId, line.itemId, line.description, line.quantityMicros, line.unitPriceMinor, line.discountType || "none", line.discountValue || "0", line.expenseAccountId, line.taxCodeId, line.projectId, line.netAmountMinor, line.taxAmountMinor, line.grossAmountMinor, line.lineIndex);
 }
 
 export function listPurchaseOrders(businessId: string, userId: string, supplierId?: string) {
@@ -90,14 +91,14 @@ export function savePurchaseOrder(businessId: string, userId: string, input: Pur
       if (current.status === "closed" || current.status === "cancelled") throw new Error("Closed or cancelled purchase orders cannot be edited.");
       if (context.sqlite.prepare("SELECT 1 FROM goods_receipts WHERE purchase_order_id = ? LIMIT 1").get(orderId)) throw new Error("A Purchase Order cannot be edited after a Goods Receipt has been created.");
       const nextStatus = current.status === "issued" || intent === "issue" ? "issued" : "draft";
-      context.sqlite.prepare(`UPDATE purchase_orders SET supplier_id = ?, project_id = ?, date = ?, expected_date = ?, reference = ?, notes = ?, status = ?, subtotal_minor = ?, tax_minor = ?, total_minor = ?, currency_code = ?, exchange_rate_to_base = ?, exchange_rate_date = ?, exchange_rate_source = ?, base_subtotal_minor = ?, base_tax_minor = ?, base_total_minor = ?, updated_at = ?, issued_at = CASE WHEN ? = 'issued' THEN COALESCE(issued_at, ?) ELSE issued_at END WHERE id = ?`)
-        .run(data.supplierId, data.projectId || null, data.date, data.expectedDate || null, data.reference || null, data.notes || null, nextStatus, amounts.subtotalMinor, amounts.taxMinor, amounts.totalMinor, rate.currencyCode, rate.exchangeRateToBase, rate.exchangeRateDate, rate.exchangeRateSource, base.baseSubtotalMinor, base.baseTaxMinor, base.baseTotalMinor, now, nextStatus, now, orderId);
+      context.sqlite.prepare(`UPDATE purchase_orders SET supplier_id = ?, project_id = ?, purchase_quote_id = ?, date = ?, expected_date = ?, reference = ?, notes = ?, terms = ?, status = ?, subtotal_minor = ?, tax_minor = ?, total_minor = ?, currency_code = ?, exchange_rate_to_base = ?, exchange_rate_date = ?, exchange_rate_source = ?, base_subtotal_minor = ?, base_tax_minor = ?, base_total_minor = ?, updated_at = ?, issued_at = CASE WHEN ? = 'issued' THEN COALESCE(issued_at, ?) ELSE issued_at END WHERE id = ?`)
+        .run(data.supplierId, data.projectId || null, data.purchaseQuoteId || null, data.date, data.expectedDate || null, data.reference || null, data.notes || null, data.terms || null, nextStatus, amounts.subtotalMinor, amounts.taxMinor, amounts.totalMinor, rate.currencyCode, rate.exchangeRateToBase, rate.exchangeRateDate, rate.exchangeRateSource, base.baseSubtotalMinor, base.baseTaxMinor, base.baseTotalMinor, now, nextStatus, now, orderId);
       context.sqlite.prepare("DELETE FROM purchase_order_lines WHERE purchase_order_id = ?").run(orderId);
     } else {
       const orderNumber = allocateNumber(context.sqlite, "purchaseOrder");
       const status = intent === "issue" ? "issued" : "draft";
-      context.sqlite.prepare(`INSERT INTO purchase_orders (id, order_number, supplier_id, project_id, date, expected_date, reference, notes, status, subtotal_minor, tax_minor, total_minor, currency_code, exchange_rate_to_base, exchange_rate_date, exchange_rate_source, base_subtotal_minor, base_tax_minor, base_total_minor, created_by, created_at, updated_at, issued_at, closed_at, cancelled_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL)`)
-        .run(id, orderNumber, data.supplierId, data.projectId || null, data.date, data.expectedDate || null, data.reference || null, data.notes || null, status, amounts.subtotalMinor, amounts.taxMinor, amounts.totalMinor, rate.currencyCode, rate.exchangeRateToBase, rate.exchangeRateDate, rate.exchangeRateSource, base.baseSubtotalMinor, base.baseTaxMinor, base.baseTotalMinor, userId, now, now, status === "issued" ? now : null);
+      context.sqlite.prepare(`INSERT INTO purchase_orders (id, order_number, supplier_id, project_id, purchase_quote_id, date, expected_date, reference, notes, terms, status, subtotal_minor, tax_minor, total_minor, currency_code, exchange_rate_to_base, exchange_rate_date, exchange_rate_source, base_subtotal_minor, base_tax_minor, base_total_minor, created_by, created_at, updated_at, issued_at, closed_at, cancelled_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL)`)
+        .run(id, orderNumber, data.supplierId, data.projectId || null, data.purchaseQuoteId || null, data.date, data.expectedDate || null, data.reference || null, data.notes || null, data.terms || null, status, amounts.subtotalMinor, amounts.taxMinor, amounts.totalMinor, rate.currencyCode, rate.exchangeRateToBase, rate.exchangeRateDate, rate.exchangeRateSource, base.baseSubtotalMinor, base.baseTaxMinor, base.baseTotalMinor, userId, now, now, status === "issued" ? now : null);
     }
     insertLines(context.sqlite, id, lines);
   }).immediate();
@@ -123,10 +124,45 @@ export function cancelPurchaseOrder(businessId: string, userId: string, orderId:
   context.db.update(purchaseOrders).set({ status: "cancelled", cancelledAt: now, updatedAt: now }).where(eq(purchaseOrders.id, orderId)).run();
 }
 
+const revisionConfig = {
+  headerTable: "purchase_orders",
+  lineTable: "purchase_order_lines",
+  headerIdColumn: "id",
+  lineHeaderIdColumn: "purchase_order_id",
+  documentNumberColumn: "order_number",
+  statusColumn: "status",
+};
+
 export function deletePurchaseOrder(businessId: string, userId: string, orderId: string) {
   const context = getBusinessDb(businessId, userId);
-  const order = context.db.select().from(purchaseOrders).where(eq(purchaseOrders.id, orderId)).get();
-  if (!order) throw new Error("Purchase order not found.");
-  if (order.status !== "draft") throw new Error("Only draft purchase orders can be deleted.");
-  context.db.delete(purchaseOrders).where(eq(purchaseOrders.id, orderId)).run();
+  deleteDraftRevision(context.sqlite, revisionConfig, orderId);
+}
+
+export function createPurchaseOrderRevision(businessId: string, userId: string, sourceOrderId: string): string {
+  const context = getBusinessDb(businessId, userId);
+  return createDocumentRevision(context.sqlite, revisionConfig, userId, sourceOrderId);
+}
+
+export function listPurchaseOrderRevisions(businessId: string, userId: string, orderId: string) {
+  const context = getBusinessDb(businessId, userId);
+  const current = context.db.select().from(purchaseOrders).where(eq(purchaseOrders.id, orderId)).get();
+  if (!current) return [];
+  const rootId = current.rootOrderId || current.id;
+  const revisions = context.sqlite.prepare(`
+    SELECT id, order_number, revision_number, is_latest_revision, status as document_status, total_minor, currency_code, date as order_date, created_at
+    FROM purchase_orders
+    WHERE root_order_id = ? OR id = ?
+    ORDER BY revision_number DESC
+  `).all(rootId, rootId) as {
+    id: string;
+    order_number: string;
+    revision_number: number;
+    is_latest_revision: number;
+    document_status: PurchaseOrderStatus;
+    total_minor: number;
+    currency_code: string;
+    order_date: string;
+    created_at: string;
+  }[];
+  return revisions;
 }

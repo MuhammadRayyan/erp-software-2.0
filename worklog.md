@@ -1620,3 +1620,73 @@ Work Log:
 - Verified form toggles: 6 of 7 document forms (quote, sales-order, purchase-order, purchase-invoice, debit-note, credit-note) have showDiscounts/showLineNumber/showDescription/amountsIncludeTax toggles from Manager.io refactor. Invoice form has the schema support (amountsIncludeTax + line discountType/discountValue in invoice-input.ts) but pre-dates the UI refactor.
 Stage Summary:
 - All 13 critical routes return 200. Typecheck 0 errors. Migration 17 fixes the quote_id SQL error. CSS typos fixed. PDF header/footer/custom-fields features verified present. App is functional and ready for delivery.
+
+---
+Task ID: 6
+Agent: Antigravity AI
+Task: E-Invoicing Removal, One-Click Conversions, Status Automations, and Sales Quote Revision Versioning System
+
+Work Log:
+- E-Invoicing Removal:
+  - Cleaned up 28+ files relating to outbound and inbound e-invoicing (`src/modules/einvoicing/`, `src/modules/inbound-einvoicing/`, app routes `/api/businesses/[businessId]/einvoicing`, tests, types).
+  - Uninstalled `saxon-js` and purged references from `next.config.ts`.
+  - Removed e-invoicing entries from sidebar navigation and settings.
+- Navigation Cleanup & Restoration:
+  - Restored missing navigation routes in sidebar: Receipts, Supplier Payments, Delivery Notes, Goods Receipts, Debit Notes.
+  - Purged phantom route directory `/purchases/debit-notes` that was lacking backing domain modules.
+- One-Click Document Conversions & Automated Triggers:
+  - Implemented `convertSalesQuoteToOrderAction`, `convertSalesOrderToInvoiceAction`, and `convertPurchaseOrderToInvoiceAction`.
+  - Added "Convert to Order" and "Convert to Invoice" actions with loading feedback in quote, order, and purchase order views.
+  - Linked `salesOrderId` and `salesQuoteId` through Drizzle schema, Zod validation, and SQL queries.
+  - Automatic status updates on conversion: Quotes -> `accepted`, Orders -> `completed`, Purchase Orders -> `closed`.
+- Sales Quote Revisions & Versioning System:
+  - Added Migration 18 (`sales_quote_revisions`): added `base_quote_number`, `root_quote_id`, `revision_number`, `is_latest_revision` to `sales_quotes` and `"superseded"` to `document_status` enum.
+  - Implemented quote cloning and sequential revision numbering (`SQ-XXXX-R1`, `SQ-XXXX-R2`, etc.) in `quote-service.ts`.
+  - Built `QuoteRevisionSwitcher` dropdown component displaying all family versions with badges and currency values.
+  - Added "+ New Revision" button in `quote-view-actions.tsx` to immediately draft the next iteration.
+  - Added visual warning alert banner when viewing older/superseded quote revisions with a 1-click link to the latest revision.
+  - Added `Rev {n}` badge in the main sales quotes list table.
+  - Updated `insertLines` in quote and order services to persist line discounts (`discount_type`, `discount_value`).
+  - Added comprehensive automated test suite `tests/sales-quote-revisions.test.ts` covering 6 lifecycle phases.
+- Verification & Stability:
+  - Fixed mathematical precision when mapping quantity (`quantityMicrosToInput`) and unit price minor across document conversions.
+  - 38/38 test suites passing (`npm test`).
+  - Production Next.js Turbopack build succeeds with 0 TypeScript/compilation errors (`npm run build`).
+
+Stage Summary:
+- Full Sales Quote Revisions & Versioning system is operational with intuitive UI switcher and automated status tracking. Document conversion pipeline and navigational sidebar are completely aligned and verified.
+
+---
+Task ID: 7
+Agent: Antigravity AI
+Task: Full Purchase Quotes (RFQ) Module, Versioning & Revisions, One-Click Conversions, and Parity with Sales Cycle
+
+Work Log:
+- Database Schema & Migration:
+  - Created Migration 19 (`purchase_quotes`): added `purchase_quotes` and `purchase_quote_lines` tables with indexes, multi-currency support, discounts, notes, terms, and revision metadata (`base_quote_number`, `root_quote_id`, `revision_number`, `is_latest_revision`, `"superseded"` status).
+  - Added `purchase_quote_id` foreign key column to `purchase_orders` table.
+  - Added `purchase_quote_prefix`, `purchase_quote_next_number`, and `purchase_quote_padding` to `business_accounting_settings` and `NumberKind` enum in `numbering-service.ts`.
+- Domain Services & Actions:
+  - Created `src/modules/purchase-quotes/purchase-quote-input.ts` with comprehensive Zod input schemas.
+  - Created `src/modules/purchase-quotes/purchase-quote-service.ts` with `savePurchaseQuote`, `getPurchaseQuote`, `listPurchaseQuotes`, `createPurchaseQuoteRevision`, and `listPurchaseQuoteRevisions`.
+  - Created `src/modules/purchase-quotes/actions.ts` with `savePurchaseQuoteAction`, status actions, `createPurchaseQuoteRevisionAction`, and `convertPurchaseQuoteToOrderAction` (one-click conversion auto-transitioning quote to `accepted`).
+  - Fixed discount persistence in `insertLines` for `purchase-order-service.ts` and `purchase-invoice-service.ts`.
+- UI & Full-Width Forms:
+  - Created `src/modules/purchase-quotes/purchase-quote-form.tsx` with Manager.io-style bottom-left toggles (`amountsIncludeTax`, `showDiscounts`, `showLineNumber`, `showDescription`, `showLineProjects`).
+  - Created `src/modules/purchase-quotes/purchase-quote-table.tsx` with `Rev {n}` pill badges, supplier and project filters, and column customization.
+  - Created `src/modules/purchase-quotes/purchase-quote-revision-switcher.tsx` and `src/modules/purchase-quotes/purchase-quote-view-actions.tsx`.
+  - Built app routes under `/b/[businessId]/purchases/quotes/` (list, new, view with superseded alert banner, and edit).
+- Navigation, Settings & PDF Integration:
+  - Added Purchase Quotes to the primary sidebar navigation under Purchases (`/purchases/quotes`).
+  - Registered `purchase-quote` in form defaults settings (`/settings/form-defaults/[formId]`) and custom fields.
+  - Enabled PDF generation endpoint `/api/businesses/[businessId]/documents/purchase-quote/[documentId]/pdf`.
+  - Added "New Purchase Quote" action button to supplier detail view page.
+- Automated Testing & Build Verification:
+  - Created comprehensive test suite `tests/purchase-quotes.test.ts` verifying quote drafting, revision cloning (`PQ-XXXX-R1`), discount calculations, one-click conversion to PO and PI, and status transitions.
+  - `npm test`: 52/52 tests pass (100%).
+  - `npm run build`: Turbopack compile and TypeScript check pass with 0 errors.
+
+Stage Summary:
+- Purchase Quotes (RFQ) module is completely implemented with end-to-end procurement cycle parity (Purchase Quote -> Purchase Order -> Goods Receipt -> Purchase Invoice -> Supplier Payment / Debit Note). All tests pass with zero regressions.
+
+

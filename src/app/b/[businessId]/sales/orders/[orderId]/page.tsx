@@ -8,18 +8,21 @@ import { formatDate, formatMoney } from "@/core/format";
 import { quantityMicrosToInput, rateBasisPointsToPercent } from "@/modules/accounting/calculations/money";
 import { getCustomFieldValuesForEntities, listCustomFieldDefinitions } from "@/modules/custom-fields/custom-field-service";
 import { formatCustomFieldValue } from "@/modules/custom-fields/custom-field-display";
-import { getSalesOrder } from "@/modules/sales-orders/sales-order-service";
-import { DocumentStatusBadge, PaymentStatusBadge } from "@/modules/sales-orders/sales-order-status";
+import { getSalesOrder, listSalesOrderRevisions } from "@/modules/sales-orders/sales-order-service";
+import { StatusBadge } from "@/components/status-badge";
+import { PaymentStatusBadge } from "@/modules/sales-invoices/invoice-status";
 import { SalesOrderViewActions } from "@/modules/sales-orders/sales-order-view-actions";
+import { OrderRevisionSwitcher } from "@/modules/sales-orders/order-revision-switcher";
 import { ProjectLinks } from "@/modules/projects/project-links";
 import { emirateLabels, type Emirate } from "@/modules/tax/uae-vat-config";
-import { buildSalesOrderEmailContext, buildSalesOrderEmailDefaults } from "@/modules/email/email-defaults";
+
 
 export default async function OrderViewPage({ params, searchParams }: { params: Promise<{ businessId: string; orderId: string }>; searchParams: Promise<{ notice?: string }> }) {
   const { businessId, orderId } = await params;
   const { notice } = await searchParams;
   const { user, access } = await requireModule(businessId, "sales");
   const record = getSalesOrder(businessId, user.id, orderId);
+  const revisions = listSalesOrderRevisions(businessId, user.id, orderId);
   if (!record) notFound();
   const { order, customer, lines } = record;
   const currency = order.currencyCode;
@@ -29,15 +32,15 @@ export default async function OrderViewPage({ params, searchParams }: { params: 
   const customFieldValues = customFieldDefinitions.length
     ? getCustomFieldValuesForEntities(businessId, user.id, "sales_order" as any, [orderId]).get(orderId) ?? {}
     : {};
-  const emailContext = buildSalesOrderEmailContext(access.business.name, record);
-  const emailDefaults = buildSalesOrderEmailDefaults(emailContext, emailContext.to);
+  
+  
   return (
     <div className="page-container">
       <NoticeToast message={notice} />
       <Link href={`/b/${businessId}/sales/orders`} className="mb-5 inline-flex items-center gap-1.5 text-[13px] text-muted-foreground hover:text-foreground"><ArrowLeft className="size-4" /> Sales Orders</Link>
       <div className="mb-5 flex flex-col justify-between gap-4 lg:flex-row lg:items-start">
-        <div><div className="flex flex-wrap items-center gap-2"><h1 className="page-title tabular">{order.orderNumber}</h1><DocumentStatusBadge status={order.documentStatus} />{record.paymentStatus && <PaymentStatusBadge status={record.paymentStatus} />}</div><p className="mt-2 text-base font-medium">{customer.name}</p><p className="mt-1 text-sm text-muted-foreground">Order date: {formatDate(order.orderDate)} · Due: {formatDate(order.dueDate)}</p><div className="mt-3 flex flex-wrap items-baseline gap-x-5 gap-y-1"><span className="money text-xl font-semibold">{formatMoney(order.totalMinor, currency)}</span>{order.documentStatus === "posted" ? <span className="money text-sm text-muted-foreground">Balance <strong className="font-semibold text-foreground">{formatMoney(record.balanceMinor, currency)}</strong></span> : <span className="text-sm text-muted-foreground">No ledger impact</span>}</div></div>
-        <SalesOrderViewActions businessId={businessId} orderId={order.id} orderNumber={order.orderNumber} documentStatus={order.documentStatus} balanceMinor={record.balanceMinor} journalEntryId={record.journal?.id ?? null} inventoryEnabled={access.modules.includes("inventory")} hasDeliverableItems={lines.some((line) => Boolean(line.itemId) && line.remainingToDeliverMicros > 0)} emailDefaults={emailDefaults} />
+        <div><div className="flex flex-wrap items-center gap-2"><h1 className="page-title tabular">{order.orderNumber}</h1> <OrderRevisionSwitcher               businessId={businessId}               currentOrderId={order.id}               revisions={revisions}             /><StatusBadge status={order.documentStatus} />{record.paymentStatus && <PaymentStatusBadge status={record.paymentStatus} />}</div><p className="mt-2 text-base font-medium">{customer.name}</p><p className="mt-1 text-sm text-muted-foreground">Order date: {formatDate(order.orderDate)} · Due: {formatDate(order.dueDate)}</p><div className="mt-3 flex flex-wrap items-baseline gap-x-5 gap-y-1"><span className="money text-xl font-semibold">{formatMoney(order.totalMinor, currency)}</span>{order.documentStatus === "posted" ? <span className="money text-sm text-muted-foreground">Balance <strong className="font-semibold text-foreground">{formatMoney(record.balanceMinor, currency)}</strong></span> : <span className="text-sm text-muted-foreground">No ledger impact</span>}</div></div>
+        <SalesOrderViewActions businessId={businessId} orderId={order.id} orderNumber={order.orderNumber} documentStatus={order.documentStatus} balanceMinor={record.balanceMinor} journalEntryId={record.journal?.id ?? null} inventoryEnabled={access.modules.includes("inventory")} hasDeliverableItems={lines.some((line) => Boolean(line.itemId) && line.remainingToDeliverMicros > 0)}  />
       </div>
       {currency !== access.business.currency && <section aria-label="Currency snapshot" className="mb-5 rounded-lg border border-border bg-surface-raised p-4"><dl className="grid gap-4 text-sm sm:grid-cols-2 lg:grid-cols-4"><div><dt className="text-xs text-muted-foreground">Stored rate</dt><dd className="money mt-1">1 {currency} = {order.exchangeRateToBase} {access.business.currency}</dd></div><div><dt className="text-xs text-muted-foreground">Rate date</dt><dd className="mt-1">{formatDate(order.exchangeRateDate)}</dd></div><div><dt className="text-xs text-muted-foreground">Rate source</dt><dd className="mt-1">{order.exchangeRateSource}</dd></div><div><dt className="text-xs text-muted-foreground">Base equivalent</dt><dd className="money mt-1 font-semibold">{formatMoney(order.baseTotalMinor, access.business.currency)}</dd></div></dl><p className="mt-3 text-xs text-muted-foreground">Base VAT {formatMoney(order.baseTaxMinor, access.business.currency)} · Posted snapshots never follow later rate-table changes.</p></section>}
       <article className="rounded-lg border border-border bg-surface-raised p-5 sm:p-7">

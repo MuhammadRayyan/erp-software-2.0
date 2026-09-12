@@ -3,7 +3,7 @@ import path from "node:path";
 
 const configuredRoot = process.env.ERP_DATA_DIR ?? path.join(process.cwd(), "data");
 
-export const DATA_ROOT = path.resolve(configuredRoot);
+export const DATA_ROOT = path.resolve(/*turbopackIgnore: true*/ configuredRoot);
 export const SYSTEM_DIRECTORY = path.join(DATA_ROOT, "system");
 export const SYSTEM_DB_PATH = path.join(SYSTEM_DIRECTORY, "system.sqlite");
 export const BUSINESSES_DIRECTORY = path.join(DATA_ROOT, "businesses");

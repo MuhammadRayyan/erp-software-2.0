@@ -213,8 +213,8 @@ export function DebitNoteForm({
     if (result.error) setServerError(result.error);
   }
   const cancelHref = noteId
-    ? `/b/${businessId}/sales/debit-notes/${noteId}`
-    : `/b/${businessId}/sales/debit-notes`;
+    ? `/b/${businessId}/purchases/debit-notes/${noteId}`
+    : `/b/${businessId}/purchases/debit-notes`;
   return (
     <form className="space-y-7 max-w-none" noValidate>
       {serverError && <FormError message={serverError} />}

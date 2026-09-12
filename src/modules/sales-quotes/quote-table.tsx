@@ -14,6 +14,8 @@ import type { SalesQuoteStatus } from "./quote-service";
 type Row = {
   id: string;
   quote_number: string;
+  revision_number?: number;
+  is_latest_revision?: number;
   customer_id: string;
   customer_name: string;
   date: string;
@@ -162,12 +164,19 @@ export function SalesQuoteTable({
               {rows.map((quote) => (
                 <tr key={quote.id}>
                   <td>
-                    <Link
-                      href={`/b/${businessId}/sales/quotes/${quote.id}`}
-                      className="tabular font-medium text-primary hover:underline"
-                    >
-                      {quote.quote_number}
-                    </Link>
+                    <div className="flex items-center gap-1.5">
+                      <Link
+                        href={`/b/${businessId}/sales/quotes/${quote.id}`}
+                        className="tabular font-medium text-primary hover:underline"
+                      >
+                        {quote.quote_number}
+                      </Link>
+                      {quote.revision_number !== undefined && quote.revision_number > 0 && (
+                        <span className="rounded bg-surface-muted px-1.5 py-0.5 text-[10px] font-semibold text-muted-foreground">
+                          Rev {quote.revision_number}
+                        </span>
+                      )}
+                    </div>
                   </td>
                   <td>{quote.customer_name}</td>
                   <td>{formatDate(quote.date)}</td>

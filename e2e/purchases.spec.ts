@@ -20,7 +20,7 @@ test.describe('Purchases Module', () => {
   test('can open a new purchase invoice form', async ({ page }) => {
     await page.getByRole('link', { name: 'Purchase Invoices', exact: true }).click();
     await expect(page.getByRole('heading', { name: 'Purchase Invoices', exact: true })).toBeVisible();
-    await page.getByRole('link', { name: /new/i }).first().click();
+    await page.getByRole('link', { name: 'New Purchase Invoice' }).first().click();
     await expect(page.getByRole('heading', { name: 'New Purchase Invoice' })).toBeVisible();
     
     // Verify essential form fields exist
@@ -31,7 +31,7 @@ test.describe('Purchases Module', () => {
   test('can open a new purchase order form', async ({ page }) => {
     await page.getByRole('link', { name: 'Purchase Orders', exact: true }).click();
     await expect(page.getByRole('heading', { name: 'Purchase Orders', exact: true })).toBeVisible();
-    await page.getByRole('link', { name: /new/i }).first().click();
+    await page.getByRole('link', { name: 'New Purchase Order' }).first().click();
     await expect(page.getByRole('heading', { name: 'New Purchase Order' })).toBeVisible();
     
     await expect(page.getByLabel(/supplier/i)).toBeVisible();

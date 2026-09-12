@@ -1,3 +1,4 @@
+import { createDocumentRevision, deleteDraftRevision } from "@/core/versioning/revision-engine";
 import { randomUUID } from "node:crypto";
 import { asc, eq } from "drizzle-orm";
 import { getBusinessDb } from "@/core/db/business";
@@ -16,20 +17,23 @@ export type SalesOrderIntent = "draft" | "issue";
 
 function insertLines(sqlite: ReturnType<typeof getBusinessDb>["sqlite"], orderId: string, lines: StoredLine[]) {
   const statement = sqlite.prepare(`INSERT INTO sales_order_lines
-    (id, order_id, item_id, description, quantity_micros, unit_price_minor, sales_account_id,
+    (id, order_id, item_id, description, quantity_micros, unit_price_minor, discount_type, discount_value, sales_account_id,
      tax_code_id, project_id, net_amount_minor, tax_amount_minor, gross_amount_minor, position)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
-  for (const line of lines) statement.run(line.id, orderId, line.itemId, line.description, line.quantityMicros, line.unitPriceMinor, line.salesAccountId, line.taxCodeId, line.projectId, line.netAmountMinor, line.taxAmountMinor, line.grossAmountMinor, line.lineIndex);
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
+  for (const line of lines) statement.run(line.id, orderId, line.itemId, line.description, line.quantityMicros, line.unitPriceMinor, line.discountType || "none", line.discountValue || "0", line.salesAccountId, line.taxCodeId, line.projectId, line.netAmountMinor, line.taxAmountMinor, line.grossAmountMinor, line.lineIndex);
 }
 
 export function listSalesOrders(
   businessId: string,
   userId: string,
-  filters?: { customerId?: string; from?: string; to?: string },
+  filters?: { customerId?: string; from?: string; to?: string; onlyLatest?: boolean },
 ) {
   const { sqlite } = getBusinessDb(businessId, userId);
   const where: string[] = [];
   const params: string[] = [];
+  if (filters?.onlyLatest) {
+    where.push("po.is_latest_revision = 1");
+  }
   if (filters?.customerId) {
     where.push("po.customer_id = ?");
     params.push(filters.customerId);
@@ -45,7 +49,7 @@ export function listSalesOrders(
   const whereClause = where.length ? `WHERE ${where.join(" AND ")}` : "";
   const rows = sqlite.prepare(`SELECT po.*, s.name AS customer_name,
     (SELECT GROUP_CONCAT(DISTINCT COALESCE(l.project_id, po.project_id)) FROM sales_order_lines l WHERE l.order_id = po.id) AS project_ids,
-    (SELECT COUNT(*) FROM sales_invoices pi WHERE pi.order_id = po.id) AS invoice_count,
+    (SELECT COUNT(*) FROM sales_invoices pi WHERE pi.sales_order_id = po.id) AS invoice_count,
     cur.minor_unit AS currency_minor_unit
     FROM sales_orders po INNER JOIN customers s ON s.id = po.customer_id
     INNER JOIN currencies cur ON cur.code = po.currency_code ${whereClause}
@@ -108,14 +112,14 @@ export function saveSalesOrder(businessId: string, userId: string, input: SalesO
       if (current.documentStatus === "completed" || current.documentStatus === "cancelled") throw new Error("Closed or cancelled purchase orders cannot be edited.");
       
       const nextStatus = current.documentStatus === "active" || intent === "issue" ? "active" : "draft";
-      context.sqlite.prepare(`UPDATE sales_orders SET customer_id = ?, project_id = ?, sales_quote_id = ?, order_date = ?, delivery_date = ?, reference = ?, document_status = ?, amounts_include_tax = ?, subtotal_minor = ?, tax_minor = ?, total_minor = ?, currency_code = ?, exchange_rate_to_base = ?, exchange_rate_date = ?, exchange_rate_source = ?, base_subtotal_minor = ?, base_tax_minor = ?, base_total_minor = ?, updated_at = ? WHERE id = ?`)
-        .run(data.customerId, data.projectId || null, data.salesQuoteId || null, data.date, data.expectedDate || "", data.reference || null, nextStatus, data.amountsIncludeTax ? 1 : 0, amounts.subtotalMinor, amounts.taxMinor, amounts.totalMinor, rate.currencyCode, rate.exchangeRateToBase, rate.exchangeRateDate, rate.exchangeRateSource, base.baseSubtotalMinor, base.baseTaxMinor, base.baseTotalMinor, now, orderId);
+      context.sqlite.prepare(`UPDATE sales_orders SET customer_id = ?, project_id = ?, sales_quote_id = ?, order_date = ?, delivery_date = ?, reference = ?, document_status = ?, amounts_include_tax = ?, subtotal_minor = ?, tax_minor = ?, total_minor = ?, currency_code = ?, exchange_rate_to_base = ?, exchange_rate_date = ?, exchange_rate_source = ?, base_subtotal_minor = ?, base_tax_minor = ?, base_total_minor = ?, notes = ?, terms = ?, updated_at = ? WHERE id = ?`)
+        .run(data.customerId, data.projectId || null, data.salesQuoteId || null, data.date, data.expectedDate || "", data.reference || null, nextStatus, data.amountsIncludeTax ? 1 : 0, amounts.subtotalMinor, amounts.taxMinor, amounts.totalMinor, rate.currencyCode, rate.exchangeRateToBase, rate.exchangeRateDate, rate.exchangeRateSource, base.baseSubtotalMinor, base.baseTaxMinor, base.baseTotalMinor, data.notes || null, data.terms || null, now, orderId);
       context.sqlite.prepare("DELETE FROM sales_order_lines WHERE order_id = ?").run(orderId);
     } else {
       const orderNumber = allocateNumber(context.sqlite, "salesOrder");
       const status = intent === "issue" ? "active" : "draft";
-      context.sqlite.prepare(`INSERT INTO sales_orders (id, order_number, customer_id, project_id, sales_quote_id, order_date, delivery_date, reference, document_status, amounts_include_tax, subtotal_minor, tax_minor, total_minor, currency_code, exchange_rate_to_base, exchange_rate_date, exchange_rate_source, base_subtotal_minor, base_tax_minor, base_total_minor, created_by, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
-        .run(id, orderNumber, data.customerId, data.projectId || null, data.salesQuoteId || null, data.date, data.expectedDate || "", data.reference || null, status, data.amountsIncludeTax ? 1 : 0, amounts.subtotalMinor, amounts.taxMinor, amounts.totalMinor, rate.currencyCode, rate.exchangeRateToBase, rate.exchangeRateDate, rate.exchangeRateSource, base.baseSubtotalMinor, base.baseTaxMinor, base.baseTotalMinor, userId, now, now);
+      context.sqlite.prepare(`INSERT INTO sales_orders (id, order_number, customer_id, project_id, sales_quote_id, order_date, delivery_date, reference, document_status, amounts_include_tax, subtotal_minor, tax_minor, total_minor, currency_code, exchange_rate_to_base, exchange_rate_date, exchange_rate_source, base_subtotal_minor, base_tax_minor, base_total_minor, notes, terms, created_by, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+        .run(id, orderNumber, data.customerId, data.projectId || null, data.salesQuoteId || null, data.date, data.expectedDate || "", data.reference || null, status, data.amountsIncludeTax ? 1 : 0, amounts.subtotalMinor, amounts.taxMinor, amounts.totalMinor, rate.currencyCode, rate.exchangeRateToBase, rate.exchangeRateDate, rate.exchangeRateSource, base.baseSubtotalMinor, base.baseTaxMinor, base.baseTotalMinor, data.notes || null, data.terms || null, userId, now, now);
     }
     insertLines(context.sqlite, id, lines);
   }).immediate();
@@ -141,10 +145,44 @@ export function cancelSalesOrder(businessId: string, userId: string, orderId: st
   context.db.update(salesOrders).set({ documentStatus: "cancelled", updatedAt: now }).where(eq(salesOrders.id, orderId)).run();
 }
 
+const revisionConfig = {
+  headerTable: "sales_orders",
+  lineTable: "sales_order_lines",
+  headerIdColumn: "id",
+  lineHeaderIdColumn: "order_id",
+  documentNumberColumn: "order_number",
+};
+
 export function deleteSalesOrder(businessId: string, userId: string, orderId: string) {
   const context = getBusinessDb(businessId, userId);
-  const order = context.db.select().from(salesOrders).where(eq(salesOrders.id, orderId)).get();
-  if (!order) throw new Error("Purchase order not found.");
-  if (order.documentStatus !== "draft") throw new Error("Only draft purchase orders can be deleted.");
-  context.db.delete(salesOrders).where(eq(salesOrders.id, orderId)).run();
+  deleteDraftRevision(context.sqlite, revisionConfig, orderId);
+}
+
+export function createSalesOrderRevision(businessId: string, userId: string, sourceOrderId: string): string {
+  const context = getBusinessDb(businessId, userId);
+  return createDocumentRevision(context.sqlite, revisionConfig, userId, sourceOrderId);
+}
+
+export function listSalesOrderRevisions(businessId: string, userId: string, orderId: string) {
+  const context = getBusinessDb(businessId, userId);
+  const current = context.db.select().from(salesOrders).where(eq(salesOrders.id, orderId)).get();
+  if (!current) return [];
+  const rootId = current.rootOrderId || current.id;
+  const revisions = context.sqlite.prepare(`
+    SELECT id, order_number, revision_number, is_latest_revision, document_status, total_minor, currency_code, order_date, created_at
+    FROM sales_orders
+    WHERE root_order_id = ? OR id = ?
+    ORDER BY revision_number DESC
+  `).all(rootId, rootId) as {
+    id: string;
+    order_number: string;
+    revision_number: number;
+    is_latest_revision: number;
+    document_status: SalesOrderStatus;
+    total_minor: number;
+    currency_code: string;
+    order_date: string;
+    created_at: string;
+  }[];
+  return revisions;
 }

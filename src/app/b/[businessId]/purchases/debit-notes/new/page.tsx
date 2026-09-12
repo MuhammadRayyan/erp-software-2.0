@@ -1,16 +1,14 @@
-// @ts-nocheck
-import Link from "next/link";
-import { ArrowLeft, ContactRound } from "lucide-react";
+﻿import Link from "next/link";
+import { ArrowLeft, Truck } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { requireModule } from "@/core/permissions/require-module";
-import { getPurchaseAccountOptions } from "@/modules/accounting/services/account-service";
+import { getExpenseAccountOptions } from "@/modules/accounting/services/account-service";
 import { getAccountingSettings } from "@/modules/accounting/services/accounting-settings-service";
 import { getActiveTaxCodes } from "@/modules/accounting/services/tax-code-service";
-import { listCustomers } from "@/modules/customers/customer-service";
-import { listCustomFieldDefinitions } from "@/modules/custom-fields/custom-field-service";
+import { listActiveSuppliers } from "@/modules/suppliers/supplier-service";
+import { listPurchaseInvoices } from "@/modules/purchase-invoices/purchase-invoice-service";
 import { listProjectOptions } from "@/modules/projects/project-service";
-import { DebitNoteForm } from "@/modules/purchase-debit-notes/debitNote-form";
-import { listInventoryItemOptions } from "@/modules/inventory/inventory-item-service";
+import { DebitNoteForm } from "@/modules/debit-notes/debit-note-form";
 import { getCurrencySettings } from "@/modules/currency/exchange-rate";
 
 export default async function NewDebitNotePage({
@@ -18,45 +16,35 @@ export default async function NewDebitNotePage({
   searchParams,
 }: {
   params: Promise<{ businessId: string }>;
-  searchParams: Promise<{ customerId?: string; projectId?: string }>;
+  searchParams: Promise<{ supplierId?: string; invoiceId?: string; projectId?: string }>;
 }) {
   const { businessId } = await params;
   const query = await searchParams;
   const { user, access } = await requireModule(businessId, "purchases");
-  const customers = listCustomers(businessId, user.id);
-  const purchasesAccounts = getPurchaseAccountOptions(businessId, user.id);
+  const suppliers = listActiveSuppliers(businessId, user.id);
+  const expenseAccounts = getExpenseAccountOptions(businessId, user.id);
   const taxCodes = getActiveTaxCodes(businessId, user.id).filter(
     (code) => code.vatCategory && ["purchases", "both"].includes(code.direction),
   );
   const settings = getAccountingSettings(businessId, user.id);
   const projects = listProjectOptions(businessId, user.id);
-  const items = listInventoryItemOptions(businessId, user.id);
-  const customFields = listCustomFieldDefinitions(businessId, user.id, "purchases_debitNote").map(
-    ({ id, name, fieldType, selectOptions, isRequired }) => ({
-      id,
-      name,
-      fieldType,
-      selectOptions,
-      isRequired,
-    }),
-  );
+  const allInvoices = listPurchaseInvoices(businessId, user.id);
+  const eligibleInvoices = allInvoices.filter((inv) => inv.document_status === "posted");
   const currencySettings = getCurrencySettings(businessId, user.id);
-  const selectedProject = projects.find((project) => project.id === query.projectId);
-  const selectedCustomerId =
-    selectedProject?.customer_id ??
-    (customers.some((customer) => customer.id === query.customerId) ? query.customerId! : "");
+
+  const selectedSupplierId = suppliers.some((s) => s.id === query.supplierId) ? query.supplierId! : "";
+  const selectedProject = projects.find((p) => p.id === query.projectId);
   const documentCurrency =
-    customers.find((customer) => customer.id === selectedCustomerId)?.defaultCurrencyCode ??
+    suppliers.find((s) => s.id === selectedSupplierId)?.defaultCurrencyCode ??
     access.business.currency;
+
   const today = new Date();
-  const due = new Date(today);
-  due.setDate(due.getDate() + 14);
   const iso = (date: Date) => date.toISOString().slice(0, 10);
   const defaultTaxCode =
-    taxCodes.find((taxCode) => taxCode.vatCategory === "standard" && taxCode.rateBasisPoints === 500) ??
+    taxCodes.find((tc) => tc.vatCategory === "standard" && tc.rateBasisPoints === 500) ??
     taxCodes[0];
 
-  const ready = customers.length && purchasesAccounts.length && taxCodes.length;
+  const ready = suppliers.length && expenseAccounts.length && taxCodes.length;
 
   return (
     <div className="page-container">
@@ -69,65 +57,54 @@ export default async function NewDebitNotePage({
       <div className="mb-7">
         <h1 className="page-title">New Debit Note</h1>
         <p className="page-description">
-          Save a non-posting draft or post a balanced Accounts Receivable entry.
+          Create a supplier debit note to adjust purchase totals, return goods, or correct tax.
         </p>
       </div>
       {ready ? (
         <DebitNoteForm
           businessId={businessId}
-          customers={customers.map(({ id, name, defaultCurrencyCode }) => ({
-            id,
-            name,
-            defaultCurrencyCode,
+          suppliers={suppliers.map(({ id, name }) => ({ id, name }))}
+          invoices={eligibleInvoices.map((inv) => ({
+            id: inv.id,
+            invoiceNumber: inv.internal_number,
+            supplierId: inv.supplier_id,
+            balanceMinor: inv.total_minor,
+            currencyCode: inv.currency_code,
+            minorUnit: 2,
+            exchangeRateToBase: String(inv.exchange_rate_to_base ?? "1"),
+            exchangeRateDate: inv.exchange_rate_date ?? "",
+            exchangeRateSource: inv.exchange_rate_source ?? "Base",
           }))}
-          purchasesAccounts={purchasesAccounts.map(({ id, code, name }) => ({ id, code, name }))}
+          salesAccounts={expenseAccounts.map(({ id, code, name }) => ({ id, code, name }))}
           taxCodes={taxCodes.map(({ id, name, rateBasisPoints }) => ({ id, name, rateBasisPoints }))}
-          projects={projects.map((project) => ({
-            id: project.id,
-            code: project.code,
-            name: project.name,
-            customerId: project.customer_id,
+          projects={projects.map((p) => ({
+            id: p.id,
+            code: p.code,
+            name: p.name,
+            supplierId: null,
           }))}
-          items={items.map(({ id, sku, name, purchasesPriceMinor, purchasesAccountId }) => ({
-            id,
-            sku,
-            name,
-            purchasesPriceMinor,
-            purchasesAccountId,
-          }))}
-          customFields={customFields}
           currency={access.business.currency}
-          currencies={currencySettings.currencies
-            .filter((entry) => entry.is_active)
-            .map((entry) => ({ code: entry.code, name: entry.name, minorUnit: entry.minor_unit }))}
-          rates={currencySettings.rates.map((entry) => ({
-            id: entry.id,
-            currencyCode: entry.currency_code,
-            rateDate: entry.rate_date,
-            rateToBase: entry.rate_to_base,
-            source: entry.source,
-            sourceReference: entry.source_reference,
-          }))}
           initial={{
             currencyCode: documentCurrency,
             exchangeRateToBase: documentCurrency === access.business.currency ? "1" : "",
             exchangeRateDate: documentCurrency === access.business.currency ? iso(today) : "",
             exchangeRateSource: documentCurrency === access.business.currency ? "Base" : "",
-            customerId: selectedCustomerId,
+            supplierId: selectedSupplierId,
             projectId: selectedProject?.id ?? "",
-            debitNoteDate: iso(today),
+            purchaseInvoiceId: query.invoiceId ?? "",
+            amountsIncludeTax: false,
+            date: iso(today),
             taxDate: iso(today),
-            supplyEmirate: "",
-            dueDate: iso(due),
             reference: "",
             lines: [
               {
-                itemId: "",
                 description: "",
                 quantity: "1",
                 unitPrice: "0.00",
-                purchasesAccountId: settings.defaultPurchaseAccountId,
-                taxCodeId: defaultTaxCode.id,
+                discountType: "none",
+                discountValue: "0",
+                expenseAccountId: settings.defaultPurchaseExpenseAccountId,
+                taxCodeId: defaultTaxCode?.id ?? "",
                 projectId: "",
               },
             ],
@@ -135,13 +112,13 @@ export default async function NewDebitNotePage({
         />
       ) : (
         <div className="max-w-xl rounded-lg border border-border bg-surface-raised p-6">
-          <ContactRound className="size-6 text-primary" />
-          <h2 className="mt-4 text-base font-semibold">DebitNote setup needs attention</h2>
+          <Truck className="size-6 text-primary" />
+          <h2 className="mt-4 text-base font-semibold">Debit Note setup needs attention</h2>
           <p className="mt-1.5 text-sm text-muted-foreground">
-            Add a customer and ensure at least one active Purchase account and tax code exist.
+            Add a supplier and ensure at least one active expense account and tax code exist.
           </p>
           <Button asChild className="mt-5">
-            <Link href={`/b/${businessId}/customers/new`}>New Customer</Link>
+            <Link href={`/b/${businessId}/suppliers/new`}>New Supplier</Link>
           </Button>
         </div>
       )}

@@ -17,9 +17,12 @@ const STATUS_TONES: Record<string, StatusTone> = {
   completed: "success",
   closed: "success",
   active: "success",
+  accepted: "success",
   void: "danger",
   cancelled: "danger",
+  rejected: "danger",
   overdue: "danger",
+  superseded: "neutral",
   inactive: "neutral",
 };
 
@@ -37,8 +40,11 @@ const LABELS: Record<string, string> = {
   completed: "Completed",
   closed: "Closed",
   active: "Active",
+  accepted: "Accepted",
   void: "Void",
   cancelled: "Cancelled",
+  rejected: "Rejected",
+  superseded: "Superseded",
   overdue: "Overdue",
   inactive: "Inactive",
 };
