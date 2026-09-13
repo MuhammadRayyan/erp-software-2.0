@@ -1,21 +1,23 @@
 "use client";
 
-import { flexRender, type Table as ReactTable } from "@tanstack/react-table";
+import { flexRender } from "@tanstack/react-table";
 import { ArrowDown, ArrowUp } from "lucide-react";
 
-interface DataTableProps<TData> {
+interface DataTableProps {
   table: any;
   minWidth?: string;
-  noResultsMessage?: React.ReactNode;
-  noResultsSubtext?: React.ReactNode;
+  noResultsMessage?: string;
+  noResultsSubtext?: string;
+  onClearFilters?: () => void;
 }
 
-export function DataTable<TData>({
+export function DataTable({
   table,
   minWidth = "min-w-[800px]",
   noResultsMessage = "No results found",
   noResultsSubtext = "Try adjusting your filters.",
-}: DataTableProps<TData>) {
+  onClearFilters,
+}: DataTableProps) {
   const rows = table.getRowModel().rows;
 
   if (rows.length === 0) {
@@ -23,6 +25,15 @@ export function DataTable<TData>({
       <div className="rounded-lg border border-border bg-surface py-10 text-center">
         <p className="font-medium">{noResultsMessage}</p>
         <p className="mt-1 text-sm text-muted-foreground">{noResultsSubtext}</p>
+        {onClearFilters && (
+          <button 
+            type="button" 
+            onClick={onClearFilters}
+            className="mt-4 rounded bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground hover:bg-primary/90"
+          >
+            Clear filters
+          </button>
+        )}
       </div>
     );
   }

@@ -6,8 +6,7 @@ import { MoreHorizontal } from "lucide-react";
 import { 
   useLegacyTable as useTable,
   getCoreRowModel as createCoreRowModel,
-  getSortedRowModel as createSortedRowModel,
-  type LegacyColumnDef as ColumnDef
+  getSortedRowModel as createSortedRowModel
 } from "@tanstack/react-table/legacy";
 import { type SortingState } from "@tanstack/react-table";
 import { StatusBadge, statusLabel } from "@/components/status-badge";
@@ -189,6 +188,7 @@ export function PurchaseOrderTable({
       table={table} 
       minWidth="min-w-[780px]" 
       noResultsMessage="No purchase orders match" 
+     onClearFilters={clearFilters}
     />
   </>;
 }

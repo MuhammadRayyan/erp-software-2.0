@@ -6,8 +6,7 @@ import { MoreHorizontal } from "lucide-react";
 import { 
   useLegacyTable as useTable,
   getCoreRowModel as createCoreRowModel,
-  getSortedRowModel as createSortedRowModel,
-  type LegacyColumnDef as ColumnDef
+  getSortedRowModel as createSortedRowModel
 } from "@tanstack/react-table/legacy";
 import { type SortingState } from "@tanstack/react-table";
 import { StatusBadge } from "@/components/status-badge";
@@ -205,7 +204,8 @@ export function DebitNoteTable({
         table={table} 
         minWidth="min-w-[760px]" 
         noResultsMessage="No debit notes match" 
-      />
+       onClearFilters={clearFilters}
+    />
     </>
   );
 }

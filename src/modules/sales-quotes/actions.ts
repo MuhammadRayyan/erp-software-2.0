@@ -1,4 +1,3 @@
-// @ts-nocheck
 "use server";
 
 import { revalidatePath } from "next/cache";
@@ -69,7 +68,7 @@ export async function convertSalesQuoteToOrderAction(businessId: string, quoteId
       currencyCode: quoteData.quote.currencyCode,
       exchangeRateToBase: String(quoteData.quote.exchangeRateToBase),
       exchangeRateDate: quoteData.quote.exchangeRateDate || "",
-      exchangeRateSource: (quoteData.quote.exchangeRateSource || "Manual") as any,
+      exchangeRateSource: quoteData.quote.exchangeRateSource as "Manual" | "CBUAE" | "Base" || "Manual",
       lines: quoteData.lines.map((l: any) => ({
         itemId: l.itemId || "",
         description: l.description,

@@ -6,8 +6,7 @@ import { MoreHorizontal } from "lucide-react";
 import { 
   useLegacyTable as useTable,
   getCoreRowModel as createCoreRowModel,
-  getSortedRowModel as createSortedRowModel,
-  type LegacyColumnDef as ColumnDef
+  getSortedRowModel as createSortedRowModel
 } from "@tanstack/react-table/legacy";
 import { type SortingState } from "@tanstack/react-table";
 import { ListToolbar, SearchInput, ToolbarSelect } from "@/components/list-toolbar";

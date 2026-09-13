@@ -6,8 +6,7 @@ import { Filter, MoreHorizontal } from "lucide-react";
 import { 
   useLegacyTable as useTable,
   getCoreRowModel as createCoreRowModel,
-  getSortedRowModel as createSortedRowModel,
-  type LegacyColumnDef as ColumnDef
+  getSortedRowModel as createSortedRowModel
 } from "@tanstack/react-table/legacy";
 import { type SortingState } from "@tanstack/react-table";
 import { useColumns } from "@/components/columns-dropdown";
@@ -245,6 +244,7 @@ export function InvoiceTable({
       minWidth="min-w-[1100px]" 
       noResultsMessage="No invoices match these filters"
       noResultsSubtext="Try a different invoice number, customer, date range, or status."
+     onClearFilters={clearFilters}
     />
   </>;
 }

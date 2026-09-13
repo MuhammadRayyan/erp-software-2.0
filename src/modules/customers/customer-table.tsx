@@ -6,8 +6,7 @@ import { Filter, MoreHorizontal } from "lucide-react";
 import { 
   useLegacyTable as useTable,
   getCoreRowModel as createCoreRowModel,
-  getSortedRowModel as createSortedRowModel,
-  type LegacyColumnDef as ColumnDef
+  getSortedRowModel as createSortedRowModel
 } from "@tanstack/react-table/legacy";
 import { type SortingState } from "@tanstack/react-table";
 import { Badge } from "@/components/ui/badge";

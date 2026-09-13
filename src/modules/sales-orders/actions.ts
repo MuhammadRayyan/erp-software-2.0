@@ -1,4 +1,3 @@
-// @ts-nocheck
 "use server";
 
 import { revalidatePath } from "next/cache";
@@ -63,7 +62,7 @@ export async function convertSalesOrderToInvoiceAction(businessId: string, order
       invoiceDate: new Date().toISOString().split("T")[0],
       taxDate: new Date().toISOString().split("T")[0],
       dueDate: new Date(Date.now() + 14 * 86400000).toISOString().split("T")[0], // Default net 14
-      supplyEmirate: "dubai", // Should probably pull from customer, but safe default
+      supplyEmirate: "dubai" as const, // Should probably pull from customer, but safe default
       reference: orderData.order.orderNumber,
       salesOrderId: orderId,
       notes: orderData.order.notes || "",
@@ -71,7 +70,7 @@ export async function convertSalesOrderToInvoiceAction(businessId: string, order
       currencyCode: orderData.order.currencyCode,
       exchangeRateToBase: String(orderData.order.exchangeRateToBase),
       exchangeRateDate: orderData.order.exchangeRateDate || "",
-      exchangeRateSource: (orderData.order.exchangeRateSource || "Manual") as any,
+      exchangeRateSource: orderData.order.exchangeRateSource as "Manual" | "CBUAE" | "Base" || "Manual",
       lines: orderData.lines.map((l: any) => ({
         itemId: l.itemId || "",
         description: l.description,
