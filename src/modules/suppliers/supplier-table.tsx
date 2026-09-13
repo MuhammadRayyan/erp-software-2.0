@@ -2,13 +2,21 @@
 
 import { useMemo, useState } from "react";
 import Link from "next/link";
-import { Columns3, Filter } from "lucide-react";
+import { Filter } from "lucide-react";
+import { 
+  useLegacyTable as useTable,
+  getCoreRowModel as createCoreRowModel,
+  getSortedRowModel as createSortedRowModel,
+  type LegacyColumnDef as ColumnDef
+} from "@tanstack/react-table/legacy";
+import { type SortingState } from "@tanstack/react-table";
 import { Badge } from "@/components/ui/badge";
-import { useColumnVisibility, type ColumnVisibility } from "@/components/use-column-visibility";
+import { type ColumnVisibility } from "@/components/use-column-visibility";
+import { useColumns } from "@/components/columns-dropdown";
 import { ListToolbar, SearchInput } from "@/components/list-toolbar";
 import { Button } from "@/components/ui/button";
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { FilterChip } from "@/components/ui/filter-chip";
+import { DataTable } from "@/components/ui/data-table";
 import { formatCustomFieldValue, type CustomFieldColumn } from "@/modules/custom-fields/custom-field-display";
 import { formatMoney } from "@/core/format";
 
@@ -19,9 +27,25 @@ type SupplierRow = {
 
 const baseColumnLabels: Record<string, string> = { email: "Email", outstanding: "Outstanding", status: "Status" };
 
-export function SupplierTable({ businessId, currency, suppliers, customFields = [], customValues = {}, serverSnapshot }: { businessId: string; currency: string; suppliers: SupplierRow[]; customFields?: CustomFieldColumn[]; customValues?: Record<string, Record<string, string>>; serverSnapshot?: ColumnVisibility }) {
+export function SupplierTable({
+  businessId,
+  currency,
+  suppliers,
+  customFields = [],
+  customValues = {},
+  serverSnapshot,
+}: {
+  businessId: string;
+  currency: string;
+  suppliers: SupplierRow[];
+  customFields?: CustomFieldColumn[];
+  customValues?: Record<string, Record<string, string>>;
+  serverSnapshot?: ColumnVisibility;
+}) {
   const [query, setQuery] = useState("");
   const [activeOnly, setActiveOnly] = useState(false);
+  const [sorting, setSorting] = useState<SortingState>([]);
+
   // Memoized so the shared visibility hook sees a stable defaults reference.
   const initialColumns = useMemo(
     () => ({
@@ -32,33 +56,122 @@ export function SupplierTable({ businessId, currency, suppliers, customFields = 
     }),
     [customFields],
   );
-  const { visibility: columns, toggle: toggleColumn } = useColumnVisibility("suppliers", initialColumns, { businessId, serverSnapshot });
-  const columnLabel = (column: string) => baseColumnLabels[column] ?? customFields.find((field) => field.id === column)?.name ?? column;
-  const rows = useMemo(() => suppliers.filter((supplier) => {
-    const matches = `${supplier.name} ${supplier.email ?? ""}`.toLowerCase().includes(query.trim().toLowerCase());
-    return matches && (!activeOnly || supplier.is_active === 1);
-  }), [activeOnly, query, suppliers]);
+
+  const labels = useMemo(() => {
+    const map = { ...baseColumnLabels };
+    for (const field of customFields) {
+      map[field.id] = field.name;
+    }
+    return map;
+  }, [customFields]);
+
+  const { columns: colVisibility, dropdown } = useColumns({
+    storageKey: "suppliers",
+    businessId,
+    serverSnapshot,
+    initial: initialColumns,
+    labels,
+  });
+
+  const rows = useMemo(() => {
+    return suppliers.filter((supplier) => {
+      const matches = `${supplier.name} ${supplier.email ?? ""}`.toLowerCase().includes(query.trim().toLowerCase());
+      return matches && (!activeOnly || supplier.is_active === 1);
+    });
+  }, [activeOnly, query, suppliers]);
+
+  const columns: any[] = useMemo(
+    () => [
+      {
+        accessorKey: "name",
+        header: "Name",
+        cell: ({ row }: any) => (
+          <Link
+            href={`/b/${businessId}/suppliers/${row.original.id}`}
+            className="font-medium text-primary hover:underline"
+          >
+            {row.original.name}
+          </Link>
+        ),
+      },
+      {
+        accessorKey: "email",
+        header: "Email",
+        cell: ({ row }: any) => (
+          <span className="text-muted-foreground">{row.original.email || "—"}</span>
+        ),
+      },
+      {
+        accessorKey: "outstanding",
+        header: "Outstanding",
+        meta: { className: "text-right" },
+        cell: ({ row }: any) => (
+          <span className="money">
+            {formatMoney(
+              Math.max(0, row.original.total_purchased_minor - row.original.total_paid_minor),
+              currency
+            )}
+          </span>
+        ),
+      },
+      {
+        accessorKey: "status",
+        header: "Status",
+        cell: ({ row }: any) => (
+          <Badge tone={row.original.is_active ? "success" : "neutral"}>
+            {row.original.is_active ? "Active" : "Inactive"}
+          </Badge>
+        ),
+      },
+      ...customFields.map((field) => ({
+        id: field.id,
+        accessorFn: (row: any) => customValues[row.id]?.[field.id],
+        header: field.name,
+        cell: ({ row }: any) => (
+          <span className="text-muted-foreground">
+            {formatCustomFieldValue(field.fieldType, customValues[row.original.id]?.[field.id])}
+          </span>
+        ),
+      })),
+    ],
+    [businessId, currency, customFields, customValues],
+  );
+
+  const table = useTable({
+    data: rows,
+    columns,
+    state: {
+      sorting,
+      columnVisibility: colVisibility,
+    },
+    onSortingChange: setSorting,
+    getCoreRowModel: createCoreRowModel(),
+    getSortedRowModel: createSortedRowModel(),
+  });
+
   return (
     <>
       <ListToolbar>
         <SearchInput value={query} onChange={setQuery} placeholder="Search suppliers…" ariaLabel="Search suppliers" />
-        <Button type="button" variant={activeOnly ? "primary" : "secondary"} onClick={() => setActiveOnly((value) => !value)}><Filter className="size-4" /> Active only</Button>
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild><Button variant="secondary"><Columns3 className="size-4" /> Columns</Button></DropdownMenuTrigger>
-          <DropdownMenuContent align="end">{Object.entries(columns).map(([column, visible]) => <DropdownMenuItem key={column} onSelect={(event) => { event.preventDefault(); toggleColumn(column); }}><span className="w-4">{visible ? "✓" : ""}</span>{columnLabel(column)}</DropdownMenuItem>)}</DropdownMenuContent>
-        </DropdownMenu>
+        <Button type="button" variant={activeOnly ? "primary" : "secondary"} onClick={() => setActiveOnly((value) => !value)}>
+          <Filter className="size-4" /> Active only
+        </Button>
+        {dropdown}
       </ListToolbar>
-      {(query || activeOnly) && <div className="mb-3"><FilterChip onRemove={() => { setQuery(""); setActiveOnly(false); }}>Clear filters</FilterChip></div>}
-      {rows.length ? (
-        <div className="overflow-x-auto">
-          <table className="data-table min-w-[720px]">
-            <thead><tr><th>Name</th>{columns.email && <th>Email</th>}{columns.outstanding && <th className="text-right!">Outstanding</th>}{columns.status && <th>Status</th>}{customFields.map((field) => columns[field.id] && <th key={field.id}>{field.name}</th>)}</tr></thead>
-            <tbody>{rows.map((supplier) => <tr key={supplier.id} className={supplier.is_active ? "" : "opacity-60"}><td><Link href={`/b/${businessId}/suppliers/${supplier.id}`} className="font-medium text-primary hover:underline">{supplier.name}</Link></td>{columns.email && <td className="text-muted-foreground">{supplier.email || "—"}</td>}{columns.outstanding && <td className="money text-right">{formatMoney(Math.max(0, supplier.total_purchased_minor - supplier.total_paid_minor), currency)}</td>}{columns.status && <td><Badge tone={supplier.is_active ? "success" : "neutral"}>{supplier.is_active ? "Active" : "Inactive"}</Badge></td>}{customFields.map((field) => columns[field.id] && <td key={field.id} className="text-muted-foreground">{formatCustomFieldValue(field.fieldType, customValues[supplier.id]?.[field.id])}</td>)}</tr>)}</tbody>
-          </table>
+      {(query || activeOnly) && (
+        <div className="mb-3">
+          <FilterChip onRemove={() => { setQuery(""); setActiveOnly(false); }}>
+            Clear filters
+          </FilterChip>
         </div>
-      ) : (
-        <div className="p-10 text-center"><p className="font-medium">No suppliers match these filters</p><p className="mt-1 text-sm text-muted-foreground">Clear the search or active-status filter.</p><Button variant="ghost" className="mt-2" onClick={() => { setQuery(""); setActiveOnly(false); }}>Clear filters</Button></div>
       )}
+      <DataTable
+        table={table}
+        minWidth="min-w-[720px]"
+        noResultsMessage="No suppliers match these filters"
+        noResultsSubtext="Clear the search or active-status filter."
+      />
     </>
   );
 }
+

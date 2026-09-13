@@ -3,11 +3,19 @@
 import { useMemo, useState } from "react";
 import Link from "next/link";
 import { MoreHorizontal } from "lucide-react";
+import { 
+  useLegacyTable as useTable,
+  getCoreRowModel as createCoreRowModel,
+  getSortedRowModel as createSortedRowModel,
+  type LegacyColumnDef as ColumnDef
+} from "@tanstack/react-table/legacy";
+import { type SortingState } from "@tanstack/react-table";
 import { StatusBadge, statusLabel } from "@/components/status-badge";
 import { ListToolbar, SearchInput, ToolbarSelect } from "@/components/list-toolbar";
 import { Button } from "@/components/ui/button";
 import { FilterChip } from "@/components/ui/filter-chip";
 import { useColumns } from "@/components/columns-dropdown";
+import { DataTable } from "@/components/ui/data-table";
 import { formatDate, formatMoney } from "@/core/format";
 import type { PurchaseQuoteStatus } from "./purchase-quote-service";
 
@@ -26,12 +34,13 @@ type Row = {
   documentStatus: PurchaseQuoteStatus;
   projectIds: string[];
   projectNames: string[];
+  businessId: string; // Passed in mapped data for links
 };
 
 const COLUMN_LABELS: Record<string, string> = {
-  expected: "Expiry Date",
-  total: "Total",
-  status: "Status",
+  expected_date: "Expiry Date",
+  total_minor: "Total",
+  documentStatus: "Status",
 };
 
 export function PurchaseQuoteTable({
@@ -40,13 +49,14 @@ export function PurchaseQuoteTable({
   serverSnapshot,
 }: {
   businessId: string;
-  quotes: Row[];
+  quotes: Omit<Row, "businessId">[];
   serverSnapshot?: import("@/components/use-column-visibility").ColumnVisibility;
 }) {
   const [query, setQuery] = useState("");
   const [status, setStatus] = useState("");
   const [supplierId, setSupplierId] = useState("");
   const [projectId, setProjectId] = useState("");
+  const [sorting, setSorting] = useState<SortingState>([]);
 
   const supplierOptions = useMemo(
     () =>
@@ -67,11 +77,11 @@ export function PurchaseQuoteTable({
   );
 
   const initialColumns = useMemo(
-    () => ({ expected: true, total: true, status: true }),
+    () => ({ expected_date: true, total_minor: true, documentStatus: true }),
     [],
   );
 
-  const { columns, dropdown } = useColumns({
+  const { columns: colVisibility, dropdown } = useColumns({
     storageKey: "purchase-quotes",
     businessId,
     serverSnapshot,
@@ -81,17 +91,98 @@ export function PurchaseQuoteTable({
 
   const rows = useMemo(
     () =>
-      quotes.filter((quote) => {
-        const matchesQuery = `${quote.quote_number} ${quote.supplier_name}`.toLowerCase().includes(query.trim().toLowerCase());
-        return (
-          (!status || quote.documentStatus === status) &&
-          (!supplierId || quote.supplier_id === supplierId) &&
-          (!projectId || quote.projectIds.includes(projectId)) &&
-          matchesQuery
-        );
-      }),
-    [quotes, projectId, query, status, supplierId],
+      quotes
+        .filter((quote) => {
+          const matchesQuery = `${quote.quote_number} ${quote.supplier_name}`.toLowerCase().includes(query.trim().toLowerCase());
+          return (
+            (!status || quote.documentStatus === status) &&
+            (!supplierId || quote.supplier_id === supplierId) &&
+            (!projectId || quote.projectIds.includes(projectId)) &&
+            matchesQuery
+          );
+        })
+        .map((quote) => ({ ...quote, businessId })),
+    [quotes, projectId, query, status, supplierId, businessId],
   );
+
+  const columns: any[] = useMemo(
+    () => [
+      {
+        accessorKey: "quote_number",
+        header: "Quote Number",
+        cell: ({ row }: any) => (
+          <div className="flex items-center gap-1.5">
+            <Link
+              href={`/b/${row.original.businessId}/purchases/quotes/${row.original.id}`}
+              className="tabular font-medium text-primary hover:underline"
+            >
+              {row.original.quote_number}
+            </Link>
+            {row.original.revision_number !== undefined && row.original.revision_number > 0 && (
+              <span className="rounded bg-surface-muted px-1.5 py-0.5 text-[10px] font-semibold text-muted-foreground">
+                Rev {row.original.revision_number}
+              </span>
+            )}
+          </div>
+        ),
+      },
+      {
+        accessorKey: "supplier_name",
+        header: "Supplier",
+      },
+      {
+        accessorKey: "date",
+        header: "Quote Date",
+        cell: ({ row }: any) => formatDate(row.original.date),
+      },
+      {
+        accessorKey: "expected_date",
+        header: "Expiry Date",
+        cell: ({ row }: any) => (row.original.expected_date ? formatDate(row.original.expected_date) : "—"),
+      },
+      {
+        accessorKey: "total_minor",
+        header: "Total",
+        meta: { className: "text-right" },
+        cell: ({ row }: any) => (
+          <span className="money">
+            {formatMoney(row.original.total_minor, row.original.currency_code, row.original.currency_minor_unit)}
+          </span>
+        ),
+      },
+      {
+        accessorKey: "documentStatus",
+        header: "Status",
+        cell: ({ row }: any) => <StatusBadge status={row.original.documentStatus} />,
+      },
+      {
+        id: "actions",
+        header: () => <span className="sr-only">Actions</span>,
+        meta: { className: "w-12" },
+        enableSorting: false,
+        cell: ({ row }: any) => (
+          <Button asChild variant="ghost" size="icon">
+            <Link href={`/b/${row.original.businessId}/purchases/quotes/${row.original.id}`} aria-label={`Open ${row.original.quote_number}`}>
+              <MoreHorizontal className="size-4" />
+            </Link>
+          </Button>
+        ),
+      },
+    ],
+    [],
+  );
+
+  const table = useTable({
+    data: rows,
+    columns,
+    state: {
+      sorting,
+      columnVisibility: colVisibility,
+    },
+    onSortingChange: setSorting,
+    getCoreRowModel: createCoreRowModel(),
+    getSortedRowModel: createSortedRowModel(),
+  });
 
   const clearFilters = () => {
     setQuery("");
@@ -157,74 +248,11 @@ export function PurchaseQuoteTable({
           {query && <FilterChip onRemove={() => setQuery("")}>Search: {query}</FilterChip>}
         </ListToolbar>
       )}
-      {rows.length ? (
-        <div className="overflow-x-auto">
-          <table className="data-table min-w-[780px]">
-            <thead>
-              <tr>
-                <th>Quote Number</th>
-                <th>Supplier</th>
-                <th>Quote Date</th>
-                {columns.expected && <th>Expiry Date</th>}
-                {columns.total && <th className="text-right!">Total</th>}
-                {columns.status && <th>Status</th>}
-                <th className="w-12">
-                  <span className="sr-only">Actions</span>
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((quote) => (
-                <tr key={quote.id}>
-                  <td>
-                    <div className="flex items-center gap-1.5">
-                      <Link
-                        href={`/b/${businessId}/purchases/quotes/${quote.id}`}
-                        className="tabular font-medium text-primary hover:underline"
-                      >
-                        {quote.quote_number}
-                      </Link>
-                      {quote.revision_number !== undefined && quote.revision_number > 0 && (
-                        <span className="rounded bg-surface-muted px-1.5 py-0.5 text-[10px] font-semibold text-muted-foreground">
-                          Rev {quote.revision_number}
-                        </span>
-                      )}
-                    </div>
-                  </td>
-                  <td>{quote.supplier_name}</td>
-                  <td>{formatDate(quote.date)}</td>
-                  {columns.expected && <td>{quote.expected_date ? formatDate(quote.expected_date) : "—"}</td>}
-                  {columns.total && (
-                    <td className="money text-right">
-                      {formatMoney(quote.total_minor, quote.currency_code, quote.currency_minor_unit)}
-                    </td>
-                  )}
-                  {columns.status && (
-                    <td>
-                      <StatusBadge status={quote.documentStatus} />
-                    </td>
-                  )}
-                  <td>
-                    <Button asChild variant="ghost" size="icon">
-                      <Link href={`/b/${businessId}/purchases/quotes/${quote.id}`} aria-label={`Open ${quote.quote_number}`}>
-                        <MoreHorizontal className="size-4" />
-                      </Link>
-                    </Button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      ) : (
-        <div className="py-10 text-center">
-          <p className="font-medium">No purchase quotes match</p>
-          <p className="mt-1 text-sm text-muted-foreground">Adjust the search or filters.</p>
-          <Button variant="ghost" className="mt-2" onClick={clearFilters}>
-            Clear filters
-          </Button>
-        </div>
-      )}
+      <DataTable
+        table={table}
+        minWidth="min-w-[780px]"
+        noResultsMessage="No purchase quotes match"
+      />
     </>
   );
 }

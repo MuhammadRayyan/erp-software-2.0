@@ -3,11 +3,19 @@
 import { useMemo, useState } from "react";
 import Link from "next/link";
 import { MoreHorizontal } from "lucide-react";
+import { 
+  useLegacyTable as useTable,
+  getCoreRowModel as createCoreRowModel,
+  getSortedRowModel as createSortedRowModel,
+  type LegacyColumnDef as ColumnDef
+} from "@tanstack/react-table/legacy";
+import { type SortingState } from "@tanstack/react-table";
 import { StatusBadge, statusLabel } from "@/components/status-badge";
 import { ListToolbar, SearchInput, ToolbarSelect } from "@/components/list-toolbar";
 import { Button } from "@/components/ui/button";
 import { FilterChip } from "@/components/ui/filter-chip";
 import { useColumns } from "@/components/columns-dropdown";
+import { DataTable } from "@/components/ui/data-table";
 import { formatDate, formatMoney } from "@/core/format";
 import type { SalesOrderStatus } from "./sales-order-service";
 
@@ -24,12 +32,13 @@ type Row = {
   documentStatus: SalesOrderStatus;
   projectIds: string[];
   projectNames: string[];
+  businessId: string; // Passed in mapped data for links
 };
 
 const COLUMN_LABELS: Record<string, string> = {
-  expected: "Expected",
-  total: "Total",
-  status: "Status",
+  expected_date: "Expected",
+  total_minor: "Total",
+  documentStatus: "Status",
 };
 
 export function SalesOrderTable({
@@ -38,13 +47,15 @@ export function SalesOrderTable({
   serverSnapshot,
 }: {
   businessId: string;
-  orders: Row[];
+  orders: Omit<Row, "businessId">[];
   serverSnapshot?: import("@/components/use-column-visibility").ColumnVisibility;
 }) {
   const [query, setQuery] = useState("");
   const [status, setStatus] = useState("");
   const [customerId, setCustomerId] = useState("");
   const [projectId, setProjectId] = useState("");
+  const [sorting, setSorting] = useState<SortingState>([]);
+
   const customerOptions = useMemo(
     () =>
       Array.from(new Map(orders.map((order) => [order.customer_id, order.customer_name])).entries()).sort((a, b) =>
@@ -61,26 +72,108 @@ export function SalesOrderTable({
       ).sort((a, b) => a[1].localeCompare(b[1])),
     [orders],
   );
-  const { columns, dropdown } = useColumns({
+
+  const initialColumns = useMemo(
+    () => ({ expected_date: true, total_minor: true, documentStatus: true }),
+    [],
+  );
+
+  const { columns: colVisibility, dropdown } = useColumns({
     storageKey: "sales-orders",
     businessId,
     serverSnapshot,
-    initial: { expected: true, total: true, status: true },
+    initial: initialColumns,
     labels: COLUMN_LABELS,
   });
+
   const rows = useMemo(
     () =>
-      orders.filter((order) => {
-        const matchesQuery = `${order.order_number} ${order.customer_name}`.toLowerCase().includes(query.trim().toLowerCase());
-        return (
-          (!status || order.documentStatus === status) &&
-          (!customerId || order.customer_id === customerId) &&
-          (!projectId || order.projectIds.includes(projectId)) &&
-          matchesQuery
-        );
-      }),
-    [orders, projectId, query, status, customerId],
+      orders
+        .filter((order) => {
+          const matchesQuery = `${order.order_number} ${order.customer_name}`.toLowerCase().includes(query.trim().toLowerCase());
+          return (
+            (!status || order.documentStatus === status) &&
+            (!customerId || order.customer_id === customerId) &&
+            (!projectId || order.projectIds.includes(projectId)) &&
+            matchesQuery
+          );
+        })
+        .map((order) => ({ ...order, businessId })),
+    [orders, projectId, query, status, customerId, businessId],
   );
+
+  const columns: any[] = useMemo(
+    () => [
+      {
+        accessorKey: "order_number",
+        header: "Order",
+        cell: ({ row }: any) => (
+          <Link
+            href={`/b/${row.original.businessId}/sales/orders/${row.original.id}`}
+            className="tabular font-medium text-primary hover:underline"
+          >
+            {row.original.order_number}
+          </Link>
+        ),
+      },
+      {
+        accessorKey: "customer_name",
+        header: "Customer",
+      },
+      {
+        accessorKey: "date",
+        header: "Date",
+        cell: ({ row }: any) => formatDate(row.original.date),
+      },
+      {
+        accessorKey: "expected_date",
+        header: "Expected",
+        cell: ({ row }: any) => row.original.expected_date ? formatDate(row.original.expected_date) : "—",
+      },
+      {
+        accessorKey: "total_minor",
+        header: "Total",
+        meta: { className: "text-right" },
+        cell: ({ row }: any) => (
+          <span className="money">
+            {formatMoney(row.original.total_minor, row.original.currency_code, row.original.currency_minor_unit)}
+          </span>
+        ),
+      },
+      {
+        accessorKey: "documentStatus",
+        header: "Status",
+        cell: ({ row }: any) => <StatusBadge status={row.original.documentStatus} />,
+      },
+      {
+        id: "actions",
+        header: () => <span className="sr-only">Actions</span>,
+        meta: { className: "w-12" },
+        enableSorting: false,
+        cell: ({ row }: any) => (
+          <Button asChild variant="ghost" size="icon">
+            <Link href={`/b/${row.original.businessId}/sales/orders/${row.original.id}`} aria-label={`Open ${row.original.order_number}`}>
+              <MoreHorizontal className="size-4" />
+            </Link>
+          </Button>
+        ),
+      },
+    ],
+    [],
+  );
+
+  const table = useTable({
+    data: rows,
+    columns,
+    state: {
+      sorting,
+      columnVisibility: colVisibility,
+    },
+    onSortingChange: setSorting,
+    getCoreRowModel: createCoreRowModel(),
+    getSortedRowModel: createSortedRowModel(),
+  });
+
   const clearFilters = () => {
     setQuery("");
     setStatus("");
@@ -137,63 +230,12 @@ export function SalesOrderTable({
           {query && <FilterChip onRemove={() => setQuery("")}>Search: {query}</FilterChip>}
         </ListToolbar>
       )}
-      {rows.length ? (
-        <div className="overflow-x-auto">
-          <table className="data-table min-w-[780px]">
-            <thead>
-              <tr>
-                <th>Order</th>
-                <th>Customer</th>
-                <th>Date</th>
-                {columns.expected && <th>Expected</th>}
-                {columns.total && <th className="text-right!">Total</th>}
-                {columns.status && <th>Status</th>}
-                <th className="w-12">
-                  <span className="sr-only">Actions</span>
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((order) => (
-                <tr key={order.id}>
-                  <td>
-                    <Link
-                      href={`/b/${businessId}/sales/orders/${order.id}`}
-                      className="tabular font-medium text-primary hover:underline"
-                    >
-                      {order.order_number}
-                    </Link>
-                  </td>
-                  <td>{order.customer_name}</td>
-                  <td>{formatDate(order.date)}</td>
-                  {columns.expected && <td>{order.expected_date ? formatDate(order.expected_date) : "—"}</td>}
-                  {columns.total && (
-                    <td className="money text-right">
-                      {formatMoney(order.total_minor, order.currency_code, order.currency_minor_unit)}
-                    </td>
-                  )}
-                  {columns.status && <td><StatusBadge status={order.documentStatus} /></td>}
-                  <td>
-                    <Button asChild variant="ghost" size="icon">
-                      <Link href={`/b/${businessId}/sales/orders/${order.id}`} aria-label={`Open ${order.order_number}`}>
-                        <MoreHorizontal className="size-4" />
-                      </Link>
-                    </Button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      ) : (
-        <div className="py-10 text-center">
-          <p className="font-medium">No sales orders match</p>
-          <p className="mt-1 text-sm text-muted-foreground">Adjust the search or filters.</p>
-          <Button variant="ghost" className="mt-2" onClick={clearFilters}>
-            Clear filters
-          </Button>
-        </div>
-      )}
+      
+      <DataTable 
+        table={table} 
+        minWidth="min-w-[780px]" 
+        noResultsMessage="No sales orders match" 
+      />
     </>
   );
 }

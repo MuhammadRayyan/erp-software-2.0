@@ -3,11 +3,19 @@
 import { useMemo, useState } from "react";
 import Link from "next/link";
 import { MoreHorizontal } from "lucide-react";
+import { 
+  useLegacyTable as useTable,
+  getCoreRowModel as createCoreRowModel,
+  getSortedRowModel as createSortedRowModel,
+  type LegacyColumnDef as ColumnDef
+} from "@tanstack/react-table/legacy";
+import { type SortingState } from "@tanstack/react-table";
 import { StatusBadge } from "@/components/status-badge";
 import { ListToolbar, SearchInput, ToolbarSelect } from "@/components/list-toolbar";
 import { Button } from "@/components/ui/button";
 import { FilterChip } from "@/components/ui/filter-chip";
 import { useColumns } from "@/components/columns-dropdown";
+import { DataTable } from "@/components/ui/data-table";
 import { formatDate, formatMoney } from "@/core/format";
 import type { DebitNoteStatus } from "./debit-note-service";
 
@@ -24,6 +32,7 @@ type Row = {
   currency_minor_unit: number;
   projectIds: string[];
   projectNames: string[];
+  businessId: string;
 };
 
 const COLUMN_LABELS: Record<string, string> = {
@@ -38,12 +47,14 @@ export function DebitNoteTable({
   serverSnapshot,
 }: {
   businessId: string;
-  debitNotes: Row[];
+  debitNotes: Omit<Row, "businessId">[];
   serverSnapshot?: import("@/components/use-column-visibility").ColumnVisibility;
 }) {
   const [query, setQuery] = useState("");
   const [status, setStatus] = useState("");
   const [projectId, setProjectId] = useState("");
+  const [sorting, setSorting] = useState<SortingState>([]);
+
   const projects = useMemo(() => {
     const choices = new Map<string, string>();
     debitNotes.forEach((note) =>
@@ -51,23 +62,103 @@ export function DebitNoteTable({
     );
     return Array.from(choices, ([id, name]) => ({ id, name })).sort((a, b) => a.name.localeCompare(b.name));
   }, [debitNotes]);
-  const { columns, dropdown } = useColumns({
+
+  const { columns: colVisibility, dropdown } = useColumns({
     storageKey: "debit-notes",
     businessId,
     serverSnapshot,
     initial: { reference: true, total: true, status: true },
     labels: COLUMN_LABELS,
   });
+
   const rows = useMemo(
     () =>
-      debitNotes.filter(
-        (note) =>
-          (!status || note.document_status === status) &&
-          (!projectId || note.projectIds.includes(projectId)) &&
-          `${note.debit_note_number} ${note.supplier_name}`.toLowerCase().includes(query.trim().toLowerCase()),
-      ),
-    [debitNotes, projectId, query, status],
+      debitNotes
+        .filter(
+          (note) =>
+            (!status || note.document_status === status) &&
+            (!projectId || note.projectIds.includes(projectId)) &&
+            `${note.debit_note_number} ${note.supplier_name}`.toLowerCase().includes(query.trim().toLowerCase()),
+        )
+        .map((note) => ({ ...note, businessId })),
+    [debitNotes, projectId, query, status, businessId],
   );
+
+  const columns: any[] = useMemo(
+    () => [
+      {
+        accessorKey: "debit_note_number",
+        header: "Debit Note",
+        cell: ({ row }: any) => (
+          <Link
+            href={`/b/${row.original.businessId}/purchases/debit-notes/${row.original.id}`}
+            className="tabular font-medium text-primary hover:underline"
+          >
+            {row.original.debit_note_number}
+          </Link>
+        ),
+      },
+      {
+        accessorKey: "supplier_name",
+        header: "Supplier",
+      },
+      {
+        accessorKey: "debit_note_date",
+        header: "Date",
+        cell: ({ row }: any) => formatDate(row.original.debit_note_date),
+      },
+      {
+        accessorKey: "reference",
+        header: "Reference",
+        cell: ({ row }: any) => (row.original.reference ? row.original.reference : "—"),
+      },
+      {
+        accessorKey: "total",
+        header: "Total",
+        meta: { className: "text-right" },
+        cell: ({ row }: any) => (
+          <span className="money">
+            {formatMoney(row.original.total_minor, row.original.currency_code, row.original.currency_minor_unit)}
+          </span>
+        ),
+      },
+      {
+        accessorKey: "status",
+        header: "Status",
+        cell: ({ row }: any) => <StatusBadge status={row.original.document_status} />,
+      },
+      {
+        id: "actions",
+        header: () => <span className="sr-only">Actions</span>,
+        meta: { className: "w-12" },
+        enableSorting: false,
+        cell: ({ row }: any) => (
+          <Button asChild variant="ghost" size="icon">
+            <Link
+              href={`/b/${row.original.businessId}/purchases/debit-notes/${row.original.id}`}
+              aria-label={`Open ${row.original.debit_note_number}`}
+            >
+              <MoreHorizontal className="size-4" />
+            </Link>
+          </Button>
+        ),
+      },
+    ],
+    [],
+  );
+
+  const table = useTable({
+    data: rows,
+    columns,
+    state: {
+      sorting,
+      columnVisibility: colVisibility,
+    },
+    onSortingChange: setSorting,
+    getCoreRowModel: createCoreRowModel(),
+    getSortedRowModel: createSortedRowModel(),
+  });
+
   const clearFilters = () => {
     setQuery("");
     setStatus("");
@@ -109,63 +200,12 @@ export function DebitNoteTable({
           {query && <FilterChip onRemove={() => setQuery("")}>Search: {query}</FilterChip>}
         </ListToolbar>
       )}
-      {rows.length ? (
-        <div className="overflow-x-auto">
-          <table className="data-table min-w-[760px]">
-            <thead>
-              <tr>
-                <th>Debit Note</th>
-                <th>Supplier</th>
-                <th>Date</th>
-                {columns.reference && <th>Reference</th>}
-                {columns.total && <th className="text-right!">Total</th>}
-                {columns.status && <th>Status</th>}
-                <th className="w-12">
-                  <span className="sr-only">Actions</span>
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((note) => (
-                <tr key={note.id}>
-                  <td>
-                    <Link
-                      href={`/b/${businessId}/purchases/debit-notes/${note.id}`}
-                      className="tabular font-medium text-primary hover:underline"
-                    >
-                      {note.debit_note_number}
-                    </Link>
-                  </td>
-                  <td>{note.supplier_name}</td>
-                  <td>{formatDate(note.debit_note_date)}</td>
-                  {columns.reference && <td className="text-muted-foreground">{note.reference ?? "—"}</td>}
-                  {columns.total && (
-                    <td className="money text-right">
-                      {formatMoney(note.total_minor, note.currency_code, note.currency_minor_unit)}
-                    </td>
-                  )}
-                  {columns.status && <td><StatusBadge status={note.document_status} /></td>}
-                  <td>
-                    <Button asChild variant="ghost" size="icon">
-                      <Link href={`/b/${businessId}/purchases/debit-notes/${note.id}`} aria-label={`Open ${note.debit_note_number}`}>
-                        <MoreHorizontal className="size-4" />
-                      </Link>
-                    </Button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      ) : (
-        <div className="py-10 text-center">
-          <p className="font-medium">No debit notes match</p>
-          <p className="mt-1 text-sm text-muted-foreground">Adjust the search or filters.</p>
-          <Button variant="ghost" className="mt-2" onClick={clearFilters}>
-            Clear filters
-          </Button>
-        </div>
-      )}
+
+      <DataTable 
+        table={table} 
+        minWidth="min-w-[760px]" 
+        noResultsMessage="No debit notes match" 
+      />
     </>
   );
 }

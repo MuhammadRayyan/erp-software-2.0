@@ -3,12 +3,20 @@
 import { useMemo, useState } from "react";
 import Link from "next/link";
 import { Filter, MoreHorizontal } from "lucide-react";
+import { 
+  useLegacyTable as useTable,
+  getCoreRowModel as createCoreRowModel,
+  getSortedRowModel as createSortedRowModel,
+  type LegacyColumnDef as ColumnDef
+} from "@tanstack/react-table/legacy";
+import { type SortingState } from "@tanstack/react-table";
 import { useColumns } from "@/components/columns-dropdown";
 import { ListToolbar, SearchInput, ToolbarSelect } from "@/components/list-toolbar";
 import { Button } from "@/components/ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { FilterChip } from "@/components/ui/filter-chip";
 import { Input } from "@/components/ui/input";
+import { DataTable } from "@/components/ui/data-table";
 import { formatDate, formatMoney } from "@/core/format";
 import { formatCustomFieldValue, type CustomFieldColumn } from "@/modules/custom-fields/custom-field-display";
 import { DocumentStatusBadge, PaymentStatusBadge } from "./invoice-status";
@@ -61,6 +69,7 @@ export function InvoiceTable({
   const [projectFilter, setProjectFilter] = useState("");
   const [fromDate, setFromDate] = useState("");
   const [toDate, setToDate] = useState("");
+  const [sorting, setSorting] = useState<SortingState>([]);
 
   const customerOptions = useMemo(
     () => Array.from(new Map(invoices.map((invoice) => [invoice.customerId, invoice.customerName])).entries()).sort((a, b) => a[1].localeCompare(b[1])),
@@ -71,12 +80,12 @@ export function InvoiceTable({
     [invoices],
   );
 
-  const data = useMemo(() => invoices.filter((invoice) => {
+  const rows = useMemo(() => invoices.filter((invoice) => {
     const [kind, status] = statusFilter.split(":");
     const matchesStatus = !statusFilter || (kind === "document" ? invoice.documentStatus === status : invoice.paymentStatus === status);
     const matchesQuery = [invoice.invoiceNumber, invoice.customerName].some((value) => value.toLowerCase().includes(query.toLowerCase().trim()));
     return matchesStatus && matchesQuery && (!customerFilter || invoice.customerId === customerFilter) && (!projectFilter || invoice.projectIds.includes(projectFilter)) && (!fromDate || invoice.invoiceDate >= fromDate) && (!toDate || invoice.invoiceDate <= toDate);
-  }), [customerFilter, fromDate, invoices, projectFilter, query, statusFilter, toDate]);
+  }).map(invoice => ({ ...invoice, businessId, customValues: customValues[invoice.id] })), [customerFilter, fromDate, invoices, projectFilter, query, statusFilter, toDate, businessId, customValues]);
 
   const initialColumns = useMemo(() => {
     const base = { dueDate: true, balanceMinor: true, paymentStatus: true, documentStatus: true } as Record<string, boolean>;
@@ -90,7 +99,7 @@ export function InvoiceTable({
     return base;
   }, [customFields]);
 
-  const { columns, dropdown } = useColumns({
+  const { columns: colVisibility, dropdown } = useColumns({
     storageKey: "sales-invoices",
     businessId,
     serverSnapshot,
@@ -98,7 +107,105 @@ export function InvoiceTable({
     labels: columnLabels,
   });
 
+  const columns: any[] = useMemo(() => {
+    const cols: any[] = [
+      {
+        accessorKey: "invoiceNumber",
+        header: "Invoice",
+        cell: ({ row }: any) => (
+          <Link href={`/b/${row.original.businessId}/sales/invoices/${row.original.id}`} className="tabular font-medium text-primary hover:underline">
+            {row.original.invoiceNumber}
+          </Link>
+        ),
+      },
+      {
+        accessorKey: "customerName",
+        header: "Customer",
+      },
+      {
+        accessorKey: "invoiceDate",
+        header: "Invoice Date",
+        cell: ({ row }: any) => formatDate(row.original.invoiceDate, { day: "2-digit", month: "short", year: "numeric" }),
+      },
+      {
+        accessorKey: "dueDate",
+        header: "Due Date",
+        cell: ({ row }: any) => formatDate(row.original.dueDate, { day: "2-digit", month: "short", year: "numeric" }),
+      },
+      {
+        accessorKey: "totalMinor",
+        header: "Total",
+        meta: { className: "text-right" },
+        cell: ({ row }: any) => (
+          <span className="money">
+            {formatMoney(row.original.totalMinor, row.original.currencyCode, row.original.currencyMinorUnit)}
+          </span>
+        ),
+      },
+      {
+        accessorKey: "balanceMinor",
+        header: "Balance",
+        meta: { className: "text-right" },
+        cell: ({ row }: any) => (
+          <span className="money">
+            {row.original.documentStatus === "posted" ? formatMoney(row.original.balanceMinor, row.original.currencyCode, row.original.currencyMinorUnit) : "—"}
+          </span>
+        ),
+      },
+      {
+        accessorKey: "paymentStatus",
+        header: "Payment Status",
+        cell: ({ row }: any) => row.original.paymentStatus ? <PaymentStatusBadge status={row.original.paymentStatus} /> : <span className="text-muted-foreground">—</span>,
+      },
+      {
+        accessorKey: "documentStatus",
+        header: "Document Status",
+        cell: ({ row }: any) => <DocumentStatusBadge status={row.original.documentStatus} />,
+      },
+    ];
+
+    for (const field of customFields) {
+      cols.push({
+        accessorKey: field.id,
+        header: field.name,
+        cell: ({ row }: any) => {
+          const val = row.original.customValues?.[field.id];
+          return <span className="text-muted-foreground">{formatCustomFieldValue(field.fieldType, val)}</span>;
+        }
+      });
+    }
+
+    cols.push({
+      id: "actions",
+      header: () => <span className="sr-only">Actions</span>,
+      meta: { className: "w-12" },
+      enableSorting: false,
+      cell: ({ row }: any) => (
+        <Button asChild variant="ghost" size="icon">
+          <Link href={`/b/${row.original.businessId}/sales/invoices/${row.original.id}`} aria-label={`Open ${row.original.invoiceNumber}`}>
+            <MoreHorizontal className="size-4" />
+          </Link>
+        </Button>
+      ),
+    });
+
+    return cols;
+  }, [customFields]);
+
+  const table = useTable({
+    data: rows,
+    columns,
+    state: {
+      sorting,
+      columnVisibility: colVisibility,
+    },
+    onSortingChange: setSorting,
+    getCoreRowModel: createCoreRowModel(),
+    getSortedRowModel: createSortedRowModel(),
+  });
+
   const clearFilters = () => { setQuery(""); setStatusFilter(""); setCustomerFilter(""); setProjectFilter(""); setFromDate(""); setToDate(""); };
+  const hasActiveFilter = Boolean(customerFilter || projectFilter || fromDate || toDate || statusFilter || query);
 
   return <>
     <ListToolbar>
@@ -124,85 +231,20 @@ export function InvoiceTable({
       {dropdown}
     </ListToolbar>
     
-    {(customerFilter || projectFilter || fromDate || toDate || statusFilter) && <ListToolbar>
+    {hasActiveFilter && <ListToolbar>
       {customerFilter && <FilterChip onRemove={() => setCustomerFilter("")}>Customer: {customerOptions.find(([id]) => id === customerFilter)?.[1]}</FilterChip>}
       {projectFilter && <FilterChip onRemove={() => setProjectFilter("")}>Project: {projectOptions.find(([id]) => id === projectFilter)?.[1]}</FilterChip>}
       {fromDate && <FilterChip onRemove={() => setFromDate("")}>From: {formatDate(fromDate)}</FilterChip>}
       {toDate && <FilterChip onRemove={() => setToDate("")}>To: {formatDate(toDate)}</FilterChip>}
       {statusFilter && <FilterChip onRemove={() => setStatusFilter("")}>Status: {filterLabels[statusFilter]}</FilterChip>}
+      {query && <FilterChip onRemove={() => setQuery("")}>Search: {query}</FilterChip>}
     </ListToolbar>}
     
-    {data.length === 0 ? (
-      <div className="rounded-lg border border-border bg-surface py-10 text-center">
-        <p className="font-medium">No invoices match these filters</p>
-        <p className="mt-1 text-sm text-muted-foreground">Try a different invoice number, customer, date range, or status.</p>
-        <Button variant="ghost" className="mt-2" onClick={clearFilters}>Clear filters</Button>
-      </div>
-    ) : (
-      <div className="data-panel overflow-x-auto">
-        <table className="data-table min-w-[1100px]">
-          <thead>
-            <tr>
-              <th>Invoice</th>
-              <th>Customer</th>
-              <th>Invoice Date</th>
-              {columns.dueDate && <th>Due Date</th>}
-              <th className="text-right!">Total</th>
-              {columns.balanceMinor && <th className="text-right!">Balance</th>}
-              {columns.paymentStatus && <th>Payment Status</th>}
-              {columns.documentStatus && <th>Document Status</th>}
-              {customFields.map((field) => columns[field.id] && <th key={field.id}>{field.name}</th>)}
-              <th className="w-12"><span className="sr-only">Actions</span></th>
-            </tr>
-          </thead>
-          <tbody>
-            {data.map((invoice) => (
-              <tr key={invoice.id}>
-                <td>
-                  <Link href={`/b/${businessId}/sales/invoices/${invoice.id}`} className="tabular font-medium text-primary hover:underline">
-                    {invoice.invoiceNumber}
-                  </Link>
-                </td>
-                <td>{invoice.customerName}</td>
-                <td>{formatDate(invoice.invoiceDate, { day: "2-digit", month: "short", year: "numeric" })}</td>
-                {columns.dueDate && <td>{formatDate(invoice.dueDate, { day: "2-digit", month: "short", year: "numeric" })}</td>}
-                <td className="money text-right">
-                  {formatMoney(invoice.totalMinor, invoice.currencyCode, invoice.currencyMinorUnit)}
-                </td>
-                {columns.balanceMinor && (
-                  <td className="money text-right">
-                    {invoice.documentStatus === "posted" ? formatMoney(invoice.balanceMinor, invoice.currencyCode, invoice.currencyMinorUnit) : "—"}
-                  </td>
-                )}
-                {columns.paymentStatus && (
-                  <td>
-                    {invoice.paymentStatus ? <PaymentStatusBadge status={invoice.paymentStatus} /> : <span className="text-muted-foreground">—</span>}
-                  </td>
-                )}
-                {columns.documentStatus && (
-                  <td>
-                    <DocumentStatusBadge status={invoice.documentStatus} />
-                  </td>
-                )}
-                {customFields.map((field) => 
-                  columns[field.id] && (
-                    <td key={field.id}>
-                      <span className="text-muted-foreground">{formatCustomFieldValue(field.fieldType, customValues[invoice.id]?.[field.id])}</span>
-                    </td>
-                  )
-                )}
-                <td>
-                  <Button asChild variant="ghost" size="icon">
-                    <Link href={`/b/${businessId}/sales/invoices/${invoice.id}`} aria-label={`Open ${invoice.invoiceNumber}`}>
-                      <MoreHorizontal className="size-4" />
-                    </Link>
-                  </Button>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-    )}
+    <DataTable 
+      table={table} 
+      minWidth="min-w-[1100px]" 
+      noResultsMessage="No invoices match these filters"
+      noResultsSubtext="Try a different invoice number, customer, date range, or status."
+    />
   </>;
 }
