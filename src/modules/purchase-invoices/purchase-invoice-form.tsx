@@ -225,9 +225,9 @@ export function PurchaseInvoiceForm({
     ? `/b/${businessId}/purchases/invoices/${invoiceId}`
     : `/b/${businessId}/purchases/invoices`;
   return (
-    <form className="space-y-7 max-w-none" noValidate>
+    <form className="space-y-5 max-w-none" noValidate>
       {serverError && <FormError message={serverError} />}
-      <section className="border-b border-border pb-7">
+      <section className="form-section">
         <h2 className="text-base font-semibold">Bill details</h2>
         <p className="mt-1 text-sm text-muted-foreground">
           Posting creates the Accounts Payable, expense, and Input VAT journal
@@ -369,7 +369,7 @@ export function PurchaseInvoiceForm({
           </div>
         </div>
       </section>
-      <section className="border-b border-border pb-7">
+      <section className="form-section">
         <h2 className="mb-4 text-base font-semibold">Document currency</h2>
         <DocumentCurrencyFields
           baseCurrencyCode={currency}
@@ -390,7 +390,7 @@ export function PurchaseInvoiceForm({
           </p>
         )}
       </section>
-      <section>
+      <section className="form-section">
         <div className="mb-3 flex flex-wrap items-end justify-between gap-3">
           <div>
             <h2 className="text-base font-semibold">Line items</h2>
@@ -410,7 +410,7 @@ export function PurchaseInvoiceForm({
         </div>
         {typeof errors.lines?.message === "string" && <p className="field-error mb-2">{errors.lines.message}</p>}
         <div className="rounded-lg border border-border bg-surface-raised w-full overflow-x-auto">
-          <table className="data-table w-full whitespace-nowrap min-w-max">
+          <table className="line-item-table w-full whitespace-nowrap min-w-max">
             <thead>
               <tr>
                 {showLineNumber && <th className="w-12 min-w-[48px] text-center">#</th>}
@@ -429,7 +429,7 @@ export function PurchaseInvoiceForm({
             </thead>
             <tbody>
               {fields.map((field, index) => (
-                <tr key={field.id} className="hover:bg-transparent!">
+                <tr key={field.id} >
                   {showLineNumber && <td className="py-2 text-center text-muted-foreground">{index + 1}</td>}
                   <td>
                     <select aria-label={`Line ${index + 1} inventory item`} className="flex h-9 w-full items-center justify-between rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-sm ring-offset-background placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-50" {...register(`lines.${index}.itemId`, { onChange: (event) => selectItem(index, event.target.value) })}>
@@ -438,19 +438,19 @@ export function PurchaseInvoiceForm({
                     </select>
                   </td>
                   {showDescription && (
-                    <td className="py-2">
+                    <td className="align-top">
                       <Input aria-label={`Line ${index + 1} description`} {...register(`lines.${index}.description`)} />
                       {errors.lines?.[index]?.description && <p className="field-error">{errors.lines[index]?.description?.message}</p>}
                     </td>
                   )}
-                  <td className="py-2">
+                  <td className="align-top">
                     <Input className="money text-right" type="number" step="0.0001" min="0.0001" aria-label={`Line ${index + 1} quantity`} {...register(`lines.${index}.quantity`)} />
                   </td>
-                  <td className="py-2">
+                  <td className="align-top">
                     <Input className="money text-right" type="number" step="0.000001" min="0" aria-label={`Line ${index + 1} rate`} {...register(`lines.${index}.unitPrice`)} />
                   </td>
                   {showDiscounts && (
-                    <td className="py-2">
+                    <td className="align-top">
                       <div className="flex gap-1 justify-end">
                         <select aria-label={`Line ${index + 1} discount type`} className="w-[70px] px-2 py-1 h-9 flex items-center justify-between rounded-md border border-input bg-transparent text-sm shadow-sm ring-offset-background placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-50" {...register(`lines.${index}.discountType`)}>
                           <option value="none">None</option>
@@ -463,7 +463,7 @@ export function PurchaseInvoiceForm({
                       </div>
                     </td>
                   )}
-                  <td className="py-2">
+                  <td className="align-top">
                     {lines[index]?.itemId ? (
                       <><input type="hidden" {...register(`lines.${index}.expenseAccountId`)} /><span className="text-sm text-muted-foreground">From item</span></>
                     ) : (
@@ -474,7 +474,7 @@ export function PurchaseInvoiceForm({
                     <input type="hidden" {...register(`lines.${index}.taxCodeId`)} />
                   </td>
                   {showLineProjects && (
-                    <td className="py-2">
+                    <td className="align-top">
                       <select aria-label={`Line ${index + 1} project`} className="flex h-9 w-full items-center justify-between rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-sm ring-offset-background placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-50" {...register(`lines.${index}.projectId`)}>
                         <option value="">Use document Project</option>
                         {projects.map((project) => <option key={project.id} value={project.id}>{project.code} � {project.name}</option>)}

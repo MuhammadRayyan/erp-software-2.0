@@ -156,9 +156,9 @@ export function PurchaseQuoteForm({
   const cancelHref = quoteId ? `/b/${businessId}/purchases/quotes/${quoteId}` : `/b/${businessId}/purchases/quotes`;
 
   return (
-    <form className="space-y-7 max-w-none" noValidate>
+    <form className="space-y-5 max-w-none" noValidate>
       {serverError && <FormError message={serverError} />}
-      <section className="border-b border-border pb-7">
+      <section className="form-section">
         <h2 className="text-base font-semibold">Quote details</h2>
         <p className="mt-1 text-sm text-muted-foreground">
           Purchase quotes (RFQs) are operational supplier documents and never affect the ledger.
@@ -229,7 +229,7 @@ export function PurchaseQuoteForm({
         </div>
       </section>
 
-      <section className="border-b border-border pb-7">
+      <section className="form-section">
         <h2 className="mb-4 text-base font-semibold">Commitment currency</h2>
         <DocumentCurrencyFields
           baseCurrencyCode={currency}
@@ -248,7 +248,7 @@ export function PurchaseQuoteForm({
         </p>
       </section>
 
-      <section>
+      <section className="form-section">
         <div className="mb-3 flex flex-wrap items-end justify-between gap-3">
           <div>
             <h2 className="text-base font-semibold">Line items</h2>
@@ -298,7 +298,7 @@ export function PurchaseQuoteForm({
         </div>
         {typeof errors.lines?.message === "string" && <p className="field-error mb-2">{errors.lines.message}</p>}
         <div className="rounded-lg border border-border bg-surface-raised w-full overflow-x-auto">
-          <table className="data-table w-full whitespace-nowrap min-w-max">
+          <table className="line-item-table w-full whitespace-nowrap min-w-max">
             <thead>
               <tr>
                 {showLineNumber && <th className="w-12 min-w-[48px] text-center">#</th>}
@@ -321,7 +321,7 @@ export function PurchaseQuoteForm({
             </thead>
             <tbody>
               {fields.map((field, index) => (
-                <tr key={field.id} className="hover:bg-transparent!">
+                <tr key={field.id} >
                   {showLineNumber && <td className="py-2 text-center text-muted-foreground">{index + 1}</td>}
                   <td>
                     <select
@@ -341,14 +341,14 @@ export function PurchaseQuoteForm({
                     </select>
                   </td>
                   {showDescription && (
-                    <td className="py-2">
+                    <td className="align-top">
                       <Input aria-label={`Line ${index + 1} description`} {...register(`lines.${index}.description`)} />
                       {errors.lines?.[index]?.description && (
                         <p className="field-error">{errors.lines[index]?.description?.message}</p>
                       )}
                     </td>
                   )}
-                  <td className="py-2">
+                  <td className="align-top">
                     <Input
                       className="money text-right"
                       type="number"
@@ -358,7 +358,7 @@ export function PurchaseQuoteForm({
                       {...register(`lines.${index}.quantity`)}
                     />
                   </td>
-                  <td className="py-2">
+                  <td className="align-top">
                     <Input
                       className="money text-right"
                       type="number"
@@ -369,7 +369,7 @@ export function PurchaseQuoteForm({
                     />
                   </td>
                   {showDiscounts && (
-                    <td className="py-2">
+                    <td className="align-top">
                       <div className="flex gap-1 justify-end">
                         <select
                           aria-label={`Line ${index + 1} discount type`}
@@ -393,7 +393,7 @@ export function PurchaseQuoteForm({
                       </div>
                     </td>
                   )}
-                  <td className="py-2">
+                  <td className="align-top">
                     {lines[index]?.itemId ? (
                       <>
                         <input type="hidden" {...register(`lines.${index}.expenseAccountId`)} />
@@ -415,7 +415,7 @@ export function PurchaseQuoteForm({
                     <input type="hidden" {...register(`lines.${index}.taxCodeId`)} />
                   </td>
                   {showLineProjects && (
-                    <td className="py-2">
+                    <td className="align-top">
                       <select
                         aria-label={`Line ${index + 1} project`}
                         className="flex h-9 w-full items-center justify-between rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-sm ring-offset-background placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-50"

@@ -216,9 +216,9 @@ export function DebitNoteForm({
     ? `/b/${businessId}/purchases/debit-notes/${noteId}`
     : `/b/${businessId}/purchases/debit-notes`;
   return (
-    <form className="space-y-7 max-w-none" noValidate>
+    <form className="space-y-5 max-w-none" noValidate>
       {serverError && <FormError message={serverError} />}
-      <section className="border-b border-border pb-7">
+      <section className="form-section">
         <h2 className="text-base font-semibold">Credit details</h2>
         <p className="mt-1 text-sm text-muted-foreground">
           A posted credit reverses Sales and output VAT while reducing Accounts
@@ -345,7 +345,7 @@ export function DebitNoteForm({
           </div>
         </div>
       </section>
-      <section className="border-b border-border pb-7">
+      <section className="form-section">
         <h2 className="text-base font-semibold">Inherited currency snapshot</h2>
         <p className="mt-1 text-sm text-muted-foreground">
           A Debit Note always uses the linked invoice currency and original
@@ -374,7 +374,7 @@ export function DebitNoteForm({
       </section>
       
       
-      <section>
+      <section className="form-section">
         <div className="mb-3 flex flex-wrap items-end justify-between gap-3">
           <div>
             <h2 className="text-base font-semibold">Credited items</h2>
@@ -423,7 +423,7 @@ export function DebitNoteForm({
           <p className="field-error mb-2">{errors.lines.message}</p>
         )}
         <div className="overflow-x-auto rounded-t-lg border border-border bg-surface-raised">
-          <table className="data-table min-w-max">
+          <table className="line-item-table min-w-max">
             <thead>
               <tr>
                 {showLineNumber && <th className="w-12 text-center text-muted-foreground">#</th>}
@@ -474,14 +474,14 @@ export function DebitNoteForm({
             </thead>
             <tbody>
               {fields.map((field, index) => (
-                <tr key={field.id} className="hover:bg-transparent!">
+                <tr key={field.id} >
                   {showLineNumber && (
                     <td className="py-2 text-center text-muted-foreground">
                       {index + 1}
                     </td>
                   )}
                   {showDescription && (
-                    <td className="py-2">
+                    <td className="align-top">
                       <Input
                         aria-label={`Line ${index + 1} description`}
                         {...register(`lines.${index}.description`)}
@@ -493,7 +493,7 @@ export function DebitNoteForm({
                       )}
                     </td>
                   )}
-                  <td className="py-2">
+                  <td className="align-top">
                     <Input
                       className="money text-right"
                       type="number"
@@ -503,7 +503,7 @@ export function DebitNoteForm({
                       {...register(`lines.${index}.quantity`)}
                     />
                   </td>
-                  <td className="py-2">
+                  <td className="align-top">
                     <Input
                       className="money text-right"
                       type="number"
@@ -514,7 +514,7 @@ export function DebitNoteForm({
                     />
                   </td>
                   {showDiscounts && (
-                    <td className="py-2">
+                    <td className="align-top">
                       <div className="flex rounded-md shadow-sm">
                         <select
                           className="-mr-px rounded-l-md border border-input bg-transparent px-2 text-sm text-muted-foreground focus:ring-1 focus:ring-ring focus:outline-none"
@@ -537,7 +537,7 @@ export function DebitNoteForm({
                       </div>
                     </td>
                   )}
-                  <td className="py-2">
+                  <td className="align-top">
                     <select
                       aria-label={`Line ${index + 1} sales account`}
                       className="flex h-9 w-full items-center justify-between rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-sm ring-offset-background placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
@@ -551,7 +551,7 @@ export function DebitNoteForm({
                       ))}
                     </select>
                   </td>
-                  <td className="py-2">
+                  <td className="align-top">
                     <select
                       aria-label={`Line ${index + 1} tax code`}
                       className="flex h-9 w-full items-center justify-between rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-sm ring-offset-background placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
@@ -565,7 +565,7 @@ export function DebitNoteForm({
                     </select>
                   </td>
                   {showLineProjects && (
-                    <td className="py-2">
+                    <td className="align-top">
                       <select
                         aria-label={`Line ${index + 1} project`}
                         className="flex h-9 w-full items-center justify-between rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-sm ring-offset-background placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-50"

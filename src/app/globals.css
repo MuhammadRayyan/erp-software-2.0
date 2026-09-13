@@ -146,3 +146,100 @@ button, a { -webkit-tap-highlight-color: transparent; }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { scroll-behavior: auto !important; transition-duration: 0.01ms !important; animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; }
 }
+
+.form-section {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface-raised);
+  padding: 24px 28px;
+}
+
+input[aria-invalid="true"], select[aria-invalid="true"] {
+  border-color: var(--danger) !important;
+}
+input[aria-invalid="true"]:focus, select[aria-invalid="true"]:focus {
+  --ring-color: color-mix(in srgb, var(--danger) 25%, transparent) !important;
+  box-shadow: 0 0 0 2px var(--ring-color) !important;
+}
+
+.line-item-row {
+  transition: box-shadow 150ms ease, border-color 150ms ease, transform 150ms ease;
+  position: relative;
+  z-index: 1;
+}
+.line-item-row:hover {
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+  border-color: var(--border-strong);
+  z-index: 10;
+}
+.dark .line-item-row:hover {
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+}
+
+.dashed-add-button {
+  width: 100%;
+  border: 1px dashed var(--border-strong);
+  background: transparent;
+  color: var(--muted-foreground);
+  transition: all 150ms ease;
+  border-radius: 8px;
+  height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  font-size: 13.5px;
+  font-weight: 500;
+}
+.dashed-add-button:hover {
+  border-color: var(--primary);
+  color: var(--primary);
+  background: color-mix(in srgb, var(--primary) 5%, transparent);
+}
+
+
+.line-item-table {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0 8px;
+  font-size: 13.5px;
+}
+.line-item-table th {
+  font-weight: 600;
+  color: var(--muted-foreground);
+  text-align: left;
+  padding: 0 12px 0px;
+  white-space: nowrap;
+  border: none;
+  background: transparent;
+  font-size: 12px;
+}
+.line-item-table td {
+  background: var(--surface-raised);
+  padding: 12px;
+  border-top: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+  vertical-align: top;
+}
+.line-item-table td:first-child {
+  border-left: 1px solid var(--border);
+  border-top-left-radius: 10px;
+  border-bottom-left-radius: 10px;
+}
+.line-item-table td:last-child {
+  border-right: 1px solid var(--border);
+  border-top-right-radius: 10px;
+  border-bottom-right-radius: 10px;
+}
+.line-item-table tbody tr {
+  box-shadow: 0 1px 2px rgba(0,0,0,0.02);
+  transition: all 150ms ease;
+}
+.line-item-table tbody tr:hover {
+  box-shadow: 0 6px 16px rgba(0,0,0,0.06);
+  transform: translateY(-1px);
+}
+.dark .line-item-table tbody tr:hover {
+  box-shadow: 0 6px 16px rgba(0,0,0,0.25);
+}
+

@@ -99,8 +99,8 @@ export default async function DebitNoteViewPage({
         </section>
       )}
 
-      <article className="rounded-lg border border-border bg-surface-raised p-5 sm:p-7">
-        <div className="grid gap-6 border-b border-border pb-6 sm:grid-cols-2">
+      <article className="rounded-xl border border-border bg-surface-raised shadow-sm p-5 sm:p-7 dark:shadow-none">
+        <div className="grid gap-6 border-b border-border pb-6 sm:grid-cols-2 -mx-5 -mt-5 bg-surface-muted/30 p-5 sm:-mx-7 sm:-mt-7 sm:p-7 rounded-t-xl">
           <div>
             <p className="text-xs font-semibold tracking-[0.08em] text-muted-foreground uppercase">Supplier</p>
             <p className="mt-2 font-semibold">{note.supplierName}</p>
