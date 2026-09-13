@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { asc, eq } from "drizzle-orm";
 import { getBusinessDb } from "@/core/db/business";
 import { customers, salesCreditNoteLines, salesCreditNotes, salesInvoices } from "@/core/db/business-schema";
-import { addMinor, calculateTax, multiplyMoneyByQuantity, parseQuantityToMicros, quantityMicrosToInput } from "@/modules/accounting/calculations/money";
+import {     quantityMicrosToInput } from "@/modules/accounting/calculations/money";
 import { postCreditNote } from "@/modules/accounting/services/credit-note-posting-service";
 import { allocateNumber } from "@/modules/accounting/services/numbering-service";
 import { reverseTransaction } from "@/modules/accounting/services/posting-service";
@@ -10,7 +10,7 @@ import { effectiveProjectId, validateProjectReferences } from "@/modules/project
 import { replaceTaxEntries, reverseTaxEntries } from "@/modules/tax/tax-entry-service";
 import { assertVatDateUnlocked, assertVatSourceUnlocked } from "@/modules/tax/tax-lock-service";
 import { creditNoteInputSchema, type CreditNoteInput } from "./credit-note-input";
-import { convertDocumentLinesToBase, minorToCurrencyInput, parseCurrencyAmountToMinor, proportionalCarryingRelease } from "@/modules/currency/conversion";
+import { convertDocumentLinesToBase, minorToCurrencyInput,  proportionalCarryingRelease } from "@/modules/currency/conversion";
 import { storedRateSnapshot } from "@/modules/currency/validation";
 import { calculateLines, totalsForLines, type StoredLine } from "@/modules/accounting/services/document-line-calculator";
 

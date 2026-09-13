@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { asc, eq } from "drizzle-orm";
 import { getBusinessDb } from "@/core/db/business";
 import { purchaseInvoiceLines, purchaseInvoices, suppliers } from "@/core/db/business-schema";
-import { addMinor, calculateTax, multiplyMoneyByQuantity, parseQuantityToMicros, quantityMicrosToInput } from "@/modules/accounting/calculations/money";
+import {     quantityMicrosToInput } from "@/modules/accounting/calculations/money";
 import { allocateNumber } from "@/modules/accounting/services/numbering-service";
 import { postPurchaseInvoice } from "@/modules/accounting/services/purchase-invoice-posting-service";
 import { reverseTransaction } from "@/modules/accounting/services/posting-service";
@@ -10,7 +10,7 @@ import { effectiveProjectId, validateProjectReferences } from "@/modules/project
 import { replaceTaxEntries, reverseTaxEntries } from "@/modules/tax/tax-entry-service";
 import { assertVatDateUnlocked, assertVatSourceUnlocked } from "@/modules/tax/tax-lock-service";
 import { purchaseInvoiceInputSchema, type PurchaseInvoiceInput } from "./purchase-invoice-input";
-import { convertDocumentLinesToBase, minorToCurrencyInput, parseCurrencyAmountToMinor } from "@/modules/currency/conversion";
+import { convertDocumentLinesToBase, minorToCurrencyInput} from "@/modules/currency/conversion";
 import { getCurrency } from "@/modules/currency/currency";
 import { resolveRateSnapshot } from "@/modules/currency/validation";
 import { calculateLines, totalsForLines, type StoredLine } from "@/modules/accounting/services/document-line-calculator";

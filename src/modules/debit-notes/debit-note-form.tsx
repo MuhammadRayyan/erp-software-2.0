@@ -3,7 +3,7 @@ import { useRouter } from "next/navigation";
 import { FormError } from "@/components/form-error";
 import { useMemo, useState } from "react";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { Columns3, LoaderCircle, Plus, Trash2 } from "lucide-react";
+import { LoaderCircle, Plus, Trash2 } from "lucide-react";
 import { useFieldArray, useForm, useWatch } from "react-hook-form";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -189,11 +189,7 @@ export function DebitNoteForm({
   const subtotalMinor = previews.reduce((sum, row) => sum + row.netMinor, 0);
   const taxMinor = previews.reduce((sum, row) => sum + row.taxMinor, 0);
   const defaultSales = salesAccounts[0]?.id ?? "";
-  const defaultTax =
-    taxCodes.find((item) => item.rateBasisPoints === 500)?.id ??
-    taxCodes[0]?.id ??
-    "";
-  
+    
   function updateGlobalTax(newTaxId: string) {
     setGlobalTaxCodeId(newTaxId);
     lines.forEach((_, i) => form.setValue(`lines.${i}.taxCodeId`, newTaxId));
