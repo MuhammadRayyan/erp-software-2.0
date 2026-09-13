@@ -9,6 +9,11 @@ export function ClassicDocumentTemplate({ data, settings, variant }: { data: Doc
   return (
     <Document>
       <Page size="A4" style={[styles.page, { fontFamily: settings.fontName }]}>
+        {data.status === "superseded" && (
+          <View style={{ position: "absolute", top: 250, left: 100, opacity: 0.1, transform: "rotate(-45deg)" }}>
+            <Text style={{ fontSize: 100, fontWeight: "heavy", color: "red" }}>SUPERSEDED</Text>
+          </View>
+        )}
         {settings.headerImageUrl && <Image src={settings.headerImageUrl} style={{ width: "100%", height: "auto", marginBottom: 20 }} />}
         <View style={styles.header}>
           <View style={{ flex: 1 }}>

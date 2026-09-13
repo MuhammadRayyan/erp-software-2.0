@@ -9,9 +9,9 @@ import Handlebars from "handlebars";
  */
 export async function renderHtmlTemplate(
   htmlTemplate: string,
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+   
   data: any,
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+   
   settings: any
 ): Promise<Buffer> {
   const template = Handlebars.compile(htmlTemplate);

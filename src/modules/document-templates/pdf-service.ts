@@ -1,4 +1,4 @@
-﻿import { formatDate, formatMoney } from "@/core/format";
+import { formatDate, formatMoney } from "@/core/format";
 import { quantityMicrosToInput } from "@/modules/accounting/calculations/money";
 import { renderDocumentPdf } from "@/modules/document-templates/template-registry";
 import { getPurchaseInvoice } from "@/modules/purchase-invoices/purchase-invoice-service";
@@ -28,6 +28,7 @@ export async function generateDocumentPdf(
   let partyName = "";
   let dateLabel = "";
   let dueLabel = "";
+  let status: string | undefined = undefined;
   let subtotalMinor = 0;
   let taxMinor = 0;
   let totalMinor = 0;
@@ -87,6 +88,7 @@ export async function generateDocumentPdf(
     currency = record.order.currencyCode;
     title = "PURCHASE ORDER";
     number = record.order.orderNumber;
+    status = (record.order as any).documentStatus;
     partyLabel = "SUPPLIER";
     partyName = record.supplier.name;
     dateLabel = formatDate((record.order as any).date || (record.order as any).orderDate);
@@ -133,6 +135,7 @@ export async function generateDocumentPdf(
     currency = record.quote.currencyCode;
     title = "SALES QUOTE";
     number = record.quote.quoteNumber;
+    status = (record.quote as any).documentStatus;
     partyName = record.customer.name;
     dateLabel = formatDate(record.quote.quoteDate);
     dueLabel = record.quote.expiryDate ? `Expiry Date: ${formatDate(record.quote.expiryDate)}` : "-";
@@ -155,6 +158,7 @@ export async function generateDocumentPdf(
     currency = record.order.currencyCode;
     title = "SALES ORDER";
     number = record.order.orderNumber;
+    status = (record.order as any).documentStatus;
     partyName = record.customer.name;
     dateLabel = formatDate(record.order.orderDate);
     dueLabel = record.order.deliveryDate ? `Delivery Date: ${formatDate(record.order.deliveryDate)}` : "-";
@@ -177,6 +181,7 @@ export async function generateDocumentPdf(
     currency = record.quote.currencyCode;
     title = "PURCHASE QUOTE";
     number = record.quote.quoteNumber;
+    status = (record.quote as any).documentStatus;
     partyLabel = "SUPPLIER";
     partyName = record.supplier.name;
     dateLabel = formatDate(record.quote.quoteDate);
@@ -247,6 +252,7 @@ export async function generateDocumentPdf(
     tax: formatMoney(taxMinor, currency),
     total: formatMoney(totalMinor, currency),
     customFields: customFields.length ? customFields : undefined,
+    status,
   };
 
   const pdf = await renderDocumentPdf(businessId, userId, documentType, data);
