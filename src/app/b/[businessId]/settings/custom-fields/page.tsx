@@ -10,7 +10,7 @@ export default async function CustomFieldsPage({ params }: { params: Promise<{ b
   const { user } = await requireModule(businessId, "settings");
   const definitions = listCustomFieldDefinitions(businessId, user.id);
   return (
-    <SettingsShell businessId={businessId} title="Custom Fields" description="Add extra fields to customers, suppliers, and sales invoices.">
+    <SettingsShell businessId={businessId} title="Custom Fields" description="Add extra fields to customers, suppliers, sales invoices, sales quotes, sales orders, purchase quotes, and purchase orders.">
       <CustomFieldsManager businessId={businessId} definitions={definitions} />
     </SettingsShell>
   );
