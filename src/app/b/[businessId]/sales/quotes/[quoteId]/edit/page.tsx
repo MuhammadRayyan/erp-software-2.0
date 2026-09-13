@@ -1,4 +1,3 @@
-// @ts-nocheck
 import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
 import { notFound } from "next/navigation";
@@ -21,8 +20,8 @@ export default async function EditQuotePage({ params }: { params: Promise<{ busi
   const { user, access } = await requireModule(businessId, "sales");
   const record = getSalesQuote(businessId, user.id, quoteId);
   if (!record) notFound();
-  if (record.quote.documentStatus === "void") {
-    return <div className="page-container"><h1 className="page-title">Void quote</h1><p className="page-description">Void quotes are retained for history and cannot be edited.</p><Button asChild className="mt-5"><Link href={`/b/${businessId}/sales/quotes/${quoteId}`}>Return to quote</Link></Button></div>;
+  if (record.quote.documentStatus === "cancelled") {
+    return <div className="page-container"><h1 className="page-title">Cancelled quote</h1><p className="page-description">Cancelled quotes are retained for history and cannot be edited.</p><Button asChild className="mt-5"><Link href={`/b/${businessId}/sales/quotes/${quoteId}`}>Return to quote</Link></Button></div>;
   }
   const customers = listCustomers(businessId, user.id);
   const salesAccounts = getSalesAccountOptions(businessId, user.id);
@@ -37,7 +36,7 @@ export default async function EditQuotePage({ params }: { params: Promise<{ busi
     : {};
   return <div className="page-container">
     <Link href={`/b/${businessId}/sales/quotes/${quoteId}`} className="mb-5 inline-flex items-center gap-1.5 text-[13px] text-muted-foreground hover:text-foreground"><ArrowLeft className="size-4" /> {record.quote.quoteNumber}</Link>
-    <div className="mb-7"><h1 className="page-title">Edit Sales Quote</h1><p className="page-description">{record.quote.documentStatus === "posted" ? "Financial changes rebuild the journal atomically." : "Update the draft, or post it when ready."}</p></div>
+    <div className="mb-7"><h1 className="page-title">Edit Sales Quote</h1><p className="page-description">{["sent", "accepted"].includes(record.quote.documentStatus) ? "Changes will be saved as a new revision." : "Update the draft, or issue it when ready."}</p></div>
     <SalesQuoteForm
       businessId={businessId}
       quoteId={quoteId}

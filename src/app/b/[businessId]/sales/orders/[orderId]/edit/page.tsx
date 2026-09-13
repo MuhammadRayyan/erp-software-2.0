@@ -1,4 +1,3 @@
-// @ts-nocheck
 import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
 import { notFound } from "next/navigation";
@@ -21,8 +20,8 @@ export default async function EditOrderPage({ params }: { params: Promise<{ busi
   const { user, access } = await requireModule(businessId, "sales");
   const record = getSalesOrder(businessId, user.id, orderId);
   if (!record) notFound();
-  if (record.order.documentStatus === "void") {
-    return <div className="page-container"><h1 className="page-title">Void order</h1><p className="page-description">Void orders are retained for history and cannot be edited.</p><Button asChild className="mt-5"><Link href={`/b/${businessId}/sales/orders/${orderId}`}>Return to order</Link></Button></div>;
+  if (record.order.documentStatus === "cancelled") {
+    return <div className="page-container"><h1 className="page-title">Cancelled order</h1><p className="page-description">Cancelled orders are retained for history and cannot be edited.</p><Button asChild className="mt-5"><Link href={`/b/${businessId}/sales/orders/${orderId}`}>Return to order</Link></Button></div>;
   }
   const customers = listCustomers(businessId, user.id);
   const salesAccounts = getSalesAccountOptions(businessId, user.id);
@@ -31,21 +30,16 @@ export default async function EditOrderPage({ params }: { params: Promise<{ busi
   const items = listInventoryItemOptions(businessId, user.id);
   const currencySettings = getCurrencySettings(businessId, user.id);
   const documentMinorUnit = currencySettings.currencies.find((entry) => entry.code === record.order.currencyCode)?.minor_unit ?? 2;
-  const customFields = listCustomFieldDefinitions(businessId, user.id, "sales_order").map(({ id, name, fieldType, selectOptions, isRequired }) => ({ id, name, fieldType, selectOptions, isRequired }));
-  const customFieldValues = customFields.length
-    ? getCustomFieldValuesForEntities(businessId, user.id, "sales_order", [orderId]).get(orderId) ?? {}
-    : {};
+
   return <div className="page-container">
     <Link href={`/b/${businessId}/sales/orders/${orderId}`} className="mb-5 inline-flex items-center gap-1.5 text-[13px] text-muted-foreground hover:text-foreground"><ArrowLeft className="size-4" /> {record.order.orderNumber}</Link>
-    <div className="mb-7"><h1 className="page-title">Edit Sales Order</h1><p className="page-description">{record.order.documentStatus === "posted" ? "Financial changes rebuild the journal atomically." : "Update the draft, or post it when ready."}</p></div>
+    <div className="mb-7"><h1 className="page-title">Edit Sales Order</h1><p className="page-description">{record.order.documentStatus === "completed" ? "Changes will be saved as a new revision." : "Update the draft, or issue it when ready."}</p></div>
     <SalesOrderForm
       businessId={businessId}
       orderId={orderId}
-      documentStatus={record.order.documentStatus}
-      customFields={customFields}
-      customFieldValues={customFieldValues}
+      status={record.order.documentStatus}
       customers={customers.map(({ id, name, defaultCurrencyCode }) => ({ id, name, defaultCurrencyCode }))}
-      salesAccounts={salesAccounts.map(({ id, code, name }) => ({ id, code, name }))}
+      expenseAccounts={salesAccounts.map(({ id, code, name }) => ({ id, code, name }))}
       taxCodes={taxCodes.map(({ id, name, rateBasisPoints }) => ({ id, name, rateBasisPoints }))}
       projects={projects.map((project) => ({ id: project.id, code: project.code, name: project.name, customerId: project.customer_id }))}
       items={items.map(({ id, sku, name, salesPriceMinor, salesAccountId }) => ({ id, sku, name, salesPriceMinor, salesAccountId }))}
@@ -59,10 +53,8 @@ export default async function EditOrderPage({ params }: { params: Promise<{ busi
         exchangeRateSource: record.order.exchangeRateSource as "Base" | "Manual" | "CBUAE",
         customerId: record.order.customerId,
         projectId: record.order.projectId ?? "",
-        orderDate: record.order.orderDate,
-        taxDate: record.order.taxDate,
-        supplyEmirate: record.order.supplyEmirate ?? "",
-        dueDate: record.order.dueDate,
+        date: record.order.orderDate,
+        expectedDate: record.order.deliveryDate ?? "",
         reference: record.order.reference ?? "",
         lines: record.lines.map((line) => ({ itemId: line.itemId ?? "", description: line.description, quantity: quantityMicrosToInput(line.quantityMicros), unitPrice: minorToCurrencyInput(line.unitPriceMinor, documentMinorUnit), salesAccountId: line.salesAccountId, taxCodeId: line.taxCodeId, projectId: line.projectId ?? "" })),
       }}

@@ -73,7 +73,7 @@ export function getSalesOrder(businessId: string, userId: string, orderId: strin
   const lines = context.db.select().from(salesOrderLines).where(eq(salesOrderLines.orderId, orderId)).orderBy(asc(salesOrderLines.position)).all();
   const accounts = context.sqlite.prepare("SELECT id, code, name FROM accounts").all() as { id: string; code: string; name: string }[];
   const taxes = context.sqlite.prepare("SELECT id, name, rate_basis_points FROM tax_codes").all() as { id: string; name: string; rate_basis_points: number }[];
-  const relatedInvoices = context.sqlite.prepare("SELECT id, invoice_number, document_status, total_minor FROM sales_invoices WHERE sales_order_id = ? ORDER BY created_at DESC").all(orderId) as { id: string; invoice_number: string; document_documentStatus: string; total_minor: number }[];
+  const relatedInvoices = context.sqlite.prepare("SELECT id, invoice_number, document_status, total_minor FROM sales_invoices WHERE sales_order_id = ? ORDER BY created_at DESC").all(orderId) as { id: string; invoice_number: string; document_status: string; total_minor: number }[];
   const accountById = new Map(accounts.map((row) => [row.id, row]));
   const taxById = new Map(taxes.map((row) => [row.id, row]));
   const projects = context.sqlite.prepare("SELECT id, code, name FROM projects").all() as { id: string; code: string; name: string }[];
@@ -82,8 +82,8 @@ export function getSalesOrder(businessId: string, userId: string, orderId: strin
   const itemById = new Map(itemRows.map((item) => [item.id, item]));
   const receivedRows = [] as { line_id: string; received_micros: number }[];
   const receivedByLine = new Map(receivedRows.map((row) => [row.line_id, row.received_micros]));
-  const goodsReceipts = [] as { id: string; receipt_number: string; date: string; document_documentStatus: string }[];
-  return { ...header, project: header.order.projectId ? projectById.get(header.order.projectId) ?? null : null, lines: lines.map((line) => ({ ...line, item: line.itemId ? itemById.get(line.itemId) ?? null : null, receivedMicros: receivedByLine.get(line.id) ?? 0, remainingMicros: Math.max(0, line.quantityMicros - (receivedByLine.get(line.id) ?? 0)), salesAccount: line.salesAccountId ? accountById.get(line.salesAccountId) ?? null : null, taxCode: taxById.get(line.taxCodeId) ?? null, project: effectiveProjectId(line.projectId, header.order.projectId) ? projectById.get(effectiveProjectId(line.projectId, header.order.projectId)!) ?? null : null })),  };
+  const goodsReceipts = [] as { id: string; receipt_number: string; date: string; document_status: string }[];
+  return { ...header, project: header.order.projectId ? projectById.get(header.order.projectId) ?? null : null, lines: lines.map((line) => ({ ...line, item: line.itemId ? itemById.get(line.itemId) ?? null : null, receivedMicros: receivedByLine.get(line.id) ?? 0, remainingMicros: Math.max(0, line.quantityMicros - (receivedByLine.get(line.id) ?? 0)), salesAccount: line.salesAccountId ? accountById.get(line.salesAccountId) ?? null : null, taxCode: taxById.get(line.taxCodeId) ?? null, project: effectiveProjectId(line.projectId, header.order.projectId) ? projectById.get(effectiveProjectId(line.projectId, header.order.projectId)!) ?? null : null })), relatedInvoices, goodsReceipts };
 }
 
 export function saveSalesOrder(businessId: string, userId: string, input: SalesOrderInput, intent: SalesOrderIntent, orderId?: string) {
