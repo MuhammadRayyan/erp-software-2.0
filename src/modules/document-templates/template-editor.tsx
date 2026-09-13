@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useState } from "react";
@@ -10,12 +11,25 @@ import { saveTemplateSettingsAction } from "./actions";
 import type { TemplateSettings } from "./template-settings";
 import { SelectNative } from "@/components/ui/select-native";
 
+const TYPE_LABELS: Record<string, string> = {
+  "sales-invoice": "sales invoice",
+  "sales-quote": "sales quote",
+  "sales-order": "sales order",
+  "sales-credit-note": "credit note",
+  "purchase-quote": "purchase quote",
+  "purchase-order": "purchase order",
+  "purchase-invoice": "purchase invoice",
+  "debit-note": "debit note",
+  "goods-receipt": "goods receipt",
+  "delivery-note": "delivery note",
+};
 
 export function TemplateEditor({ businessId, documentType, initialSettings }: { businessId: string; documentType: string; initialSettings: TemplateSettings }) {
   const [settings, setSettings] = useState<TemplateSettings>(initialSettings);
-
   const [saving, setSaving] = useState(false);
   const [previewing, setPreviewing] = useState(false);
+
+  const typeLabel = TYPE_LABELS[documentType] || "document";
 
   const handleImageUpload = (key: keyof TemplateSettings) => (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -27,7 +41,6 @@ export function TemplateEditor({ businessId, documentType, initialSettings }: { 
     reader.readAsDataURL(file);
   };
 
-
   const update = (key: keyof TemplateSettings, value: unknown) => {
     setSettings((prev) => ({ ...prev, [key]: value as never }));
   };
@@ -37,7 +50,7 @@ export function TemplateEditor({ businessId, documentType, initialSettings }: { 
     const result = await saveTemplateSettingsAction(businessId, documentType, settings);
     setSaving(false);
     if (result.error) toast.error(result.error);
-    else toast.success("Template settings saved");
+    else toast.success(`Template settings saved for ${typeLabel}`);
   }
 
   async function preview() {
@@ -59,7 +72,7 @@ export function TemplateEditor({ businessId, documentType, initialSettings }: { 
       <div className="space-y-6 lg:col-span-3">
         
         {/* Template choice */}
-        <section className="rounded-lg border border-border bg-surface-raised p-5">
+        <section className="form-section">
           <h2 className="text-base font-semibold">Engine</h2>
           <div className="mt-4 grid gap-4 sm:grid-cols-2">
             {(["modern", "classic", "custom-html"] as const).map((type) => (
@@ -86,7 +99,7 @@ export function TemplateEditor({ businessId, documentType, initialSettings }: { 
 
         {/* Branding (for modern/classic) */}
         {settings.templateType !== "custom-html" && (
-          <section className="rounded-lg border border-border bg-surface-raised p-5">
+          <section className="form-section">
             <h2 className="text-base font-semibold">Branding</h2>
             <div className="mt-4 grid gap-4 sm:grid-cols-2">
               <div className="space-y-1.5">
@@ -110,7 +123,6 @@ export function TemplateEditor({ businessId, documentType, initialSettings }: { 
                 <Label htmlFor="fontName">Font</Label>
                 <SelectNative
                   id="fontName"
-                  
                   value={settings.fontName}
                   onChange={(e) => update("fontName", e.target.value as TemplateSettings["fontName"])}
                 >
@@ -185,8 +197,8 @@ export function TemplateEditor({ businessId, documentType, initialSettings }: { 
 
         {/* Field toggles (for modern/classic) */}
         {settings.templateType !== "custom-html" && (
-          <section className="rounded-lg border border-border bg-surface-raised p-5">
-            <h2 className="text-base font-semibold">Show on invoice</h2>
+          <section className="form-section">
+            <h2 className="text-base font-semibold">Show on {typeLabel}</h2>
             <div className="mt-4 grid gap-3 sm:grid-cols-2">
               <label className="flex items-center gap-2 text-sm">
                 <input
@@ -204,7 +216,7 @@ export function TemplateEditor({ businessId, documentType, initialSettings }: { 
                   onChange={(e) => update("showCustomerTrn", e.target.checked)}
                   className="size-4 accent-[var(--primary)]"
                 />
-                Customer TRN
+                Client/Supplier TRN
               </label>
               <label className="flex items-center gap-2 text-sm">
                 <input
@@ -231,7 +243,7 @@ export function TemplateEditor({ businessId, documentType, initialSettings }: { 
                   onChange={(e) => update("showCustomFields", e.target.checked)}
                   className="size-4 accent-[var(--primary)]"
                 />
-                Custom fields (sales invoices)
+                Custom fields
               </label>
             </div>
           </section>
@@ -239,18 +251,18 @@ export function TemplateEditor({ businessId, documentType, initialSettings }: { 
 
         {/* Custom HTML editor */}
         {settings.templateType === "custom-html" && (
-          <section className="rounded-lg border border-border bg-surface-raised p-5">
+          <section className="form-section">
             <h2 className="text-base font-semibold">Custom HTML template</h2>
             <p className="mt-1 text-sm text-muted-foreground">
-              Write HTML with Handlebars variables. Use <code className="rounded bg-surface-muted px-1">{"{{invoice.invoiceNumber}}"}</code>,{" "}
-              <code className="rounded bg-surface-muted px-1">{"{{customer.name}}"}</code>,{" "}
+              Write HTML with Handlebars variables. The structure uses standardized keys: <code className="rounded bg-surface-muted px-1">{"{{invoiceNumber}}"}</code>,{" "}
+              <code className="rounded bg-surface-muted px-1">{"{{customerName}}"}</code>,{" "}
               <code className="rounded bg-surface-muted px-1">{"{{#each lines}}"}</code>.
             </p>
             <textarea
               value={settings.customHtml}
               onChange={(e) => update("customHtml", e.target.value)}
               className="mt-4 h-96 w-full rounded-md border border-border-strong bg-surface p-3 font-mono text-xs"
-              placeholder={`<!DOCTYPE html>\n<html>\n<head>\n  <style>\n    body { font-family: sans-serif; padding: 40px; }\n    table { width: 100%; border-collapse: collapse; }\n    th, td { padding: 8px; border-bottom: 1px solid #ddd; text-align: left; }\n  </style>\n</head>\n<body>\n  <h1>INVOICE {{invoice.invoiceNumber}}</h1>\n  <p>{{customer.name}}</p>\n  <table>\n    <thead><tr><th>Description</th><th>Qty</th><th>Rate</th><th>Amount</th></tr></thead>\n    <tbody>\n      {{#each lines}}\n      <tr><td>{{description}}</td><td>{{quantity}}</td><td>{{unitPrice}}</td><td>{{amount}}</td></tr>\n      {{/each}}\n    </tbody>\n  </table>\n</body>\n</html>`}
+              placeholder={`<!DOCTYPE html>\n<html>\n<head>\n  <style>\n    body { font-family: sans-serif; padding: 40px; }\n    table { width: 100%; border-collapse: collapse; }\n    th, td { padding: 8px; border-bottom: 1px solid #ddd; text-align: left; }\n  </style>\n</head>\n<body>\n  <h1>{{invoiceTitle}} {{invoiceNumber}}</h1>\n  <p>{{customerLabel}}: {{customerName}}</p>\n  <table>\n    <thead><tr><th>Description</th><th>Qty</th><th>Rate</th><th>Amount</th></tr></thead>\n    <tbody>\n      {{#each lines}}\n      <tr><td>{{description}}</td><td>{{quantity}}</td><td>{{unitPrice}}</td><td>{{amount}}</td></tr>\n      {{/each}}\n    </tbody>\n  </table>\n</body>\n</html>`}
             />
           </section>
         )}
@@ -273,7 +285,7 @@ export function TemplateEditor({ businessId, documentType, initialSettings }: { 
         <div className="rounded-lg border border-info/20 bg-info/5 p-4 text-sm">
           <p className="font-medium">Template settings</p>
           <p className="mt-1 text-muted-foreground">
-            Changes apply to all sales invoice PDFs in this business. Click &quot;Live Preview&quot; to see the result with sample data.
+            Changes apply to all {typeLabel} PDFs in this business. Click &quot;Live Preview&quot; to see the result with sample data.
           </p>
         </div>
         {settings.templateType === "custom-html" && (
@@ -281,7 +293,7 @@ export function TemplateEditor({ businessId, documentType, initialSettings }: { 
             <p className="font-medium">Custom HTML notes</p>
             <ul className="mt-2 list-disc space-y-1 pl-4 text-muted-foreground">
               <li>HTML is rendered server-side via a headless browser.</li>
-              <li>Available variables: invoice, customer, lines, settings.</li>
+              <li>Available variables: invoiceTitle, invoiceNumber, customerLabel, customerName, lines, subtotal, tax, total.</li>
               <li>Use <code>{"{{#each lines}}"}</code> for line items.</li>
               <li>Keep CSS inline or in a <code>{"<style>"}</code> tag.</li>
             </ul>
@@ -291,3 +303,4 @@ export function TemplateEditor({ businessId, documentType, initialSettings }: { 
     </div>
   );
 }
+

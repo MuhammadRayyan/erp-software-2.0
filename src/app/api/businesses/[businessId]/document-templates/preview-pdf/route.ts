@@ -1,7 +1,8 @@
+
 import { NextResponse } from "next/server";
 import { requireApiAuth } from "@/core/auth/api-auth";
 import { renderDocumentPdf } from "@/modules/document-templates/template-registry";
-import type { InvoiceTemplateData } from "@/modules/document-templates/react-pdf/invoice-template";
+import type { DocumentTemplateData } from "@/modules/document-templates/react-pdf/modern-document-template";
 
 export const runtime = "nodejs";
 
@@ -29,12 +30,27 @@ export async function GET(
       "goods-receipt": "GOODS RECEIPT",
       "delivery-note": "DELIVERY NOTE"
     };
+    
+    const partyLabelMap: Record<string, string> = {
+      "sales-invoice": "BILL TO",
+      "sales-quote": "QUOTE FOR",
+      "sales-order": "ORDER FOR",
+      "sales-credit-note": "CREDIT TO",
+      "purchase-quote": "SUPPLIER",
+      "purchase-order": "SUPPLIER",
+      "purchase-invoice": "SUPPLIER",
+      "debit-note": "SUPPLIER",
+      "goods-receipt": "SUPPLIER",
+      "delivery-note": "DELIVER TO"
+    };
 
     const title = titleMap[documentType] || "DOCUMENT";
+    const partyLabel = partyLabelMap[documentType] || "BILL TO";
 
-    const sampleData: InvoiceTemplateData & { invoiceTitle: string } = {
+    const sampleData: DocumentTemplateData & { invoiceTitle: string; customerLabel: string } = {
       companyName: "Acme Corporation",
       invoiceTitle: title,
+      customerLabel: partyLabel,
       invoiceNumber: "DOC-2026-0001",
       invoiceDate: "Aug 16, 2026",
       dueDate: "Sep 15, 2026",
@@ -42,7 +58,7 @@ export async function GET(
       customerAddress: "123 Main St, Springfield",
       customerTrn: "1234567890",
       lines: [
-        { description: "Software Development Services (August)", quantity: "1", unitPrice: "$5,000.00", amount: "$5,000.00" },
+        { description: "Software Development Services", quantity: "1", unitPrice: "$5,000.00", amount: "$5,000.00" },
         { description: "Server Hosting", quantity: "1", unitPrice: "$250.00", amount: "$250.00" },
         { description: "Consulting (Hourly)", quantity: "10", unitPrice: "$150.00", amount: "$1,500.00" },
       ],
@@ -57,7 +73,7 @@ export async function GET(
       status: 200,
       headers: {
         "Content-Type": "application/pdf",
-        "Content-Disposition": 'inline; filename="preview.pdf"',
+        "Content-Disposition": `inline; filename="preview.pdf"`,
         "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0",
       },
     });
@@ -66,3 +82,5 @@ export async function GET(
     return new NextResponse("Internal Server Error", { status: 500 });
   }
 }
+
+
