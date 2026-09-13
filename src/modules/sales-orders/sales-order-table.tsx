@@ -17,6 +17,8 @@ import { useColumns } from "@/components/columns-dropdown";
 import { DataTable } from "@/components/ui/data-table";
 import { formatDate, formatMoney } from "@/core/format";
 import type { SalesOrderStatus } from "./sales-order-service";
+import { DensityToggle } from "@/components/density-toggle";
+import { useTableDensity } from "@/components/use-table-density";
 
 type Row = {
   id: string;
@@ -49,6 +51,8 @@ export function SalesOrderTable({
   orders: Omit<Row, "businessId">[];
   serverSnapshot?: import("@/components/use-column-visibility").ColumnVisibility;
 }) {
+  const { density } = useTableDensity(businessId);
+
   const [query, setQuery] = useState("");
   const [status, setStatus] = useState("");
   const [customerId, setCustomerId] = useState("");
@@ -118,6 +122,7 @@ export function SalesOrderTable({
       {
         accessorKey: "customer_name",
         header: "Customer",
+        meta: { wrap: true },
       },
       {
         accessorKey: "date",
@@ -132,7 +137,7 @@ export function SalesOrderTable({
       {
         accessorKey: "total_minor",
         header: "Total",
-        meta: { className: "text-right" },
+        meta: { numeric: true },
         cell: ({ row }: any) => (
           <span className="money">
             {formatMoney(row.original.total_minor, row.original.currency_code, row.original.currency_minor_unit)}
@@ -211,7 +216,10 @@ export function SalesOrderTable({
             { value: "cancelled", label: "Cancelled" },
           ]}
         />
-        {dropdown}
+        <div className="ml-auto flex items-center gap-2">
+          <DensityToggle businessId={businessId} />
+          {dropdown}
+        </div>
       </ListToolbar>
       {hasActiveFilter && (
         <ListToolbar>
@@ -231,7 +239,9 @@ export function SalesOrderTable({
       )}
       
       <DataTable 
-        table={table} 
+        table={table}
+        density={density}
+        pinFirstColumn 
         minWidth="min-w-[780px]" 
         noResultsMessage="No sales orders match" 
        onClearFilters={clearFilters}

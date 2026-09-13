@@ -18,6 +18,8 @@ import { Input } from "@/components/ui/input";
 import { formatMoney } from "@/core/format";
 import type { ProjectListRow } from "./project-service";
 import { ProjectStatusBadge } from "./project-status";
+import { DensityToggle } from "@/components/density-toggle";
+import { useTableDensity } from "@/components/use-table-density";
 
 const COLUMN_LABELS: Record<string, string> = {
   customerName: "Customer",
@@ -38,6 +40,8 @@ export function ProjectTable({
   projects: ProjectListRow[];
   serverSnapshot?: import("@/components/use-column-visibility").ColumnVisibility;
 }) {
+  const { density } = useTableDensity(businessId);
+
   const [query, setQuery] = useState("");
   const [status, setStatus] = useState("");
   const [customerId, setCustomerId] = useState("");
@@ -90,7 +94,7 @@ export function ProjectTable({
       {
         accessorKey: "revenueMinor",
         header: "Revenue",
-        meta: { className: "text-right" },
+        meta: { numeric: true },
         cell: ({ row }: any) => (
           <span className="money text-right">
             {formatMoney(row.original.revenueMinor, row.original.currency)}
@@ -100,7 +104,7 @@ export function ProjectTable({
       {
         accessorKey: "costMinor",
         header: "Cost",
-        meta: { className: "text-right" },
+        meta: { numeric: true },
         cell: ({ row }: any) => (
           <span className="money text-right">
             {formatMoney(row.original.costMinor, row.original.currency)}
@@ -110,7 +114,7 @@ export function ProjectTable({
       {
         accessorKey: "profitMinor",
         header: "Profit",
-        meta: { className: "text-right" },
+        meta: { numeric: true },
         cell: ({ row }: any) => (
           <span className={`money text-right font-medium ${row.original.profitMinor < 0 ? "text-danger" : ""}`}>
             {formatMoney(row.original.profitMinor, row.original.currency)}
@@ -174,7 +178,10 @@ export function ProjectTable({
       />
       <Input type="date" value={fromDate} onChange={(event) => setFromDate(event.target.value)} aria-label="Project start date from" className="w-38" />
       <Input type="date" value={toDate} onChange={(event) => setToDate(event.target.value)} aria-label="Project target end date to" className="w-38" />
-      {dropdown}
+      <div className="ml-auto flex items-center gap-2">
+          <DensityToggle businessId={businessId} />
+          {dropdown}
+        </div>
     </ListToolbar>
     {hasActiveFilter && (
       <ListToolbar>
@@ -190,7 +197,8 @@ export function ProjectTable({
       </ListToolbar>
     )}
     <DataTable 
-      table={table} 
+      table={table}
+        density={density} 
       minWidth="min-w-[860px]" 
       noResultsMessage="No projects match these filters" 
     />

@@ -17,6 +17,8 @@ import { useColumns } from "@/components/columns-dropdown";
 import { DataTable } from "@/components/ui/data-table";
 import { formatDate, formatMoney } from "@/core/format";
 import type { PurchaseQuoteStatus } from "./purchase-quote-service";
+import { DensityToggle } from "@/components/density-toggle";
+import { useTableDensity } from "@/components/use-table-density";
 
 type Row = {
   id: string;
@@ -51,6 +53,8 @@ export function PurchaseQuoteTable({
   quotes: Omit<Row, "businessId">[];
   serverSnapshot?: import("@/components/use-column-visibility").ColumnVisibility;
 }) {
+  const { density } = useTableDensity(businessId);
+
   const [query, setQuery] = useState("");
   const [status, setStatus] = useState("");
   const [supplierId, setSupplierId] = useState("");
@@ -128,6 +132,7 @@ export function PurchaseQuoteTable({
       {
         accessorKey: "supplier_name",
         header: "Supplier",
+        meta: { wrap: true },
       },
       {
         accessorKey: "date",
@@ -142,7 +147,7 @@ export function PurchaseQuoteTable({
       {
         accessorKey: "total_minor",
         header: "Total",
-        meta: { className: "text-right" },
+        meta: { numeric: true },
         cell: ({ row }: any) => (
           <span className="money">
             {formatMoney(row.original.total_minor, row.original.currency_code, row.original.currency_minor_unit)}
@@ -229,7 +234,10 @@ export function PurchaseQuoteTable({
             { value: "cancelled", label: "Cancelled" },
           ]}
         />
-        {dropdown}
+        <div className="ml-auto flex items-center gap-2">
+          <DensityToggle businessId={businessId} />
+          {dropdown}
+        </div>
       </ListToolbar>
       {hasActiveFilter && (
         <ListToolbar>
@@ -249,6 +257,7 @@ export function PurchaseQuoteTable({
       )}
       <DataTable
         table={table}
+        density={density}
         minWidth="min-w-[780px]"
         noResultsMessage="No purchase quotes match"
        onClearFilters={clearFilters}

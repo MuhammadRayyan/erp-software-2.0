@@ -57,3 +57,8 @@ export function formatRelativeOpened(value: string | null) {
   if (days === 1) return "Last opened yesterday";
   return `Last opened ${days} days ago`;
 }
+
+export const EMPTY_CELL = "�";
+export function formatOptional(value?: string | null): string {
+  return value ?? EMPTY_CELL;
+}

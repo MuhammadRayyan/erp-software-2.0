@@ -16,12 +16,16 @@ import { FilterChip } from "@/components/ui/filter-chip";
 import { useColumns } from "@/components/columns-dropdown";
 import { DataTable } from "@/components/ui/data-table";
 import { formatCustomFieldValue, type CustomFieldColumn } from "@/modules/custom-fields/custom-field-display";
+import { DensityToggle } from "@/components/density-toggle";
+import { useTableDensity } from "@/components/use-table-density";
 
 type CustomerRow = { id: string; name: string; email: string | null; phone: string | null; isActive: boolean; };
 
 const baseColumnLabels: Record<string, string> = { email: "Email", phone: "Phone", status: "Status" };
 
 export function CustomerTable({ businessId, customers, customFields = [], customValues = {}, serverSnapshot }: { businessId: string; customers: CustomerRow[]; customFields?: CustomFieldColumn[]; customValues?: Record<string, Record<string, string>>; serverSnapshot?: import("@/components/use-column-visibility").ColumnVisibility }) {
+  const { density } = useTableDensity(businessId);
+
   const [query, setQuery] = useState("");
   const [activeOnly, setActiveOnly] = useState(false);
   const [sorting, setSorting] = useState<SortingState>([]);
@@ -145,7 +149,10 @@ export function CustomerTable({ businessId, customers, customFields = [], custom
         <Button type="button" variant={activeOnly ? "primary" : "secondary"} onClick={() => setActiveOnly((value) => !value)}>
           <Filter className="size-4" /> Active only
         </Button>
-        {dropdown}
+        <div className="ml-auto flex items-center gap-2">
+          <DensityToggle businessId={businessId} />
+          {dropdown}
+        </div>
       </ListToolbar>
       {(query || activeOnly) && (
         <div className="mb-3">
@@ -153,7 +160,8 @@ export function CustomerTable({ businessId, customers, customFields = [], custom
         </div>
       )}
       <DataTable 
-        table={table} 
+        table={table}
+        density={density} 
         minWidth="min-w-[800px]" 
         noResultsMessage="No customers match these filters"
         noResultsSubtext="Clear the search or active-status filter."

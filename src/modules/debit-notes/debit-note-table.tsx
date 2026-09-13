@@ -17,6 +17,8 @@ import { useColumns } from "@/components/columns-dropdown";
 import { DataTable } from "@/components/ui/data-table";
 import { formatDate, formatMoney } from "@/core/format";
 import type { DebitNoteStatus } from "./debit-note-service";
+import { DensityToggle } from "@/components/density-toggle";
+import { useTableDensity } from "@/components/use-table-density";
 
 type Row = {
   id: string;
@@ -49,6 +51,8 @@ export function DebitNoteTable({
   debitNotes: Omit<Row, "businessId">[];
   serverSnapshot?: import("@/components/use-column-visibility").ColumnVisibility;
 }) {
+  const { density } = useTableDensity(businessId);
+
   const [query, setQuery] = useState("");
   const [status, setStatus] = useState("");
   const [projectId, setProjectId] = useState("");
@@ -100,6 +104,7 @@ export function DebitNoteTable({
       {
         accessorKey: "supplier_name",
         header: "Supplier",
+        meta: { wrap: true },
       },
       {
         accessorKey: "debit_note_date",
@@ -114,7 +119,7 @@ export function DebitNoteTable({
       {
         accessorKey: "total",
         header: "Total",
-        meta: { className: "text-right" },
+        meta: { numeric: true },
         cell: ({ row }: any) => (
           <span className="money">
             {formatMoney(row.original.total_minor, row.original.currency_code, row.original.currency_minor_unit)}
@@ -186,7 +191,10 @@ export function DebitNoteTable({
             { value: "void", label: "Void" },
           ]}
         />
-        {dropdown}
+        <div className="ml-auto flex items-center gap-2">
+          <DensityToggle businessId={businessId} />
+          {dropdown}
+        </div>
       </ListToolbar>
       {hasActiveFilter && (
         <ListToolbar>
@@ -201,7 +209,9 @@ export function DebitNoteTable({
       )}
 
       <DataTable 
-        table={table} 
+        table={table}
+        density={density}
+        pinFirstColumn 
         minWidth="min-w-[760px]" 
         noResultsMessage="No debit notes match" 
        onClearFilters={clearFilters}

@@ -18,6 +18,8 @@ import { useColumns } from "@/components/columns-dropdown";
 import { DataTable } from "@/components/ui/data-table";
 import { formatDate, formatMoney } from "@/core/format";
 import type { PurchaseInvoiceStatus, PurchasePaymentStatus } from "./purchase-invoice-service";
+import { DensityToggle } from "@/components/density-toggle";
+import { useTableDensity } from "@/components/use-table-density";
 
 type Row = {
   id: string;
@@ -63,6 +65,8 @@ export function PurchaseInvoiceTable({
   /** Server-loaded snapshot for the "purchase-invoices" storage key. */
   serverSnapshot?: import("@/components/use-column-visibility").ColumnVisibility;
 }) {
+  const { density } = useTableDensity(businessId);
+
   const [query, setQuery] = useState("");
   const [status, setStatus] = useState("");
   const [supplierId, setSupplierId] = useState("");
@@ -129,6 +133,7 @@ export function PurchaseInvoiceTable({
       {
         accessorKey: "supplier_name",
         header: "Supplier",
+        meta: { wrap: true },
       },
       {
         id: "supplierInvoice",
@@ -152,7 +157,7 @@ export function PurchaseInvoiceTable({
         id: "total",
         accessorFn: (row: any) => row.total_minor,
         header: "Total",
-        meta: { className: "text-right" },
+        meta: { numeric: true },
         cell: ({ row }: any) => (
           <span className="money text-right">
             {formatMoney(row.original.total_minor, row.original.currency_code, row.original.currency_minor_unit)}
@@ -163,7 +168,7 @@ export function PurchaseInvoiceTable({
         id: "balance",
         accessorFn: (row: any) => row.balanceMinor,
         header: "Balance",
-        meta: { className: "text-right" },
+        meta: { numeric: true },
         cell: ({ row }: any) => (
           <span className="money text-right">
             {row.original.document_status === "posted" ? formatMoney(row.original.balanceMinor, row.original.currency_code, row.original.currency_minor_unit) : "—"}
@@ -252,7 +257,10 @@ export function PurchaseInvoiceTable({
             ]},
           ]}
         />
-        {dropdown}
+        <div className="ml-auto flex items-center gap-2">
+          <DensityToggle businessId={businessId} />
+          {dropdown}
+        </div>
       </ListToolbar>
       {hasActiveFilter && (
         <ListToolbar>
@@ -271,7 +279,9 @@ export function PurchaseInvoiceTable({
         </ListToolbar>
       )}
       <DataTable 
-        table={table} 
+        table={table}
+        density={density}
+        pinFirstColumn 
         minWidth="min-w-[640px]" 
         noResultsMessage="No purchase invoices match" 
       />

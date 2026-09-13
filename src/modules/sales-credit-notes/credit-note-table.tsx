@@ -17,6 +17,8 @@ import { useColumns } from "@/components/columns-dropdown";
 import { DataTable } from "@/components/ui/data-table";
 import { formatDate, formatMoney } from "@/core/format";
 import type { CreditNoteStatus } from "./credit-note-service";
+import { DensityToggle } from "@/components/density-toggle";
+import { useTableDensity } from "@/components/use-table-density";
 
 type Row = {
   id: string;
@@ -49,6 +51,8 @@ export function CreditNoteTable({
   creditNotes: Omit<Row, "businessId">[];
   serverSnapshot?: import("@/components/use-column-visibility").ColumnVisibility;
 }) {
+  const { density } = useTableDensity(businessId);
+
   const [query, setQuery] = useState("");
   const [status, setStatus] = useState("");
   const [projectId, setProjectId] = useState("");
@@ -105,6 +109,7 @@ export function CreditNoteTable({
       {
         accessorKey: "customer_name",
         header: "Customer",
+        meta: { wrap: true },
       },
       {
         id: "projectIds",
@@ -151,7 +156,7 @@ export function CreditNoteTable({
       {
         accessorKey: "total_minor",
         header: "Total",
-        meta: { className: "text-right" },
+        meta: { numeric: true },
         cell: ({ row }: any) => (
           <span className="money">
             {formatMoney(row.original.total_minor, row.original.currency_code, row.original.currency_minor_unit)}
@@ -218,7 +223,10 @@ export function CreditNoteTable({
             { value: "void", label: "Void" },
           ]}
         />
-        {dropdown}
+        <div className="ml-auto flex items-center gap-2">
+          <DensityToggle businessId={businessId} />
+          {dropdown}
+        </div>
       </ListToolbar>
       {hasActiveFilter && (
         <ListToolbar>
@@ -233,7 +241,9 @@ export function CreditNoteTable({
       )}
 
       <DataTable 
-        table={table} 
+        table={table}
+        density={density}
+        pinFirstColumn 
         minWidth="min-w-[900px]" 
         noResultsMessage="No credit notes match" 
       />

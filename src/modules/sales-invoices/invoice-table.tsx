@@ -21,6 +21,8 @@ import { formatCustomFieldValue, type CustomFieldColumn } from "@/modules/custom
 import { DocumentStatusBadge, PaymentStatusBadge } from "./invoice-status";
 import type { DocumentStatus, PaymentStatus } from "./invoice-service";
 import type { ColumnVisibility } from "@/components/use-column-visibility";
+import { DensityToggle } from "@/components/density-toggle";
+import { useTableDensity } from "@/components/use-table-density";
 
 export type InvoiceRow = {
   id: string;
@@ -62,6 +64,8 @@ export function InvoiceTable({
   customValues?: Record<string, Record<string, string>>;
   serverSnapshot?: ColumnVisibility;
 }) {
+  const { density } = useTableDensity(businessId);
+
   const [query, setQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
   const [customerFilter, setCustomerFilter] = useState("");
@@ -134,7 +138,7 @@ export function InvoiceTable({
       {
         accessorKey: "totalMinor",
         header: "Total",
-        meta: { className: "text-right" },
+        meta: { numeric: true },
         cell: ({ row }: any) => (
           <span className="money">
             {formatMoney(row.original.totalMinor, row.original.currencyCode, row.original.currencyMinorUnit)}
@@ -144,7 +148,7 @@ export function InvoiceTable({
       {
         accessorKey: "balanceMinor",
         header: "Balance",
-        meta: { className: "text-right" },
+        meta: { numeric: true },
         cell: ({ row }: any) => (
           <span className="money">
             {row.original.documentStatus === "posted" ? formatMoney(row.original.balanceMinor, row.original.currencyCode, row.original.currencyMinorUnit) : "—"}
@@ -227,7 +231,10 @@ export function InvoiceTable({
         </DropdownMenuContent>
       </DropdownMenu>
 
-      {dropdown}
+      <div className="ml-auto flex items-center gap-2">
+          <DensityToggle businessId={businessId} />
+          {dropdown}
+        </div>
     </ListToolbar>
     
     {hasActiveFilter && <ListToolbar>
@@ -240,7 +247,9 @@ export function InvoiceTable({
     </ListToolbar>}
     
     <DataTable 
-      table={table} 
+      table={table}
+        density={density}
+        pinFirstColumn 
       minWidth="min-w-[1100px]" 
       noResultsMessage="No invoices match these filters"
       noResultsSubtext="Try a different invoice number, customer, date range, or status."

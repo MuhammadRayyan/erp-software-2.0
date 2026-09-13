@@ -18,6 +18,8 @@ import { FilterChip } from "@/components/ui/filter-chip";
 import { DataTable } from "@/components/ui/data-table";
 import { formatCustomFieldValue, type CustomFieldColumn } from "@/modules/custom-fields/custom-field-display";
 import { formatMoney } from "@/core/format";
+import { DensityToggle } from "@/components/density-toggle";
+import { useTableDensity } from "@/components/use-table-density";
 
 type SupplierRow = {
   id: string; name: string; email: string | null; is_active: number;
@@ -41,6 +43,8 @@ export function SupplierTable({
   customValues?: Record<string, Record<string, string>>;
   serverSnapshot?: ColumnVisibility;
 }) {
+  const { density } = useTableDensity(businessId);
+
   const [query, setQuery] = useState("");
   const [activeOnly, setActiveOnly] = useState(false);
   const [sorting, setSorting] = useState<SortingState>([]);
@@ -103,7 +107,7 @@ export function SupplierTable({
       {
         accessorKey: "outstanding",
         header: "Outstanding",
-        meta: { className: "text-right" },
+        meta: { numeric: true },
         cell: ({ row }: any) => (
           <span className="money">
             {formatMoney(
@@ -155,7 +159,10 @@ export function SupplierTable({
         <Button type="button" variant={activeOnly ? "primary" : "secondary"} onClick={() => setActiveOnly((value) => !value)}>
           <Filter className="size-4" /> Active only
         </Button>
-        {dropdown}
+        <div className="ml-auto flex items-center gap-2">
+          <DensityToggle businessId={businessId} />
+          {dropdown}
+        </div>
       </ListToolbar>
       {(query || activeOnly) && (
         <div className="mb-3">
@@ -166,6 +173,7 @@ export function SupplierTable({
       )}
       <DataTable
         table={table}
+        density={density}
         minWidth="min-w-[720px]"
         noResultsMessage="No suppliers match these filters"
         noResultsSubtext="Clear the search or active-status filter."

@@ -18,6 +18,8 @@ import { useColumns } from "@/components/columns-dropdown";
 import { DataTable } from "@/components/ui/data-table";
 import { formatDate, formatMoney } from "@/core/format";
 import type { PurchaseOrderStatus } from "./purchase-order-service";
+import { DensityToggle } from "@/components/density-toggle";
+import { useTableDensity } from "@/components/use-table-density";
 
 type Row = {
   id: string;
@@ -50,6 +52,8 @@ export function PurchaseOrderTable({
   orders: Omit<Row, "businessId">[];
   serverSnapshot?: import("@/components/use-column-visibility").ColumnVisibility;
 }) {
+  const { density } = useTableDensity(businessId);
+
   const [query, setQuery] = useState("");
   const [status, setStatus] = useState("");
   const [supplierId, setSupplierId] = useState("");
@@ -107,6 +111,7 @@ export function PurchaseOrderTable({
       {
         accessorKey: "supplier_name",
         header: "Supplier",
+        meta: { wrap: true },
       },
       {
         accessorKey: "date",
@@ -121,7 +126,7 @@ export function PurchaseOrderTable({
       {
         accessorKey: "total_minor",
         header: "Total",
-        meta: { className: "text-right" },
+        meta: { numeric: true },
         cell: ({ row }: any) => (
           <span className="money text-right">
             {formatMoney(row.original.total_minor, row.original.currency_code, row.original.currency_minor_unit)}
@@ -173,7 +178,10 @@ export function PurchaseOrderTable({
       <Input type="date" value={fromDate} onChange={(event) => setFromDate(event.target.value)} aria-label="Order date from" className="w-38" />
       <Input type="date" value={toDate} onChange={(event) => setToDate(event.target.value)} aria-label="Order date to" className="w-38" />
       <ToolbarSelect value={status} onChange={setStatus} ariaLabel="Filter by status" options={[{ value: "", label: "All statuses" }, { value: "draft", label: "Draft" }, { value: "issued", label: "Issued" }, { value: "closed", label: "Closed" }, { value: "cancelled", label: "Cancelled" }]} />
-      {dropdown}
+      <div className="ml-auto flex items-center gap-2">
+          <DensityToggle businessId={businessId} />
+          {dropdown}
+        </div>
     </ListToolbar>
     {hasActiveFilter && <ListToolbar>
       {supplierId && <FilterChip onRemove={() => setSupplierId("")}>Supplier: {supplierOptions.find(([id]) => id === supplierId)?.[1]}</FilterChip>}
@@ -185,7 +193,9 @@ export function PurchaseOrderTable({
     </ListToolbar>}
 
     <DataTable 
-      table={table} 
+      table={table}
+        density={density}
+        pinFirstColumn 
       minWidth="min-w-[780px]" 
       noResultsMessage="No purchase orders match" 
      onClearFilters={clearFilters}
