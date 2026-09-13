@@ -33,7 +33,19 @@ export default async function QuoteViewPage({ params, searchParams }: { params: 
   const revisions = listSalesQuoteRevisions(businessId, user.id, quoteId);
   const latestRevision = revisions.find((r) => r.is_latest_revision);
   const isViewingOlderRevision = !quote.isLatestRevision || quote.documentStatus === "superseded";
-  const emailContext = buildDocumentEmailContext(access.business.name, "Sales Quote", record, record.customer.email ?? "");
+  const emailContext = buildDocumentEmailContext(
+    access.business.name,
+    "Sales Quote",
+    {
+      currencyCode: quote.currencyCode,
+      documentNumber: quote.quoteNumber,
+      documentDate: quote.quoteDate,
+      dueDate: quote.expiryDate ?? "-",
+      partyName: customer.name,
+      totalMinor: quote.totalMinor,
+    },
+    record.customer.email ?? ""
+  );
   const emailDefaults = buildDocumentEmailDefaults(emailContext, record.customer.email ?? "");
   
   return (

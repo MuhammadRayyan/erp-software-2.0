@@ -23,7 +23,19 @@ export default async function PurchaseOrderViewPage({ params, searchParams }: { 
   const currency = order.currencyCode;
   const linkedProjects = Array.from(new Map(lines.flatMap((line) => line.project ? [[line.project.id, line.project] as const] : [])).values());
   const showLineProjects = linkedProjects.length > 1;
-  const emailContext = buildDocumentEmailContext(access.business.name, "Purchase Order", record, record.supplier.email ?? "");
+  const emailContext = buildDocumentEmailContext(
+    access.business.name,
+    "Purchase Order",
+    {
+      currencyCode: order.currencyCode,
+      documentNumber: order.orderNumber,
+      documentDate: order.date,
+      dueDate: order.expectedDate ?? "-",
+      partyName: supplier.name,
+      totalMinor: order.totalMinor,
+    },
+    supplier.email ?? ""
+  );
   const emailDefaults = buildDocumentEmailDefaults(emailContext, record.supplier.email ?? "");
 
   return <div className="page-container">

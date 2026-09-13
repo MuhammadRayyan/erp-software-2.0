@@ -9,19 +9,30 @@ import {
 
 export type InvoiceRecord = NonNullable<Awaited<ReturnType<typeof getInvoice>>>;
 
+export type DocumentEmailSourceData = {
+  currencyCode: string;
+  documentNumber: string;
+  documentDate: string;
+  dueDate: string;
+  partyName: string;
+  totalMinor: number;
+  balanceMinor?: number; // Used for invoices if posted
+  documentStatus?: string; // Used for invoices
+};
+
 export function buildDocumentEmailContext(
   businessName: string,
   documentName: string,
-  record: any,
+  source: DocumentEmailSourceData,
   toEmail: string
 ): DocumentEmailContext & { to: string; balance: string | null } {
-  const currency = record.invoice?.currencyCode || record.quote?.currencyCode || record.order?.currencyCode || record.note?.currencyCode || "AED";
-  const documentNumber = record.invoice?.invoiceNumber || record.quote?.quoteNumber || record.order?.orderNumber || record.note?.creditNoteNumber || record.invoice?.internalNumber || "";
-  const documentDate = record.invoice?.invoiceDate || record.quote?.quoteDate || record.order?.date || record.order?.orderDate || record.note?.date || "";
-  const dueDate = record.invoice?.dueDate || record.quote?.expiryDate || record.order?.expectedDate || record.order?.deliveryDate || "-";
-  const customerName = record.customer?.name || record.supplier?.name || "";
-  const totalMinor = record.invoice?.totalMinor ?? record.quote?.totalMinor ?? record.order?.totalMinor ?? record.note?.totalMinor ?? 0;
-  const balance = record.invoice?.documentStatus === "posted" ? formatMoney(record.balanceMinor, currency) : null;
+  const currency = source.currencyCode;
+  const documentNumber = source.documentNumber;
+  const documentDate = source.documentDate;
+  const dueDate = source.dueDate;
+  const customerName = source.partyName;
+  const totalMinor = source.totalMinor;
+  const balance = source.documentStatus === "posted" ? formatMoney(source.balanceMinor ?? 0, currency) : null;
 
   const ISO_DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 

@@ -34,7 +34,19 @@ export default async function PurchaseQuoteViewPage({
   const revisions = listPurchaseQuoteRevisions(businessId, user.id, quoteId);
   const latestRevision = revisions.find((r) => r.is_latest_revision);
   const isViewingOlderRevision = !quote.isLatestRevision || quote.documentStatus === "superseded";
-  const emailContext = buildDocumentEmailContext(access.business.name, "Purchase Quote", record, record.supplier.email ?? "");
+  const emailContext = buildDocumentEmailContext(
+    access.business.name,
+    "Purchase Quote",
+    {
+      currencyCode: quote.currencyCode,
+      documentNumber: quote.quoteNumber,
+      documentDate: quote.quoteDate,
+      dueDate: quote.expiryDate ?? "-",
+      partyName: supplier.name,
+      totalMinor: quote.totalMinor,
+    },
+    supplier.email ?? ""
+  );
   const emailDefaults = buildDocumentEmailDefaults(emailContext, record.supplier.email ?? "");
 
   return (

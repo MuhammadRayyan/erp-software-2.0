@@ -20,7 +20,19 @@ export default async function CreditNoteViewPage({ params, searchParams }: { par
   const { note, customer, invoice, lines } = record;
   const currency = note.currencyCode;
   const linkedProjects = Array.from(new Map(lines.filter((line) => line.project).map((line) => [line.project!.id, line.project!] as const)).values());
-  const emailContext = buildDocumentEmailContext(access.business.name, "Sales Credit Note", record, customer.email ?? "");
+  const emailContext = buildDocumentEmailContext(
+    access.business.name,
+    "Sales Credit Note",
+    {
+      currencyCode: note.currencyCode,
+      documentNumber: note.creditNoteNumber,
+      documentDate: note.date,
+      dueDate: "-",
+      partyName: customer.name,
+      totalMinor: note.totalMinor,
+    },
+    customer.email ?? ""
+  );
   const emailDefaults = buildDocumentEmailDefaults(emailContext, customer.email ?? "");
   return <div className="page-container">
     <NoticeToast message={notice} />

@@ -28,7 +28,21 @@ export default async function InvoiceViewPage({ params, searchParams }: { params
   const customFieldValues = customFieldDefinitions.length
     ? getCustomFieldValuesForEntities(businessId, user.id, "sales_invoice", [invoiceId]).get(invoiceId) ?? {}
     : {};
-  const emailContext = buildDocumentEmailContext(access.business.name, "Invoice", record, record.customer.email ?? "");
+  const emailContext = buildDocumentEmailContext(
+    access.business.name,
+    "Invoice",
+    {
+      currencyCode: invoice.currencyCode,
+      documentNumber: invoice.invoiceNumber,
+      documentDate: invoice.invoiceDate,
+      dueDate: invoice.dueDate,
+      partyName: customer.name,
+      totalMinor: invoice.totalMinor,
+      documentStatus: invoice.documentStatus,
+      balanceMinor: record.balanceMinor,
+    },
+    record.customer.email ?? ""
+  );
   const emailDefaults = buildDocumentEmailDefaults(emailContext, emailContext.to);
   return (
     <div className="page-container">

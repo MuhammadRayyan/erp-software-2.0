@@ -33,7 +33,19 @@ export default async function OrderViewPage({ params, searchParams }: { params: 
     ? getCustomFieldValuesForEntities(businessId, user.id, "sales_order", [orderId]).get(orderId) ?? {}
     : {};
   
-  const emailContext = buildDocumentEmailContext(access.business.name, "Sales order", record, customer.email ?? "");
+  const emailContext = buildDocumentEmailContext(
+    access.business.name,
+    "Sales order",
+    {
+      currencyCode: order.currencyCode,
+      documentNumber: order.orderNumber,
+      documentDate: order.orderDate,
+      dueDate: order.deliveryDate ?? "-",
+      partyName: customer.name,
+      totalMinor: order.totalMinor,
+    },
+    customer.email ?? ""
+  );
   const emailDefaults = buildDocumentEmailDefaults(emailContext, customer.email ?? "");
 
   return (

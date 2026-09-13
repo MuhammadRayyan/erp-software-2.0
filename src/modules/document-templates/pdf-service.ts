@@ -88,7 +88,7 @@ export async function generateDocumentPdf(
     currency = record.order.currencyCode;
     title = "PURCHASE ORDER";
     number = record.order.orderNumber;
-    status = (record.order as any).documentStatus;
+    status = (record.order as any).status;
     partyLabel = "SUPPLIER";
     partyName = record.supplier.name;
     dateLabel = formatDate((record.order as any).date || (record.order as any).orderDate);
