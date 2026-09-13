@@ -15,11 +15,9 @@ export async function GET(
 ) {
   try {
     const { businessId, formType } = await params;
-    const user = await requireUser();
-    await requireApiAuth(request);
-    // we could also requireApiAuth(request) but requireUser checks session.
-    const access = getBusinessForUser(businessId, user.id);
-    if (!access) return NextResponse.json({ error: "Not found" }, { status: 404 });
+    const auth = await requireApiAuth(request, { businessId, module: "settings" });
+    if ("error" in auth) return auth.error;
+    const user = auth.session.user;
 
     const { db } = getBusinessDb(businessId, user.id);
     const existing = db.select().from(formDefaults).where(eq(formDefaults.formType, formType)).get();
@@ -36,11 +34,9 @@ export async function PUT(
 ) {
   try {
     const { businessId, formType } = await params;
-    const user = await requireUser();
-    await requireApiAuth(request);
-    // we could also requireApiAuth(request) but requireUser checks session.
-    const access = getBusinessForUser(businessId, user.id);
-    if (!access) return NextResponse.json({ error: "Not found" }, { status: 404 });
+    const auth = await requireApiAuth(request, { businessId, module: "settings" });
+    if ("error" in auth) return auth.error;
+    const user = auth.session.user;
 
     const body = await request.json();
     const payloadJson = JSON.stringify(body);

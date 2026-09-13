@@ -34,7 +34,7 @@
     "handlebars": "^4.7.9",
     "jszip": "3.10.1",
     "lucide-react": "1.30.0",
-    "next": "16.3.0",
+    "next": "^16.3.5",
     "next-themes": "0.4.6",
     "nodemailer": "^9.0.5",
     "puppeteer": "^25.7.0",
@@ -56,7 +56,7 @@
     "@types/react-dom": "19.2.4",
     "drizzle-kit": "0.31.10",
     "eslint": "9.39.5",
-    "eslint-config-next": "16.3.0",
+    "eslint-config-next": "^16.3.5",
     "tailwindcss": "4.3.3",
     "tsx": "4.23.11",
     "typescript": "6.0.3"
