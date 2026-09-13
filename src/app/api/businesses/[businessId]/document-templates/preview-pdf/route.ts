@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { requireApiAuth } from "@/core/auth/api-auth";
-import { renderInvoicePdf } from "@/modules/document-templates/template-registry";
+import { renderDocumentPdf } from "@/modules/document-templates/template-registry";
 import type { InvoiceTemplateData } from "@/modules/document-templates/react-pdf/invoice-template";
 
 export const runtime = "nodejs";
@@ -14,9 +14,28 @@ export async function GET(
     const { session, access, error: authError } = await requireApiAuth(request, { businessId, module: "settings" });
     if (authError || !session || !access) return authError;
 
-    const sampleData: InvoiceTemplateData = {
+    const url = new URL(request.url);
+    const documentType = url.searchParams.get("type") || "sales-invoice";
+
+    const titleMap: Record<string, string> = {
+      "sales-invoice": "INVOICE",
+      "sales-quote": "SALES QUOTE",
+      "sales-order": "SALES ORDER",
+      "sales-credit-note": "CREDIT NOTE",
+      "purchase-quote": "PURCHASE QUOTE",
+      "purchase-order": "PURCHASE ORDER",
+      "purchase-invoice": "PURCHASE INVOICE",
+      "debit-note": "DEBIT NOTE",
+      "goods-receipt": "GOODS RECEIPT",
+      "delivery-note": "DELIVERY NOTE"
+    };
+
+    const title = titleMap[documentType] || "DOCUMENT";
+
+    const sampleData: InvoiceTemplateData & { invoiceTitle: string } = {
       companyName: "Acme Corporation",
-      invoiceNumber: "INV-2026-0001",
+      invoiceTitle: title,
+      invoiceNumber: "DOC-2026-0001",
       invoiceDate: "Aug 16, 2026",
       dueDate: "Sep 15, 2026",
       customerName: "Globex Inc.",
@@ -32,7 +51,7 @@ export async function GET(
       total: "$7,087.50",
     };
 
-    const pdfBuffer = await renderInvoicePdf(businessId, session.user.id, sampleData);
+    const pdfBuffer = await renderDocumentPdf(businessId, session.user.id, documentType, sampleData);
 
     return new NextResponse(new Uint8Array(pdfBuffer), {
       status: 200,

@@ -11,7 +11,7 @@ import type { TemplateSettings } from "./template-settings";
 import { SelectNative } from "@/components/ui/select-native";
 
 
-export function TemplateEditor({ businessId, initialSettings }: { businessId: string; initialSettings: TemplateSettings }) {
+export function TemplateEditor({ businessId, documentType, initialSettings }: { businessId: string; documentType: string; initialSettings: TemplateSettings }) {
   const [settings, setSettings] = useState<TemplateSettings>(initialSettings);
 
   const [saving, setSaving] = useState(false);
@@ -34,7 +34,7 @@ export function TemplateEditor({ businessId, initialSettings }: { businessId: st
 
   async function save() {
     setSaving(true);
-    const result = await saveTemplateSettingsAction(businessId, "sales-invoice", settings);
+    const result = await saveTemplateSettingsAction(businessId, documentType, settings);
     setSaving(false);
     if (result.error) toast.error(result.error);
     else toast.success("Template settings saved");
@@ -43,13 +43,14 @@ export function TemplateEditor({ businessId, initialSettings }: { businessId: st
   async function preview() {
     setPreviewing(true);
     try {
-      await saveTemplateSettingsAction(businessId, "sales-invoice", settings);
-      const url = `/api/businesses/${businessId}/invoices/preview-pdf?_t=${Date.now()}`;
+      await saveTemplateSettingsAction(businessId, documentType, settings);
+      const url = `/api/businesses/${businessId}/document-templates/preview-pdf?type=${documentType}&_t=${Date.now()}`;
       window.open(url, "_blank");
     } catch {
       toast.error("Preview failed");
+    } finally {
+      setPreviewing(false);
     }
-    setPreviewing(false);
   }
 
   return (
