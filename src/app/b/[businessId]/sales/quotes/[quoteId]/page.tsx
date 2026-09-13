@@ -26,9 +26,9 @@ export default async function QuoteViewPage({ params, searchParams }: { params: 
   const currency = quote.currencyCode;
   const linkedProjects = Array.from(new Map(lines.flatMap((line) => line.project ? [[line.project.id, line.project] as const] : [])).values());
   const showLineProjects = linkedProjects.length > 1;
-  const customFieldDefinitions = listCustomFieldDefinitions(businessId, user.id, "sales_quote" as any);
+  const customFieldDefinitions = listCustomFieldDefinitions(businessId, user.id, "sales_quote");
   const customFieldValues = customFieldDefinitions.length
-    ? getCustomFieldValuesForEntities(businessId, user.id, "sales_quote" as any, [quoteId]).get(quoteId) ?? {}
+    ? getCustomFieldValuesForEntities(businessId, user.id, "sales_quote", [quoteId]).get(quoteId) ?? {}
     : {};
   const revisions = listSalesQuoteRevisions(businessId, user.id, quoteId);
   const latestRevision = revisions.find((r) => r.is_latest_revision);

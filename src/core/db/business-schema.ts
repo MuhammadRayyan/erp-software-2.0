@@ -1515,7 +1515,7 @@ export const documentTemplates = sqliteTable("document_templates", {
   updatedAt: text("updated_at").notNull(),
 });
 
-export const customFieldEntityTypes = ["customer", "supplier", "sales_invoice", "sales_quote", "sales_order"] as const;
+export const customFieldEntityTypes = ["customer", "supplier", "sales_invoice", "sales_quote", "sales_order", "purchase_quote", "purchase_order"] as const;
 export const customFieldFieldTypes = ["text", "number", "date", "select", "checkbox"] as const;
 export const customFieldDefinitions = sqliteTable(
   "custom_field_definitions",

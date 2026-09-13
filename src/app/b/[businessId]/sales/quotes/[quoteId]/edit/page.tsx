@@ -31,9 +31,9 @@ export default async function EditQuotePage({ params }: { params: Promise<{ busi
   const items = listInventoryItemOptions(businessId, user.id);
   const currencySettings = getCurrencySettings(businessId, user.id);
   const documentMinorUnit = currencySettings.currencies.find((entry) => entry.code === record.quote.currencyCode)?.minor_unit ?? 2;
-  const customFields = listCustomFieldDefinitions(businessId, user.id, "sales_quote" as any).map(({ id, name, fieldType, selectOptions, isRequired }) => ({ id, name, fieldType, selectOptions, isRequired }));
+  const customFields = listCustomFieldDefinitions(businessId, user.id, "sales_quote").map(({ id, name, fieldType, selectOptions, isRequired }) => ({ id, name, fieldType, selectOptions, isRequired }));
   const customFieldValues = customFields.length
-    ? getCustomFieldValuesForEntities(businessId, user.id, "sales_quote" as any, [quoteId]).get(quoteId) ?? {}
+    ? getCustomFieldValuesForEntities(businessId, user.id, "sales_quote", [quoteId]).get(quoteId) ?? {}
     : {};
   return <div className="page-container">
     <Link href={`/b/${businessId}/sales/quotes/${quoteId}`} className="mb-5 inline-flex items-center gap-1.5 text-[13px] text-muted-foreground hover:text-foreground"><ArrowLeft className="size-4" /> {record.quote.quoteNumber}</Link>

@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-export const customFieldEntityTypes = ["customer", "supplier", "sales_invoice"] as const;
+export const customFieldEntityTypes = ["customer", "supplier", "sales_invoice", "sales_quote", "sales_order", "purchase_quote", "purchase_order"] as const;
 export const customFieldFieldTypes = ["text", "number", "date", "select", "checkbox"] as const;
 
 export type CustomFieldEntityType = (typeof customFieldEntityTypes)[number];

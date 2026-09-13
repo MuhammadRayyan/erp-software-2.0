@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { ArrowDown, ArrowUp, ContactRound, Pencil, Plus, ReceiptText, Trash2, Truck, X } from "lucide-react";
+import { ArrowDown, ArrowUp, ContactRound, FileText, Pencil, Plus, ReceiptText, Trash2, Truck, X } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { DialogContent, DialogDescription, DialogRoot, DialogTitle } from "@/components/ui/dialog";
@@ -25,6 +25,10 @@ const entityTypeLabels: Record<CustomFieldEntityType, string> = {
   customer: "Customers",
   supplier: "Suppliers",
   sales_invoice: "Sales Invoices",
+  sales_quote: "Sales Quotes",
+  sales_order: "Sales Orders",
+  purchase_quote: "Purchase Quotes",
+  purchase_order: "Purchase Orders",
 };
 
 const fieldTypeLabels: Record<CustomFieldFieldType, string> = {
@@ -57,6 +61,10 @@ const entityIcons: Record<CustomFieldEntityType, typeof ContactRound> = {
   customer: ContactRound,
   supplier: Truck,
   sales_invoice: ReceiptText,
+  sales_quote: FileText,
+  sales_order: FileText,
+  purchase_quote: FileText,
+  purchase_order: FileText,
 };
 
 export function CustomFieldsManager({

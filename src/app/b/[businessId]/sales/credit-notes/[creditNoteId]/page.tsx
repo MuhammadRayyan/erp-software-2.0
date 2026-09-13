@@ -9,6 +9,7 @@ import { quantityMicrosToInput, rateBasisPointsToPercent } from "@/modules/accou
 import { getCreditNote } from "@/modules/sales-credit-notes/credit-note-service";
 import { CreditNoteViewActions } from "@/modules/sales-credit-notes/credit-note-view-actions";
 import { emirateLabels, type Emirate } from "@/modules/tax/uae-vat-config";
+import { buildDocumentEmailContext, buildDocumentEmailDefaults } from "@/modules/email/email-defaults";
 
 export default async function CreditNoteViewPage({ params, searchParams }: { params: Promise<{ businessId: string; creditNoteId: string }>; searchParams: Promise<{ notice?: string }> }) {
   const { businessId, creditNoteId } = await params;
@@ -19,6 +20,8 @@ export default async function CreditNoteViewPage({ params, searchParams }: { par
   const { note, customer, invoice, lines } = record;
   const currency = note.currencyCode;
   const linkedProjects = Array.from(new Map(lines.filter((line) => line.project).map((line) => [line.project!.id, line.project!] as const)).values());
+  const emailContext = buildDocumentEmailContext(access.business.name, "Sales Credit Note", record, customer.email ?? "");
+  const emailDefaults = buildDocumentEmailDefaults(emailContext, customer.email ?? "");
   return <div className="page-container">
     <NoticeToast message={notice} />
     <Link href={`/b/${businessId}/sales/credit-notes`} className="mb-5 inline-flex items-center gap-1.5 text-[13px] text-muted-foreground hover:text-foreground"><ArrowLeft className="size-4" /> Sales Credit Notes</Link>
@@ -30,7 +33,7 @@ export default async function CreditNoteViewPage({ params, searchParams }: { par
         {linkedProjects.length > 0 && <p className="mt-1 text-sm text-muted-foreground">Project: {linkedProjects.map((project, index) => <span key={project.id}>{index > 0 && ", "}<Link className="font-medium text-primary hover:underline" href={`/b/${businessId}/projects/${project.id}`}>{project.code} · {project.name}</Link></span>)}</p>}
         <div className="mt-3 flex items-baseline gap-4"><span className="money text-xl font-semibold">{formatMoney(note.totalMinor, currency)}</span><span className="text-sm text-muted-foreground">{note.documentStatus === "posted" ? "Reduces Accounts Receivable" : "No ledger impact"}</span></div>
       </div>
-      <CreditNoteViewActions businessId={businessId} noteId={note.id} creditNoteNumber={note.creditNoteNumber} documentStatus={note.documentStatus} journalEntryId={record.journal?.id ?? null} />
+      <CreditNoteViewActions businessId={businessId} noteId={note.id} creditNoteNumber={note.creditNoteNumber} documentStatus={note.documentStatus} journalEntryId={record.journal?.id ?? null} emailDefaults={emailDefaults} />
     </div>
     {currency !== access.business.currency && <section aria-label="Currency snapshot" className="mb-5 rounded-lg border border-border bg-surface-raised p-4"><dl className="grid gap-4 text-sm sm:grid-cols-2 lg:grid-cols-4"><div><dt className="text-xs text-muted-foreground">Inherited rate</dt><dd className="money mt-1">1 {currency} = {note.exchangeRateToBase} {access.business.currency}</dd></div><div><dt className="text-xs text-muted-foreground">Rate date</dt><dd className="mt-1">{formatDate(note.exchangeRateDate)}</dd></div><div><dt className="text-xs text-muted-foreground">Rate source</dt><dd className="mt-1">{note.exchangeRateSource}</dd></div><div><dt className="text-xs text-muted-foreground">Base reduction</dt><dd className="money mt-1 font-semibold">{formatMoney(note.baseTotalMinor, access.business.currency)}</dd></div></dl><p className="mt-3 text-xs text-muted-foreground">The linked invoice snapshot is reused, avoiding an artificial FX difference.</p></section>}
     <article className="rounded-lg border border-border bg-surface-raised p-5 sm:p-7">

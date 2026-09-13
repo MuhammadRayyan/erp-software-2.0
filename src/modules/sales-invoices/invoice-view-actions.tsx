@@ -43,7 +43,7 @@ export function InvoiceViewActions({
         documentNumber={invoiceNumber}
         documentType="Invoice"
         editHref={documentStatus !== "void" ? `/b/${businessId}/sales/invoices/${invoiceId}/edit` : undefined}
-        pdfHref={`/api/businesses/${businessId}/invoices/${invoiceId}/pdf`}
+        pdfHref={`/api/businesses/${businessId}/documents/sales-invoice/${invoiceId}/pdf`}
         onEmail={() => { setEmailOpen(true); }}
         onDuplicate={async () => {
           const result = await duplicateInvoiceAction(businessId, invoiceId);

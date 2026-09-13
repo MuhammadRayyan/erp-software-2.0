@@ -29,9 +29,9 @@ export default async function OrderViewPage({ params, searchParams }: { params: 
   const currency = order.currencyCode;
   const linkedProjects = Array.from(new Map(lines.flatMap((line) => line.project ? [[line.project.id, line.project] as const] : [])).values());
   const showLineProjects = linkedProjects.length > 1;
-  const customFieldDefinitions = listCustomFieldDefinitions(businessId, user.id, "sales_order" as any);
+  const customFieldDefinitions = listCustomFieldDefinitions(businessId, user.id, "sales_order");
   const customFieldValues = customFieldDefinitions.length
-    ? getCustomFieldValuesForEntities(businessId, user.id, "sales_order" as any, [orderId]).get(orderId) ?? {}
+    ? getCustomFieldValuesForEntities(businessId, user.id, "sales_order", [orderId]).get(orderId) ?? {}
     : {};
   
   

@@ -31,9 +31,9 @@ export default async function EditOrderPage({ params }: { params: Promise<{ busi
   const items = listInventoryItemOptions(businessId, user.id);
   const currencySettings = getCurrencySettings(businessId, user.id);
   const documentMinorUnit = currencySettings.currencies.find((entry) => entry.code === record.order.currencyCode)?.minor_unit ?? 2;
-  const customFields = listCustomFieldDefinitions(businessId, user.id, "sales_order" as any).map(({ id, name, fieldType, selectOptions, isRequired }) => ({ id, name, fieldType, selectOptions, isRequired }));
+  const customFields = listCustomFieldDefinitions(businessId, user.id, "sales_order").map(({ id, name, fieldType, selectOptions, isRequired }) => ({ id, name, fieldType, selectOptions, isRequired }));
   const customFieldValues = customFields.length
-    ? getCustomFieldValuesForEntities(businessId, user.id, "sales_order" as any, [orderId]).get(orderId) ?? {}
+    ? getCustomFieldValuesForEntities(businessId, user.id, "sales_order", [orderId]).get(orderId) ?? {}
     : {};
   return <div className="page-container">
     <Link href={`/b/${businessId}/sales/orders/${orderId}`} className="mb-5 inline-flex items-center gap-1.5 text-[13px] text-muted-foreground hover:text-foreground"><ArrowLeft className="size-4" /> {record.order.orderNumber}</Link>
