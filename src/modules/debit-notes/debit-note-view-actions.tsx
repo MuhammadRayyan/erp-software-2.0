@@ -1,5 +1,5 @@
 "use client";
-
+import { useState } from "react";
 import Link from "next/link";
 import { BookOpenText } from "lucide-react";
 import { useRouter } from "next/navigation";
@@ -8,6 +8,7 @@ import { DropdownMenuItem } from "@/components/ui/dropdown-menu";
 import { deleteDebitNoteAction, duplicateDebitNoteAction, voidDebitNoteAction } from "./actions";
 import type { DebitNoteStatus } from "./debit-note-service";
 import { DocumentViewActions } from "@/components/document-view-actions";
+import { DocumentEmailDialog, type DocumentEmailDefaults } from "@/modules/email/email-compose-dialog";
 
 export function DebitNoteViewActions({
   businessId,
@@ -15,54 +16,71 @@ export function DebitNoteViewActions({
   debitNoteNumber,
   documentStatus,
   journalEntryId,
+  emailDefaults,
 }: {
   businessId: string;
   noteId: string;
   debitNoteNumber: string;
   documentStatus: DebitNoteStatus;
   journalEntryId: string | null;
+  emailDefaults?: DocumentEmailDefaults;
 }) {
   const router = useRouter();
+  const [emailOpen, setEmailOpen] = useState(false);
 
   return (
-    <DocumentViewActions
-      documentNumber={debitNoteNumber}
-      documentType="Debit Note"
-      editHref={documentStatus !== "void" ? `/b/${businessId}/purchases/debit-notes/${noteId}/edit` : undefined}
-      pdfHref={`/api/businesses/${businessId}/documents/debit-note/${noteId}/pdf`}
-      onDuplicate={async () => {
-        const result = await duplicateDebitNoteAction(businessId, noteId);
-        if (result?.error) throw new Error(result.error);
-      }}
-      onVoid={documentStatus === "posted" ? {
-        label: "Void",
-        description: "This retains the debit note and creates a balanced reversing journal entry.",
-        action: async () => {
-          const result = await voidDebitNoteAction(businessId, noteId);
-          if (result.error) throw new Error(result.error);
-          toast.success("Debit note voided.");
-          router.refresh();
+    <>
+      <DocumentViewActions
+        documentNumber={debitNoteNumber}
+        documentType="Debit Note"
+        editHref={documentStatus !== "void" ? `/b/${businessId}/purchases/debit-notes/${noteId}/edit` : undefined}
+        pdfHref={`/api/businesses/${businessId}/documents/debit-note/${noteId}/pdf`}
+        onEmail={emailDefaults ? () => { setEmailOpen(true); } : undefined}
+        onDuplicate={async () => {
+          const result = await duplicateDebitNoteAction(businessId, noteId);
+          if (result?.error) throw new Error(result.error);
+        }}
+        onVoid={documentStatus === "posted" ? {
+          label: "Void",
+          description: "This retains the debit note and creates a balanced reversing journal entry.",
+          action: async () => {
+            const result = await voidDebitNoteAction(businessId, noteId);
+            if (result.error) throw new Error(result.error);
+            toast.success("Debit note voided.");
+            router.refresh();
+          }
+        } : undefined}
+        onDelete={documentStatus === "draft" ? {
+          label: "Delete draft",
+          description: "This permanently removes the draft.",
+          action: async () => {
+            const result = await deleteDebitNoteAction(businessId, noteId);
+            if (result.error) throw new Error(result.error);
+            toast.success("Draft debit note deleted.");
+            router.push(`/b/${businessId}/purchases/debit-notes`);
+          }
+        } : undefined}
+        extraActions={
+          <>
+            {journalEntryId && (
+              <DropdownMenuItem asChild>
+                <Link href={`/b/${businessId}/accounting/journal/${journalEntryId}`}><BookOpenText className="size-4" /> View Journal Entry</Link>
+              </DropdownMenuItem>
+            )}
+          </>
         }
-      } : undefined}
-      onDelete={documentStatus === "draft" ? {
-        label: "Delete draft",
-        description: "This permanently removes the draft.",
-        action: async () => {
-          const result = await deleteDebitNoteAction(businessId, noteId);
-          if (result.error) throw new Error(result.error);
-          toast.success("Draft debit note deleted.");
-          router.push(`/b/${businessId}/purchases/debit-notes`);
-        }
-      } : undefined}
-      extraActions={
-        <>
-          {journalEntryId && (
-            <DropdownMenuItem asChild>
-              <Link href={`/b/${businessId}/accounting/journal/${journalEntryId}`}><BookOpenText className="size-4" /> View Journal Entry</Link>
-            </DropdownMenuItem>
-          )}
-        </>
-      }
-    />
+      />
+      {emailDefaults && (
+        <DocumentEmailDialog
+          open={emailOpen}
+          onOpenChange={setEmailOpen}
+          businessId={businessId}
+          documentId={noteId}
+          documentType="debit-note"
+          documentNumber={debitNoteNumber}
+          defaults={emailDefaults}
+        />
+      )}
+    </>
   );
 }

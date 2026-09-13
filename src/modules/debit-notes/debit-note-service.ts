@@ -1,4 +1,4 @@
-﻿import { randomUUID } from "crypto";
+import { randomUUID } from "crypto";
 import { eq } from "drizzle-orm";
 import { debitNotes } from "@/core/db/business-schema";
 import { getBusinessDb } from "@/core/db/business";
@@ -249,7 +249,7 @@ export function voidDebitNote(businessId: string, userId: string, noteId: string
 export function getDebitNote(businessId: string, userId: string, noteId: string) {
   const context = getBusinessDb(businessId, userId);
   const header = context.sqlite.prepare(`
-    SELECT n.*, s.name as supplierName, s.currency_code as supplierCurrency 
+    SELECT n.*, s.name as supplierName, s.email as supplierEmail, s.currency_code as supplierCurrency 
     FROM debit_notes n
     JOIN suppliers s ON n.supplier_id = s.id
     WHERE n.id = ?

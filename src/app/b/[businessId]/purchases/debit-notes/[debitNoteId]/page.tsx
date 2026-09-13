@@ -1,4 +1,4 @@
-﻿import Link from "next/link";
+import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
 import { notFound } from "next/navigation";
 import { NoticeToast } from "@/components/notice-toast";
@@ -8,21 +8,37 @@ import { quantityMicrosToInput, rateBasisPointsToPercent } from "@/modules/accou
 import { getDebitNote } from "@/modules/debit-notes/debit-note-service";
 import { StatusBadge } from "@/components/status-badge";
 import { DebitNoteViewActions } from "@/modules/debit-notes/debit-note-view-actions";
+import { buildDocumentEmailContext, buildDocumentEmailDefaults } from "@/modules/email/email-defaults";
 
 export default async function DebitNoteViewPage({
   params,
   searchParams,
 }: {
-  params: Promise<{ businessId: string; invoiceId: string }>;
+  params: Promise<{ businessId: string; debitNoteId: string }>;
   searchParams: Promise<{ notice?: string }>;
 }) {
-  const { businessId, invoiceId } = await params;
+  const { businessId, debitNoteId } = await params;
   const { notice } = await searchParams;
   const { user, access } = await requireModule(businessId, "purchases");
-  const record = getDebitNote(businessId, user.id, invoiceId);
+  const record = getDebitNote(businessId, user.id, debitNoteId);
   if (!record) notFound();
   const { note, lines } = record;
   const currency = note.currencyCode;
+
+  const emailContext = buildDocumentEmailContext(
+    access.business.name,
+    "Debit Note",
+    {
+      currencyCode: note.currencyCode,
+      documentNumber: note.debitNoteNumber,
+      documentDate: note.debitNoteDate,
+      dueDate: "-",
+      partyName: note.supplierName,
+      totalMinor: note.totalMinor,
+    },
+    (note as any).supplierEmail ?? ""
+  );
+  const emailDefaults = buildDocumentEmailDefaults(emailContext, (note as any).supplierEmail ?? "");
 
   return (
     <div className="page-container">
@@ -56,6 +72,7 @@ export default async function DebitNoteViewPage({
           debitNoteNumber={note.debitNoteNumber}
           documentStatus={note.documentStatus}
           journalEntryId={null}
+          emailDefaults={emailDefaults}
         />
       </div>
 

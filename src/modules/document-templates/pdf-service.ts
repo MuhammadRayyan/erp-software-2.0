@@ -10,6 +10,7 @@ import { getSalesOrder } from "@/modules/sales-orders/sales-order-service";
 import { getPurchaseQuote } from "@/modules/purchase-quotes/purchase-quote-service";
 import { getGoodsReceipt } from "@/modules/inventory/goods-receipt-service";
 import { getDeliveryNote } from "@/modules/inventory/delivery-note-service";
+import { getDebitNote } from "@/modules/debit-notes/debit-note-service";
 import { averageUnitCostMicros, formatUnitCostMicros } from "@/modules/inventory/inventory-valuation";
 import { getCustomFieldPairsForEntity } from "@/modules/custom-fields/custom-field-service";
 
@@ -124,6 +125,26 @@ export async function generateDocumentPdf(
     totalMinor = record.note.totalMinor;
     rows = record.lines.map((line) => ({
       description: line.description,
+      quantity: quantityMicrosToInput(line.quantityMicros),
+      unitPrice: formatMoney(line.unitPriceMinor, currency),
+      amount: formatMoney(line.grossAmountMinor, currency),
+      discount: (line as any).discountType === "percentage" ? `${(line as any).discountValue}%` : ((line as any).discountType === "fixed" ? formatMoney(Number((line as any).discountValue), currency) : undefined),
+    }));
+  } else if (documentType === "debit-note") {
+    const record = getDebitNote(businessId, userId, documentId);
+    if (!record) throw new Error("Debit note not found");
+    currency = record.note.currencyCode;
+    title = "DEBIT NOTE";
+    number = record.note.debitNoteNumber;
+    partyLabel = "SUPPLIER";
+    partyName = record.note.supplierName;
+    dateLabel = formatDate(record.note.debitNoteDate);
+    dueLabel = "-";
+    subtotalMinor = record.note.subtotalMinor;
+    taxMinor = record.note.taxMinor;
+    totalMinor = record.note.totalMinor;
+    rows = record.lines.map((line) => ({
+      description: line.description || "-",
       quantity: quantityMicrosToInput(line.quantityMicros),
       unitPrice: formatMoney(line.unitPriceMinor, currency),
       amount: formatMoney(line.grossAmountMinor, currency),

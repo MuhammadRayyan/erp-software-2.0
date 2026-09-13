@@ -1,4 +1,4 @@
-﻿import Link from "next/link";
+import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
 import { notFound } from "next/navigation";
 import { Button } from "@/components/ui/button";
@@ -17,11 +17,11 @@ import { getCurrencySettings } from "@/modules/currency/exchange-rate";
 export default async function EditDebitNotePage({
   params,
 }: {
-  params: Promise<{ businessId: string; invoiceId: string }>;
+  params: Promise<{ businessId: string; debitNoteId: string }>;
 }) {
-  const { businessId, invoiceId } = await params;
+  const { businessId, debitNoteId } = await params;
   const { user, access } = await requireModule(businessId, "purchases");
-  const record = getDebitNote(businessId, user.id, invoiceId);
+  const record = getDebitNote(businessId, user.id, debitNoteId);
   if (!record) notFound();
   if (record.note.documentStatus === "void") {
     return (
@@ -29,7 +29,7 @@ export default async function EditDebitNotePage({
         <h1 className="page-title">Void Debit Note</h1>
         <p className="page-description">Void debit notes are retained for history and cannot be edited.</p>
         <Button asChild className="mt-5">
-          <Link href={`/b/${businessId}/purchases/debit-notes/${invoiceId}`}>Return to Debit Note</Link>
+          <Link href={`/b/${businessId}/purchases/debit-notes/${debitNoteId}`}>Return to Debit Note</Link>
         </Button>
       </div>
     );
@@ -50,7 +50,7 @@ export default async function EditDebitNotePage({
   return (
     <div className="page-container">
       <Link
-        href={`/b/${businessId}/purchases/debit-notes/${invoiceId}`}
+        href={`/b/${businessId}/purchases/debit-notes/${debitNoteId}`}
         className="mb-5 inline-flex items-center gap-1.5 text-[13px] text-muted-foreground hover:text-foreground"
       >
         <ArrowLeft className="size-4" /> {record.note.debitNoteNumber}
@@ -65,7 +65,7 @@ export default async function EditDebitNotePage({
       </div>
       <DebitNoteForm
         businessId={businessId}
-        noteId={invoiceId}
+        noteId={debitNoteId}
         documentStatus={record.note.documentStatus}
         suppliers={suppliers.map(({ id, name }) => ({ id, name }))}
         invoices={eligibleInvoices.map((inv) => ({

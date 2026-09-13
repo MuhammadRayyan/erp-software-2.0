@@ -63,6 +63,13 @@ export function PurchaseInvoiceViewActions({
       }
       extraActions={
         <>
+          {documentStatus !== "void" && documentStatus !== "draft" && (
+            <DropdownMenuItem asChild>
+              <Link href={`/b/${businessId}/purchases/debit-notes/new?invoiceId=${invoiceId}`}>
+                <BookOpenText className="size-4" /> Request Refund / Debit Note
+              </Link>
+            </DropdownMenuItem>
+          )}
           {journalEntryId && (
             <DropdownMenuItem asChild>
               <Link href={`/b/${businessId}/accounting/journal/${journalEntryId}`}><BookOpenText className="size-4" /> View Journal Entry</Link>
