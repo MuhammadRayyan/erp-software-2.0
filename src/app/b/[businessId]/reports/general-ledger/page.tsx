@@ -1,5 +1,4 @@
 import Link from "next/link";
-import { ArrowLeft } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { requireModule } from "@/core/permissions/require-module";
@@ -9,6 +8,7 @@ import { journalSourceLabel } from "@/modules/accounting/journal-source";
 import { listCustomers } from "@/modules/customers/customer-service";
 import { getGeneralLedger } from "@/modules/reports/report-service";
 import { SelectNative } from "@/components/ui/select-native";
+import { BackLink } from "@/components/back-link";
 
 
 export default async function GeneralLedgerPage({ params, searchParams }: { params: Promise<{ businessId: string }>; searchParams: Promise<{ dateFrom?: string; dateTo?: string; accountId?: string; customerId?: string }> }) {
@@ -20,7 +20,7 @@ export default async function GeneralLedgerPage({ params, searchParams }: { para
   const rows = getGeneralLedger(businessId, user.id, filters);
   return (
     <div className="page-container">
-      <Link href={`/b/${businessId}/reports`} className="mb-5 inline-flex items-center gap-1.5 text-[13px] text-muted-foreground hover:text-foreground"><ArrowLeft className="size-4" /> Reports</Link>
+      <BackLink href={`/b/${businessId}/reports`}>Reports</BackLink>
       <div className="page-header"><div><h1 className="page-title">General Ledger</h1><p className="page-description">Posted journal lines with natural running balances per account.</p></div></div>
       <form className="mb-3 flex flex-wrap items-end gap-3">
         <label className="space-y-1 text-xs text-muted-foreground">Date from<Input name="dateFrom" type="date" defaultValue={filters.dateFrom} className="mt-1 w-40 text-foreground" /></label>

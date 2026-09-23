@@ -1,5 +1,4 @@
 import Link from "next/link";
-import { ArrowLeft } from "lucide-react";
 import { notFound } from "next/navigation";
 import { NoticeToast } from "@/components/notice-toast";
 import { requireModule } from "@/core/permissions/require-module";
@@ -9,6 +8,7 @@ import { getDebitNote } from "@/modules/debit-notes/debit-note-service";
 import { StatusBadge } from "@/components/status-badge";
 import { DebitNoteViewActions } from "@/modules/debit-notes/debit-note-view-actions";
 import { buildDocumentEmailContext, buildDocumentEmailDefaults } from "@/modules/email/email-defaults";
+import { BackLink } from "@/components/back-link";
 
 export default async function DebitNoteViewPage({
   params,
@@ -43,12 +43,7 @@ export default async function DebitNoteViewPage({
   return (
     <div className="page-container">
       <NoticeToast message={notice} />
-      <Link
-        href={`/b/${businessId}/purchases/debit-notes`}
-        className="mb-5 inline-flex items-center gap-1.5 text-[13px] text-muted-foreground hover:text-foreground"
-      >
-        <ArrowLeft className="size-4" /> Debit Notes
-      </Link>
+      <BackLink href={`/b/${businessId}/purchases/debit-notes`}>Debit Notes</BackLink>
       <div className="mb-5 flex flex-col justify-between gap-4 lg:flex-row lg:items-start">
         <div>
           <div className="flex flex-wrap items-center gap-2">

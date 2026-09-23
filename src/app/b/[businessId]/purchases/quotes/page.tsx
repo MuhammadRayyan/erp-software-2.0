@@ -2,16 +2,16 @@ import Link from "next/link";
 import { Plus, FileText } from "lucide-react";
 import { EmptyState } from "@/components/empty-state";
 import { ListDateFilter } from "@/components/list-date-filter";
+import { PageHeader } from "@/components/page-header";
 import { Button } from "@/components/ui/button";
 import { requireModule } from "@/core/permissions/require-module";
+import { buildDateSearchParams, DATE_PATTERN } from "@/lib/params";
 import { listPreferences } from "@/modules/preferences/preference-service";
 import { decodeColumnSnapshots } from "@/modules/preferences/snapshot-codec";
-import { PurchaseQuoteTable } from "@/modules/purchase-quotes/purchase-quote-table";
 import { listPurchaseQuotes } from "@/modules/purchase-quotes/purchase-quote-service";
+import { PurchaseQuoteTable } from "@/modules/purchase-quotes/purchase-quote-table";
 
 export const metadata = { title: "Purchase Quotes" };
-
-const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 
 export default async function PurchaseQuotesPage({
   params,
@@ -28,25 +28,20 @@ export default async function PurchaseQuotesPage({
   const quotes = listPurchaseQuotes(businessId, user.id, { from, to });
   const preferences = listPreferences(businessId, user.id);
   const columnSnapshots = decodeColumnSnapshots(preferences);
-  const searchParamsUrl = new URLSearchParams();
-  if (from) searchParamsUrl.set("from", from);
-  if (to) searchParamsUrl.set("to", to);
+  const searchParamsUrl = buildDateSearchParams({ from, to });
 
   return (
     <div className="page-container">
-      <div className="page-header">
-        <div>
-          <h1 className="page-title">Purchase Quotes</h1>
-          <p className="page-description">Draft, receive, and track supplier quotes and RFQs.</p>
-        </div>
-        <div className="flex flex-wrap gap-2">
-          <Button asChild>
-            <Link href={`/b/${businessId}/purchases/quotes/new`}>
-              <Plus className="size-4" /> New Purchase Quote
-            </Link>
-          </Button>
-        </div>
-      </div>
+      <PageHeader
+        title="Purchase Quotes"
+        description="Draft, receive, and track supplier quotes and RFQs."
+      >
+        <Button asChild>
+          <Link href={`/b/${businessId}/purchases/quotes/new`}>
+            <Plus className="size-4" /> New Purchase Quote
+          </Link>
+        </Button>
+      </PageHeader>
       {quotes.length ? (
         <div className="data-panel overflow-hidden">
           <ListDateFilter
@@ -54,8 +49,8 @@ export default async function PurchaseQuotesPage({
             searchParams={searchParamsUrl}
             initialFrom={from ?? ""}
             initialTo={to ?? ""}
-            fromLabel="From"
-            toLabel="To"
+            fromLabel="Quote from"
+            toLabel="Quote to"
           />
           <PurchaseQuoteTable
             businessId={businessId}

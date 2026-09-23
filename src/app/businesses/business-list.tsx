@@ -108,22 +108,20 @@ export function BusinessList({ businesses }: { businesses: BusinessCard[] }) {
       ) : (
         <div className="grid gap-3">
           {filtered.map((business, index) => (
-            <article key={business.id} className="group relative flex items-center gap-3 rounded-lg border border-border bg-surface-raised px-4 py-3.5 transition-colors hover:border-border-strong hover:bg-surface">
-              <Link href={`/b/${business.id}/overview`} className="absolute inset-0 z-0 rounded-lg">
-                <span className="sr-only">Open {business.name}</span>
-              </Link>
-              <span className="relative z-10 grid size-10 shrink-0 place-items-center rounded-lg bg-accent text-accent-foreground">{index === 0 ? <Star className="size-4 fill-current" /> : <Building2 className="size-4" />}</span>
-              <div className="relative z-10 min-w-0 flex-1">
+            <article key={business.id} className="group relative flex items-center gap-3 rounded-lg border border-border bg-surface-raised px-4 py-3.5 transition-colors hover:border-border-strong hover:bg-surface cursor-pointer">
+              <Link href={`/b/${business.id}/overview`} className="absolute inset-0 z-[1] rounded-lg" tabIndex={-1} aria-label={`Open ${business.name}`} />
+              <span className="pointer-events-none relative grid size-10 shrink-0 place-items-center rounded-lg bg-accent text-accent-foreground">{index === 0 ? <Star className="size-4 fill-current" /> : <Building2 className="size-4" />}</span>
+              <div className="pointer-events-none relative min-w-0 flex-1">
                 <span className="font-semibold text-foreground">{business.name}</span>
                 <p className="mt-1 truncate text-xs text-muted-foreground">{business.country} · {business.currency} · {business.lastOpened}</p>
               </div>
-              <div className="relative z-10 hidden sm:flex items-center gap-2">
+              <div className="relative z-[2] hidden sm:flex items-center gap-2">
                 <Button asChild variant="ghost" className="opacity-0 transition-opacity focus-within:opacity-100 group-hover:opacity-100">
                   <Link href={`/b/${business.id}/overview`}>Open <ArrowRight className="size-4" /></Link>
                 </Button>
                 <BusinessMenu business={business} />
               </div>
-              <div className="relative z-10 sm:hidden">
+              <div className="relative z-[2] sm:hidden">
                 <BusinessMenu business={business} />
               </div>
             </article>

@@ -1,5 +1,4 @@
 import Link from "next/link";
-import { ArrowLeft } from "lucide-react";
 import { notFound } from "next/navigation";
 import { requireModule } from "@/core/permissions/require-module";
 import { formatDate, formatMoney } from "@/core/format";
@@ -9,6 +8,7 @@ import { getCustomer } from "@/modules/customers/customer-service";
 import { getCustomerStatement } from "@/modules/reports/customer-statement-service";
 import { FileText } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { BackLink } from "@/components/back-link";
 
 export default async function CustomerStatementPage({ params }: { params: Promise<{ businessId: string; customerId: string }> }) {
   const { businessId, customerId } = await params;
@@ -18,7 +18,7 @@ export default async function CustomerStatementPage({ params }: { params: Promis
   const rows = getCustomerStatement(businessId, user.id, customerId);
   return (
     <div className="page-container">
-      <Link href={`/b/${businessId}/customers/${customerId}`} className="mb-5 inline-flex items-center gap-1.5 text-[13px] text-muted-foreground hover:text-foreground print:hidden"><ArrowLeft className="size-4" /> {customer.name}</Link>
+      <BackLink href={`/b/${businessId}/customers/${customerId}`}>{customer.name}</BackLink>
       <div className="page-header">
         <div>
           <h1 className="page-title">Customer Statement</h1>

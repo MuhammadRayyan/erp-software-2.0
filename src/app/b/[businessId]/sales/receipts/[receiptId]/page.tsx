@@ -1,5 +1,4 @@
 import Link from "next/link";
-import { ArrowLeft } from "lucide-react";
 import { notFound } from "next/navigation";
 import { Badge } from "@/components/ui/badge";
 import { formatDate, formatMoney } from "@/core/format";
@@ -7,6 +6,7 @@ import { requireModule } from "@/core/permissions/require-module";
 import { getReceipt } from "@/modules/receipts/receipt-service";
 import { ReceiptViewActions } from "@/modules/receipts/receipt-view-actions";
 import { getSourceBankingStatus } from "@/modules/banking/banking-report-service";
+import { BackLink } from "@/components/back-link";
 
 export default async function ReceiptViewPage({
   params,
@@ -23,7 +23,7 @@ export default async function ReceiptViewPage({
   const number = String(receipt.receipt_number);
   return (
     <div className="page-container">
-      <Link href={`/b/${businessId}/sales/receipts`} className="mb-5 inline-flex items-center gap-1.5 text-[13px] text-muted-foreground hover:text-foreground"><ArrowLeft className="size-4" /> Receipts</Link>
+      <BackLink href={`/b/${businessId}/sales/receipts`}>Receipts</BackLink>
       <div className="mb-6 flex flex-col justify-between gap-4 lg:flex-row lg:items-start">
         <div>
           <div className="flex items-center gap-2"><h1 className="page-title tabular">{number}</h1><Badge tone={status === "posted" ? "info" : "danger"}>{status === "posted" ? "Posted" : "Reversed"}</Badge></div>

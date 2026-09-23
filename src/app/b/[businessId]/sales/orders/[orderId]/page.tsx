@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { ArrowLeft, Tag } from "lucide-react";
+import { Tag } from "lucide-react";
 import { notFound } from "next/navigation";
 import { NoticeToast } from "@/components/notice-toast";
 import { requireModule } from "@/core/permissions/require-module";
@@ -15,6 +15,7 @@ import { OrderRevisionSwitcher } from "@/modules/sales-orders/order-revision-swi
 import { ProjectLinks } from "@/modules/projects/project-links";
 import { buildDocumentEmailContext, buildDocumentEmailDefaults } from "@/modules/email/email-defaults";
 import { emirateLabels, type Emirate } from "@/modules/tax/uae-vat-config";
+import { BackLink } from "@/components/back-link";
 
 
 export default async function OrderViewPage({ params, searchParams }: { params: Promise<{ businessId: string; orderId: string }>; searchParams: Promise<{ notice?: string }> }) {
@@ -51,7 +52,7 @@ export default async function OrderViewPage({ params, searchParams }: { params: 
   return (
     <div className="page-container">
       <NoticeToast message={notice} />
-      <Link href={`/b/${businessId}/sales/orders`} className="mb-5 inline-flex items-center gap-1.5 text-[13px] text-muted-foreground hover:text-foreground"><ArrowLeft className="size-4" /> Sales Orders</Link>
+      <BackLink href={`/b/${businessId}/sales/orders`}>Sales Orders</BackLink>
       <div className="mb-5 flex flex-col justify-between gap-4 lg:flex-row lg:items-start">
         <div><div className="flex flex-wrap items-center gap-2"><h1 className="page-title tabular">{order.orderNumber}</h1> <OrderRevisionSwitcher               businessId={businessId}               currentOrderId={order.id}               revisions={revisions}             /><StatusBadge status={order.documentStatus} /></div><p className="mt-2 text-base font-medium">{customer.name}</p><p className="mt-1 text-sm text-muted-foreground">Order date: {formatDate(order.orderDate)}{order.deliveryDate ? ` — Delivery: ${formatDate(order.deliveryDate)}` : ""}</p><div className="mt-3 flex flex-wrap items-baseline gap-x-5 gap-y-1"><span className="money text-xl font-semibold">{formatMoney(order.totalMinor, currency)}</span><span className="text-sm text-muted-foreground">No ledger impact</span></div></div>
         <SalesOrderViewActions businessId={businessId} orderId={order.id} orderNumber={order.orderNumber} documentStatus={order.documentStatus} inventoryEnabled={access.modules.includes("inventory")} hasDeliverableItems={lines.some((line) => Boolean(line.itemId) && line.remainingMicros > 0)} emailDefaults={emailDefaults} />

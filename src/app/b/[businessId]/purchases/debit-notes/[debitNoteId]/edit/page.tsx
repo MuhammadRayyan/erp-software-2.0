@@ -1,5 +1,4 @@
 import Link from "next/link";
-import { ArrowLeft } from "lucide-react";
 import { notFound } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { requireModule } from "@/core/permissions/require-module";
@@ -13,6 +12,7 @@ import { getDebitNote } from "@/modules/debit-notes/debit-note-service";
 import { quantityMicrosToInput } from "@/modules/accounting/calculations/money";
 import { minorToCurrencyInput } from "@/modules/currency/conversion";
 import { getCurrencySettings } from "@/modules/currency/exchange-rate";
+import { BackLink } from "@/components/back-link";
 
 export default async function EditDebitNotePage({
   params,
@@ -49,12 +49,7 @@ export default async function EditDebitNotePage({
 
   return (
     <div className="page-container">
-      <Link
-        href={`/b/${businessId}/purchases/debit-notes/${debitNoteId}`}
-        className="mb-5 inline-flex items-center gap-1.5 text-[13px] text-muted-foreground hover:text-foreground"
-      >
-        <ArrowLeft className="size-4" /> {record.note.debitNoteNumber}
-      </Link>
+      <BackLink href={`/b/${businessId}/purchases/debit-notes/${debitNoteId}`}>{record.note.debitNoteNumber}</BackLink>
       <div className="mb-7">
         <h1 className="page-title">Edit Debit Note</h1>
         <p className="page-description">

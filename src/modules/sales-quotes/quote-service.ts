@@ -52,7 +52,9 @@ export function listSalesQuotes(
     COALESCE(po.revision_number, 0) AS revision_number,
     COALESCE(po.is_latest_revision, 1) AS is_latest_revision,
     (SELECT GROUP_CONCAT(DISTINCT COALESCE(l.project_id, po.project_id)) FROM sales_quote_lines l WHERE l.quote_id = po.id) AS project_ids,
-    (SELECT COUNT(*) FROM sales_invoices pi WHERE pi.quote_id = po.id) AS invoice_count,
+    (SELECT COUNT(*) FROM sales_invoices pi 
+     INNER JOIN sales_orders so ON so.id = pi.sales_order_id 
+     WHERE so.sales_quote_id = po.id) AS invoice_count,
     cur.minor_unit AS currency_minor_unit
     FROM sales_quotes po INNER JOIN customers s ON s.id = po.customer_id
     INNER JOIN currencies cur ON cur.code = po.currency_code ${whereClause}

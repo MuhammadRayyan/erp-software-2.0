@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { ArrowLeft, ContactRound } from "lucide-react";
+import { ContactRound } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { requireModule } from "@/core/permissions/require-module";
 import { getSalesAccountOptions } from "@/modules/accounting/services/account-service";
@@ -11,6 +11,7 @@ import { listProjectOptions } from "@/modules/projects/project-service";
 import { InvoiceForm } from "@/modules/sales-invoices/invoice-form";
 import { listInventoryItemOptions } from "@/modules/inventory/inventory-item-service";
 import { getCurrencySettings } from "@/modules/currency/exchange-rate";
+import { BackLink } from "@/components/back-link";
 
 export default async function NewInvoicePage({
   params,
@@ -59,12 +60,7 @@ export default async function NewInvoicePage({
 
   return (
     <div className="page-container">
-      <Link
-        href={`/b/${businessId}/sales/invoices`}
-        className="mb-5 inline-flex items-center gap-1.5 text-[13px] text-muted-foreground hover:text-foreground"
-      >
-        <ArrowLeft className="size-4" /> Sales Invoices
-      </Link>
+      <BackLink href={`/b/${businessId}/sales/invoices`}>Sales Invoices</BackLink>
       <div className="mb-7">
         <h1 className="page-title">New Sales Invoice</h1>
         <p className="page-description">

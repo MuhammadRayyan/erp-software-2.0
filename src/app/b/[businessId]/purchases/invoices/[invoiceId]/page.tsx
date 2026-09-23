@@ -1,5 +1,4 @@
 import Link from "next/link";
-import { ArrowLeft } from "lucide-react";
 import { notFound } from "next/navigation";
 import { NoticeToast } from "@/components/notice-toast";
 import { StatusBadge } from "@/components/status-badge";
@@ -9,6 +8,7 @@ import { quantityMicrosToInput, rateBasisPointsToPercent } from "@/modules/accou
 import { ProjectLinks } from "@/modules/projects/project-links";
 import { getPurchaseInvoice } from "@/modules/purchase-invoices/purchase-invoice-service";
 import { PurchaseInvoiceViewActions } from "@/modules/purchase-invoices/purchase-invoice-view-actions";
+import { BackLink } from "@/components/back-link";
 
 
 export default async function PurchaseInvoiceViewPage({ params, searchParams }: { params: Promise<{ businessId: string; invoiceId: string }>; searchParams: Promise<{ notice?: string }> }) {
@@ -23,7 +23,7 @@ export default async function PurchaseInvoiceViewPage({ params, searchParams }: 
   const showLineProjects = linkedProjects.length > 1;
   return <div className="page-container">
     <NoticeToast message={notice} />
-    <Link href={`/b/${businessId}/purchases/invoices`} className="mb-5 inline-flex items-center gap-1.5 text-[13px] text-muted-foreground hover:text-foreground"><ArrowLeft className="size-4" /> Purchase Invoices</Link>
+    <BackLink href={`/b/${businessId}/purchases/invoices`}>Purchase Invoices</BackLink>
     <div className="mb-5 flex flex-col justify-between gap-4 lg:flex-row lg:items-start"><div><div className="flex flex-wrap items-center gap-2"><h1 className="page-title tabular">{invoice.internalNumber}</h1><StatusBadge status={invoice.documentStatus} />{record.paymentStatus && <StatusBadge status={record.paymentStatus} />}</div><p className="mt-2 text-base font-medium">{supplier.name}</p><p className="mt-1 text-sm text-muted-foreground">Supplier invoice: {invoice.supplierInvoiceNumber} · Invoice date: {formatDate(invoice.invoiceDate)} · Due: {formatDate(invoice.dueDate)}</p><div className="mt-3 flex flex-wrap items-baseline gap-x-5 gap-y-1"><span className="money text-xl font-semibold">{formatMoney(invoice.totalMinor, currency)}</span>{invoice.documentStatus === "posted" ? <span className="money text-sm text-muted-foreground">Balance <strong className="font-semibold text-foreground">{formatMoney(record.balanceMinor, currency)}</strong></span> : <span className="text-sm text-muted-foreground">No ledger impact</span>}</div></div><PurchaseInvoiceViewActions businessId={businessId} invoiceId={invoice.id} internalNumber={invoice.internalNumber} documentStatus={invoice.documentStatus} balanceMinor={record.balanceMinor} journalEntryId={record.journal?.id ?? null} inventoryEnabled={access.modules.includes("inventory")} hasInventoryLines={lines.some((line) => Boolean(line.itemId))} /></div>
     {currency !== access.business.currency && <section aria-label="Currency snapshot" className="mb-5 rounded-lg border border-border bg-surface-raised p-4"><dl className="grid gap-4 text-sm sm:grid-cols-2 lg:grid-cols-4"><div><dt className="text-xs text-muted-foreground">Stored rate</dt><dd className="money mt-1">1 {currency} = {invoice.exchangeRateToBase} {access.business.currency}</dd></div><div><dt className="text-xs text-muted-foreground">Rate date</dt><dd className="mt-1">{formatDate(invoice.exchangeRateDate)}</dd></div><div><dt className="text-xs text-muted-foreground">Rate source</dt><dd className="mt-1">{invoice.exchangeRateSource}</dd></div><div><dt className="text-xs text-muted-foreground">Base equivalent</dt><dd className="money mt-1 font-semibold">{formatMoney(invoice.baseTotalMinor, access.business.currency)}</dd></div></dl><p className="mt-3 text-xs text-muted-foreground">Base Input VAT {formatMoney(invoice.baseTaxMinor, access.business.currency)} · Inventory purchases remain base historical cost and do not move stock here.</p></section>}
     <article className="rounded-xl border border-border bg-surface-raised shadow-sm p-5 sm:p-7 dark:shadow-none">

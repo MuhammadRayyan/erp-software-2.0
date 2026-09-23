@@ -142,8 +142,28 @@ function postMovements(
   }
 }
 
-export function listGoodsReceipts(businessId: string, userId: string) {
+export function listGoodsReceipts(
+  businessId: string,
+  userId: string,
+  filters?: { supplierId?: string; from?: string; to?: string }
+) {
   const { sqlite } = getBusinessDb(businessId, userId);
+  const where: string[] = [];
+  const params: string[] = [];
+  if (filters?.supplierId) {
+    where.push("gr.supplier_id = ?");
+    params.push(filters.supplierId);
+  }
+  if (filters?.from) {
+    where.push("gr.date >= ?");
+    params.push(filters.from);
+  }
+  if (filters?.to) {
+    where.push("gr.date <= ?");
+    params.push(filters.to);
+  }
+  const whereClause = where.length > 0 ? `WHERE ${where.join(" AND ")}` : "";
+
   return sqlite.prepare(`
     SELECT gr.*, s.name AS supplier_name, l.code AS location_code,
       COALESCE((
@@ -159,8 +179,9 @@ export function listGoodsReceipts(businessId: string, userId: string) {
     FROM goods_receipts gr
     INNER JOIN suppliers s ON s.id = gr.supplier_id
     INNER JOIN inventory_locations l ON l.id = gr.location_id
+    ${whereClause}
     ORDER BY gr.date DESC, gr.created_at DESC
-  `).all() as Record<string, unknown>[];
+  `).all(...params) as Record<string, unknown>[];
 }
 
 export function getGoodsReceipt(businessId: string, userId: string, receiptId: string) {

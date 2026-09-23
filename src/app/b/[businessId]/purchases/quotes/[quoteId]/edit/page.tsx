@@ -1,5 +1,4 @@
 import Link from "next/link";
-import { ArrowLeft } from "lucide-react";
 import { notFound } from "next/navigation";
 import { requireModule } from "@/core/permissions/require-module";
 import { getExpenseAccountOptions } from "@/modules/accounting/services/account-service";
@@ -12,6 +11,7 @@ import { listInventoryItemOptions } from "@/modules/inventory/inventory-item-ser
 import { getCurrencySettings } from "@/modules/currency/exchange-rate";
 import { quantityMicrosToInput } from "@/modules/accounting/calculations/money";
 import { minorToCurrencyInput } from "@/modules/currency/conversion";
+import { BackLink } from "@/components/back-link";
 
 export default async function EditPurchaseQuotePage({
   params,
@@ -37,12 +37,7 @@ export default async function EditPurchaseQuotePage({
 
   return (
     <div className="page-container">
-      <Link
-        href={`/b/${businessId}/purchases/quotes/${quoteId}`}
-        className="mb-5 inline-flex items-center gap-1.5 text-[13px] text-muted-foreground hover:text-foreground"
-      >
-        <ArrowLeft className="size-4" /> {record.quote.quoteNumber}
-      </Link>
+      <BackLink href={`/b/${businessId}/purchases/quotes/${quoteId}`}>{record.quote.quoteNumber}</BackLink>
       <div className="mb-7">
         <h1 className="page-title">Edit Purchase Quote</h1>
         <p className="page-description">Updates remain operational and do not affect the ledger.</p>

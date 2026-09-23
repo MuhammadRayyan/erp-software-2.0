@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { AlertCircle, ArrowLeft } from "lucide-react";
+import { AlertCircle, } from "lucide-react";
 import { notFound } from "next/navigation";
 import { NoticeToast } from "@/components/notice-toast";
 import { requireModule } from "@/core/permissions/require-module";
@@ -11,6 +11,7 @@ import { PurchaseQuoteViewActions } from "@/modules/purchase-quotes/purchase-quo
 import { PurchaseQuoteRevisionSwitcher } from "@/modules/purchase-quotes/purchase-quote-revision-switcher";
 import { ProjectLinks } from "@/modules/projects/project-links";
 import { buildDocumentEmailContext, buildDocumentEmailDefaults } from "@/modules/email/email-defaults";
+import { BackLink } from "@/components/back-link";
 
 export default async function PurchaseQuoteViewPage({
   params,
@@ -52,12 +53,7 @@ export default async function PurchaseQuoteViewPage({
   return (
     <div className="page-container">
       <NoticeToast message={notice} />
-      <Link
-        href={`/b/${businessId}/purchases/quotes`}
-        className="mb-5 inline-flex items-center gap-1.5 text-[13px] text-muted-foreground hover:text-foreground"
-      >
-        <ArrowLeft className="size-4" /> Purchase Quotes
-      </Link>
+      <BackLink href={`/b/${businessId}/purchases/quotes`}>Purchase Quotes</BackLink>
 
       {isViewingOlderRevision && latestRevision && latestRevision.id !== quote.id && (
         <div className="mb-5 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-amber-500/30 bg-amber-500/10 p-3.5 text-sm text-amber-900 dark:text-amber-200">

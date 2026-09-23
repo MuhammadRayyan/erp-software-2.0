@@ -1,5 +1,4 @@
 import Link from "next/link";
-import { ArrowLeft } from "lucide-react";
 import { notFound } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { requireModule } from "@/core/permissions/require-module";
@@ -14,6 +13,7 @@ import { InvoiceForm } from "@/modules/sales-invoices/invoice-form";
 import { getInvoice } from "@/modules/sales-invoices/invoice-service";
 import { minorToCurrencyInput } from "@/modules/currency/conversion";
 import { getCurrencySettings } from "@/modules/currency/exchange-rate";
+import { BackLink } from "@/components/back-link";
 
 export default async function EditInvoicePage({ params }: { params: Promise<{ businessId: string; invoiceId: string }> }) {
   const { businessId, invoiceId } = await params;
@@ -35,7 +35,7 @@ export default async function EditInvoicePage({ params }: { params: Promise<{ bu
     ? getCustomFieldValuesForEntities(businessId, user.id, "sales_invoice", [invoiceId]).get(invoiceId) ?? {}
     : {};
   return <div className="page-container">
-    <Link href={`/b/${businessId}/sales/invoices/${invoiceId}`} className="mb-5 inline-flex items-center gap-1.5 text-[13px] text-muted-foreground hover:text-foreground"><ArrowLeft className="size-4" /> {record.invoice.invoiceNumber}</Link>
+    <BackLink href={`/b/${businessId}/sales/invoices/${invoiceId}`}>{record.invoice.invoiceNumber}</BackLink>
     <div className="mb-7"><h1 className="page-title">Edit Sales Invoice</h1><p className="page-description">{record.invoice.documentStatus === "posted" ? "Financial changes rebuild the journal atomically." : "Update the draft, or post it when ready."}</p></div>
     <InvoiceForm
       businessId={businessId}

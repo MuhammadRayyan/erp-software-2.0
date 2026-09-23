@@ -1,5 +1,5 @@
 ﻿import Link from "next/link";
-import { ArrowLeft, Truck } from "lucide-react";
+import { Truck } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { requireModule } from "@/core/permissions/require-module";
 import { getExpenseAccountOptions } from "@/modules/accounting/services/account-service";
@@ -10,6 +10,7 @@ import { listPurchaseInvoices } from "@/modules/purchase-invoices/purchase-invoi
 import { listProjectOptions } from "@/modules/projects/project-service";
 import { DebitNoteForm } from "@/modules/debit-notes/debit-note-form";
 import { getCurrencySettings } from "@/modules/currency/exchange-rate";
+import { BackLink } from "@/components/back-link";
 
 export default async function NewDebitNotePage({
   params,
@@ -48,12 +49,7 @@ export default async function NewDebitNotePage({
 
   return (
     <div className="page-container">
-      <Link
-        href={`/b/${businessId}/purchases/debit-notes`}
-        className="mb-5 inline-flex items-center gap-1.5 text-[13px] text-muted-foreground hover:text-foreground"
-      >
-        <ArrowLeft className="size-4" /> Debit Notes
-      </Link>
+      <BackLink href={`/b/${businessId}/purchases/debit-notes`}>Debit Notes</BackLink>
       <div className="mb-7">
         <h1 className="page-title">New Debit Note</h1>
         <p className="page-description">

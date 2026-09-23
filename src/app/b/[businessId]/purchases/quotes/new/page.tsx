@@ -1,5 +1,4 @@
 import Link from "next/link";
-import { ArrowLeft } from "lucide-react";
 import { requireModule } from "@/core/permissions/require-module";
 import { getExpenseAccountOptions } from "@/modules/accounting/services/account-service";
 import { getActiveTaxCodes } from "@/modules/accounting/services/tax-code-service";
@@ -8,6 +7,7 @@ import { listActiveSuppliers } from "@/modules/suppliers/supplier-service";
 import { listProjectOptions } from "@/modules/projects/project-service";
 import { listInventoryItemOptions } from "@/modules/inventory/inventory-item-service";
 import { getCurrencySettings } from "@/modules/currency/exchange-rate";
+import { BackLink } from "@/components/back-link";
 
 export default async function NewPurchaseQuotePage({
   params,
@@ -39,12 +39,7 @@ export default async function NewPurchaseQuotePage({
 
   return (
     <div className="page-container">
-      <Link
-        href={`/b/${businessId}/purchases/quotes`}
-        className="mb-5 inline-flex items-center gap-1.5 text-[13px] text-muted-foreground hover:text-foreground"
-      >
-        <ArrowLeft className="size-4" /> Purchase Quotes
-      </Link>
+      <BackLink href={`/b/${businessId}/purchases/quotes`}>Purchase Quotes</BackLink>
       <div className="mb-7">
         <h1 className="page-title">New Purchase Quote</h1>
         <p className="page-description">Save a draft or issue an operational supplier quote without ledger impact.</p>

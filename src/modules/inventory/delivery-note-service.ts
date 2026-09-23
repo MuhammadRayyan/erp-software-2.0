@@ -229,8 +229,28 @@ function postDelivery(
   });
 }
 
-export function listDeliveryNotes(businessId: string, userId: string) {
+export function listDeliveryNotes(
+  businessId: string, 
+  userId: string, 
+  filters?: { customerId?: string; from?: string; to?: string }
+) {
   const { sqlite } = getBusinessDb(businessId, userId);
+  const where: string[] = [];
+  const params: string[] = [];
+  if (filters?.customerId) {
+    where.push("dn.customer_id = ?");
+    params.push(filters.customerId);
+  }
+  if (filters?.from) {
+    where.push("dn.date >= ?");
+    params.push(filters.from);
+  }
+  if (filters?.to) {
+    where.push("dn.date <= ?");
+    params.push(filters.to);
+  }
+  const whereClause = where.length > 0 ? `WHERE ${where.join(" AND ")}` : "";
+
   return sqlite.prepare(`
     SELECT dn.*, c.name AS customer_name, l.code AS location_code,
       COALESCE((
@@ -246,8 +266,9 @@ export function listDeliveryNotes(businessId: string, userId: string) {
     FROM delivery_notes dn
     INNER JOIN customers c ON c.id = dn.customer_id
     INNER JOIN inventory_locations l ON l.id = dn.location_id
+    ${whereClause}
     ORDER BY dn.date DESC, dn.created_at DESC
-  `).all() as Record<string, unknown>[];
+  `).all(...params) as Record<string, unknown>[];
 }
 
 export function getDeliveryNote(businessId: string, userId: string, deliveryId: string) {

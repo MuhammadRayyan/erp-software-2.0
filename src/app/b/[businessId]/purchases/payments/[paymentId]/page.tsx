@@ -1,5 +1,4 @@
 import Link from "next/link";
-import { ArrowLeft } from "lucide-react";
 import { notFound } from "next/navigation";
 import { Badge } from "@/components/ui/badge";
 import { formatDate, formatMoney } from "@/core/format";
@@ -7,6 +6,7 @@ import { requireModule } from "@/core/permissions/require-module";
 import { getSupplierPayment } from "@/modules/supplier-payments/supplier-payment-service";
 import { SupplierPaymentViewActions } from "@/modules/supplier-payments/supplier-payment-view-actions";
 import { getSourceBankingStatus } from "@/modules/banking/banking-report-service";
+import { BackLink } from "@/components/back-link";
 
 export default async function SupplierPaymentViewPage({
   params,
@@ -23,7 +23,7 @@ export default async function SupplierPaymentViewPage({
   const number = String(payment.payment_number);
   return (
     <div className="page-container">
-      <Link href={`/b/${businessId}/purchases/payments`} className="mb-5 inline-flex items-center gap-1.5 text-[13px] text-muted-foreground hover:text-foreground"><ArrowLeft className="size-4" /> Supplier Payments</Link>
+      <BackLink href={`/b/${businessId}/purchases/payments`}>Supplier Payments</BackLink>
       <div className="mb-6 flex flex-col justify-between gap-4 lg:flex-row lg:items-start"><div><div className="flex items-center gap-2"><h1 className="page-title tabular">{number}</h1><Badge tone={status === "posted" ? "info" : "danger"}>{status === "posted" ? "Posted" : "Reversed"}</Badge></div><p className="mt-2 font-medium">{String(payment.supplier_name)}</p><p className="mt-1 text-sm text-muted-foreground">{formatDate(String(payment.date))}</p><p className="money mt-3 text-xl font-semibold">{formatMoney(Number(payment.amount_minor), String(payment.currency_code))}</p><p className="mt-1 text-sm text-muted-foreground">Bank {formatMoney(Number(payment.base_amount_minor), access.business.currency)} at 1 {String(payment.currency_code)} = {String(payment.exchange_rate_to_base)} {access.business.currency} · Realized FX {formatMoney(Number(payment.realized_fx_amount_minor), access.business.currency)}</p></div><SupplierPaymentViewActions businessId={businessId} paymentId={paymentId} paymentNumber={number} status={status} /></div>
       <article className="rounded-lg border border-border bg-surface-raised p-5 sm:p-7">
         <dl className="grid gap-4 border-b border-border pb-6 text-sm sm:grid-cols-2 lg:grid-cols-4"><div><dt className="text-xs text-muted-foreground">Supplier</dt><dd className="mt-1"><Link href={`/b/${businessId}/suppliers/${String(payment.supplier_id)}`} className="font-medium text-primary hover:underline">{String(payment.supplier_name)}</Link></dd></div><div><dt className="text-xs text-muted-foreground">Bank / Cash account</dt><dd className="mt-1">{String(payment.bank_account_code)} · {String(payment.bank_account_name)}</dd></div><div><dt className="text-xs text-muted-foreground">Reference</dt><dd className="mt-1">{String(payment.reference ?? "—")}</dd></div><div><dt className="text-xs text-muted-foreground">Description</dt><dd className="mt-1">{String(payment.description ?? "—")}</dd></div></dl>

@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { ArrowLeft } from "lucide-react";
+import { } from "lucide-react";
 import { notFound } from "next/navigation";
 import { NoticeToast } from "@/components/notice-toast";
 import { StatusBadge } from "@/components/status-badge";
@@ -11,6 +11,7 @@ import { buildDocumentEmailContext, buildDocumentEmailDefaults } from "@/modules
 import { getPurchaseOrder, listPurchaseOrderRevisions } from "@/modules/purchase-orders/purchase-order-service";
 import { PurchaseOrderViewActions } from "@/modules/purchase-orders/purchase-order-view-actions";
 import { OrderRevisionSwitcher } from "@/modules/purchase-orders/order-revision-switcher";
+import { BackLink } from "@/components/back-link";
 
 export default async function PurchaseOrderViewPage({ params, searchParams }: { params: Promise<{ businessId: string; orderId: string }>; searchParams: Promise<{ notice?: string }> }) {
   const { businessId, orderId } = await params;
@@ -40,7 +41,7 @@ export default async function PurchaseOrderViewPage({ params, searchParams }: { 
 
   return <div className="page-container">
     <NoticeToast message={notice} />
-    <Link href={`/b/${businessId}/purchases/orders`} className="mb-5 inline-flex items-center gap-1.5 text-[13px] text-muted-foreground hover:text-foreground"><ArrowLeft className="size-4" /> Purchase Orders</Link>
+    <BackLink href={`/b/${businessId}/purchases/orders`}>Purchase Orders</BackLink>
     <div className="mb-5 flex flex-col justify-between gap-4 lg:flex-row lg:items-start"><div><div className="flex flex-wrap items-center gap-2"><h1 className="page-title tabular">{order.orderNumber}</h1> <OrderRevisionSwitcher               businessId={businessId}               currentOrderId={order.id}               revisions={revisions}             /><StatusBadge status={order.status} /></div><p className="mt-2 text-base font-medium">{supplier.name}</p><p className="mt-1 text-sm text-muted-foreground">Order date: {formatDate(order.date)}{order.expectedDate ? ` · Expected: ${formatDate(order.expectedDate)}` : ""}</p><div className="mt-3 flex flex-wrap items-baseline gap-4"><span className="money text-xl font-semibold">{formatMoney(order.totalMinor, currency)}</span><span className="text-sm text-muted-foreground">No ledger impact</span></div></div><PurchaseOrderViewActions businessId={businessId} orderId={order.id} orderNumber={order.orderNumber} status={order.status} inventoryEnabled={access.modules.includes("inventory")} hasReceivableItems={lines.some((line) => Boolean(line.itemId) && line.remainingMicros > 0)} emailDefaults={emailDefaults} /></div>
     {currency !== access.business.currency && <section aria-label="Currency snapshot" className="mb-5 rounded-lg border border-border bg-surface-raised p-4"><dl className="grid gap-4 text-sm sm:grid-cols-2 lg:grid-cols-4"><div><dt className="text-xs text-muted-foreground">Commitment rate</dt><dd className="money mt-1">1 {currency} = {order.exchangeRateToBase} {access.business.currency}</dd></div><div><dt className="text-xs text-muted-foreground">Rate date</dt><dd className="mt-1">{formatDate(order.exchangeRateDate)}</dd></div><div><dt className="text-xs text-muted-foreground">Rate source</dt><dd className="mt-1">{order.exchangeRateSource}</dd></div><div><dt className="text-xs text-muted-foreground">Base commitment</dt><dd className="money mt-1 font-semibold">{formatMoney(order.baseTotalMinor, access.business.currency)}</dd></div></dl><p className="mt-3 text-xs text-muted-foreground">Operational snapshot only; a later Purchase Invoice uses its own posting and VAT rate.</p></section>}
     <article className="rounded-xl border border-border bg-surface-raised shadow-sm p-5 sm:p-7 dark:shadow-none">

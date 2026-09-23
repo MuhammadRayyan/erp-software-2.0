@@ -39,26 +39,28 @@ export function listSalesOrders(
     params.push(filters.customerId);
   }
   if (filters?.from) {
-    where.push("po.date >= ?");
+    where.push("po.order_date >= ?");
     params.push(filters.from);
   }
   if (filters?.to) {
-    where.push("po.date <= ?");
+    where.push("po.order_date <= ?");
     params.push(filters.to);
   }
   const whereClause = where.length ? `WHERE ${where.join(" AND ")}` : "";
-  const rows = sqlite.prepare(`SELECT po.*, s.name AS customer_name,
+  const rows = sqlite.prepare(`SELECT po.*,
+    po.order_date AS date, po.delivery_date AS expected_date, po.document_status AS documentStatus,
+    s.name AS customer_name,
     (SELECT GROUP_CONCAT(DISTINCT COALESCE(l.project_id, po.project_id)) FROM sales_order_lines l WHERE l.order_id = po.id) AS project_ids,
     (SELECT COUNT(*) FROM sales_invoices pi WHERE pi.sales_order_id = po.id) AS invoice_count,
     cur.minor_unit AS currency_minor_unit
     FROM sales_orders po INNER JOIN customers s ON s.id = po.customer_id
     INNER JOIN currencies cur ON cur.code = po.currency_code ${whereClause}
-    ORDER BY po.date DESC, po.created_at DESC`).all(...params) as {
+    ORDER BY po.order_date DESC, po.created_at DESC`).all(...params) as {
       id: string; order_number: string; customer_id: string; customer_name: string; date: string;
       expected_date: string | null; reference: string | null; notes: string | null;
       documentStatus: SalesOrderStatus; subtotal_minor: number; tax_minor: number; total_minor: number; currency_code: string; currency_minor_unit: number;
-      created_by: string; created_at: string; updated_at: string; issued_at: string | null;
-      closed_at: string | null; cancelled_at: string | null; invoice_count: number; project_id: string | null; project_ids: string | null;
+      created_by: string; created_at: string; updated_at: string;
+      invoice_count: number; project_id: string | null; project_ids: string | null;
     }[];
   const projects = sqlite.prepare("SELECT id, name FROM projects").all() as { id: string; name: string }[];
   const projectById = new Map(projects.map((project) => [project.id, project.name]));

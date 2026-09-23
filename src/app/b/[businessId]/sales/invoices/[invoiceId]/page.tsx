@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { ArrowLeft, Tag } from "lucide-react";
+import { Tag } from "lucide-react";
 import { notFound } from "next/navigation";
 import { NoticeToast } from "@/components/notice-toast";
 import { requireModule } from "@/core/permissions/require-module";
@@ -13,6 +13,7 @@ import { InvoiceViewActions } from "@/modules/sales-invoices/invoice-view-action
 import { ProjectLinks } from "@/modules/projects/project-links";
 import { emirateLabels, type Emirate } from "@/modules/tax/uae-vat-config";
 import { buildDocumentEmailContext, buildDocumentEmailDefaults } from "@/modules/email/email-defaults";
+import { BackLink } from "@/components/back-link";
 
 export default async function InvoiceViewPage({ params, searchParams }: { params: Promise<{ businessId: string; invoiceId: string }>; searchParams: Promise<{ notice?: string }> }) {
   const { businessId, invoiceId } = await params;
@@ -47,7 +48,7 @@ export default async function InvoiceViewPage({ params, searchParams }: { params
   return (
     <div className="page-container">
       <NoticeToast message={notice} />
-      <Link href={`/b/${businessId}/sales/invoices`} className="mb-5 inline-flex items-center gap-1.5 text-[13px] text-muted-foreground hover:text-foreground"><ArrowLeft className="size-4" /> Sales Invoices</Link>
+      <BackLink href={`/b/${businessId}/sales/invoices`}>Sales Invoices</BackLink>
       <div className="mb-5 flex flex-col justify-between gap-4 lg:flex-row lg:items-start">
         <div><div className="flex flex-wrap items-center gap-2"><h1 className="page-title tabular">{invoice.invoiceNumber}</h1><DocumentStatusBadge status={invoice.documentStatus} />{record.paymentStatus && <PaymentStatusBadge status={record.paymentStatus} />}</div><p className="mt-2 text-base font-medium">{customer.name}</p><p className="mt-1 text-sm text-muted-foreground">Invoice date: {formatDate(invoice.invoiceDate)}{invoice.dueDate ? ` · Due: ${formatDate(invoice.dueDate)}` : ""}</p><div className="mt-3 flex flex-wrap items-baseline gap-x-5 gap-y-1"><span className="money text-xl font-semibold">{formatMoney(invoice.totalMinor, currency)}</span>{invoice.documentStatus === "posted" ? <span className="money text-sm text-muted-foreground">Balance <strong className="font-semibold text-foreground">{formatMoney(record.balanceMinor, currency)}</strong></span> : <span className="text-sm text-muted-foreground">No ledger impact</span>}</div></div>
         <InvoiceViewActions businessId={businessId} invoiceId={invoice.id} invoiceNumber={invoice.invoiceNumber} documentStatus={invoice.documentStatus} balanceMinor={record.balanceMinor} journalEntryId={record.journal?.id ?? null} inventoryEnabled={access.modules.includes("inventory")} hasDeliverableItems={lines.some((line) => Boolean(line.itemId) && line.remainingToDeliverMicros > 0)} emailDefaults={emailDefaults} />

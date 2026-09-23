@@ -2,16 +2,16 @@ import Link from "next/link";
 import { Plus, ReceiptText } from "lucide-react";
 import { EmptyState } from "@/components/empty-state";
 import { ListDateFilter } from "@/components/list-date-filter";
+import { PageHeader } from "@/components/page-header";
 import { Button } from "@/components/ui/button";
 import { requireModule } from "@/core/permissions/require-module";
+import { buildDateSearchParams, DATE_PATTERN } from "@/lib/params";
 import { listPreferences } from "@/modules/preferences/preference-service";
 import { decodeColumnSnapshots } from "@/modules/preferences/snapshot-codec";
 import { SalesOrderTable } from "@/modules/sales-orders/sales-order-table";
 import { listSalesOrders } from "@/modules/sales-orders/sales-order-service";
 
 export const metadata = { title: "Sales Orders" };
-
-const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 
 export default async function OrderListPage({
   params,
@@ -28,25 +28,17 @@ export default async function OrderListPage({
   const orders = listSalesOrders(businessId, user.id, { from, to });
   const preferences = listPreferences(businessId, user.id);
   const columnSnapshots = decodeColumnSnapshots(preferences);
-  const searchParamsUrl = new URLSearchParams();
-  if (from) searchParamsUrl.set("from", from);
-  if (to) searchParamsUrl.set("to", to);
+  const searchParamsUrl = buildDateSearchParams({ from, to });
 
   return (
     <div className="page-container">
-      <div className="page-header">
-        <div>
-          <h1 className="page-title">Sales Orders</h1>
-          <p className="page-description">Draft, issue, and track customer orders.</p>
-        </div>
-        <div className="flex flex-wrap gap-2">
-          <Button asChild>
-            <Link href={`/b/${businessId}/sales/orders/new`}>
-              <Plus className="size-4" /> New Order
-            </Link>
-          </Button>
-        </div>
-      </div>
+      <PageHeader title="Sales Orders" description="Draft, issue, and track customer orders.">
+        <Button asChild>
+          <Link href={`/b/${businessId}/sales/orders/new`}>
+            <Plus className="size-4" /> New Order
+          </Link>
+        </Button>
+      </PageHeader>
       {orders.length ? (
         <div className="data-panel overflow-hidden">
           <ListDateFilter
@@ -54,8 +46,8 @@ export default async function OrderListPage({
             searchParams={searchParamsUrl}
             initialFrom={from ?? ""}
             initialTo={to ?? ""}
-            fromLabel="From"
-            toLabel="To"
+            fromLabel="Order from"
+            toLabel="Order to"
           />
           <SalesOrderTable
             businessId={businessId}

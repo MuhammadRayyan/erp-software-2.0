@@ -16,6 +16,15 @@ export type PaginationInfo = {
   totalPages: number;
 };
 
+export function toPaginationInfo(data: { page: number; pageSize: number; total: number; totalPages: number }): PaginationInfo {
+  return {
+    page: data.page,
+    pageSize: data.pageSize,
+    total: data.total,
+    totalPages: data.totalPages,
+  };
+}
+
 /** Page-size options offered in the selector. `0` means "all rows". */
 export const DEFAULT_PAGE_SIZE_OPTIONS = [25, 50, 100, 200] as const;
 

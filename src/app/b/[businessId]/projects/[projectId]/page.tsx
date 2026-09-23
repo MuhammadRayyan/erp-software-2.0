@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { ArrowLeft, CalendarDays, CircleUserRound } from "lucide-react";
+import { CalendarDays, CircleUserRound } from "lucide-react";
 import { notFound } from "next/navigation";
 import { NoticeToast } from "@/components/notice-toast";
 import { requireModule } from "@/core/permissions/require-module";
@@ -9,6 +9,7 @@ import { getProject } from "@/modules/projects/project-service";
 import { ProjectStatusBadge } from "@/modules/projects/project-status";
 import { ProjectViewActions } from "@/modules/projects/project-view-actions";
 import { getProjectOperationalView, type ProjectDocumentRow } from "@/modules/projects/project-view-service";
+import { BackLink } from "@/components/back-link";
 
 function Metric({ label, value, currency, emphasis = false }: { label: string; value: number | null; currency: string; emphasis?: boolean }) {
   return <div className="bg-surface-raised px-4 py-3"><dt className="text-xs text-muted-foreground">{label}</dt><dd className={`money mt-1 text-base ${emphasis ? "font-semibold" : "font-medium"}`}>{value === null ? "Not tracked" : formatMoney(value, currency)}</dd></div>;
@@ -29,7 +30,7 @@ export default async function ProjectViewPage({ params, searchParams }: { params
   const currency = access.business.currency;
   return <div className="page-container">
     <NoticeToast message={notice} />
-    <Link href={`/b/${businessId}/projects`} className="mb-5 inline-flex items-center gap-1.5 text-[13px] text-muted-foreground hover:text-foreground"><ArrowLeft className="size-4" /> Projects</Link>
+    <BackLink href={`/b/${businessId}/projects`}>Projects</BackLink>
     <div className="mb-5 flex flex-col justify-between gap-4 lg:flex-row lg:items-start"><div><div className="flex flex-wrap items-center gap-2"><span className="tabular text-sm font-semibold text-primary">{project.code}</span><ProjectStatusBadge status={project.status} /></div><h1 className="page-title mt-1">{project.name}</h1><p className="mt-2 text-sm text-muted-foreground">{project.customerId ? <Link href={`/b/${businessId}/customers/${project.customerId}`} className="font-medium text-foreground hover:text-primary hover:underline">{project.customerName}</Link> : "No customer assigned"}</p></div><ProjectViewActions businessId={businessId} projectId={projectId} customerId={project.customerId} /></div>
     <nav aria-label="Project sections" className="mb-5 overflow-x-auto border-b border-border"><div className="flex min-w-max gap-6">{[["overview", "Overview"], ["sales", "Sales"], ["purchases", "Purchases"], ["activity", "Activity"], ["files", "Files"]].map(([href, label]) => <a key={href} href={`#${href}`} className="border-b-2 border-transparent px-0.5 py-2.5 text-[13px] font-medium text-muted-foreground hover:border-primary hover:text-foreground">{label}</a>)}</div></nav>
 

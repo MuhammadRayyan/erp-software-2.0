@@ -58,9 +58,27 @@ function insertLines(sqlite: ReturnType<typeof getBusinessDb>["sqlite"], noteId:
   for (const line of lines) statement.run(line.id, noteId, line.description, line.quantityMicros, line.unitPriceMinor, line.salesAccountId, line.taxCodeId, line.projectId, line.netAmountMinor, line.taxAmountMinor, line.grossAmountMinor, line.lineIndex);
 }
 
-export function listCreditNotes(businessId: string, userId: string, customerId?: string) {
+export function listCreditNotes(
+  businessId: string, 
+  userId: string, 
+  filters?: { customerId?: string; from?: string; to?: string }
+) {
   const { sqlite } = getBusinessDb(businessId, userId);
-  const where = customerId ? "WHERE scn.customer_id = ?" : "";
+  const where: string[] = [];
+  const params: string[] = [];
+  if (filters?.customerId) {
+    where.push("scn.customer_id = ?");
+    params.push(filters.customerId);
+  }
+  if (filters?.from) {
+    where.push("scn.date >= ?");
+    params.push(filters.from);
+  }
+  if (filters?.to) {
+    where.push("scn.date <= ?");
+    params.push(filters.to);
+  }
+  const whereClause = where.length > 0 ? `WHERE ${where.join(" AND ")}` : "";
   const rows = sqlite.prepare(`
     SELECT scn.*, c.name AS customer_name, i.invoice_number, cur.minor_unit AS currency_minor_unit,
       (SELECT GROUP_CONCAT(DISTINCT COALESCE(l.project_id, scn.project_id)) FROM sales_credit_note_lines l WHERE l.credit_note_id = scn.id) AS project_ids
@@ -68,9 +86,9 @@ export function listCreditNotes(businessId: string, userId: string, customerId?:
     INNER JOIN customers c ON c.id = scn.customer_id
     INNER JOIN sales_invoices i ON i.id = scn.source_invoice_id
     INNER JOIN currencies cur ON cur.code = scn.currency_code
-    ${where}
+    ${whereClause}
     ORDER BY scn.date DESC, scn.created_at DESC
-  `).all(...(customerId ? [customerId] : [])) as {
+  `).all(...params) as {
     id: string; credit_note_number: string; customer_id: string; customer_name: string;
     source_invoice_id: string; invoice_number: string; project_id: string | null; project_ids: string | null;
     date: string; reference: string | null; reason: string | null; document_status: CreditNoteStatus;

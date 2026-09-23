@@ -23,22 +23,43 @@ function insertLines(sqlite: ReturnType<typeof getBusinessDb>["sqlite"], orderId
   for (const line of lines) statement.run(line.id, orderId, line.itemId, line.description, line.quantityMicros, line.unitPriceMinor, line.discountType || "none", line.discountValue || "0", line.expenseAccountId, line.taxCodeId, line.projectId, line.netAmountMinor, line.taxAmountMinor, line.grossAmountMinor, line.lineIndex);
 }
 
-export function listPurchaseOrders(businessId: string, userId: string, supplierId?: string) {
+export function listPurchaseOrders(
+  businessId: string, 
+  userId: string, 
+  filters?: { supplierId?: string; from?: string; to?: string }
+) {
   const { sqlite } = getBusinessDb(businessId, userId);
-  const where = supplierId ? "WHERE po.supplier_id = ?" : "";
-  const rows = sqlite.prepare(`SELECT po.*, s.name AS supplier_name,
-    (SELECT GROUP_CONCAT(DISTINCT COALESCE(l.project_id, po.project_id)) FROM purchase_order_lines l WHERE l.purchase_order_id = po.id) AS project_ids,
-    (SELECT COUNT(*) FROM purchase_invoices pi WHERE pi.purchase_order_id = po.id) AS invoice_count,
-    cur.minor_unit AS currency_minor_unit
+  const where: string[] = [];
+  const params: string[] = [];
+  if (filters?.supplierId) {
+    where.push("po.supplier_id = ?");
+    params.push(filters.supplierId);
+  }
+  if (filters?.from) {
+    where.push("po.date >= ?");
+    params.push(filters.from);
+  }
+  if (filters?.to) {
+    where.push("po.date <= ?");
+    params.push(filters.to);
+  }
+  const whereClause = where.length > 0 ? `WHERE ${where.join(" AND ")}` : "";
+  const rows = sqlite.prepare(`
+    SELECT po.*, s.name AS supplier_name,
+      (SELECT GROUP_CONCAT(DISTINCT COALESCE(l.project_id, po.project_id)) FROM purchase_order_lines l WHERE l.purchase_order_id = po.id) AS project_ids,
+      (SELECT COUNT(*) FROM purchase_invoices pi WHERE pi.purchase_order_id = po.id) AS invoice_count,
+      cur.minor_unit AS currency_minor_unit
     FROM purchase_orders po INNER JOIN suppliers s ON s.id = po.supplier_id
-    INNER JOIN currencies cur ON cur.code = po.currency_code ${where}
-    ORDER BY po.date DESC, po.created_at DESC`).all(...(supplierId ? [supplierId] : [])) as {
+    INNER JOIN currencies cur ON cur.code = po.currency_code
+    ${whereClause}
+    ORDER BY po.date DESC, po.created_at DESC
+  `).all(...params) as {
       id: string; order_number: string; supplier_id: string; supplier_name: string; date: string;
       expected_date: string | null; reference: string | null; notes: string | null;
       status: PurchaseOrderStatus; subtotal_minor: number; tax_minor: number; total_minor: number; currency_code: string; currency_minor_unit: number;
       created_by: string; created_at: string; updated_at: string; issued_at: string | null;
       closed_at: string | null; cancelled_at: string | null; invoice_count: number; project_id: string | null; project_ids: string | null;
-    }[];
+  }[];
   const projects = sqlite.prepare("SELECT id, name FROM projects").all() as { id: string; name: string }[];
   const projectById = new Map(projects.map((project) => [project.id, project.name]));
   return rows.map((row) => ({ ...row, projectIds: row.project_ids?.split(",").filter(Boolean) ?? [], projectNames: (row.project_ids?.split(",").filter(Boolean) ?? []).map((id) => projectById.get(id) ?? id) }));

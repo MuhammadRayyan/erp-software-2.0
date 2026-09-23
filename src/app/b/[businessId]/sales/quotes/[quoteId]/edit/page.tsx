@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { ArrowLeft } from "lucide-react";
+import { } from "lucide-react";
 import { notFound } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { requireModule } from "@/core/permissions/require-module";
@@ -14,6 +14,7 @@ import { SalesQuoteForm } from "@/modules/sales-quotes/quote-form";
 import { getSalesQuote } from "@/modules/sales-quotes/quote-service";
 import { minorToCurrencyInput } from "@/modules/currency/conversion";
 import { getCurrencySettings } from "@/modules/currency/exchange-rate";
+import { BackLink } from "@/components/back-link";
 
 export default async function EditQuotePage({ params }: { params: Promise<{ businessId: string; quoteId: string }> }) {
   const { businessId, quoteId } = await params;
@@ -35,7 +36,7 @@ export default async function EditQuotePage({ params }: { params: Promise<{ busi
     ? getCustomFieldValuesForEntities(businessId, user.id, "sales_quote", [quoteId]).get(quoteId) ?? {}
     : {};
   return <div className="page-container">
-    <Link href={`/b/${businessId}/sales/quotes/${quoteId}`} className="mb-5 inline-flex items-center gap-1.5 text-[13px] text-muted-foreground hover:text-foreground"><ArrowLeft className="size-4" /> {record.quote.quoteNumber}</Link>
+    <BackLink href={`/b/${businessId}/sales/quotes/${quoteId}`}>{record.quote.quoteNumber}</BackLink>
     <div className="mb-7"><h1 className="page-title">Edit Sales Quote</h1><p className="page-description">{["sent", "accepted"].includes(record.quote.documentStatus) ? "Changes will be saved as a new revision." : "Update the draft, or issue it when ready."}</p></div>
     <SalesQuoteForm
       businessId={businessId}

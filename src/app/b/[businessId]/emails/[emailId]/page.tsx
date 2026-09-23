@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { ArrowLeft, FileText, Paperclip } from "lucide-react";
+import { FileText, Paperclip } from "lucide-react";
 import { notFound } from "next/navigation";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -7,6 +7,7 @@ import { requireModule } from "@/core/permissions/require-module";
 import { formatDateTime } from "@/core/format";
 import { getSentEmail } from "@/modules/email/email-service";
 import { parseMailboxes } from "@/modules/email/email-driver";
+import { BackLink } from "@/components/back-link";
 
 export const metadata = { title: "Sent Email" };
 
@@ -41,12 +42,7 @@ export default async function SentEmailViewPage({ params }: { params: Promise<{ 
 
   return (
     <div className="page-container">
-      <Link
-        href={`/b/${businessId}/emails`}
-        className="mb-5 inline-flex items-center gap-1.5 text-[13px] text-muted-foreground hover:text-foreground"
-      >
-        <ArrowLeft className="size-4" /> Sent Emails
-      </Link>
+      <BackLink href={`/b/${businessId}/emails`}>Sent Emails</BackLink>
       <div className="mb-5 flex flex-col justify-between gap-4 lg:flex-row lg:items-start">
         <div>
           <div className="flex flex-wrap items-center gap-2">

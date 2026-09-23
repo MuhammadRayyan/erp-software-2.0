@@ -1,5 +1,4 @@
 import Link from "next/link";
-import { ArrowLeft } from "lucide-react";
 import { requireModule } from "@/core/permissions/require-module";
 import { getSalesAccountOptions } from "@/modules/accounting/services/account-service";
 import { getActiveTaxCodes } from "@/modules/accounting/services/tax-code-service";
@@ -8,6 +7,7 @@ import { listProjectOptions } from "@/modules/projects/project-service";
 import { listInventoryItemOptions } from "@/modules/inventory/inventory-item-service";
 import { getCurrencySettings } from "@/modules/currency/exchange-rate";
 import { SalesQuoteForm } from "@/modules/sales-quotes/quote-form";
+import { BackLink } from "@/components/back-link";
 
 export default async function NewQuotePage({ params, searchParams }: { params: Promise<{ businessId: string }>; searchParams: Promise<{ customerId?: string; projectId?: string }> }) {
   const { businessId } = await params;
@@ -33,9 +33,7 @@ export default async function NewQuotePage({ params, searchParams }: { params: P
 
   return (
     <div className="page-container">
-      <Link href={`/b/${businessId}/sales/quotes`} className="mb-5 inline-flex items-center gap-1.5 text-[13px] text-muted-foreground hover:text-foreground">
-        <ArrowLeft className="size-4" /> Sales Quotes
-      </Link>
+      <BackLink href={`/b/${businessId}/sales/quotes`}>Sales Quotes</BackLink>
       <div className="mb-7">
         <h1 className="page-title">New Sales Quote</h1>
         <p className="page-description">Save a draft or issue a quote to a customer.</p>

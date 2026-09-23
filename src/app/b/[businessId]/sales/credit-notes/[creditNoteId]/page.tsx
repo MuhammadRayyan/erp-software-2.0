@@ -1,5 +1,4 @@
 import Link from "next/link";
-import { ArrowLeft } from "lucide-react";
 import { notFound } from "next/navigation";
 import { NoticeToast } from "@/components/notice-toast";
 import { StatusBadge } from "@/components/status-badge";
@@ -10,6 +9,7 @@ import { getCreditNote } from "@/modules/sales-credit-notes/credit-note-service"
 import { CreditNoteViewActions } from "@/modules/sales-credit-notes/credit-note-view-actions";
 import { emirateLabels, type Emirate } from "@/modules/tax/uae-vat-config";
 import { buildDocumentEmailContext, buildDocumentEmailDefaults } from "@/modules/email/email-defaults";
+import { BackLink } from "@/components/back-link";
 
 export default async function CreditNoteViewPage({ params, searchParams }: { params: Promise<{ businessId: string; creditNoteId: string }>; searchParams: Promise<{ notice?: string }> }) {
   const { businessId, creditNoteId } = await params;
@@ -36,7 +36,7 @@ export default async function CreditNoteViewPage({ params, searchParams }: { par
   const emailDefaults = buildDocumentEmailDefaults(emailContext, customer.email ?? "");
   return <div className="page-container">
     <NoticeToast message={notice} />
-    <Link href={`/b/${businessId}/sales/credit-notes`} className="mb-5 inline-flex items-center gap-1.5 text-[13px] text-muted-foreground hover:text-foreground"><ArrowLeft className="size-4" /> Sales Credit Notes</Link>
+    <BackLink href={`/b/${businessId}/sales/credit-notes`}>Sales Credit Notes</BackLink>
     <div className="mb-5 flex flex-col justify-between gap-4 lg:flex-row lg:items-start">
       <div>
         <div className="flex flex-wrap items-center gap-2"><h1 className="page-title tabular">{note.creditNoteNumber}</h1><StatusBadge status={note.documentStatus} /></div>

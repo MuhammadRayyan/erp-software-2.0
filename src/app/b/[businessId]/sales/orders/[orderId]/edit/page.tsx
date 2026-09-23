@@ -1,5 +1,4 @@
 import Link from "next/link";
-import { ArrowLeft } from "lucide-react";
 import { notFound } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { requireModule } from "@/core/permissions/require-module";
@@ -14,6 +13,7 @@ import { SalesOrderForm } from "@/modules/sales-orders/sales-order-form";
 import { getSalesOrder } from "@/modules/sales-orders/sales-order-service";
 import { minorToCurrencyInput } from "@/modules/currency/conversion";
 import { getCurrencySettings } from "@/modules/currency/exchange-rate";
+import { BackLink } from "@/components/back-link";
 
 export default async function EditOrderPage({ params }: { params: Promise<{ businessId: string; orderId: string }> }) {
   const { businessId, orderId } = await params;
@@ -32,7 +32,7 @@ export default async function EditOrderPage({ params }: { params: Promise<{ busi
   const documentMinorUnit = currencySettings.currencies.find((entry) => entry.code === record.order.currencyCode)?.minor_unit ?? 2;
 
   return <div className="page-container">
-    <Link href={`/b/${businessId}/sales/orders/${orderId}`} className="mb-5 inline-flex items-center gap-1.5 text-[13px] text-muted-foreground hover:text-foreground"><ArrowLeft className="size-4" /> {record.order.orderNumber}</Link>
+    <BackLink href={`/b/${businessId}/sales/orders/${orderId}`}>{record.order.orderNumber}</BackLink>
     <div className="mb-7"><h1 className="page-title">Edit Sales Order</h1><p className="page-description">{record.order.documentStatus === "completed" ? "Changes will be saved as a new revision." : "Update the draft, or issue it when ready."}</p></div>
     <SalesOrderForm
       businessId={businessId}

@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { AlertCircle, ArrowLeft, Tag } from "lucide-react";
+import { AlertCircle, Tag } from "lucide-react";
 import { notFound } from "next/navigation";
 import { NoticeToast } from "@/components/notice-toast";
 import { requireModule } from "@/core/permissions/require-module";
@@ -14,6 +14,7 @@ import { QuoteRevisionSwitcher } from "@/modules/sales-quotes/quote-revision-swi
 import { ProjectLinks } from "@/modules/projects/project-links";
 import { buildDocumentEmailContext, buildDocumentEmailDefaults } from "@/modules/email/email-defaults";
 import { emirateLabels, type Emirate } from "@/modules/tax/uae-vat-config";
+import { BackLink } from "@/components/back-link";
 
 
 export default async function QuoteViewPage({ params, searchParams }: { params: Promise<{ businessId: string; quoteId: string }>; searchParams: Promise<{ notice?: string }> }) {
@@ -51,7 +52,7 @@ export default async function QuoteViewPage({ params, searchParams }: { params: 
   return (
     <div className="page-container">
       <NoticeToast message={notice} />
-      <Link href={`/b/${businessId}/sales/quotes`} className="mb-5 inline-flex items-center gap-1.5 text-[13px] text-muted-foreground hover:text-foreground"><ArrowLeft className="size-4" /> Sales Quotes</Link>
+      <BackLink href={`/b/${businessId}/sales/quotes`}>Sales Quotes</BackLink>
       
       {isViewingOlderRevision && latestRevision && latestRevision.id !== quote.id && (
         <div className="mb-5 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-amber-500/30 bg-amber-500/10 p-3.5 text-sm text-amber-900 dark:text-amber-200">
