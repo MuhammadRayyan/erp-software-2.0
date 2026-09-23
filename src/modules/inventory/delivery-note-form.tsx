@@ -225,7 +225,7 @@ export function DeliveryNoteForm({
                 <tr key={field.id} className="hover:bg-transparent!">
                   <td>
                     <SelectNative
-                      
+                      aria-label={`Line ${index + 1} item`}
                       {...register(`lines.${index}.itemId`, {
                         onChange: (event) => selectItem(index, event.target.value),
                       })}
@@ -239,9 +239,10 @@ export function DeliveryNoteForm({
                     </SelectNative>
                     <input type="hidden" {...register(`lines.${index}.salesInvoiceLineId`)} />
                   </td>
-                  <td><Input {...register(`lines.${index}.description`)} /></td>
+                  <td><Input aria-label={`Line ${index + 1} description`} {...register(`lines.${index}.description`)} /></td>
                   <td>
                     <Input
+                      aria-label={`Line ${index + 1} quantity`}
                       type="number"
                       min="0.0001"
                       step="0.0001"

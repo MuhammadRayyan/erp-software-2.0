@@ -15,7 +15,7 @@ test.describe('Settings Module', () => {
   test('can view document templates settings', async ({ page }) => {
     await page.getByRole('link', { name: 'Settings' }).click();
     await page.getByRole('link', { name: /templates/i }).first().click();
-    await expect(page.getByRole('heading', { name: /Invoice Template/i })).toBeVisible();
+    await expect(page.getByRole('heading', { name: /Document Templates/i })).toBeVisible();
   });
   
   test('can view tax codes settings', async ({ page }) => {

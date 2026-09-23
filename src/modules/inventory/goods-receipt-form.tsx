@@ -248,8 +248,8 @@ export function GoodsReceiptForm({
                     <input type="hidden" {...register(`lines.${index}.purchaseInvoiceLineId`)} />
                   </td>
                   <td><Input aria-label={`Line ${index + 1} description`} {...register(`lines.${index}.description`)} /></td>
-                  <td><Input className="money text-right" type="number" min="0.0001" step="0.0001" {...register(`lines.${index}.quantity`)} /></td>
-                  <td><Input className="money text-right" type="number" min="0" step="0.01" {...register(`lines.${index}.unitCost`)} /></td>
+                  <td><Input aria-label={`Line ${index + 1} quantity`} className="money text-right" type="number" min="0.0001" step="0.0001" {...register(`lines.${index}.quantity`)} /></td>
+                  <td><Input aria-label={`Line ${index + 1} unit cost`} className="money text-right" type="number" min="0" step="0.01" {...register(`lines.${index}.unitCost`)} /></td>
                   {showProjects && (
                     <td>
                       <SelectNative  {...register(`lines.${index}.projectId`)}>

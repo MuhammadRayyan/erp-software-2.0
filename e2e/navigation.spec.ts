@@ -17,7 +17,7 @@ test.describe('Navigation & Rendering', () => {
   });
 
   test('Sales Invoices page loads', async ({ page }) => {
-    await page.getByRole('link', { name: 'Invoices', exact: true }).click();
+    await page.getByRole('link', { name: 'Sales Invoices', exact: true }).click();
     await expect(page.getByRole('heading', { name: 'Sales Invoices', exact: true })).toBeVisible();
   });
 

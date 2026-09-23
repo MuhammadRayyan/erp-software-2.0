@@ -18,12 +18,12 @@ test.describe('Sales Module', () => {
   });
 
   test('can view sales invoices list', async ({ page }) => {
-    await page.getByRole('link', { name: 'Invoices', exact: true }).click();
+    await page.getByRole('link', { name: 'Sales Invoices', exact: true }).click();
     await expect(page.getByRole('heading', { name: 'Sales Invoices' })).toBeVisible();
   });
 
   test('can open a new sales invoice form', async ({ page }) => {
-    await page.getByRole('link', { name: 'Invoices', exact: true }).click();
+    await page.getByRole('link', { name: 'Sales Invoices', exact: true }).click();
     await expect(page.getByRole('heading', { name: 'Sales Invoices' })).toBeVisible();
     await page.getByRole('link', { name: 'New Invoice' }).first().click();
     await expect(page.getByRole('heading', { name: 'New Sales Invoice' })).toBeVisible();

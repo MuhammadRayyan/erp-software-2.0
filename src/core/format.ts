@@ -8,7 +8,10 @@ const knownMinorUnits: Record<string, number> = { AED: 2, USD: 2, EUR: 2, JPY: 0
 // are reused across hundreds of table cells per page render.
 const moneyFormatterCache = new Map<string, Intl.NumberFormat>();
 
-export function formatMoney(minor: number, currency = "AED", minorUnit = knownMinorUnits[currency] ?? 2) {
+export function formatMoney(minor?: number | null, currency = "AED", minorUnit = knownMinorUnits[currency] ?? 2) {
+  if (minor == null || Number.isNaN(minor)) {
+    minor = 0;
+  }
   const key = `${currency}:${minorUnit}`;
   let fmt = moneyFormatterCache.get(key);
   if (!fmt) {
@@ -30,7 +33,8 @@ const dateFormatterCache = new Map<string, Intl.DateTimeFormat>();
 
 const DEFAULT_DATE_OPTIONS: Intl.DateTimeFormatOptions = { day: "2-digit", month: "short", year: "numeric" };
 
-export function formatDate(value: string, options?: Intl.DateTimeFormatOptions) {
+export function formatDate(value?: string | null, options?: Intl.DateTimeFormatOptions) {
+  if (!value) return "—";
   const resolvedOptions = options ?? DEFAULT_DATE_OPTIONS;
   const key = JSON.stringify(resolvedOptions);
   let fmt = dateFormatterCache.get(key);
@@ -38,13 +42,22 @@ export function formatDate(value: string, options?: Intl.DateTimeFormatOptions) 
     fmt = new Intl.DateTimeFormat("en-AE", { ...resolvedOptions, timeZone: BUSINESS_TIME_ZONE });
     dateFormatterCache.set(key, fmt);
   }
-  const date = /^\d{4}-\d{2}-\d{2}$/.test(value)
-    ? new Date(`${value}T00:00:00Z`)
-    : new Date(value);
+  
+  let date: Date;
+  if (/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    date = new Date(`${value}T00:00:00Z`);
+  } else {
+    date = new Date(value);
+  }
+  
+  if (Number.isNaN(date.getTime())) {
+    return "—";
+  }
+  
   return fmt.format(date);
 }
 
-export function formatDateTime(value: string) {
+export function formatDateTime(value?: string | null) {
   return formatDate(value, { dateStyle: "medium", timeStyle: "short" });
 }
 
