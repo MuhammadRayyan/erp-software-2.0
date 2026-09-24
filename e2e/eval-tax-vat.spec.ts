@@ -44,6 +44,7 @@ test.describe('Evaluation Suite B: Tax & VAT Calculations', () => {
     await page.getByRole('button', { name: /add line/i }).click();
     await page.getByLabel(/Line 2 inventory item/i).selectOption({ label: item2 });
     await page.getByLabel(/Line 2 quantity/i).fill('2'); // 50 * 2 = 100
+    // @ts-ignore
     await page.getByLabel(/Line 2 tax code/i).selectOption(/Zero/i);
 
     // Assert UI totals
