@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import Link from "next/link";
-import { MoreHorizontal } from "lucide-react";
+import { ChevronRight } from "lucide-react";
 import { 
   useLegacyTable as useTable,
   getCoreRowModel as createCoreRowModel,
@@ -193,9 +193,9 @@ export function PurchaseInvoiceTable({
         meta: { className: "w-12" },
         enableSorting: false,
         cell: ({ row }: any) => (
-          <Button asChild variant="ghost" size="icon">
+          <Button asChild variant="ghost" size="icon" className="text-muted-foreground opacity-50 transition-opacity md:opacity-0 md:group-hover:opacity-100">
             <Link href={`/b/${row.original.businessId}/purchases/invoices/${row.original.id}`} aria-label={`Open ${row.original.internal_number}`}>
-              <MoreHorizontal className="size-4" />
+              <ChevronRight className="size-4" />
             </Link>
           </Button>
         ),

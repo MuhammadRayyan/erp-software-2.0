@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import Link from "next/link";
-import { Filter } from "lucide-react";
+import { Filter, ChevronRight } from "lucide-react";
 import { 
   useLegacyTable as useTable,
   getCoreRowModel as createCoreRowModel,
@@ -136,6 +136,19 @@ export function SupplierTable({
           </span>
         ),
       })),
+      {
+        id: "actions",
+        header: () => <span className="sr-only">Actions</span>,
+        meta: { className: "w-12" },
+        enableSorting: false,
+        cell: ({ row }: any) => (
+          <Button asChild variant="ghost" size="icon" className="text-muted-foreground opacity-50 transition-opacity md:opacity-0 md:group-hover:opacity-100">
+            <Link href={`/b/${businessId}/suppliers/${row.original.id}`} aria-label={`Open ${row.original.name}`}>
+              <ChevronRight className="size-4" />
+            </Link>
+          </Button>
+        ),
+      },
     ],
     [businessId, currency, customFields, customValues],
   );
