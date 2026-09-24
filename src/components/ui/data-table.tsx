@@ -3,7 +3,6 @@
 
 import { flexRender } from "@tanstack/react-table";
 import { ArrowDown, ArrowUp, ChevronsUpDown } from "lucide-react";
-import { formatOptional } from "@/core/format";
 
 interface DataTableProps {
   table: any;
@@ -105,14 +104,9 @@ export function DataTable({
                 else classes += " truncate";
                 if (isSticky) classes += " sticky-col";
 
-                const val = cell.getValue();
-                const rendered = (val === null || val === undefined || val === "") 
-                  ? <span className="text-muted-foreground/50">{formatOptional(null)}</span>
-                  : flexRender(cell.column.columnDef.cell, cell.getContext());
-
                 return (
                   <td key={cell.id} className={classes.trim()}>
-                    {rendered}
+                    {flexRender(cell.column.columnDef.cell, cell.getContext())}
                   </td>
                 );
               })}

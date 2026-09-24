@@ -139,7 +139,7 @@ export function PurchaseInvoiceTable({
         id: "supplierInvoice",
         accessorFn: (row: any) => row.supplier_invoice_number,
         header: "Supplier invoice",
-        cell: ({ row }: any) => <span className="tabular text-muted-foreground">{row.original.supplier_invoice_number}</span>,
+        cell: ({ row }: any) => <span className="tabular text-muted-foreground">{row.original.supplier_invoice_number || "—"}</span>,
       },
       {
         id: "date",
