@@ -102,7 +102,6 @@ export const accounts = sqliteTable(
   "accounts",
   {
     id: text("id").primaryKey(),
-    code: text("code").notNull(),
     name: text("name").notNull(),
     type: text("type", { enum: accountTypes }).notNull(),
     subtype: text("subtype", { enum: accountSubtypes }).notNull(),
@@ -111,7 +110,7 @@ export const accounts = sqliteTable(
     createdAt: text("created_at").notNull(),
     updatedAt: text("updated_at").notNull(),
   },
-  (table) => [uniqueIndex("account_code_idx").on(table.code)],
+  () => [],
 );
 
 export const taxCodes = sqliteTable("tax_codes", {

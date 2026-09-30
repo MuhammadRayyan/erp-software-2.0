@@ -24,7 +24,7 @@ export default async function JournalEntryPage({ params }: { params: Promise<{ b
       <table className="data-table min-w-[800px]">
         <thead><tr><th>Account</th><th>Description</th><th>Project</th><th className="text-right!">Debit</th><th className="text-right!">Credit</th></tr></thead>
         <tbody>{record.lines.map((line) => <tr key={line.id}>
-          <td><span className="tabular text-muted-foreground">{line.code}</span> <span className="font-medium">{line.name}</span></td>
+          <td><span className="font-medium">{line.name}</span></td>
           <td className="text-muted-foreground">{line.description}</td>
           <td>{line.project_id ? <Link href={`/b/${businessId}/projects/${line.project_id}`} className="text-primary hover:underline">{line.project_code} · {line.project_name}</Link> : <span className="text-muted-foreground">—</span>}</td>
           <td className="money text-right">{line.debit_minor ? formatMoney(line.debit_minor, access.business.currency) : "—"}</td>

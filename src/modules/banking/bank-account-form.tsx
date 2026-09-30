@@ -16,7 +16,7 @@ import { SelectNative } from "@/components/ui/select-native";
 
 export function BankAccountForm({ businessId, accountId, ledgerAccounts, initial }: {
   businessId: string; accountId?: string;
-  ledgerAccounts: { id: string; code: string; name: string; subtype: "bank" | "cash"; available: number }[];
+  ledgerAccounts: { id: string;  name: string; subtype: "bank" | "cash"; available: number }[];
   initial: BankAccountInput;
 }) {
   const [serverError, setServerError] = useState("");
@@ -39,7 +39,7 @@ export function BankAccountForm({ businessId, accountId, ledgerAccounts, initial
       <div className="space-y-1.5"><Label htmlFor="bankName">Bank name <span className="font-normal text-muted-foreground">(optional)</span></Label><Input id="bankName" {...register("bankName")} disabled={isCash} /></div>
       <div className="space-y-1.5"><Label htmlFor="accountNumberMasked">Masked account number <span className="font-normal text-muted-foreground">(optional)</span></Label><Input id="accountNumberMasked" placeholder="•••• 1234" {...register("accountNumberMasked")} disabled={isCash} /></div>
       <div className="space-y-1.5"><Label htmlFor="currencyCode">Currency</Label><Input id="currencyCode" readOnly className="bg-surface-muted" {...register("currencyCode")} /><p className="text-xs text-muted-foreground">Base currency only in Phase 5.</p></div>
-      <div className="space-y-1.5"><Label htmlFor="ledgerAccountId">Mapped GL account</Label><SelectNative id="ledgerAccountId"  {...register("ledgerAccountId")}><option value="">Choose account</option>{ledgerAccounts.filter((ledger) => ledger.available && (isCash ? ledger.subtype === "cash" : ledger.subtype === "bank")).map((ledger) => <option key={ledger.id} value={ledger.id}>{ledger.code} · {ledger.name}</option>)}</SelectNative>{errors.ledgerAccountId && <p className="field-error">{errors.ledgerAccountId.message}</p>}</div>
+      <div className="space-y-1.5"><Label htmlFor="ledgerAccountId">Mapped GL account</Label><SelectNative id="ledgerAccountId"  {...register("ledgerAccountId")}><option value="">Choose account</option>{ledgerAccounts.filter((ledger) => ledger.available && (isCash ? ledger.subtype === "cash" : ledger.subtype === "bank")).map((ledger) => <option key={ledger.id} value={ledger.id}>{ledger.name}</option>)}</SelectNative>{errors.ledgerAccountId && <p className="field-error">{errors.ledgerAccountId.message}</p>}</div>
     </div></section>
     <div className="flex flex-wrap gap-5"><label className="flex items-center gap-2 text-sm"><input type="checkbox" className="size-4 accent-[var(--primary)]" {...register("isCashAccount")} /> Cash account</label><label className="flex items-center gap-2 text-sm"><input type="checkbox" className="size-4 accent-[var(--primary)]" {...register("isActive")} /> Active</label></div>
     <div className="sticky bottom-0 z-20 -mx-4 flex justify-between border-t border-border bg-surface/95 px-4 py-3 backdrop-blur-sm sm:mx-0 sm:rounded-t-lg sm:border-x"><Button asChild variant="ghost"><Link href={accountId ? `/b/${businessId}/banking/accounts/${accountId}` : `/b/${businessId}/banking/accounts`}>Cancel</Link></Button><Button type="submit" disabled={isSubmitting}>{isSubmitting && <LoaderCircle className="size-4 animate-spin" />} {accountId ? "Save Changes" : "Create Bank Account"}</Button></div>

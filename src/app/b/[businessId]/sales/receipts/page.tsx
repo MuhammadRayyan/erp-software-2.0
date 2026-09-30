@@ -76,7 +76,7 @@ export default async function ReceiptsPage({
                       </td>
                       <td>{receipt.customer_name}</td>
                       <td>{formatDate(receipt.date)}</td>
-                      <td>{receipt.bank_account_code} · {receipt.bank_account_name}</td>
+                      <td>{receipt.bank_account_name}</td>
                       <td className="text-muted-foreground">{receipt.reference || "—"}</td>
                       <td className="money text-right">
                         {formatMoney(receipt.amount_minor, receipt.currency_code, receipt.currency_minor_unit)}

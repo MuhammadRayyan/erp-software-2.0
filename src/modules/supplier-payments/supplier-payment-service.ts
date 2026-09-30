@@ -78,7 +78,6 @@ type SupplierPaymentListRow = {
   supplier_id: string;
   supplier_name: string;
   bank_account_id: string;
-  bank_account_code: string;
   bank_account_name: string;
 };
 
@@ -170,7 +169,7 @@ export function listAllSupplierPayments(businessId: string, userId: string, filt
     SELECT sp.id, sp.payment_number, sp.date, sp.amount_minor, sp.base_amount_minor,
       sp.currency_code, cur.minor_unit AS currency_minor_unit, sp.reference,
       sp.document_status, sp.created_at, s.id AS supplier_id, s.name AS supplier_name,
-      a.id AS bank_account_id, a.code AS bank_account_code, a.name AS bank_account_name
+      a.id AS bank_account_id, a.name AS bank_account_name
     FROM supplier_payments sp
     INNER JOIN suppliers s ON s.id = sp.supplier_id
     INNER JOIN accounts a ON a.id = sp.bank_account_id
@@ -189,7 +188,7 @@ export function getSupplierPayment(
   const { sqlite } = getBusinessDb(businessId, userId);
   const payment = sqlite.prepare(`
     SELECT sp.*, s.name AS supplier_name, s.email AS supplier_email,
-      a.code AS bank_account_code, a.name AS bank_account_name
+      a.name AS bank_account_name
     FROM supplier_payments sp
     INNER JOIN suppliers s ON s.id = sp.supplier_id
     INNER JOIN accounts a ON a.id = sp.bank_account_id

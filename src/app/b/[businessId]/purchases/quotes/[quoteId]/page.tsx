@@ -185,7 +185,7 @@ export default async function PurchaseQuoteViewPage({
                   </td>
                   <td>
                     <span className="text-xs text-muted-foreground">
-                      {line.expenseAccount ? `${line.expenseAccount.code} ${line.expenseAccount.name}` : "—"}
+                      {line.expenseAccount ? line.expenseAccount.name : "—"}
                     </span>
                   </td>
                   <td>{line.taxCode ? line.taxCode.name : "—"}</td>
@@ -232,3 +232,4 @@ export default async function PurchaseQuoteViewPage({
     </div>
   );
 }
+

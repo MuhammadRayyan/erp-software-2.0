@@ -71,7 +71,7 @@ export default async function NewDebitNotePage({
             exchangeRateDate: inv.exchange_rate_date ?? "",
             exchangeRateSource: inv.exchange_rate_source ?? "Base",
           }))}
-          salesAccounts={expenseAccounts.map(({ id, code, name }) => ({ id, code, name }))}
+          salesAccounts={expenseAccounts.map(({ id, name }) => ({ id, name }))}
           taxCodes={taxCodes.map(({ id, name, rateBasisPoints }) => ({ id, name, rateBasisPoints }))}
           projects={projects.map((p) => ({
             id: p.id,

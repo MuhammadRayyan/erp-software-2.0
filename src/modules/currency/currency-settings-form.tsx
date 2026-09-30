@@ -84,10 +84,11 @@ export function CurrencySettingsForm({
     <section className="space-y-4">
       <div><h2 className="text-base font-semibold">Realized FX accounts</h2><p className="mt-1 text-sm text-muted-foreground">Settlement differences post automatically to these base-currency GL accounts.</p></div>
       <div className="grid gap-4 rounded-lg border border-border bg-surface-raised p-4 sm:grid-cols-2">
-        <div><Label htmlFor="fx-gain">Realized FX Gain</Label><SelectNative id="fx-gain"  disabled={!isAdmin} value={fxAccounts.gainAccountId} onChange={(event) => setFxAccounts((current) => ({ ...current, gainAccountId: event.target.value }))}>{gainAccounts.map((account) => <option key={account.id} value={account.id}>{account.code} — {account.name}</option>)}</SelectNative></div>
-        <div><Label htmlFor="fx-loss">Realized FX Loss</Label><SelectNative id="fx-loss"  disabled={!isAdmin} value={fxAccounts.lossAccountId} onChange={(event) => setFxAccounts((current) => ({ ...current, lossAccountId: event.target.value }))}>{lossAccounts.map((account) => <option key={account.id} value={account.id}>{account.code} — {account.name}</option>)}</SelectNative></div>
+        <div><Label htmlFor="fx-gain">Realized FX Gain</Label><SelectNative id="fx-gain"  disabled={!isAdmin} value={fxAccounts.gainAccountId} onChange={(event) => setFxAccounts((current) => ({ ...current, gainAccountId: event.target.value }))}>{gainAccounts.map((account) => <option key={account.id} value={account.id}>{account.name}</option>)}</SelectNative></div>
+        <div><Label htmlFor="fx-loss">Realized FX Loss</Label><SelectNative id="fx-loss"  disabled={!isAdmin} value={fxAccounts.lossAccountId} onChange={(event) => setFxAccounts((current) => ({ ...current, lossAccountId: event.target.value }))}>{lossAccounts.map((account) => <option key={account.id} value={account.id}>{account.name}</option>)}</SelectNative></div>
         {isAdmin && <div className="sm:col-span-2 flex justify-end"><Button disabled={Boolean(pending)} onClick={() => run("accounts", () => saveRealizedFxAccountsAction(businessId, fxAccounts), "Realized FX accounts saved.")}>Save accounts</Button></div>}
       </div>
     </section>
   </div>;
 }
+

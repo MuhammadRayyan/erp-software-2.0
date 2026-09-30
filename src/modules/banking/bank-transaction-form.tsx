@@ -19,9 +19,9 @@ import { SelectNative } from "@/components/ui/select-native";
 export function BankTransactionForm({ businessId, transactionId, bankAccounts, counterAccounts, taxCodes, projects, initial, currency }: {
   businessId: string; transactionId?: string; currency: string;
   bankAccounts: { id: string; name: string; is_cash_account: number }[];
-  counterAccounts: { id: string; code: string; name: string; type: string; subtype: string }[];
+  counterAccounts: { id: string; name: string; type: string; subtype: string }[];
   taxCodes: { id: string; name: string; rateBasisPoints: number; direction: string; vatCategory: string | null }[];
-  projects: { id: string; code: string; name: string }[];
+  projects: { id: string; name: string }[];
   initial: BankTransactionInput;
 }) {
   const [serverError, setServerError] = useState("");
@@ -59,9 +59,9 @@ export function BankTransactionForm({ businessId, transactionId, bankAccounts, c
     <section><div className="flex items-start justify-between gap-4"><div><h2 className="text-base font-semibold">{type === "money_in" ? "Income allocation" : "Expense allocation"}</h2><p className="mt-1 text-sm text-muted-foreground">Amounts include tax. Project is applied only to the counter-account P&amp;L line.</p></div><Button type="button" variant="secondary" size="sm" onClick={() => append({ accountId: "", taxCodeId: defaultTax, projectId: "", description: "", amount: "0.00" })}><Plus className="size-4" /> Add line</Button></div>
       <div className="mt-4 space-y-3">{fields.map((field, index) => <div key={field.id} className="grid gap-3 rounded-md border border-border bg-surface px-3 py-3 md:grid-cols-[1.3fr_1.3fr_0.9fr_0.9fr_auto]">
         <div className="space-y-1"><Label className="text-xs">Description</Label><Input {...register(`lines.${index}.description`)} /></div>
-        <div className="space-y-1"><Label className="text-xs">Counter account</Label><SelectNative  {...register(`lines.${index}.accountId`)}><option value="">Choose account</option>{accountOptions.map((account) => <option key={account.id} value={account.id}>{account.code} · {account.name}</option>)}</SelectNative></div>
+        <div className="space-y-1"><Label className="text-xs">Counter account</Label><SelectNative  {...register(`lines.${index}.accountId`)}><option value="">Choose account</option>{accountOptions.map((account) => <option key={account.id} value={account.id}>{account.name}</option>)}</SelectNative></div>
         <div className="space-y-1"><Label className="text-xs">Tax</Label><SelectNative  {...register(`lines.${index}.taxCodeId`)}>{availableTaxCodes.map((tax) => <option key={tax.id} value={tax.id}>{tax.name}</option>)}</SelectNative></div>
-        <div className="space-y-1"><Label className="text-xs">Project</Label><SelectNative  {...register(`lines.${index}.projectId`)}><option value="">No Project</option>{projects.map((project) => <option key={project.id} value={project.id}>{project.code} · {project.name}</option>)}</SelectNative></div>
+        <div className="space-y-1"><Label className="text-xs">Project</Label><SelectNative  {...register(`lines.${index}.projectId`)}><option value="">No Project</option>{projects.map((project) => <option key={project.id} value={project.id}>{project.name}</option>)}</SelectNative></div>
         <div className="flex items-end gap-1"><div className="space-y-1"><Label className="text-xs">Amount incl. tax</Label><Input className="w-32 text-right tabular" inputMode="decimal" {...register(`lines.${index}.amount`)} /></div><Button type="button" variant="ghost" size="icon" aria-label={`Remove line ${index + 1}`} disabled={fields.length === 1} onClick={() => remove(index)}><Trash2 className="size-4" /></Button></div>
       </div>)}</div>
       {errors.lines?.root?.message && <p className="field-error">{errors.lines.root.message}</p>}

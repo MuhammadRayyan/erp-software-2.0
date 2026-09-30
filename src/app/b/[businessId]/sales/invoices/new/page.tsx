@@ -75,7 +75,7 @@ export default async function NewInvoicePage({
             name,
             defaultCurrencyCode,
           }))}
-          salesAccounts={salesAccounts.map(({ id, code, name }) => ({ id, code, name }))}
+          salesAccounts={salesAccounts.map(({ id, name }) => ({ id, name }))}
           taxCodes={taxCodes.map(({ id, name, rateBasisPoints }) => ({ id, name, rateBasisPoints }))}
           projects={projects.map((project) => ({
             id: project.id,

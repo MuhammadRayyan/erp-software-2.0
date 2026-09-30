@@ -258,7 +258,7 @@ export function getDebitNote(businessId: string, userId: string, noteId: string)
   if (!header) return null;
   
   const lines = context.sqlite.prepare(`
-    SELECT l.*, a.code as accountCode, a.name as accountName, t.name as taxCodeName, t.rate_basis_points as taxRateBasisPoints, p.code as projectCode, p.name as projectName
+    SELECT l.*, a.name as accountName, t.name as taxCodeName, t.rate_basis_points as taxRateBasisPoints, p.code as projectCode, p.name as projectName
     FROM debit_note_lines l
     JOIN accounts a ON l.expense_account_id = a.id
     JOIN tax_codes t ON l.tax_code_id = t.id

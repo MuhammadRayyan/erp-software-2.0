@@ -78,13 +78,12 @@ export function getGeneralLedger(
     .prepare(`
       SELECT je.id AS journal_entry_id, je.entry_number, je.date, je.source_type,
              je.source_id, jl.position, jl.description, jl.debit_minor,
-             jl.credit_minor, jl.reference, a.id AS account_id, a.code,
-             a.name AS account_name, a.type AS account_type
+             jl.credit_minor, jl.reference, a.id AS account_id, a.name AS account_name, a.type AS account_type
       FROM journal_lines jl
       INNER JOIN journal_entries je ON je.id = jl.journal_entry_id
       INNER JOIN accounts a ON a.id = jl.account_id
       WHERE ${conditions.join(" AND ")}
-      ORDER BY a.code, je.date, je.entry_number, jl.position
+      ORDER BY je.date, je.entry_number, jl.position
     `)
     .all(...values) as {
       journal_entry_id: string;
@@ -98,7 +97,7 @@ export function getGeneralLedger(
       credit_minor: number;
       reference: string | null;
       account_id: string;
-      code: string;
+
       account_name: string;
       account_type: "asset" | "liability" | "equity" | "income" | "expense";
     }[];
@@ -123,7 +122,7 @@ export function getTrialBalance(businessId: string, userId: string, throughDate?
   const date = validDate(throughDate) ?? "9999-12-31";
   const rows = sqlite
     .prepare(`
-      SELECT a.id, a.code, a.name, a.type,
+      SELECT a.id, a.name, a.type,
              COALESCE(SUM(CASE WHEN je.id IS NOT NULL THEN jl.debit_minor ELSE 0 END), 0)
                AS debit_total,
              COALESCE(SUM(CASE WHEN je.id IS NOT NULL THEN jl.credit_minor ELSE 0 END), 0)
@@ -133,11 +132,10 @@ export function getTrialBalance(businessId: string, userId: string, throughDate?
       LEFT JOIN journal_entries je
         ON je.id = jl.journal_entry_id AND je.status = 'posted' AND je.date <= ?
       GROUP BY a.id
-      ORDER BY a.code
-    `)
+      ORDER BY `)
     .all(date) as {
       id: string;
-      code: string;
+
       name: string;
       type: string;
       debit_total: number;

@@ -188,3 +188,16 @@ Last verified on 24 August 2026 (review round 7 + v2.1.0 packaging): explicit mi
 - Rewrote the email server action from `sendInvoiceEmailAction` into a generic `sendDocumentEmailAction` that handles permissions and dynamically attaches PDFs using `generateDocumentPdf`.
 - Refactored `InvoiceEmailDialog` into a reusable `DocumentEmailDialog`.
 - Extended one-click emailing capability with inline PDF attachments directly from the view pages for Sales Quotes, Sales Orders, Purchase Quotes, and Purchase Orders.
+
+---
+## Updates — 2026-09-30
+
+### Account Codes Removed
+- The `accounts` table no longer has a `code` column. Accounts are identified and sorted by **name** only.
+- DB Migration v22 safely drops the `code` column from existing databases on next server start.
+- All UI dropdowns, detail views, reports, and forms across all modules now display account names without code prefixes.
+- `AccountOption` types across the codebase are now `{ id: string; name: string }` (no `code`).
+
+### Dashboard Overview
+- The Overview page now shows a **Financial Summary** (Balance Sheet + P&L) instead of the module-directory grid.
+- Layout: KPI cards ? Financial Summary ? Recent Invoices ? Recent Emails.

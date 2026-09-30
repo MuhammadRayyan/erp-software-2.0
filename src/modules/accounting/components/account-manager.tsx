@@ -35,7 +35,6 @@ type AccountRow = AccountInput & {
 
 
 const emptyAccount: AccountInput = {
-  code: "",
   name: "",
   type: "expense",
   subtype: "operating_expense",
@@ -54,7 +53,6 @@ export function AccountManager({ businessId, accounts }: { businessId: string; a
   function openEditor(account?: AccountRow) {
     setEditing(account ?? null);
     setValues(account ? {
-      code: account.code,
       name: account.name,
       type: account.type,
       subtype: account.subtype,
@@ -104,11 +102,10 @@ export function AccountManager({ businessId, accounts }: { businessId: string; a
               </div>
               <div className="overflow-x-auto">
                 <table className="data-table min-w-[650px]">
-                  <thead><tr><th className="w-28">Code</th><th>Account</th><th>Subtype</th><th>Status</th><th className="w-12"><span className="sr-only">Actions</span></th></tr></thead>
+                  <thead><tr><th>Account</th><th>Subtype</th><th>Status</th><th className="w-12"><span className="sr-only">Actions</span></th></tr></thead>
                   <tbody>
                     {rows.map((account) => (
                       <tr key={account.id}>
-                        <td className="tabular font-medium">{account.code}</td>
                         <td><span className="font-medium">{account.name}</span>{account.isSystem && <Badge className="ml-2">System</Badge>}</td>
                         <td className="text-muted-foreground">{accountSubtypeLabels[account.subtype]}</td>
                         <td><Badge tone={account.isActive ? "success" : "neutral"}>{account.isActive ? "Active" : "Inactive"}</Badge></td>
@@ -135,10 +132,9 @@ export function AccountManager({ businessId, accounts }: { businessId: string; a
       <DialogRoot open={editing !== undefined} onOpenChange={(open) => !open && setEditing(undefined)}>
         <DialogContent>
           <DialogTitle>{editing ? "Edit account" : "New account"}</DialogTitle>
-          <DialogDescription>Use a clear code, account type, and reporting subtype.</DialogDescription>
+          <DialogDescription>Set the account name, type, and reporting subtype.</DialogDescription>
           <div className="mt-5 grid gap-4 sm:grid-cols-2">
-            <div className="space-y-1.5"><Label htmlFor="account-code">Code</Label><Input id="account-code" value={values.code} onChange={(event) => setValues((current) => ({ ...current, code: event.target.value }))} aria-invalid={!!errors.code} />{errors.code && <p className="field-error">{errors.code[0]}</p>}</div>
-            <div className="space-y-1.5"><Label htmlFor="account-name">Name</Label><Input id="account-name" value={values.name} onChange={(event) => setValues((current) => ({ ...current, name: event.target.value }))} aria-invalid={!!errors.name} />{errors.name && <p className="field-error">{errors.name[0]}</p>}</div>
+            <div className="space-y-1.5 sm:col-span-2"><Label htmlFor="account-name">Name</Label><Input id="account-name" value={values.name} onChange={(event) => setValues((current) => ({ ...current, name: event.target.value }))} aria-invalid={!!errors.name} />{errors.name && <p className="field-error">{errors.name[0]}</p>}</div>
             <div className="space-y-1.5"><Label htmlFor="account-type">Type</Label><SelectNative id="account-type"  value={values.type} disabled={!!editing?.isSystem} onChange={(event) => { const type = event.target.value as AccountInput["type"]; setValues((current) => ({ ...current, type, subtype: accountSubtypesByType[type][0] })); }}>{accountTypes.map((type) => <option key={type} value={type}>{accountTypeLabels[type]}</option>)}</SelectNative></div>
             <div className="space-y-1.5"><Label htmlFor="account-subtype">Subtype</Label><SelectNative id="account-subtype"  value={values.subtype} disabled={!!editing?.isSystem} onChange={(event) => setValues((current) => ({ ...current, subtype: event.target.value as AccountInput["subtype"] }))}>{accountSubtypesByType[values.type].map((subtype) => <option key={subtype} value={subtype}>{accountSubtypeLabels[subtype]}</option>)}</SelectNative></div>
             <label className="flex min-h-9 items-center gap-2 text-sm sm:col-span-2"><input type="checkbox" checked={values.isActive} disabled={!!editing?.isSystem} onChange={(event) => setValues((current) => ({ ...current, isActive: event.target.checked }))} className="size-4 accent-[var(--primary)]" /> Active account</label>

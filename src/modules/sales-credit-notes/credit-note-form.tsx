@@ -22,7 +22,7 @@ import { DocumentFormFooter } from "@/components/document-form-footer";
 import { SelectNative } from "@/components/ui/select-native";
 
 type Option = { id: string; name: string };
-type AccountOption = { id: string; code: string; name: string };
+type AccountOption = { id: string; name: string };
 type TaxOption = { id: string; name: string; rateBasisPoints: number };
 type InvoiceOption = {
   id: string;
@@ -560,7 +560,7 @@ export function CreditNoteForm({
                       <option value="">Choose an account...</option>
                       {salesAccounts.map((account) => (
                         <option key={account.id} value={account.id}>
-                          {account.code} - {account.name}
+                          {account.name}
                         </option>
                       ))}
                     </select>
@@ -588,7 +588,7 @@ export function CreditNoteForm({
                         <option value="">Use doc Project</option>
                         {eligibleProjects.map((project) => (
                           <option key={project.id} value={project.id}>
-                            {project.code} - {project.name}
+                            {project.name}
                           </option>
                         ))}
                       </select>

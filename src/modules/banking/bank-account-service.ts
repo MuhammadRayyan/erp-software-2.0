@@ -6,12 +6,10 @@ import { bankAccountInputSchema, type BankAccountInput } from "./bank-account-in
 export type BankAccountRow = {
   id: string;
   name: string;
-  account_code: string | null;
   bank_name: string | null;
   account_number_masked: string | null;
   currency_code: string;
   ledger_account_id: string;
-  ledger_code: string;
   ledger_name: string;
   is_cash_account: number;
   is_active: number;
@@ -23,9 +21,9 @@ export type BankAccountRow = {
 // SQL fragment reused for both list and single-record queries — defined once
 // at module level to avoid rebuilding the string on every invocation.
 const ACCOUNT_SELECT = `
-    SELECT ba.id, ba.name, ba.account_code, ba.bank_name, ba.account_number_masked,
+    SELECT ba.id, ba.name, ba.bank_name, ba.account_number_masked,
       ba.currency_code, ba.ledger_account_id, ba.is_cash_account, ba.is_active,
-      a.code AS ledger_code, a.name AS ledger_name,
+      a.name AS ledger_name,
       COALESCE((
         SELECT SUM(jl.debit_minor - jl.credit_minor)
         FROM journal_lines jl
@@ -58,14 +56,14 @@ export function getBankAccount(businessId: string, userId: string, bankAccountId
 export function listBankLedgerOptions(businessId: string, userId: string, currentBankAccountId?: string) {
   const { sqlite } = getBusinessDb(businessId, userId);
   return sqlite.prepare(`
-    SELECT a.id, a.code, a.name, a.subtype,
+    SELECT a.id, a.name, a.subtype,
       CASE WHEN ba.id IS NULL OR ba.id = ? THEN 1 ELSE 0 END AS available
     FROM accounts a
     LEFT JOIN bank_accounts ba ON ba.ledger_account_id = a.id
     WHERE a.is_active = 1 AND a.type = 'asset' AND a.subtype IN ('bank', 'cash')
-    ORDER BY a.code
+    ORDER BY a.name
   `).all(currentBankAccountId ?? "") as {
-    id: string; code: string; name: string; subtype: "bank" | "cash"; available: number;
+    id: string; name: string; subtype: "bank" | "cash"; available: number;
   }[];
 }
 
@@ -143,7 +141,7 @@ export function saveBankAccount(
 export function bankAccountToInput(account: BankAccountRow): BankAccountInput {
   return {
     name: account.name,
-    accountCode: account.account_code ?? "",
+    accountCode: "",
     bankName: account.bank_name ?? "",
     accountNumberMasked: account.account_number_masked ?? "",
     currencyCode: account.currency_code,

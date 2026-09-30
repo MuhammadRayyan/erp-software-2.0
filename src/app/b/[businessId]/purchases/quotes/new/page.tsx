@@ -47,7 +47,7 @@ export default async function NewPurchaseQuotePage({
       <PurchaseQuoteForm
         businessId={businessId}
         suppliers={suppliers.map(({ id, name, defaultCurrencyCode }) => ({ id, name, defaultCurrencyCode }))}
-        expenseAccounts={accounts.map(({ id, code, name }) => ({ id, code, name }))}
+        expenseAccounts={accounts.map(({ id, name }) => ({ id, name }))}
         taxCodes={taxes.map(({ id, name, rateBasisPoints }) => ({ id, name, rateBasisPoints }))}
         projects={projects}
         items={items.map(({ id, sku, name, purchasePriceMinor, inventoryAssetAccountId }) => ({

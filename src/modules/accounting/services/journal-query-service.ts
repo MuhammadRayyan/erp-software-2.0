@@ -48,7 +48,7 @@ export function getJournalEntry(
   const lines = sqlite
     .prepare(`
       SELECT jl.id, jl.description, jl.debit_minor, jl.credit_minor,
-             jl.customer_id, jl.project_id, jl.reference, a.id AS account_id, a.code, a.name,
+             jl.customer_id, jl.project_id, jl.reference, a.id AS account_id, a.name,
              p.code AS project_code, p.name AS project_name
       FROM journal_lines jl
       INNER JOIN accounts a ON a.id = jl.account_id
@@ -67,7 +67,6 @@ export function getJournalEntry(
       project_name: string | null;
       reference: string | null;
       account_id: string;
-      code: string;
       name: string;
     }[];
   return {

@@ -178,8 +178,7 @@ export function saveBankTransaction(
 export function getBankTransaction(businessId: string, userId: string, transactionId: string) {
   const { sqlite } = getBusinessDb(businessId, userId);
   const transaction = sqlite.prepare(`
-    SELECT bt.*, ba.name AS bank_account_name, ba.ledger_account_id, a.code AS ledger_code,
-      a.name AS ledger_name, bsl.match_status AS statement_status
+    SELECT bt.*, ba.name AS bank_account_name, ba.ledger_account_id, a.name AS ledger_name, bsl.match_status AS statement_status
     FROM bank_transactions bt
     INNER JOIN bank_accounts ba ON ba.id = bt.bank_account_id
     INNER JOIN accounts a ON a.id = ba.ledger_account_id
@@ -188,7 +187,7 @@ export function getBankTransaction(businessId: string, userId: string, transacti
   `).get(transactionId) as Record<string, unknown> | undefined;
   if (!transaction) return null;
   const lines = sqlite.prepare(`
-    SELECT btl.*, a.code AS account_code, a.name AS account_name, tc.name AS tax_name,
+    SELECT btl.*, a.name AS account_name, tc.name AS tax_name,
       p.code AS project_code, p.name AS project_name
     FROM bank_transaction_lines btl
     INNER JOIN accounts a ON a.id = btl.account_id

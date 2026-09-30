@@ -2144,6 +2144,18 @@ export const businessMigrations = [
         }
       },
     },
+    {
+      version: 22,
+      name: "drop_account_code",
+      up: (sqlite) => {
+        const cols = sqlite.prepare("PRAGMA table_info(accounts)").all() as { name: string }[];
+        if (cols.some((c) => c.name === "code")) {
+          sqlite.exec(`ALTER TABLE accounts DROP COLUMN code;`);
+          // Drop the unique index if it exists
+          try { sqlite.exec(`DROP INDEX IF EXISTS account_code_idx;`); } catch { /* already gone */ }
+        }
+      },
+    },
 ] satisfies readonly SqliteMigration[];
 
 

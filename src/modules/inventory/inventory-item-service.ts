@@ -69,9 +69,9 @@ export const listInventoryItemOptions = cache((businessId: string, userId: strin
 export function getInventoryItem(businessId: string, userId: string, itemId: string) {
   const { sqlite } = getBusinessDb(businessId, userId);
   const item = sqlite.prepare(`
-    SELECT i.*, sa.code AS sales_account_code, sa.name AS sales_account_name,
-      ia.code AS asset_account_code, ia.name AS asset_account_name,
-      cs.code AS cogs_account_code, cs.name AS cogs_account_name
+    SELECT i.*, sa.name AS sales_account_name,
+      ia.name AS asset_account_name,
+      cs.name AS cogs_account_name
     FROM inventory_items i
     INNER JOIN accounts sa ON sa.id = i.sales_account_id
     INNER JOIN accounts ia ON ia.id = i.inventory_asset_account_id

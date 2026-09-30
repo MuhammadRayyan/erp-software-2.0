@@ -13,7 +13,7 @@ import { saveInventoryItemAction } from "./actions";
 import { inventoryItemInputSchema, type InventoryItemInput } from "./inventory-item-input";
 import { SelectNative } from "@/components/ui/select-native";
 
-type AccountOption = { id: string; code: string; name: string };
+type AccountOption = { id: string; name: string };
 
 export function InventoryItemForm({ businessId, itemId, salesAccounts, assetAccounts, expenseAccounts, initial }: { businessId: string; itemId?: string; salesAccounts: AccountOption[]; assetAccounts: AccountOption[]; expenseAccounts: AccountOption[]; initial: InventoryItemInput }) {
   const [serverError, setServerError] = useState("");
@@ -36,9 +36,9 @@ export function InventoryItemForm({ businessId, itemId, salesAccounts, assetAcco
       <div className="space-y-1.5 md:col-span-3"><Label htmlFor="description">Description <span className="font-normal text-muted-foreground">(optional)</span></Label><textarea id="description" rows={3} className="w-full rounded-[6px] border border-border-strong bg-surface-raised px-2.5 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-ring/25 disabled:cursor-not-allowed disabled:opacity-60 h-auto py-2" {...register("description")} /></div>
     </div></section>
     <section className="border-b border-border pb-7"><h2 className="text-base font-semibold">Accounting</h2><p className="mt-1 text-sm text-muted-foreground">Invoices use Sales and Inventory Asset; Delivery Notes use Cost of Sales and Inventory Asset.</p><div className="mt-5 grid gap-5 md:grid-cols-3">
-      <div className="space-y-1.5"><Label htmlFor="salesAccountId">Sales account</Label><SelectNative id="salesAccountId"  {...register("salesAccountId")}>{salesAccounts.map((a) => <option key={a.id} value={a.id}>{a.code} {a.name}</option>)}</SelectNative></div>
-      <div className="space-y-1.5"><Label htmlFor="inventoryAssetAccountId">Inventory Asset</Label><SelectNative id="inventoryAssetAccountId"  {...register("inventoryAssetAccountId")}>{assetAccounts.map((a) => <option key={a.id} value={a.id}>{a.code} {a.name}</option>)}</SelectNative></div>
-      <div className="space-y-1.5"><Label htmlFor="costOfSalesAccountId">Cost of Sales</Label><SelectNative id="costOfSalesAccountId"  {...register("costOfSalesAccountId")}>{expenseAccounts.map((a) => <option key={a.id} value={a.id}>{a.code} {a.name}</option>)}</SelectNative></div>
+      <div className="space-y-1.5"><Label htmlFor="salesAccountId">Sales account</Label><SelectNative id="salesAccountId"  {...register("salesAccountId")}>{salesAccounts.map((a) => <option key={a.id} value={a.id}>{} {a.name}</option>)}</SelectNative></div>
+      <div className="space-y-1.5"><Label htmlFor="inventoryAssetAccountId">Inventory Asset</Label><SelectNative id="inventoryAssetAccountId"  {...register("inventoryAssetAccountId")}>{assetAccounts.map((a) => <option key={a.id} value={a.id}>{} {a.name}</option>)}</SelectNative></div>
+      <div className="space-y-1.5"><Label htmlFor="costOfSalesAccountId">Cost of Sales</Label><SelectNative id="costOfSalesAccountId"  {...register("costOfSalesAccountId")}>{expenseAccounts.map((a) => <option key={a.id} value={a.id}>{} {a.name}</option>)}</SelectNative></div>
     </div></section>
     <label className="flex items-center gap-2 text-sm"><input type="checkbox" className="size-4 accent-[var(--primary)]" {...register("isActive")} /> Active item</label>
     <div className="sticky bottom-0 z-20 -mx-4 flex justify-between border-t border-border bg-surface/95 px-4 py-3 backdrop-blur-sm sm:mx-0 sm:rounded-t-lg sm:border-x"><Button asChild variant="ghost"><Link href={itemId ? `/b/${businessId}/inventory/items/${itemId}` : `/b/${businessId}/inventory/items`}>Cancel</Link></Button><Button type="submit" disabled={isSubmitting}>{isSubmitting && <LoaderCircle className="size-4 animate-spin" />} {itemId ? "Save Changes" : "Create Item"}</Button></div>

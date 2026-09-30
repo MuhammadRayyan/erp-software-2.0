@@ -15,7 +15,7 @@ export const listAccounts = cache((businessId: string, userId: string) => {
   return getBusinessDb(businessId, userId).db
     .select()
     .from(accounts)
-    .orderBy(asc(accounts.code))
+    .orderBy(asc(accounts.name))
     .all();
 });
 
@@ -24,17 +24,10 @@ export function createAccount(businessId: string, userId: string, input: Account
   validateSubtype(data);
   const context = getBusinessDb(businessId, userId);
   const now = new Date().toISOString();
-  try {
-    context.db
-      .insert(accounts)
-      .values({ id: randomUUID(), ...data, isSystem: false, createdAt: now, updatedAt: now })
-      .run();
-  } catch (error) {
-    if (error instanceof Error && error.message.includes("UNIQUE")) {
-      throw new Error("An account with this code already exists.");
-    }
-    throw error;
-  }
+  context.db
+    .insert(accounts)
+    .values({ id: randomUUID(), ...data, isSystem: false, createdAt: now, updatedAt: now })
+    .run();
 }
 
 export function updateAccount(
@@ -49,20 +42,13 @@ export function updateAccount(
   const current = context.db.select().from(accounts).where(eq(accounts.id, accountId)).get();
   if (!current) throw new Error("Account not found.");
   const next = current.isSystem
-    ? { code: data.code, name: data.name, isActive: true }
+    ? { name: data.name, isActive: true }
     : data;
-  try {
-    context.db
-      .update(accounts)
-      .set({ ...next, updatedAt: new Date().toISOString() })
-      .where(eq(accounts.id, accountId))
-      .run();
-  } catch (error) {
-    if (error instanceof Error && error.message.includes("UNIQUE")) {
-      throw new Error("An account with this code already exists.");
-    }
-    throw error;
-  }
+  context.db
+    .update(accounts)
+    .set({ ...next, updatedAt: new Date().toISOString() })
+    .where(eq(accounts.id, accountId))
+    .run();
 }
 
 export function deleteAccount(businessId: string, userId: string, accountId: string) {

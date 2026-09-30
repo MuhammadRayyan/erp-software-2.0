@@ -19,7 +19,7 @@ import { DocumentFormFooter } from "@/components/document-form-footer";
 import { SelectNative } from "@/components/ui/select-native";
 
 type Option = { id: string; name: string; defaultCurrencyCode: string | null };
-type AccountOption = { id: string; code: string; name: string };
+type AccountOption = { id: string; name: string };
 type TaxOption = { id: string; name: string; rateBasisPoints: number };
 type ProjectOption = { id: string; code: string; name: string };
 type ItemOption = { id: string; sku: string | null; name: string; salesPriceMinor: number | null; salesAccountId: string };
@@ -186,7 +186,7 @@ export function SalesQuoteForm({ businessId, quoteId, status = "draft", customer
                       <><input type="hidden" {...register(`lines.${index}.salesAccountId`)} /><span className="text-sm text-muted-foreground">From item</span></>
                     ) : (
                       <select aria-label={`Line ${index + 1} sales account`} className="flex h-9 w-full items-center justify-between rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-sm ring-offset-background placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-50" {...register(`lines.${index}.salesAccountId`)}>
-                        {salesAccounts.map((account) => <option key={account.id} value={account.id}>{account.code} {account.name}</option>)}
+                        {salesAccounts.map((account) => <option key={account.id} value={account.id}>{account.name}</option>)}
                       </select>
                     )}
                     <input type="hidden" {...register(`lines.${index}.taxCodeId`)} />

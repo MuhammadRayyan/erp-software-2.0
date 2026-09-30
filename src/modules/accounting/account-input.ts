@@ -2,7 +2,6 @@ import { z } from "zod";
 import { accountSubtypes, accountTypes } from "./account-types";
 
 export const accountInputSchema = z.object({
-  code: z.string().trim().min(1, "Enter an account code").max(20),
   name: z.string().trim().min(2, "Enter an account name").max(100),
   type: z.enum(accountTypes),
   subtype: z.enum(accountSubtypes),

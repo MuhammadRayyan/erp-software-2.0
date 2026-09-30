@@ -89,7 +89,6 @@ type ReceiptListRow = {
   customer_id: string;
   customer_name: string;
   bank_account_id: string;
-  bank_account_code: string;
   bank_account_name: string;
 };
 
@@ -181,7 +180,7 @@ export function listReceipts(businessId: string, userId: string, filters?: Recei
     SELECT r.id, r.receipt_number, r.date, r.amount_minor, r.base_amount_minor, r.currency_code,
       cur.minor_unit AS currency_minor_unit, r.reference,
       r.document_status, r.created_at, c.id AS customer_id, c.name AS customer_name,
-      a.id AS bank_account_id, a.code AS bank_account_code, a.name AS bank_account_name
+      a.id AS bank_account_id, a.name AS bank_account_name
     FROM receipts r
     INNER JOIN customers c ON c.id = r.customer_id
     INNER JOIN accounts a ON a.id = r.bank_account_id
@@ -196,7 +195,7 @@ export function getReceipt(businessId: string, userId: string, receiptId: string
   const { sqlite } = getBusinessDb(businessId, userId);
   const receipt = sqlite.prepare(`
     SELECT r.*, c.name AS customer_name, c.email AS customer_email,
-      a.code AS bank_account_code, a.name AS bank_account_name
+      a.name AS bank_account_name
     FROM receipts r
     INNER JOIN customers c ON c.id = r.customer_id
     INNER JOIN accounts a ON a.id = r.bank_account_id

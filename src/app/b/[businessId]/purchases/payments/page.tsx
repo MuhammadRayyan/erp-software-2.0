@@ -93,7 +93,7 @@ export default async function SupplierPaymentsPage({
                       <td>{payment.supplier_name}</td>
                       <td>{formatDate(payment.date)}</td>
                       <td>
-                        {payment.bank_account_code} · {payment.bank_account_name}
+                        {payment.bank_account_name}
                       </td>
                       <td className="text-muted-foreground">{payment.reference || "—"}</td>
                       <td className="money text-right">

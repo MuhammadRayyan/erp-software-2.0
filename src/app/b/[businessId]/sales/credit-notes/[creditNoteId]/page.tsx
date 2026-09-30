@@ -42,7 +42,7 @@ export default async function CreditNoteViewPage({ params, searchParams }: { par
         <div className="flex flex-wrap items-center gap-2"><h1 className="page-title tabular">{note.creditNoteNumber}</h1><StatusBadge status={note.documentStatus} /></div>
         <p className="mt-2 text-base font-medium">{customer.name}</p>
         <p className="mt-1 text-sm text-muted-foreground">Credit date: {formatDate(note.date)} · Applied to <Link className="tabular text-primary hover:underline" href={`/b/${businessId}/sales/invoices/${invoice.id}`}>{invoice.invoiceNumber}</Link></p>
-        {linkedProjects.length > 0 && <p className="mt-1 text-sm text-muted-foreground">Project: {linkedProjects.map((project, index) => <span key={project.id}>{index > 0 && ", "}<Link className="font-medium text-primary hover:underline" href={`/b/${businessId}/projects/${project.id}`}>{project.code} · {project.name}</Link></span>)}</p>}
+        {linkedProjects.length > 0 && <p className="mt-1 text-sm text-muted-foreground">Project: {linkedProjects.map((project, index) => <span key={project.id}>{index > 0 && ", "}<Link className="font-medium text-primary hover:underline" href={`/b/${businessId}/projects/${project.id}`}>{project.name}</Link></span>)}</p>}
         <div className="mt-3 flex items-baseline gap-4"><span className="money text-xl font-semibold">{formatMoney(note.totalMinor, currency)}</span><span className="text-sm text-muted-foreground">{note.documentStatus === "posted" ? "Reduces Accounts Receivable" : "No ledger impact"}</span></div>
       </div>
       <CreditNoteViewActions businessId={businessId} noteId={note.id} creditNoteNumber={note.creditNoteNumber} documentStatus={note.documentStatus} journalEntryId={record.journal?.id ?? null} emailDefaults={emailDefaults} />
@@ -54,7 +54,7 @@ export default async function CreditNoteViewPage({ params, searchParams }: { par
         <dl className="grid grid-cols-2 gap-x-5 gap-y-3 text-sm sm:justify-self-end"><dt className="text-muted-foreground">Credit date</dt><dd className="text-right">{formatDate(note.date)}</dd><dt className="text-muted-foreground">VAT tax date</dt><dd className="text-right">{formatDate(note.taxDate)}</dd><dt className="text-muted-foreground">Supply Emirate</dt><dd className="text-right">{note.supplyEmirate ? emirateLabels[note.supplyEmirate as Emirate] : "Business default"}</dd><dt className="text-muted-foreground">Source invoice</dt><dd className="text-right"><Link href={`/b/${businessId}/sales/invoices/${invoice.id}`} className="tabular text-primary hover:underline">{invoice.invoiceNumber}</Link></dd><dt className="text-muted-foreground">Reference</dt><dd className="text-right">{note.reference || "—"}</dd><dt className="text-muted-foreground">Reason</dt><dd className="max-w-72 text-right">{note.reason || "—"}</dd></dl>
       </div>
       <div className="mt-6 overflow-x-auto"><table className="data-table min-w-[900px]"><thead><tr><th>Description</th><th>Project</th><th className="text-right!">Qty</th><th className="text-right!">Rate</th><th>VAT</th><th className="text-right!">Amount</th></tr></thead><tbody>{lines.map((line) => <tr key={line.id}>
-        <td><span className="font-medium">{line.description}</span><span className="mt-0.5 block text-xs text-muted-foreground">{line.salesAccount ? `${line.salesAccount.code} ${line.salesAccount.name}` : "Sales account unavailable"}</span></td>
+        <td><span className="font-medium">{line.description}</span><span className="mt-0.5 block text-xs text-muted-foreground">{line.salesAccount ? line.salesAccount.name : "Sales account unavailable"}</span></td>
         <td>{line.project ? <Link href={`/b/${businessId}/projects/${line.project.id}`} className="text-primary hover:underline">{line.project.name}</Link> : <span className="text-muted-foreground">—</span>}</td>
         <td className="money text-right">{quantityMicrosToInput(line.quantityMicros)}</td><td className="money text-right">{formatMoney(line.unitPriceMinor, currency)}</td><td>{line.taxCode ? `${line.taxCode.name} (${rateBasisPointsToPercent(line.taxCode.rate_basis_points)}%)` : "—"}</td><td className="money text-right">{formatMoney(line.grossAmountMinor, currency)}</td>
       </tr>)}</tbody></table></div>
@@ -63,3 +63,4 @@ export default async function CreditNoteViewPage({ params, searchParams }: { par
     </article>
   </div>;
 }
+

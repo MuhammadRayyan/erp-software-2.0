@@ -39,7 +39,7 @@ export default async function EditOrderPage({ params }: { params: Promise<{ busi
       orderId={orderId}
       status={record.order.documentStatus}
       customers={customers.map(({ id, name, defaultCurrencyCode }) => ({ id, name, defaultCurrencyCode }))}
-      expenseAccounts={salesAccounts.map(({ id, code, name }) => ({ id, code, name }))}
+      expenseAccounts={salesAccounts.map(({ id, name }) => ({ id, name }))}
       taxCodes={taxCodes.map(({ id, name, rateBasisPoints }) => ({ id, name, rateBasisPoints }))}
       projects={projects.map((project) => ({ id: project.id, code: project.code, name: project.name, customerId: project.customer_id }))}
       items={items.map(({ id, sku, name, salesPriceMinor, salesAccountId }) => ({ id, sku, name, salesPriceMinor, salesAccountId }))}

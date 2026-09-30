@@ -53,7 +53,7 @@ export default async function NewReceiptPage({
           currencyCode: invoice.currencyCode,
           minorUnit: currencyMinorUnits.get(invoice.currencyCode) ?? 2,
         }))}
-        bankAccounts={bankAccounts.map(({ id, code, name }) => ({ id, name: `${code} ${name}` }))}
+        bankAccounts={bankAccounts.map(({ id, name }) => ({ id, name }))}
         initial={{
           customerId,
           invoiceId,

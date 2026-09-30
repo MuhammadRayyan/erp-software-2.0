@@ -58,11 +58,11 @@ export default async function BankAccountsPage({ params }: { params: Promise<{ b
                       <Link href={`/b/${businessId}/banking/accounts/${account.id}`} className="font-medium text-primary hover:underline">
                         {account.name}
                       </Link>
-                      <span className="ml-2 text-xs text-muted-foreground">{account.is_cash_account ? "Cash" : account.account_code || "Bank"}</span>
+                      <span className="ml-2 text-xs text-muted-foreground">{account.is_cash_account ? "Cash" : "Bank"}</span>
                     </td>
                     <td>{account.is_cash_account ? "—" : account.bank_name || "—"}</td>
                     <td>
-                      <span className="tabular text-muted-foreground">{account.ledger_code}</span> · {account.ledger_name}
+                      {account.ledger_name}
                     </td>
                     <td className="tabular">{account.currency_code}</td>
                     <td className="money text-right font-medium">{formatMoney(account.book_balance_minor, access.business.currency)}</td>

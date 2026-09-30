@@ -170,3 +170,24 @@ Seeded demo accounts: `admin@demo.local / demo12345` (all modules) and `standard
 
 Runtime data (SQLite databases, attachments) lives under `data/` and is created by the migrate/seed scripts; it is intentionally absent from this archive. The `public/downloads/` folder is a delivery artifact for the hosted preview and can be deleted safely â€” the login page download link auto-hides when the archive file is not present.
 
+
+## Modern Chart of Accounts & Dashboard Overhaul (2026-09-30)
+
+### Remove Account Codes — Full Stack Elimination
+Following the modern accounting software industry standard (e.g., Xero, FreeAgent), account codes have been fully removed from the system. They were replaced with name-based sorting and display.
+
+- **Database Schema** (`business-schema.ts`): Dropped `code: text("code").notNull()` field and `uniqueIndex("account_code_idx")` from the `accounts` table.
+- **DB Migration v22** (`business-migrations.ts`): Safe idempotent migration using `PRAGMA table_info(accounts)` guard before executing `ALTER TABLE accounts DROP COLUMN code`. Runs automatically on next server start for all existing business databases.
+- **Account Validation** (`account-input.ts`): Removed `code` field from `accountInputSchema` Zod schema entirely. Accounts are now validated only by name, type, subtype, and isActive.
+- **Account Service** (`account-service.ts`): Changed `ORDER BY code` to `ORDER BY name`; removed all code insert/update/UNIQUE-conflict handling.
+- **Chart of Accounts UI** (`account-manager.tsx`): Removed "Code" column from the accounts table, removed Code input field from the create/edit dialog.
+- **All Form Pages** (20+ files across sales, purchases, banking, settings): Fixed `AccountOption` type definitions from `{ id, code, name }` to `{ id, name }`. Removed all account code JSX interpolation and SQL references.
+- **Banking Service** (`bank-account-service.ts`): Removed `ledger_code` from `BankAccountRow` type; removed `ba.account_code` from SELECT queries; fixed `listBankLedgerOptions` return type.
+- **Banking Detail Views**: Replaced `account.ledger_code` references with `account.ledger_name`.
+- **Document Detail Views** (invoices, orders, quotes, credit notes): Replaced code-prefixed account display with name-only.
+- **Tax Codes Manager**: Removed `code: string` from account prop types; removed code prefixes from account display.
+
+### Dashboard Overview Modernized
+- Replaced the `ManagerSummary` module-directory grid on the Overview page with the `FinancialSummary` component (Balance Sheet + P&L at-a-glance).
+- Overview page now shows: KPI cards -> Financial Summary (Balance Sheet / P&L) -> Recent Invoices -> Recent Emails.
+- Removed `getDashboardCounts` import from overview page (no longer needed there).

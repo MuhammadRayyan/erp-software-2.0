@@ -20,7 +20,7 @@ import { DocumentFormFooter } from "@/components/document-form-footer";
 import { SelectNative } from "@/components/ui/select-native";
 
 type Option = { id: string; name: string; defaultCurrencyCode: string | null };
-type AccountOption = { id: string; code: string; name: string };
+type AccountOption = { id: string; name: string };
 type TaxOption = { id: string; name: string; rateBasisPoints: number };
 type ProjectOption = { id: string; code: string; name: string };
 type ItemOption = { id: string; sku: string | null; name: string; purchasePriceMinor: number | null; inventoryAssetAccountId: string };
@@ -407,7 +407,7 @@ export function PurchaseQuoteForm({
                       >
                         {expenseAccounts.map((account) => (
                           <option key={account.id} value={account.id}>
-                            {account.code} {account.name}
+                            {account.name}
                           </option>
                         ))}
                       </select>
