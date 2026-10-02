@@ -29,8 +29,9 @@ export default async function InvoiceListPage({
   const to = DATE_PATTERN.test(sp.to ?? "") ? sp.to : undefined;
   const page = parsePageParam(sp.page);
   const pageSize = parsePageSizeParam(sp.pageSize);
+  const status = (sp as any).status as "overdue" | "draft" | "unpaid" | "paid" | "void" | undefined;
   
-  const { rows: invoices, ...pagination } = listInvoicesPaginated(businessId, user.id, { from, to, page, pageSize });
+  const { rows: invoices, ...pagination } = listInvoicesPaginated(businessId, user.id, { from, to, status, page, pageSize });
   const customFieldColumns = invoices.length
     ? listCustomFieldDefinitions(businessId, user.id, "sales_invoice")
         .filter((definition) => definition.showInList)
@@ -42,6 +43,7 @@ export default async function InvoiceListPage({
   const preferences = listPreferences(businessId, user.id);
   const columnSnapshots = decodeColumnSnapshots(preferences);
   const searchParamsUrl = buildDateSearchParams({ from, to });
+  if (status) searchParamsUrl.set("status", status);
   if (pageSize !== undefined) searchParamsUrl.set("pageSize", String(pageSize));
 
   return (

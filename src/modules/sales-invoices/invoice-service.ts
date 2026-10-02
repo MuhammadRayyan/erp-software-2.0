@@ -106,6 +106,7 @@ const ALLOCATED_BASE_MINOR_FRAGMENT = `
 `;
 
 export type InvoiceListFilters = {
+    status?: "draft" | "overdue" | "unpaid" | "paid" | "void";
   /** Inclusive lower bound on invoice_date (YYYY-MM-DD). Invalid values are ignored. */
   from?: string;
   /** Inclusive upper bound on invoice_date (YYYY-MM-DD). Invalid values are ignored. */
@@ -152,6 +153,23 @@ function countInvoiceRows(businessId: string, userId: string, filters?: InvoiceL
   const values: string[] = [];
   const dateFrom = validDate(filters?.from);
   const dateTo = validDate(filters?.to);
+
+    if (filters?.status === "overdue") {
+      conditions.push("i.document_status = 'posted'");
+      conditions.push(`i.total_minor > (${ALLOCATED_MINOR_FRAGMENT})`);
+      conditions.push("i.due_date < date('now', 'localtime')");
+    } else if (filters?.status === "draft") {
+      conditions.push("i.document_status = 'draft'");
+    } else if (filters?.status === "void") {
+      conditions.push("i.document_status = 'void'");
+    } else if (filters?.status === "unpaid") {
+      conditions.push("i.document_status = 'posted'");
+      conditions.push(`i.total_minor > (${ALLOCATED_MINOR_FRAGMENT})`);
+    } else if (filters?.status === "paid") {
+      conditions.push("i.document_status = 'posted'");
+      conditions.push(`i.total_minor <= (${ALLOCATED_MINOR_FRAGMENT})`);
+    }
+
   if (dateFrom) {
     conditions.push("i.invoice_date >= ?");
     values.push(dateFrom);
@@ -212,6 +230,23 @@ function listInvoiceRows(
   }
   const dateFrom = validDate(filters?.from);
   const dateTo = validDate(filters?.to);
+
+    if (filters?.status === "overdue") {
+      conditions.push("i.document_status = 'posted'");
+      conditions.push(`i.total_minor > (${ALLOCATED_MINOR_FRAGMENT})`);
+      conditions.push("i.due_date < date('now', 'localtime')");
+    } else if (filters?.status === "draft") {
+      conditions.push("i.document_status = 'draft'");
+    } else if (filters?.status === "void") {
+      conditions.push("i.document_status = 'void'");
+    } else if (filters?.status === "unpaid") {
+      conditions.push("i.document_status = 'posted'");
+      conditions.push(`i.total_minor > (${ALLOCATED_MINOR_FRAGMENT})`);
+    } else if (filters?.status === "paid") {
+      conditions.push("i.document_status = 'posted'");
+      conditions.push(`i.total_minor <= (${ALLOCATED_MINOR_FRAGMENT})`);
+    }
+
   if (dateFrom) {
     conditions.push("i.invoice_date >= ?");
     values.push(dateFrom);
