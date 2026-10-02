@@ -2147,12 +2147,40 @@ export const businessMigrations = [
     {
       version: 22,
       name: "drop_account_code",
+      foreignKeys: "off",
       up: (sqlite) => {
         const cols = sqlite.prepare("PRAGMA table_info(accounts)").all() as { name: string }[];
         if (cols.some((c) => c.name === "code")) {
-          sqlite.exec(`ALTER TABLE accounts DROP COLUMN code;`);
-          // Drop the unique index if it exists
-          try { sqlite.exec(`DROP INDEX IF EXISTS account_code_idx;`); } catch { /* already gone */ }
+          // Drop the unique index if it exists externally
+          try { sqlite.exec(`DROP INDEX IF EXISTS account_code_idx;`); } catch { /* ignore */ }
+          
+          // SQLite cannot DROP COLUMN if the column has a UNIQUE constraint inline.
+          // We must do a table rebuild (create new, copy, drop old, rename).
+          
+          // Must disable foreign keys temporarily to drop a referenced table
+          sqlite.pragma("foreign_keys = OFF");
+          
+          sqlite.exec(`
+            CREATE TABLE accounts_new (
+              id TEXT PRIMARY KEY NOT NULL,
+              name TEXT NOT NULL,
+              type TEXT NOT NULL CHECK (type IN ('asset', 'liability', 'equity', 'income', 'expense')),
+              subtype TEXT NOT NULL,
+              is_system INTEGER NOT NULL DEFAULT 0,
+              is_active INTEGER NOT NULL DEFAULT 1,
+              created_at TEXT NOT NULL,
+              updated_at TEXT NOT NULL
+            );
+            
+            INSERT INTO accounts_new (id, name, type, subtype, is_system, is_active, created_at, updated_at)
+            SELECT id, name, type, subtype, is_system, is_active, created_at, updated_at FROM accounts;
+            
+            DROP TABLE accounts;
+            ALTER TABLE accounts_new RENAME TO accounts;
+          `);
+          
+          // Re-enable foreign keys
+          sqlite.pragma("foreign_keys = ON");
         }
       },
     },

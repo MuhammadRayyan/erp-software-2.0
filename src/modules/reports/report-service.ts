@@ -132,7 +132,7 @@ export function getTrialBalance(businessId: string, userId: string, throughDate?
       LEFT JOIN journal_entries je
         ON je.id = jl.journal_entry_id AND je.status = 'posted' AND je.date <= ?
       GROUP BY a.id
-      ORDER BY `)
+      ORDER BY a.name`)
     .all(date) as {
       id: string;
 
