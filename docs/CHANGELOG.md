@@ -4,6 +4,14 @@ All notable changes since the original `erp-software-2.0-antigravity-edits` uplo
 
 Full per-task detail (file lists, verification transcripts, QA walkthroughs) lives in `worklog.md` at the repository root.
 
+
+## UX & Quality Polish Sprint
+- **Financial Reports**: Added dedicated `/reports/profit-loss` and `/reports/balance-sheet` pages. Both allow exporting to CSV.
+- **CSV Export Engine**: Added a reusable `exportCsv` utility and `<ExportCsvButton>`. Deployed to Bank Transactions, P&L, and Balance Sheet reports.
+- **Overdue Invoices Drill-down**: The Overdue KPI card on the dashboard is now clickable, taking users directly to a pre-filtered Sales Invoices list.
+- **Customer Payment Terms**: Added `paymentTermsDays` and `creditLimitMinor` to the customer schema (Migration v23). The Invoice form now auto-calculates the Due Date based on the selected customer's default terms.
+- **Pagination**: Added 100-rows-per-page client/server hydration pagination to the Bank Transactions report.
+
 ## v2.4.1 - Universal Document Email System
 
 ### Email Capabilities Extended

@@ -4,6 +4,13 @@ import { requireModule } from "@/core/permissions/require-module";
 
 const groups = [
   {
+    title: "Financial Statements",
+    reports: [
+      { title: "Profit & Loss", description: "Income, Cost of Sales, and Expenses for a given period.", path: "/reports/profit-loss", icon: ScrollText },
+      { title: "Balance Sheet", description: "Assets, Liabilities, and Equity as of a specific date.", path: "/reports/balance-sheet", icon: Landmark },
+    ],
+  },
+  {
     title: "Accounting",
     reports: [
       { title: "General Ledger", description: "Account-by-account journal movement and running balances.", path: "/reports/general-ledger", icon: BookOpenText },

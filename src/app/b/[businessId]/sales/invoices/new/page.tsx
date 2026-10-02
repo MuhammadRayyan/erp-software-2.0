@@ -70,11 +70,7 @@ export default async function NewInvoicePage({
       {ready ? (
         <InvoiceForm
           businessId={businessId}
-          customers={customers.map(({ id, name, defaultCurrencyCode }) => ({
-            id,
-            name,
-            defaultCurrencyCode,
-          }))}
+          customers={customers as any}
           salesAccounts={salesAccounts.map(({ id, name }) => ({ id, name }))}
           taxCodes={taxCodes.map(({ id, name, rateBasisPoints }) => ({ id, name, rateBasisPoints }))}
           projects={projects.map((project) => ({
@@ -143,3 +139,4 @@ export default async function NewInvoicePage({
     </div>
   );
 }
+

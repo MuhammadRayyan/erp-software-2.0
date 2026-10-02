@@ -25,6 +25,8 @@ export const customerInputSchema = z.object({
   buyerReference: z.string().trim().max(80).optional().default(""),
   billingAddress: z.string().trim().max(1000).optional().default(""),
   deliveryAddress: z.string().trim().max(1000).optional().default(""),
+  paymentTermsDays: z.coerce.number().int().min(0).max(365).optional().default(0),
+  creditLimitMinor: z.union([z.coerce.number().int().min(0), z.literal("")]).optional().transform(v => v === "" ? null : v),
   isActive: z.boolean().default(true),
 });
 

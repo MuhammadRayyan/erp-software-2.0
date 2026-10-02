@@ -24,7 +24,7 @@ export function CustomerForm({ businessId, customerId, currencies, initial, cust
       name: "", email: "", phone: "", taxReference: "", legalName: "", trn: "",
       legalRegistrationIdentifier: "", electronicAddress: "", electronicAddressScheme: "",
       addressLine1: "", city: "", countrySubdivision: "", countryCode: "AE", buyerReference: "", defaultCurrencyCode: currencies[0]?.code ?? "AED",
-      billingAddress: "", deliveryAddress: "", isActive: true,
+      paymentTermsDays: 0, creditLimitMinor: "", billingAddress: "", deliveryAddress: "", isActive: true,
     },
   });
   
@@ -69,7 +69,9 @@ export function CustomerForm({ businessId, customerId, currencies, initial, cust
         <div className="space-y-1.5"><Label htmlFor="email">Email</Label><Input id="email" type="email" {...register("email")} aria-invalid={!!errors.email} />{errors.email && <p className="field-error">{errors.email.message}</p>}</div>
         <div className="space-y-1.5"><Label htmlFor="phone">Phone</Label><Input id="phone" type="tel" {...register("phone")} aria-invalid={!!errors.phone} />{errors.phone && <p className="field-error">{errors.phone.message}</p>}</div>
         <div className="space-y-1.5"><Label htmlFor="taxReference">TRN / reference <span className="font-normal text-muted-foreground">(optional)</span></Label><Input id="taxReference" {...register("taxReference")} /></div>
-        <div className="space-y-1.5"><Label htmlFor="defaultCurrencyCode">Default document currency</Label><select id="defaultCurrencyCode" className="h-9 w-full rounded-[6px] border border-border-strong bg-surface-raised px-3 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-ring/25" {...register("defaultCurrencyCode")}>{currencies.map((currency) => <option key={currency.code} value={currency.code}>{currency.code} — {currency.name}</option>)}</select></div>
+                  <div className="space-y-1.5"><Label htmlFor="defaultCurrencyCode">Default document currency</Label><select id="defaultCurrencyCode" className="h-9 w-full rounded-[6px] border border-border-strong bg-surface-raised px-3 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-ring/25" {...register("defaultCurrencyCode")}>{currencies.map((currency) => <option key={currency.code} value={currency.code}>{currency.code} — {currency.name}</option>)}</select></div>
+          <div className="space-y-1.5"><Label htmlFor="paymentTermsDays">Payment terms (days)</Label><Input id="paymentTermsDays" type="number" min="0" max="365" {...register("paymentTermsDays")} aria-invalid={!!errors.paymentTermsDays} />{errors.paymentTermsDays && <p className="field-error">{errors.paymentTermsDays.message}</p>}</div>
+          <div className="space-y-1.5"><Label htmlFor="creditLimitMinor">Credit limit</Label><Input id="creditLimitMinor" type="number" min="0" placeholder="No limit" {...register("creditLimitMinor")} aria-invalid={!!errors.creditLimitMinor} />{errors.creditLimitMinor && <p className="field-error">{errors.creditLimitMinor.message}</p>}</div>
         
         <div className="space-y-1.5 sm:col-span-2">
           <Label htmlFor="billingAddress">Billing Address</Label>

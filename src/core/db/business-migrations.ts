@@ -2184,6 +2184,14 @@ export const businessMigrations = [
         }
       },
     },
+    {
+    version: 23,
+    name: "add_customer_terms",
+    up: (sqlite) => {
+      sqlite.exec(`ALTER TABLE customers ADD COLUMN payment_terms_days INTEGER NOT NULL DEFAULT 0;`);
+      sqlite.exec(`ALTER TABLE customers ADD COLUMN credit_limit_minor INTEGER;`);
+    },
+  },
 ] satisfies readonly SqliteMigration[];
 
 

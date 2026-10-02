@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo } from "react";
+import Link from "next/link";
 import { AlertTriangle, Banknote, CircleDollarSign, LayoutGrid, ReceiptText } from "lucide-react";
 import { useColumnVisibility, type ColumnVisibility } from "@/components/use-column-visibility";
 import { Button } from "@/components/ui/button";
@@ -26,6 +27,8 @@ export type KpiCardData = {
   caption?: string;
   /** Native browser tooltip shown on hover; clarifies what the metric means. */
   tooltip?: string;
+  /** Optional href to make the card clickable. */
+  href?: string;
 };
 
 /**
@@ -69,16 +72,32 @@ export function KpiCards({ cards, businessId, serverSnapshot }: { cards: KpiCard
           {visibleCards.map((card) => {
             const Icon = cardIcons[card.icon];
             return (
-              <article key={card.id} title={card.tooltip ?? `${card.label} — ${card.note}${card.caption ? ` · ${card.caption}` : ""}`} className="rounded-lg border border-border bg-surface-raised p-4 transition-colors hover:border-border-strong">
-                <div className="flex items-center justify-between gap-2">
-                  <p className="text-xs font-medium text-muted-foreground">{card.label}</p>
-                  <span className="grid size-6 place-items-center rounded-full bg-surface-muted text-muted-foreground"><Icon className="size-3.5" /></span>
-                </div>
-                <p className="money mt-3 text-xl font-semibold tracking-[-0.02em]">{card.value}</p>
-                <p className="mt-1 text-xs text-muted-foreground">
-                  {card.note}
-                  {card.caption && <span className="text-muted-foreground/75"> · {card.caption}</span>}
-                </p>
+                            <article key={card.id} title={card.tooltip ?? `${card.label} — ${card.note}${card.caption ? ` · ${card.caption}` : ""}`} className={`rounded-lg border border-border bg-surface-raised p-4 transition-colors hover:border-border-strong ${card.href ? "hover:bg-surface-muted/30" : ""}`}>
+                {card.href ? (
+                  <Link href={card.href} className="block h-full">
+                    <div className="flex items-center justify-between gap-2">
+                      <p className="text-xs font-medium text-muted-foreground">{card.label}</p>
+                      <span className="grid size-6 place-items-center rounded-full bg-surface-muted text-muted-foreground"><Icon className="size-3.5" /></span>
+                    </div>
+                    <p className="money mt-3 text-xl font-semibold tracking-[-0.02em]">{card.value}</p>
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      {card.note}
+                      {card.caption && <span className="text-muted-foreground/75"> · {card.caption}</span>}
+                    </p>
+                  </Link>
+                ) : (
+                  <>
+                    <div className="flex items-center justify-between gap-2">
+                      <p className="text-xs font-medium text-muted-foreground">{card.label}</p>
+                      <span className="grid size-6 place-items-center rounded-full bg-surface-muted text-muted-foreground"><Icon className="size-3.5" /></span>
+                    </div>
+                    <p className="money mt-3 text-xl font-semibold tracking-[-0.02em]">{card.value}</p>
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      {card.note}
+                      {card.caption && <span className="text-muted-foreground/75"> · {card.caption}</span>}
+                    </p>
+                  </>
+                )}
               </article>
             );
           })}
@@ -87,3 +106,4 @@ export function KpiCards({ cards, businessId, serverSnapshot }: { cards: KpiCard
     </section>
   );
 }
+

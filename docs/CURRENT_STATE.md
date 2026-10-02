@@ -201,3 +201,4 @@ Last verified on 24 August 2026 (review round 7 + v2.1.0 packaging): explicit mi
 ### Dashboard Overview
 - The Overview page now shows a **Financial Summary** (Balance Sheet + P&L) instead of the module-directory grid.
 - Layout: KPI cards ? Financial Summary ? Recent Invoices ? Recent Emails.
+

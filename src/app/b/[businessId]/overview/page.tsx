@@ -70,7 +70,7 @@ export default async function OverviewPage({ params, searchParams }: { params: P
   const cards: KpiCardData[] = [
     { id: "posted-sales", icon: "sales", label: "Posted Sales", value: formatMoney(sales, currency), note: `${periodPosted.length} posted invoices`, caption: periodLabel, tooltip: "Total of posted sales invoices in the selected period (base currency)." },
     { id: "outstanding", icon: "receivables", label: "Outstanding Receivables", value: formatMoney(outstanding, currency), note: `${posted.filter((item) => item.balanceMinor > 0).length} open invoices`, caption: "as of today", tooltip: "Unsettled receivable balances across all posted invoices, regardless of the selected period." },
-    { id: "overdue", icon: "overdue", label: "Overdue", value: formatMoney(overdue, currency), note: `${posted.filter((item) => item.paymentStatus === "overdue").length} overdue invoices`, caption: "as of today", tooltip: "Posted invoices past their due date that still have an open balance." },
+    { id: "overdue", icon: "overdue", label: "Overdue", value: formatMoney(overdue, currency), note: `${posted.filter((item) => item.paymentStatus === "overdue").length} overdue invoices`, caption: "as of today", tooltip: "Posted invoices past their due date that still have an open balance.", href: `/b/${businessId}/sales/invoices?status=overdue` },
     ...(bankBalance === null ? [] : [{ id: "bank", icon: "bank" as const, label: "Bank & Cash", value: formatMoney(bankBalance, currency), note: "Posted receipt balance", caption: "as of today", tooltip: "Sum of posted bank and cash account balances from the general ledger." }]),
   ];
   return (
@@ -120,3 +120,4 @@ export default async function OverviewPage({ params, searchParams }: { params: P
     </div>
   );
 }
+

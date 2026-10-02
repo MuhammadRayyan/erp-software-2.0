@@ -275,3 +275,40 @@ export function getDashboardCounts(businessId: string, userId: string) {
     journals: getCount("journal_entries")
   };
 }
+
+export function getProfitAndLoss(businessId: string, userId: string, fromDate?: string, toDate?: string) {
+  const { sqlite } = getBusinessDb(businessId, userId);
+  const from = validDate(fromDate) ?? "0000-01-01";
+  const to = validDate(toDate) ?? "9999-12-31";
+  const rows = sqlite
+    .prepare(`
+      SELECT a.id, a.name, a.type, a.subtype,
+             COALESCE(SUM(CASE WHEN je.id IS NOT NULL THEN jl.debit_minor ELSE 0 END), 0)
+               AS debit_total,
+             COALESCE(SUM(CASE WHEN je.id IS NOT NULL THEN jl.credit_minor ELSE 0 END), 0)
+               AS credit_total
+      FROM accounts a
+      LEFT JOIN journal_lines jl ON a.id = jl.account_id
+      LEFT JOIN journal_entries je ON jl.journal_entry_id = je.id
+        AND je.status = 'posted'
+        AND je.date >= ? AND je.date <= ?
+      WHERE a.type IN ('income', 'expense')
+      GROUP BY a.id
+      ORDER BY a.type DESC, a.name
+    `).all(from, to) as {
+      id: string;
+      name: string;
+      type: string;
+      subtype: string;
+      debit_total: number;
+      credit_total: number;
+    }[];
+    
+  return rows.map((r) => {
+    // Normal balance for income is credit, expense is debit
+    const net_minor = r.type === 'income' 
+      ? r.credit_total - r.debit_total 
+      : r.debit_total - r.credit_total;
+    return { ...r, net_minor };
+  }).filter(r => r.net_minor !== 0);
+}
