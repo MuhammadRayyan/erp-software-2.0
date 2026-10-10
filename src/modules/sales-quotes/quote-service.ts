@@ -78,7 +78,7 @@ export function getSalesQuote(businessId: string, userId: string, quoteId: strin
     .innerJoin(customers, eq(customers.id, salesQuotes.customerId)).where(eq(salesQuotes.id, quoteId)).get();
   if (!header) return null;
   const lines = context.db.select().from(salesQuoteLines).where(eq(salesQuoteLines.quoteId, quoteId)).orderBy(asc(salesQuoteLines.position)).all();
-  const accounts = context.sqlite.prepare("SELECT id, code, name FROM accounts").all() as { id: string; code: string; name: string }[];
+  const accounts = context.sqlite.prepare("SELECT id, name FROM accounts").all() as { id: string; name: string }[];
   const taxes = context.sqlite.prepare("SELECT id, name, rate_basis_points FROM tax_codes").all() as { id: string; name: string; rate_basis_points: number }[];
   const relatedInvoices = [] as { id: string; internal_number: string; document_documentStatus: string; total_minor: number }[];
   const accountById = new Map(accounts.map((row) => [row.id, row]));

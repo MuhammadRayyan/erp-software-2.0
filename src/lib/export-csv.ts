@@ -7,11 +7,15 @@ export type CsvColumn<T> = {
   accessorFn: (row: T) => string | number | boolean | null | undefined;
 };
 
-function escapeCsvCell(cell: any): string {
+function escapeCsvCell(cell: unknown): string {
   if (cell === null || cell === undefined) return "";
-  const str = String(cell);
+  let str = String(cell);
+  // Protect against CSV formula injection (OWASP recommendation)
+  if (/^[=+\-@\t\r]/.test(str)) {
+    str = `'${str}`;
+  }
   // If it contains quotes, commas, or newlines, enclose in quotes and double the internal quotes.
-  if (str.includes('"') || str.includes(',') || str.includes('\n')) {
+  if (str.includes('"') || str.includes(',') || str.includes('\n') || str.includes('\r')) {
     return `"${str.replace(/"/g, '""')}"`;
   }
   return str;

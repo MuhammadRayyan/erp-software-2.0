@@ -32,7 +32,7 @@ const cash = sqlite.prepare("SELECT * FROM bank_accounts WHERE is_cash_account =
 const settings = sqlite.prepare("SELECT default_purchase_expense_account_id FROM business_accounting_settings WHERE id = 'default'").get() as { default_purchase_expense_account_id: string };
 const noVat = sqlite.prepare("SELECT id FROM tax_codes WHERE vat_category = 'out_of_scope' AND direction = 'both' LIMIT 1").get() as { id: string };
 const vat = sqlite.prepare("SELECT id FROM tax_codes WHERE id = 'tax-uae-vat-5' LIMIT 1").get() as { id: string };
-const income = sqlite.prepare("SELECT id FROM accounts WHERE type = 'income' ORDER BY code LIMIT 1").get() as { id: string };
+const income = sqlite.prepare("SELECT id FROM accounts WHERE type = 'income' ORDER BY name LIMIT 1").get() as { id: string };
 const project = sqlite.prepare("SELECT id FROM projects WHERE status = 'active' LIMIT 1").get() as { id: string };
 
 test("Phase 5 banking invariants", async (suite) => {

@@ -73,7 +73,7 @@ export function getSalesOrder(businessId: string, userId: string, orderId: strin
     .innerJoin(customers, eq(customers.id, salesOrders.customerId)).where(eq(salesOrders.id, orderId)).get();
   if (!header) return null;
   const lines = context.db.select().from(salesOrderLines).where(eq(salesOrderLines.orderId, orderId)).orderBy(asc(salesOrderLines.position)).all();
-  const accounts = context.sqlite.prepare("SELECT id, code, name FROM accounts").all() as { id: string; code: string; name: string }[];
+  const accounts = context.sqlite.prepare("SELECT id, name FROM accounts").all() as { id: string; name: string }[];
   const taxes = context.sqlite.prepare("SELECT id, name, rate_basis_points FROM tax_codes").all() as { id: string; name: string; rate_basis_points: number }[];
   const relatedInvoices = context.sqlite.prepare("SELECT id, invoice_number, document_status, total_minor FROM sales_invoices WHERE sales_order_id = ? ORDER BY created_at DESC").all(orderId) as { id: string; invoice_number: string; document_status: string; total_minor: number }[];
   const accountById = new Map(accounts.map((row) => [row.id, row]));

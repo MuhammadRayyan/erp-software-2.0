@@ -1,16 +1,32 @@
-﻿# Changelog ?" Ledgerly ERP
+# Changelog ?" Ledgerly ERP
 
 All notable changes since the original `erp-software-2.0-antigravity-edits` upload. Grouped by development wave, newest last. Dates use the development environment calendar (August 2026 demo data).
 
 Full per-task detail (file lists, verification transcripts, QA walkthroughs) lives in `worklog.md` at the repository root.
 
 
-## UX & Quality Polish Sprint
-- **Financial Reports**: Added dedicated `/reports/profit-loss` and `/reports/balance-sheet` pages. Both allow exporting to CSV.
-- **CSV Export Engine**: Added a reusable `exportCsv` utility and `<ExportCsvButton>`. Deployed to Bank Transactions, P&L, and Balance Sheet reports.
-- **Overdue Invoices Drill-down**: The Overdue KPI card on the dashboard is now clickable, taking users directly to a pre-filtered Sales Invoices list.
-- **Customer Payment Terms**: Added `paymentTermsDays` and `creditLimitMinor` to the customer schema (Migration v23). The Invoice form now auto-calculates the Due Date based on the selected customer's default terms.
-- **Pagination**: Added 100-rows-per-page client/server hydration pagination to the Bank Transactions report.
+## UX & Quality Polish Sprint (Verified & Standardized)
+- **Financial Reports**:
+  - Added dedicated `/reports/profit-loss` statement with categorized sales, other income, cost of sales, and operating expenses.
+  - Added dedicated `/reports/balance-sheet` statement with Assets, Liabilities, and Equity (including automated Current Period Retained Earnings).
+  - Extended `getTrialBalance` with `subtype` property and full TypeScript safety.
+- **Enterprise CSV Export Engine**:
+  - Added reusable `exportCsv` utility (`src/lib/export-csv.ts`) and `<ExportCsvButton>` component.
+  - Hardened against CSV formula injection (OWASP recommendation: escaping `=+\-@\t\r` prefixes).
+  - Deployed native CSV export to Bank Transactions, Profit & Loss, and Balance Sheet reports.
+- **Interactive Overview KPI Drill-downs**:
+  - All Overview KPI cards (`Posted Sales`, `Outstanding Receivables`, `Overdue`, `Bank & Cash`) now feature direct interactive drill-down links to filtered lists.
+  - Added server-side status filtering (`overdue`, `unpaid`, `paid`, `draft`, `void`) to `listInvoicesPaginated` with allocation subqueries.
+- **Customer Payment Terms & Auto Due Dates**:
+  - Added `paymentTermsDays` and `creditLimitMinor` to `customers` and `suppliers` schema.
+  - Added migration v23 (`add_customer_terms`) and migration v24 (`add_supplier_terms`) with safe PRAGMA column checks.
+  - Customer Edit and View pages now fully preserve and display Payment Terms and Credit Limit.
+  - Invoice Form automatically recalculates and sets the `dueDate` whenever the Customer or `invoiceDate` changes.
+- **Chart of Accounts Code Deprecation Standardization**:
+  - Completely purged all residual `code` queries across services (`exchange-rate.ts`, `currency-settings-form.tsx`, `bank-account-service.ts`, `purchase-invoice-service.ts`, `purchase-order-service.ts`, `purchase-quote-service.ts`, `sales-credit-notes/credit-note-service.ts`, `sales-invoices/invoice-service.ts`, `sales-orders/sales-order-service.ts`, `sales-quotes/quote-service.ts`, and test fixtures).
+  - Standardized accounts ordering to `ORDER BY name`.
+- **Bank Transactions Pagination**:
+  - Implemented 100-rows-per-page pagination with URL search params persistence on `/reports/bank-transactions`.
 
 ## v2.4.1 - Universal Document Email System
 

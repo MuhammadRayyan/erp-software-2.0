@@ -175,14 +175,14 @@ export const getCurrencySettings = cache((businessId: string, userId: string) =>
     }[],
     fxMappings,
     gainAccounts: context.sqlite.prepare(`
-      SELECT id, code, name FROM accounts
+      SELECT id, name FROM accounts
       WHERE is_active = 1 AND type IN ('other_income', 'income')
-      ORDER BY code
+      ORDER BY name
     `).all() as { id: string; name: string }[],
     lossAccounts: context.sqlite.prepare(`
-      SELECT id, code, name FROM accounts
+      SELECT id, name FROM accounts
       WHERE is_active = 1 AND type IN ('other_expense', 'expense')
-      ORDER BY code
+      ORDER BY name
     `).all() as { id: string; name: string }[],
     baseLocked: hasBaseCurrencyActivity(context.sqlite),
   };

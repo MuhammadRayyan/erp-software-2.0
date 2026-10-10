@@ -20,7 +20,7 @@ import {
 
 type Currency = { code: string; name: string; symbol: string | null; minor_unit: number; is_base: number; is_active: number };
 type Rate = { id: string; currency_code: string; rate_date: string; rate_to_base: string; source: "Manual" | "CBUAE"; source_reference: string | null };
-type Account = { id: string; code: string; name: string };
+type Account = { id: string; name: string };
 
 export function CurrencySettingsForm({
   businessId, baseCode, baseLocked, isAdmin, currencies, rates, gainAccounts, lossAccounts, gainAccountId, lossAccountId,

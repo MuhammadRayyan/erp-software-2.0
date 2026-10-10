@@ -2185,14 +2185,39 @@ export const businessMigrations = [
       },
     },
     {
-    version: 23,
-    name: "add_customer_terms",
-    up: (sqlite) => {
-      sqlite.exec(`ALTER TABLE customers ADD COLUMN payment_terms_days INTEGER NOT NULL DEFAULT 0;`);
-      sqlite.exec(`ALTER TABLE customers ADD COLUMN credit_limit_minor INTEGER;`);
+      version: 23,
+      name: "add_customer_terms",
+      up: (sqlite) => {
+        const customerCols = (sqlite.prepare("PRAGMA table_info(customers)").all() as { name: string }[]).map((c) => c.name);
+        if (!customerCols.includes("payment_terms_days")) {
+          sqlite.exec(`ALTER TABLE customers ADD COLUMN payment_terms_days INTEGER NOT NULL DEFAULT 0;`);
+        }
+        if (!customerCols.includes("credit_limit_minor")) {
+          sqlite.exec(`ALTER TABLE customers ADD COLUMN credit_limit_minor INTEGER;`);
+        }
+        const supplierCols = (sqlite.prepare("PRAGMA table_info(suppliers)").all() as { name: string }[]).map((c) => c.name);
+        if (!supplierCols.includes("payment_terms_days")) {
+          sqlite.exec(`ALTER TABLE suppliers ADD COLUMN payment_terms_days INTEGER NOT NULL DEFAULT 0;`);
+        }
+        if (!supplierCols.includes("credit_limit_minor")) {
+          sqlite.exec(`ALTER TABLE suppliers ADD COLUMN credit_limit_minor INTEGER;`);
+        }
+      },
     },
-  },
-] satisfies readonly SqliteMigration[];
+    {
+      version: 24,
+      name: "add_supplier_terms",
+      up: (sqlite) => {
+        const supplierCols = (sqlite.prepare("PRAGMA table_info(suppliers)").all() as { name: string }[]).map((c) => c.name);
+        if (!supplierCols.includes("payment_terms_days")) {
+          sqlite.exec(`ALTER TABLE suppliers ADD COLUMN payment_terms_days INTEGER NOT NULL DEFAULT 0;`);
+        }
+        if (!supplierCols.includes("credit_limit_minor")) {
+          sqlite.exec(`ALTER TABLE suppliers ADD COLUMN credit_limit_minor INTEGER;`);
+        }
+      },
+    },
+  ] satisfies readonly SqliteMigration[];
 
 
 

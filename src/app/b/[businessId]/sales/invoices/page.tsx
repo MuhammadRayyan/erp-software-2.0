@@ -20,7 +20,7 @@ export default async function InvoiceListPage({
   searchParams,
 }: {
   params: Promise<{ businessId: string }>;
-  searchParams: Promise<{ page?: string; pageSize?: string; from?: string; to?: string }>;
+  searchParams: Promise<{ page?: string; pageSize?: string; from?: string; to?: string; status?: string }>;
 }) {
   const { businessId } = await params;
   const { user } = await requireModule(businessId, "sales");
@@ -29,7 +29,8 @@ export default async function InvoiceListPage({
   const to = DATE_PATTERN.test(sp.to ?? "") ? sp.to : undefined;
   const page = parsePageParam(sp.page);
   const pageSize = parsePageSizeParam(sp.pageSize);
-  const status = (sp as any).status as "overdue" | "draft" | "unpaid" | "paid" | "void" | undefined;
+  const validStatuses = ["overdue", "draft", "unpaid", "paid", "void"] as const;
+  const status = validStatuses.includes(sp.status as any) ? (sp.status as typeof validStatuses[number]) : undefined;
   
   const { rows: invoices, ...pagination } = listInvoicesPaginated(businessId, user.id, { from, to, status, page, pageSize });
   const customFieldColumns = invoices.length

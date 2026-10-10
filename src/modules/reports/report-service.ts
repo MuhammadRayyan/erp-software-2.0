@@ -122,7 +122,7 @@ export function getTrialBalance(businessId: string, userId: string, throughDate?
   const date = validDate(throughDate) ?? "9999-12-31";
   const rows = sqlite
     .prepare(`
-      SELECT a.id, a.name, a.type,
+      SELECT a.id, a.name, a.type, a.subtype,
              COALESCE(SUM(CASE WHEN je.id IS NOT NULL THEN jl.debit_minor ELSE 0 END), 0)
                AS debit_total,
              COALESCE(SUM(CASE WHEN je.id IS NOT NULL THEN jl.credit_minor ELSE 0 END), 0)
@@ -135,9 +135,9 @@ export function getTrialBalance(businessId: string, userId: string, throughDate?
       ORDER BY a.name`)
     .all(date) as {
       id: string;
-
       name: string;
       type: string;
+      subtype: string;
       debit_total: number;
       credit_total: number;
     }[];

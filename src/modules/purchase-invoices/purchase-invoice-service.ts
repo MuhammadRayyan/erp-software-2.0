@@ -244,7 +244,7 @@ export function getPurchaseInvoice(businessId: string, userId: string, invoiceId
   const projectIds = [...new Set([header.invoice.projectId, ...lines.map(l => l.projectId)].filter(Boolean))] as string[];
 
   const accounts = lineAccountIds.length > 0
-    ? context.sqlite.prepare(`SELECT id, code, name FROM accounts WHERE id IN (${lineAccountIds.map(() => '?').join(',')})`).all(...lineAccountIds) as { id: string; code: string; name: string }[]
+    ? context.sqlite.prepare(`SELECT id, name FROM accounts WHERE id IN (${lineAccountIds.map(() => '?').join(',')})`).all(...lineAccountIds) as { id: string; name: string }[]
     : [];
   const taxes = lineTaxCodeIds.length > 0
     ? context.sqlite.prepare(`SELECT id, name, rate_basis_points FROM tax_codes WHERE id IN (${lineTaxCodeIds.map(() => '?').join(',')})`).all(...lineTaxCodeIds) as { id: string; name: string; rate_basis_points: number }[]

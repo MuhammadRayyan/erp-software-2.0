@@ -21,7 +21,7 @@ export default async function BalanceSheetReportPage({
   const { user, access } = await requireModule(businessId, "reports");
 
   const tb = getTrialBalance(businessId, user.id, filters.throughDate);
-  const rows = tb.accounts as any[];
+  const rows = tb.accounts;
 
   // Group by type and subtype
   const assets = rows.filter((r) => r.type === "asset");

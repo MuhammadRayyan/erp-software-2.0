@@ -1,4 +1,4 @@
-# Current State (accounting through Phase 9 · hardening through Phase 10 · review rounds 1–7 through 2026-08-24)
+# Current State (accounting through Phase 9 Â· hardening through Phase 10 Â· review rounds 1â€“7 through 2026-08-24)
 
 This is the compact source of truth for the code that exists now. Historical phase files describe intent; use them only for targeted archaeology.
 
@@ -8,7 +8,7 @@ This is the compact source of truth for the code that exists now. Historical pha
 - One Next.js application owns UI, server components/actions, authenticated download routes, domain services, and persistence; there is no separate API or worker service.
 - Better Auth provides local email/password auth. The system SQLite database stores auth tables, businesses, and memberships. Each business has a separate SQLite database and attachment directory, accessed with `better-sqlite3`/Drizzle through membership-aware services.
 - Domain logic is server-side; multi-row document posting and accounting/tax/inventory effects use SQLite transactions. Document money remains integer currency-minor units, exchange rates are canonical decimal strings evaluated with `decimal.js`, and quantities support four decimals (`10_000` scale) despite historical `*_micros` names.
-- Development is a single app on the host: `bun run dev` (bare `next dev` on port 3000 — no Docker/Compose, no bundler flags). Database lifecycle scripts are `bun run db:migrate`, `bun run db:seed`, and `bun run db:check` (tsx with `--env-file=.env`). Light, Dark, and System themes use the shared tokens in `docs/THEME.md`.
+- Development is a single app on the host: `bun run dev` (bare `next dev` on port 3000 â€” no Docker/Compose, no bundler flags). Database lifecycle scripts are `bun run db:migrate`, `bun run db:seed`, and `bun run db:check` (tsx with `--env-file=.env`). Light, Dark, and System themes use the shared tokens in `docs/THEME.md`.
 - `.erpbackup` v2 files contain a checksummed business database plus attachments and portable country/base-currency/fiscal metadata. Import creates a new isolated business, restores that metadata and the business-local currency/rate state, runs pending migrations, makes the importer Administrator, and disables eInvoice provider execution.
 
 ## Implemented modules
@@ -102,44 +102,44 @@ This is the compact source of truth for the code that exists now. Historical pha
 
 ## Code Health, Security & Customizability (2026-08-23)
 
-The Phase 10 code-health sprint — a full-day pass over the codebase as ported to bun + Node 24 (single app, no Docker).
+The Phase 10 code-health sprint â€” a full-day pass over the codebase as ported to bun + Node 24 (single app, no Docker).
 
 ### Security fixes
 
 - **FormError recursion fix**: the shared error banner used to render itself recursively, crashing every server-action error path (including failed login). It is now a simple conditional paragraph in `src/components/form-error.tsx`, and failed sign-ins surface the message inline.
-- **Server-side rate limiting**: better-auth now enforces limits itself — a `before` hook applies a strict per-IP failed-attempt limiter on `/sign-in/email`, an `after` hook records/clears attempts, and the built-in `rateLimit` option covers every auth endpoint (10 sign-in attempts per 15 minutes, 100 requests/minute elsewhere). The old unauthenticated login-attempt server actions (`preLoginCheck`/`clearLoginAttempts`) were removed; client IPs resolve from the least-spoofable (rightmost) `x-forwarded-for` entry.
+- **Server-side rate limiting**: better-auth now enforces limits itself â€” a `before` hook applies a strict per-IP failed-attempt limiter on `/sign-in/email`, an `after` hook records/clears attempts, and the built-in `rateLimit` option covers every auth endpoint (10 sign-in attempts per 15 minutes, 100 requests/minute elsewhere). The old unauthenticated login-attempt server actions (`preLoginCheck`/`clearLoginAttempts`) were removed; client IPs resolve from the least-spoofable (rightmost) `x-forwarded-for` entry.
 - **Custom-HTML template hardening**: configuring a custom-HTML document template requires the Administrator role; Puppeteer is imported lazily so every other PDF route avoids loading Chromium; page requests are intercepted so templates render fully offline (external network requests are blocked).
 - **Appearance settings validation**: the appearance server action validates font/scale against a Zod enum instead of trusting client-provided values.
 - **Stale `compose.prod.yaml` removed**: the broken production Compose file (which fell back to the development secret) is gone; the repository has no Docker/Compose path at all.
 - **Portable structural tests**: the `middleware-exists` structural guards were rewritten from Windows-only `findstr`/`where` shell-outs to portable Node `fs`/`readdir` checks, so the suite runs on Linux.
-- **Connection-pool eviction safety**: the business connection pool caps at 32 handles, closes idle connections after 5 minutes, and evicts only the least-recently-used handle that has been idle ≥10 seconds — growing past the soft cap rather than yanking a connection a live request may still hold.
+- **Connection-pool eviction safety**: the business connection pool caps at 32 handles, closes idle connections after 5 minutes, and evicts only the least-recently-used handle that has been idle â‰¥10 seconds â€” growing past the soft cap rather than yanking a connection a live request may still hold.
 
 ### Dead code & duplication
 
 - **Completed schema dedup**: `src/core/validation/document-schemas.ts` is the single source of shared money/quantity schemas, wired into all six document input files (receipt, supplier payment, sales invoice, sales credit note, purchase order, purchase invoice).
 - **Dead-code removal**: 12 unused imports in the receipt/supplier-payment services, 4 unused `next/link` imports, the never-referenced `validateCurrency` export, a dead loading state in the template editor, and the unused `allowPublic` API-auth option were deleted (each verified unused by search before removal).
 - **Shared UI primitives (adopted across ~26 files)**: `StatusBadge`/`statusLabel` (replaces 13 inline tone/label maps), `EmptyState` (replaces 16 hand-rolled empty blocks), `ListToolbar`/`SearchInput`/`ToolbarSelect` (adopted by 6 tables), and the reusable command-palette component.
-- **Multi-currency `/100` bug fixed**: document line editors no longer hardcode two-decimal division — prefills and live previews use the document currency's configured minor-unit exponent (`minorToCurrencyInput`), and all four form preview calculators share the server's exact money engine, so previews match posted journal amounts (including 3-decimal currencies like KWD).
+- **Multi-currency `/100` bug fixed**: document line editors no longer hardcode two-decimal division â€” prefills and live previews use the document currency's configured minor-unit exponent (`minorToCurrencyInput`), and all four form preview calculators share the server's exact money engine, so previews match posted journal amounts (including 3-decimal currencies like KWD).
 
 ### UX
 
 - **Command palette & Help dialog**: Ctrl/Cmd+K opens a palette with 16 module-filtered navigation commands plus 5 create actions; a real Help dialog replaces the disabled placeholder.
-- **Honest shell**: business archive asks for confirmation; the fake "Recent Activity" panel and the misleading invoice "Created by" block are gone — the overview keeps a single honest "Recent Invoices" table.
+- **Honest shell**: business archive asks for confirmation; the fake "Recent Activity" panel and the misleading invoice "Created by" block are gone â€” the overview keeps a single honest "Recent Invoices" table.
 
 ### Customizability features
 
-- **Custom Fields engine**: per-business field definitions (migration 13; text/number/date/select/checkbox types with required/show-in-list flags) managed under Settings → Custom Fields; definitions and values are injected into customer and supplier forms, list columns, and view pages, and save atomically inside the entity transaction.
+- **Custom Fields engine**: per-business field definitions (migration 13; text/number/date/select/checkbox types with required/show-in-list flags) managed under Settings â†’ Custom Fields; definitions and values are injected into customer and supplier forms, list columns, and view pages, and save atomically inside the entity transaction.
 - **Persisted column visibility**: column/card visibility on the customers table, sales-invoices table, and overview cards persists per browser in localStorage (`ledgerly.cols.*`) through a hydration-safe `useColumnVisibility` hook.
 - **Configurable overview**: the dashboard supports a URL-driven date range (with This month / Last month / This quarter / This year / All time presets) for Posted Sales, per-card show/hide toggles, and balance KPIs explicitly captioned "as of today".
 
-## Review rounds 1–7 (2026-08-24)
+## Review rounds 1â€“7 (2026-08-24)
 
 Seven scheduled QA + feature rounds layered on top of Phase 10. Per-task verification transcripts live in `worklog.md`; summary:
 
-- **Custom Fields everywhere**: definitions extend beyond customers/suppliers to sales invoices — form section, list columns (toggleable in the Columns menu), view-page card, and PDF rendering in both Modern and Classic react-pdf layouts behind a per-template settings toggle.
-- **Per-account server-side preferences** (system migration v3 `user_preferences`): column visibility on sales invoices, customers, suppliers, and purchase invoices; overview KPI card visibility; and the overview date range all sync to the server via `GET/PUT/DELETE /api/businesses/[businessId]/preferences` with a debounced hook, localStorage as fast-cache mirror, and a Settings → Preferences reset-to-defaults card. Preferences follow the account across browsers/devices.
+- **Custom Fields everywhere**: definitions extend beyond customers/suppliers to sales invoices â€” form section, list columns (toggleable in the Columns menu), view-page card, and PDF rendering in both Modern and Classic react-pdf layouts behind a per-template settings toggle.
+- **Per-account server-side preferences** (system migration v3 `user_preferences`): column visibility on sales invoices, customers, suppliers, and purchase invoices; overview KPI card visibility; and the overview date range all sync to the server via `GET/PUT/DELETE /api/businesses/[businessId]/preferences` with a debounced hook, localStorage as fast-cache mirror, and a Settings â†’ Preferences reset-to-defaults card. Preferences follow the account across browsers/devices.
 - **Server-side pagination on every major list**: sales invoices, purchase invoices, receipts, supplier payments, customers, and suppliers use `LIMIT/OFFSET` services with count helpers, URL-driven `?page`/`?pageSize` (25/50/100/200 selector), and the shared `<ListPagination>` component. A reusable `<ListDateFilter>` (calendar inputs, presets, Clear) drives the server-honored `?from`/`?to` on the four document lists.
-- **Email delivery** (business migration 14 `sent_emails`): pluggable driver interface (log driver default — SMTP-ready), invoice email template (HTML + text), compose modal on the invoice view with generated PDF attachment, Sent Emails list/view pages, nav entry, and an overview Recent Emails widget.
+- **Email delivery** (business migration 14 `sent_emails`): pluggable driver interface (log driver default â€” SMTP-ready), invoice email template (HTML + text), compose modal on the invoice view with generated PDF attachment, Sent Emails list/view pages, nav entry, and an overview Recent Emails widget.
 - **Responsive command palette**: mobile bottom-sheet dialog with a floating action button (safe-area aware, 44 px touch targets) plus the desktop Ctrl/Cmd+K top-centered card.
 - **Styling polish**: consistent status badges and empty states, sticky table headers, KPI icon badges with tooltips, pagination/date-filter components in the `data-panel` design language, no double-bordered table panels.
 
@@ -155,9 +155,9 @@ bun run test
 bun run build
 ```
 
-`bun run build` requires `BETTER_AUTH_SECRET`. `bun run test` runs 87 service/migration/structural regressions in `tests/middleware-exists.test.ts`, `tests/pre-phase-5.test.ts` and `tests/phase-{5,6,7,8,9}.test.ts`; the Phase 10 Custom Fields engine adds 4 more tests in `tests/custom-fields.test.ts` (91 total when run together). 22 tests specifically cover Phase 9 migration, Decimal math, Sales/Purchases/VAT posting, immutable snapshots, partial/final residuals, FX gains/losses/reversals, cross-currency rejection, inventory, reports, permissions/isolation, PINT boundaries, and backup portability. Structural guards verify middleware existence, `selectClass` elimination, `runtime = "nodejs"` on API routes, `requireApiAuth` coverage, and CSP header consistency on eInvoice XML routes — and are Linux-portable (the old Windows `findstr`/`where` checks are gone). There is a committed Playwright E2E suite covering 28 UI flows run via `bun run test:e2e`. Database setup commands are `bun run db:migrate` and `bun run db:seed`.
+`bun run build` requires `BETTER_AUTH_SECRET`. `bun run test` runs 87 service/migration/structural regressions in `tests/middleware-exists.test.ts`, `tests/pre-phase-5.test.ts` and `tests/phase-{5,6,7,8,9}.test.ts`; the Phase 10 Custom Fields engine adds 4 more tests in `tests/custom-fields.test.ts` (91 total when run together). 22 tests specifically cover Phase 9 migration, Decimal math, Sales/Purchases/VAT posting, immutable snapshots, partial/final residuals, FX gains/losses/reversals, cross-currency rejection, inventory, reports, permissions/isolation, PINT boundaries, and backup portability. Structural guards verify middleware existence, `selectClass` elimination, `runtime = "nodejs"` on API routes, `requireApiAuth` coverage, and CSP header consistency on eInvoice XML routes â€” and are Linux-portable (the old Windows `findstr`/`where` checks are gone). There is a committed Playwright E2E suite covering 28 UI flows run via `bun run test:e2e`. Database setup commands are `bun run db:migrate` and `bun run db:seed`.
 
-Last verified on 24 August 2026 (review round 7 + v2.1.0 packaging): explicit migrations (system v3, business 0-14) and database check passed; TypeScript clean; the full `bun run test` suite passes (unit/structural regressions incl. the Linux-portable guards and the custom-fields tests); the round's flows were additionally browser-verified via agent-browser (login, overview preferences save/restore, pagination on customers/suppliers, mobile bottom-sheet palette at 375×812, desktop palette at 1280×800, zero console errors). Historical verification after the Phase 3 audit also covered the 28 Playwright E2E tests (`bun run test:e2e`) and the production build. Phase 1 critical fixes (rate limiter, API auth, numbering padding separation, customer status cleanup, credit note formatting, runtime declarations), Phase 2 deduplication (shared schemas, settlement service, document line calculator, document view actions, parameterized PDF templates, section boundaries, posting helpers), and Phase 3 standardization (dead dependency removal, mock data relocation, validation type unification, schema architecture fix, BaseStoredLine, selectClass elimination, CSP header consistency) are all verified complete.
+Last verified on 24 August 2026 (review round 7 + v2.1.0 packaging): explicit migrations (system v3, business 0-14) and database check passed; TypeScript clean; the full `bun run test` suite passes (unit/structural regressions incl. the Linux-portable guards and the custom-fields tests); the round's flows were additionally browser-verified via agent-browser (login, overview preferences save/restore, pagination on customers/suppliers, mobile bottom-sheet palette at 375Ã—812, desktop palette at 1280Ã—800, zero console errors). Historical verification after the Phase 3 audit also covered the 28 Playwright E2E tests (`bun run test:e2e`) and the production build. Phase 1 critical fixes (rate limiter, API auth, numbering padding separation, customer status cleanup, credit note formatting, runtime declarations), Phase 2 deduplication (shared schemas, settlement service, document line calculator, document view actions, parameterized PDF templates, section boundaries, posting helpers), and Phase 3 standardization (dead dependency removal, mock data relocation, validation type unification, schema architecture fix, BaseStoredLine, selectClass elimination, CSP header consistency) are all verified complete.
 
 ## Known limitations and deferred work
 
@@ -190,7 +190,7 @@ Last verified on 24 August 2026 (review round 7 + v2.1.0 packaging): explicit mi
 - Extended one-click emailing capability with inline PDF attachments directly from the view pages for Sales Quotes, Sales Orders, Purchase Quotes, and Purchase Orders.
 
 ---
-## Updates � 2026-09-30
+## Updates — 2026-09-30
 
 ### Account Codes Removed
 - The `accounts` table no longer has a `code` column. Accounts are identified and sorted by **name** only.
@@ -200,5 +200,22 @@ Last verified on 24 August 2026 (review round 7 + v2.1.0 packaging): explicit mi
 
 ### Dashboard Overview
 - The Overview page now shows a **Financial Summary** (Balance Sheet + P&L) instead of the module-directory grid.
-- Layout: KPI cards ? Financial Summary ? Recent Invoices ? Recent Emails.
+- Layout: KPI cards — Financial Summary — Recent Invoices — Recent Emails.
+
+---
+## Updates — 2026-10-02 & Verification Sprint
+
+### UX & Financial Reports
+- **Profit & Loss Report**: Standalone statement at `/reports/profit-loss` grouping revenue, cost of sales, and operating expenses with Gross and Net Profit calculations.
+- **Balance Sheet Report**: Standalone statement at `/reports/balance-sheet` reporting Assets, Liabilities, and Equity (factoring current period retained earnings).
+- **Client-Side CSV Export**: Added `exportCsv` and `<ExportCsvButton>` with OWASP formula injection protection (`=+\-@\t\r`). Integrated across Bank Transactions, P&L, and Balance Sheet reports.
+- **KPI Card Drill-downs**: Interactive navigation links on all Overview dashboard cards (Posted Sales, Outstanding Receivables, Overdue, Bank & Cash).
+- **Server-Side Status Filtering**: Added `status` (`overdue`, `unpaid`, `paid`, `draft`, `void`) support to `listInvoicesPaginated`.
+
+### Schema & Code Modernization
+- **Customer & Supplier Terms**: Added `paymentTermsDays` and `creditLimitMinor` to `customers` and `suppliers`.
+- **Database Migrations v23 & v24**: Applied `add_customer_terms` and `add_supplier_terms` with safe PRAGMA column checks.
+- **Complete Account Code Eradication**: Purged all leftover `SELECT code` and `ORDER BY code` queries across service files and test fixtures following migration v22. Standardized to `ORDER BY name`.
+- **Form Intelligence**: Auto-calculation of invoice `dueDate` based on Customer payment terms when selecting customer or changing invoice date.
+
 

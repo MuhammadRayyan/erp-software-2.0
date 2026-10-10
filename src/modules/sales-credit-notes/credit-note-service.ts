@@ -104,7 +104,7 @@ export function getCreditNote(businessId: string, userId: string, noteId: string
   const header = context.db.select({ note: salesCreditNotes, customer: customers, invoice: salesInvoices }).from(salesCreditNotes).innerJoin(customers, eq(customers.id, salesCreditNotes.customerId)).innerJoin(salesInvoices, eq(salesInvoices.id, salesCreditNotes.sourceInvoiceId)).where(eq(salesCreditNotes.id, noteId)).get();
   if (!header) return null;
   const lines = context.db.select().from(salesCreditNoteLines).where(eq(salesCreditNoteLines.creditNoteId, noteId)).orderBy(asc(salesCreditNoteLines.position)).all();
-  const accounts = context.sqlite.prepare("SELECT id, code, name FROM accounts").all() as { id: string; code: string; name: string }[];
+  const accounts = context.sqlite.prepare("SELECT id, name FROM accounts").all() as { id: string; name: string }[];
   const taxes = context.sqlite.prepare("SELECT id, name, rate_basis_points FROM tax_codes").all() as { id: string; name: string; rate_basis_points: number }[];
   const projects = context.sqlite.prepare("SELECT id, code, name FROM projects").all() as { id: string; code: string; name: string }[];
   const accountById = new Map(accounts.map((row) => [row.id, row]));

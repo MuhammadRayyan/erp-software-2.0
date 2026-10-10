@@ -168,7 +168,7 @@ export function ensureDefaultDemoBankAccounts(businessId: string, userId: string
   }
   const cashLedger = context.sqlite.prepare(`
     SELECT id FROM accounts WHERE subtype = 'cash' AND is_active = 1
-      AND id NOT IN (SELECT ledger_account_id FROM bank_accounts) ORDER BY code LIMIT 1
+      AND id NOT IN (SELECT ledger_account_id FROM bank_accounts) ORDER BY name LIMIT 1
   `).get() as { id: string } | undefined;
   if (cashLedger) {
     saveBankAccount(businessId, userId, {

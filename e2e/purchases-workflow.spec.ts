@@ -70,7 +70,7 @@ test.describe('Purchases Deep Workflow Testing', () => {
 
     // 6. Record Payment
     await page.getByRole('link', { name: /Record Payment/i }).click();
-    await expect(page.getByRole('heading', { name: /New Supplier Payment/i })).toBeVisible();
+    await expect(page.getByRole('heading', { name: /Record Supplier Payment|New Supplier Payment/i })).toBeVisible();
     await page.getByRole('button', { name: /Post Payment/i }).click();
 
     // Expect to be back on the payment view
