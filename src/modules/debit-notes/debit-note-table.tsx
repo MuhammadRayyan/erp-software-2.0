@@ -10,9 +10,8 @@ import {
 } from "@tanstack/react-table/legacy";
 import { type SortingState } from "@tanstack/react-table";
 import { StatusBadge } from "@/components/status-badge";
-import { ListToolbar, SearchInput, ToolbarSelect } from "@/components/list-toolbar";
+import { ListToolbar, SearchInput, ToolbarSelect, ActiveFiltersRow, FilterChip } from "@/components/list-toolbar";
 import { Button } from "@/components/ui/button";
-import { FilterChip } from "@/components/ui/filter-chip";
 import { useColumns } from "@/components/columns-dropdown";
 import { DataTable } from "@/components/ui/data-table";
 import { formatDate, formatMoney } from "@/core/format";
@@ -178,6 +177,7 @@ export function DebitNoteTable({
           value={projectId}
           onChange={setProjectId}
           ariaLabel="Filter by project"
+          className="min-w-36 max-w-52"
           options={[{ value: "", label: "All projects" }, ...projects.map((project) => ({ value: project.id, label: project.name }))]}
         />
         <ToolbarSelect
@@ -191,13 +191,13 @@ export function DebitNoteTable({
             { value: "void", label: "Void" },
           ]}
         />
-        <div className="ml-auto flex items-center gap-2">
+        <div className="ml-auto flex items-center gap-1.5 shrink-0">
           <DensityToggle businessId={businessId} />
           {dropdown}
         </div>
       </ListToolbar>
       {hasActiveFilter && (
-        <ListToolbar>
+        <ActiveFiltersRow onClearAll={clearFilters}>
           {projectId && (
             <FilterChip onRemove={() => setProjectId("")}>
               Project: {projects.find((p) => p.id === projectId)?.name}
@@ -205,17 +205,16 @@ export function DebitNoteTable({
           )}
           {status && <FilterChip onRemove={() => setStatus("")}>Status: {status}</FilterChip>}
           {query && <FilterChip onRemove={() => setQuery("")}>Search: {query}</FilterChip>}
-        </ListToolbar>
+        </ActiveFiltersRow>
       )}
 
       <DataTable 
         table={table}
         density={density}
-        pinFirstColumn 
         minWidth="min-w-[760px]" 
         noResultsMessage="No debit notes match" 
-       onClearFilters={clearFilters}
-    />
+        onClearFilters={clearFilters}
+      />
     </>
   );
 }

@@ -12,9 +12,8 @@ import { type SortingState } from "@tanstack/react-table";
 import { Badge } from "@/components/ui/badge";
 import { type ColumnVisibility } from "@/components/use-column-visibility";
 import { useColumns } from "@/components/columns-dropdown";
-import { ListToolbar, SearchInput } from "@/components/list-toolbar";
+import { ListToolbar, SearchInput, ActiveFiltersRow, FilterChip } from "@/components/list-toolbar";
 import { Button } from "@/components/ui/button";
-import { FilterChip } from "@/components/ui/filter-chip";
 import { DataTable } from "@/components/ui/data-table";
 import { formatCustomFieldValue, type CustomFieldColumn } from "@/modules/custom-fields/custom-field-display";
 import { formatMoney } from "@/core/format";
@@ -165,24 +164,39 @@ export function SupplierTable({
     getSortedRowModel: createSortedRowModel(),
   });
 
+  const clearFilters = () => {
+    setQuery("");
+    setActiveOnly(false);
+  };
+  const hasActiveFilter = Boolean(query || activeOnly);
+
   return (
     <>
       <ListToolbar>
         <SearchInput value={query} onChange={setQuery} placeholder="Search suppliers…" ariaLabel="Search suppliers" />
-        <Button type="button" variant={activeOnly ? "primary" : "secondary"} onClick={() => setActiveOnly((value) => !value)}>
-          <Filter className="size-4" /> Active only
+        <Button
+          type="button"
+          variant={activeOnly ? "primary" : "secondary"}
+          size="sm"
+          className="h-9 gap-1.5 text-xs font-medium"
+          onClick={() => setActiveOnly((value) => !value)}
+        >
+          <Filter className="size-3.5" /> Active only
         </Button>
-        <div className="ml-auto flex items-center gap-2">
+        <div className="ml-auto flex items-center gap-1.5 shrink-0">
           <DensityToggle businessId={businessId} />
           {dropdown}
         </div>
       </ListToolbar>
-      {(query || activeOnly) && (
-        <div className="mb-3">
-          <FilterChip onRemove={() => { setQuery(""); setActiveOnly(false); }}>
-            Clear filters
-          </FilterChip>
-        </div>
+      {hasActiveFilter && (
+        <ActiveFiltersRow onClearAll={clearFilters}>
+          {activeOnly && (
+            <FilterChip onRemove={() => setActiveOnly(false)}>
+              Status: Active only
+            </FilterChip>
+          )}
+          {query && <FilterChip onRemove={() => setQuery("")}>Search: {query}</FilterChip>}
+        </ActiveFiltersRow>
       )}
       <DataTable
         table={table}
@@ -190,6 +204,7 @@ export function SupplierTable({
         minWidth="min-w-[720px]"
         noResultsMessage="No suppliers match these filters"
         noResultsSubtext="Clear the search or active-status filter."
+        onClearFilters={clearFilters}
       />
     </>
   );

@@ -13,10 +13,14 @@ export function FilterChip({
   return (
     <button
       type="button"
-      className={cn("inline-flex h-7 items-center gap-1.5 rounded-md border border-border bg-surface-raised px-2.5 text-xs", className)}
+      className={cn(
+        "inline-flex h-7 items-center gap-1.5 rounded-md border border-border bg-surface-muted/60 px-2.5 text-xs text-foreground transition-colors hover:bg-surface-muted hover:border-border-strong",
+        className
+      )}
       onClick={onRemove}
     >
-      {children} <X aria-hidden="true" className="size-3" />
+      <span>{children}</span>
+      <X aria-hidden="true" className="size-3 text-muted-foreground group-hover:text-foreground shrink-0" />
     </button>
   );
 }

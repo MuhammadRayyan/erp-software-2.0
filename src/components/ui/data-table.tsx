@@ -2,7 +2,7 @@
 "use client";
 
 import { flexRender } from "@tanstack/react-table";
-import { ArrowDown, ArrowUp, ChevronsUpDown } from "lucide-react";
+import { ArrowDown, ArrowUp, ChevronsUpDown, Search } from "lucide-react";
 
 interface DataTableProps {
   table: any;
@@ -29,14 +29,17 @@ export function DataTable({
 
   if (rows.length === 0) {
     return (
-      <div className="rounded-lg border border-border bg-surface py-10 text-center">
-        <p className="font-medium">{noResultsMessage}</p>
-        <p className="mt-1 text-sm text-muted-foreground">{noResultsSubtext}</p>
+      <div className="rounded-lg border border-border bg-surface-raised py-12 px-4 text-center">
+        <div className="mx-auto mb-3 flex size-11 items-center justify-center rounded-full bg-surface-muted text-muted-foreground">
+          <Search className="size-5" />
+        </div>
+        <p className="font-semibold text-sm text-foreground">{noResultsMessage}</p>
+        <p className="mt-1 text-xs text-muted-foreground max-w-sm mx-auto">{noResultsSubtext}</p>
         {onClearFilters && (
           <button 
             type="button" 
             onClick={onClearFilters}
-            className="mt-4 rounded bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground hover:bg-primary/90"
+            className="mt-4 inline-flex items-center gap-1.5 rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground hover:bg-primary/90 transition-colors"
           >
             Clear filters
           </button>
@@ -65,24 +68,25 @@ export function DataTable({
                 if (meta?.wrap) classes += " col-wrap";
                 else classes += " truncate";
                 if (isSticky) classes += " sticky-col";
+                classes += " select-none group/th";
+                if (canSort) classes += " cursor-pointer hover:text-foreground transition-colors";
 
                 return (
                   <th
                     key={header.id}
                     className={classes.trim()}
                     onClick={canSort ? header.column.getToggleSortingHandler() : undefined}
-                    style={{ cursor: canSort ? "pointer" : "default" }}
                   >
                     <div className={`flex items-center gap-1.5 ${meta?.numeric ? "justify-end" : ""}`}>
                       {header.isPlaceholder
                         ? null
                         : flexRender(header.column.columnDef.header, header.getContext())}
                       {isSorted === "asc" ? (
-                        <ArrowUp className="size-3" />
+                        <ArrowUp className="size-3 text-primary shrink-0" />
                       ) : isSorted === "desc" ? (
-                        <ArrowDown className="size-3" />
+                        <ArrowDown className="size-3 text-primary shrink-0" />
                       ) : canSort ? (
-                        <span className="opacity-0 group-hover:opacity-30 transition-opacity"><ChevronsUpDown className="size-3" /></span>
+                        <ChevronsUpDown className="size-3 text-muted-foreground/40 opacity-0 group-hover/th:opacity-100 transition-opacity shrink-0" />
                       ) : null}
                     </div>
                   </th>

@@ -9,12 +9,10 @@ import {
   getSortedRowModel as createSortedRowModel
 } from "@tanstack/react-table/legacy";
 import { type SortingState } from "@tanstack/react-table";
-import { ListToolbar, SearchInput, ToolbarSelect } from "@/components/list-toolbar";
+import { ListToolbar, SearchInput, ToolbarSelect, DateRangeFilter, ActiveFiltersRow, FilterChip } from "@/components/list-toolbar";
 import { Button } from "@/components/ui/button";
-import { FilterChip } from "@/components/ui/filter-chip";
 import { useColumns } from "@/components/columns-dropdown";
 import { DataTable } from "@/components/ui/data-table";
-import { Input } from "@/components/ui/input";
 import { formatMoney } from "@/core/format";
 import type { ProjectListRow } from "./project-service";
 import { ProjectStatusBadge } from "./project-status";
@@ -150,6 +148,13 @@ export function ProjectTable({
     getSortedRowModel: createSortedRowModel(),
   });
 
+  const clearFilters = () => {
+    setQuery("");
+    setStatus("");
+    setCustomerId("");
+    setFromDate("");
+    setToDate("");
+  };
   const hasActiveFilter = Boolean(customerId || status || query || fromDate || toDate);
   const statusLabel = (s: string) => s === "draft" ? "Draft" : s === "active" ? "Active" : s === "on_hold" ? "On Hold" : s === "completed" ? "Completed" : s === "cancelled" ? "Cancelled" : s;
 
@@ -160,6 +165,7 @@ export function ProjectTable({
         value={status}
         onChange={setStatus}
         ariaLabel="Filter by project status"
+        className="min-w-32 max-w-44"
         options={[
           { value: "", label: "All statuses" },
           { value: "draft", label: "Draft" },
@@ -173,18 +179,24 @@ export function ProjectTable({
         value={customerId}
         onChange={setCustomerId}
         ariaLabel="Filter by customer"
-        className="min-w-44"
+        className="min-w-36 max-w-52"
         options={[{ value: "", label: "All customers" }, ...customerOptions.map(([id, name]) => ({ value: id, label: name }))]}
       />
-      <Input type="date" value={fromDate} onChange={(event) => setFromDate(event.target.value)} aria-label="Project start date from" className="w-38" />
-      <Input type="date" value={toDate} onChange={(event) => setToDate(event.target.value)} aria-label="Project target end date to" className="w-38" />
-      <div className="ml-auto flex items-center gap-2">
-          <DensityToggle businessId={businessId} />
-          {dropdown}
-        </div>
+      <DateRangeFilter
+        fromDate={fromDate}
+        toDate={toDate}
+        onFromChange={setFromDate}
+        onToChange={setToDate}
+        fromAriaLabel="Project start date from"
+        toAriaLabel="Project target end date to"
+      />
+      <div className="ml-auto flex items-center gap-1.5 shrink-0">
+        <DensityToggle businessId={businessId} />
+        {dropdown}
+      </div>
     </ListToolbar>
     {hasActiveFilter && (
-      <ListToolbar>
+      <ActiveFiltersRow onClearAll={clearFilters}>
         {customerId && (
           <FilterChip onRemove={() => setCustomerId("")}>
             Customer: {customerOptions.find(([id]) => id === customerId)?.[1]}
@@ -194,13 +206,14 @@ export function ProjectTable({
         {fromDate && <FilterChip onRemove={() => setFromDate("")}>From: {fromDate}</FilterChip>}
         {toDate && <FilterChip onRemove={() => setToDate("")}>To: {toDate}</FilterChip>}
         {query && <FilterChip onRemove={() => setQuery("")}>Search: {query}</FilterChip>}
-      </ListToolbar>
+      </ActiveFiltersRow>
     )}
     <DataTable 
       table={table}
-        density={density} 
+      density={density} 
       minWidth="min-w-[860px]" 
       noResultsMessage="No projects match these filters" 
+      onClearFilters={clearFilters}
     />
   </>;
 }

@@ -5,6 +5,26 @@ All notable changes since the original `erp-software-2.0-antigravity-edits` uplo
 Full per-task detail (file lists, verification transcripts, QA walkthroughs) lives in `worklog.md` at the repository root.
 
 
+## Table & Filter Bar Modernization Sprint (Verified & Standardized)
+- **Visual Border & Grid Cleanliness**:
+  - Removed arbitrary `box-shadow: inset -1px 0 0` on `.data-table th.sticky-col` and `td.sticky-col` in `globals.css` that was drawing harsh vertical hairline dividers down column 1 in half the app.
+  - Standardized all 11 list tables to use clean borderless columns with subtle horizontal row dividers (`border-b border-border/40`) and smooth row hover transitions (`hover:bg-muted/40`).
+- **Standardized Filter Toolbar (`src/components/list-toolbar.tsx`)**:
+  - **`SearchInput`**: Replaced greedy `flex-1 min-w-[220px]` layout with dedicated responsive widths (`w-56 sm:w-64 md:w-72`) and added an instant `✕` clear button when search text is entered.
+  - **`ToolbarSelect`**: Standardized to `h-9` height, consistent compact widths (`min-w-36 max-w-52`), and subtle active state highlighting (`border-primary/50 bg-primary/5 text-primary`) when a filter value is selected.
+  - **`DateRangeFilter`**: Created unified, modern inline date range pill with `Calendar` icon, `From:` input, separator `—`, `To:` input, and an instant clear `✕` button, replacing disjointed raw `<input type="date">` boxes that broke onto 2 lines.
+  - **`StatusFilterSelect`**: Standardized native select supporting both flat status lists and optgroup hierarchies (e.g. Document vs Payment).
+  - **`ActiveFiltersRow`**: Standardized active filters chip row with `Active filters:` label, dismissible tags, and a `Reset all` button with rotate icon.
+- **DataTable Polish (`src/components/ui/data-table.tsx`)**:
+  - Upgraded empty state with a centered search icon, clear title, subtext, and a prominent "Clear filters" action button.
+  - Enhanced column header sorting indicators with subtle hover transitions and active sort highlights.
+- **11 Modules Fully Standardized**:
+  - Standardized toolbar layout, active filters row, clearFilters, and borderless tables across Sales Quotes, Sales Orders, Sales Invoices, Sales Credit Notes, Purchase Quotes, Purchase Orders, Purchase Invoices, Debit Notes, Customers, Suppliers, and Projects without duplicate code.
+- **Comprehensive Verification**:
+  - Verified 100% type safety (`npx tsc --noEmit` = 0 errors).
+  - Verified all 57 backend and invariant unit tests pass (`npm test`).
+  - Verified all Playwright test suites pass (`sales.spec.ts`, `purchases.spec.ts`, `purchases-workflow.spec.ts`, `eval-ar-financial.spec.ts`, `eval-document-lifecycle.spec.ts`, `deep-workflow.spec.ts`, `deep-ui.spec.ts`).
+
 ## UX & Quality Polish Sprint (Verified & Standardized)
 - **Financial Reports**:
   - Added dedicated `/reports/profit-loss` statement with categorized sales, other income, cost of sales, and operating expenses.

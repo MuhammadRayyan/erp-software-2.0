@@ -10,11 +10,8 @@ import {
 } from "@tanstack/react-table/legacy";
 import { type SortingState } from "@tanstack/react-table";
 import { useColumns } from "@/components/columns-dropdown";
-import { ListToolbar, SearchInput, ToolbarSelect } from "@/components/list-toolbar";
+import { ListToolbar, SearchInput, ToolbarSelect, DateRangeFilter, StatusFilterSelect, ActiveFiltersRow, FilterChip } from "@/components/list-toolbar";
 import { Button } from "@/components/ui/button";
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
-import { FilterChip } from "@/components/ui/filter-chip";
-import { Input } from "@/components/ui/input";
 import { DataTable } from "@/components/ui/data-table";
 import { formatDate, formatMoney } from "@/core/format";
 import { formatCustomFieldValue, type CustomFieldColumn } from "@/modules/custom-fields/custom-field-display";
@@ -212,48 +209,61 @@ export function InvoiceTable({
 
   return <>
     <ListToolbar>
-      <SearchInput value={query} onChange={setQuery} placeholder="Search invoices..." ariaLabel="Search invoices" />
-      <ToolbarSelect value={customerFilter} onChange={setCustomerFilter} ariaLabel="Filter by customer" className="min-w-44" options={[{ value: "", label: "All customers" }, ...customerOptions.map(([id, name]) => ({ value: id, label: name }))]} />
-      <ToolbarSelect value={projectFilter} onChange={setProjectFilter} ariaLabel="Filter by project" className="min-w-44" options={[{ value: "", label: "All projects" }, ...projectOptions.map(([id, name]) => ({ value: id, label: name }))]} />
-      <Input type="date" value={fromDate} onChange={(event) => setFromDate(event.target.value)} aria-label="Invoice date from" className="w-38" />
-      <Input type="date" value={toDate} onChange={(event) => setToDate(event.target.value)} aria-label="Invoice date to" className="w-38" />
-      
-      <DropdownMenu>
-        <DropdownMenuTrigger asChild><Button variant="secondary"><Filter className="size-4" /> Filter</Button></DropdownMenuTrigger>
-        <DropdownMenuContent align="end">
-          <DropdownMenuItem onSelect={() => setStatusFilter("")}>All invoices</DropdownMenuItem>
-          <DropdownMenuSeparator />
-          <DropdownMenuLabel>Document</DropdownMenuLabel>
-          {["draft", "posted", "void"].map((status) => <DropdownMenuItem key={status} onSelect={() => setStatusFilter(`document:${status}`)}>{filterLabels[`document:${status}`]}</DropdownMenuItem>)}
-          <DropdownMenuSeparator />
-          <DropdownMenuLabel>Payment</DropdownMenuLabel>
-          {["unpaid", "partially_paid", "paid", "overdue"].map((status) => <DropdownMenuItem key={status} onSelect={() => setStatusFilter(`payment:${status}`)}>{filterLabels[`payment:${status}`]}</DropdownMenuItem>)}
-        </DropdownMenuContent>
-      </DropdownMenu>
+      <SearchInput value={query} onChange={setQuery} placeholder="Search invoices…" ariaLabel="Search invoices" />
+      <ToolbarSelect value={customerFilter} onChange={setCustomerFilter} ariaLabel="Filter by customer" className="min-w-36 max-w-52" options={[{ value: "", label: "All customers" }, ...customerOptions.map(([id, name]) => ({ value: id, label: name }))]} />
+      <ToolbarSelect value={projectFilter} onChange={setProjectFilter} ariaLabel="Filter by project" className="min-w-36 max-w-52" options={[{ value: "", label: "All projects" }, ...projectOptions.map(([id, name]) => ({ value: id, label: name }))]} />
+      <DateRangeFilter
+        fromDate={fromDate}
+        toDate={toDate}
+        onFromChange={setFromDate}
+        onToChange={setToDate}
+        fromAriaLabel="Invoice date from"
+        toAriaLabel="Invoice date to"
+      />
+      <StatusFilterSelect
+        value={statusFilter}
+        onChange={setStatusFilter}
+        ariaLabel="Filter invoices"
+        options={[
+          { value: "", label: "All statuses" },
+          { label: "Document", options: [
+            { value: "document:draft", label: "Draft" },
+            { value: "document:posted", label: "Posted" },
+            { value: "document:void", label: "Void" },
+          ]},
+          { label: "Payment", options: [
+            { value: "payment:unpaid", label: "Unpaid" },
+            { value: "payment:partially_paid", label: "Partially Paid" },
+            { value: "payment:paid", label: "Paid" },
+            { value: "payment:overdue", label: "Overdue" },
+          ]},
+        ]}
+      />
 
-      <div className="ml-auto flex items-center gap-2">
-          <DensityToggle businessId={businessId} />
-          {dropdown}
-        </div>
+      <div className="ml-auto flex items-center gap-1.5 shrink-0">
+        <DensityToggle businessId={businessId} />
+        {dropdown}
+      </div>
     </ListToolbar>
     
-    {hasActiveFilter && <ListToolbar>
-      {customerFilter && <FilterChip onRemove={() => setCustomerFilter("")}>Customer: {customerOptions.find(([id]) => id === customerFilter)?.[1]}</FilterChip>}
-      {projectFilter && <FilterChip onRemove={() => setProjectFilter("")}>Project: {projectOptions.find(([id]) => id === projectFilter)?.[1]}</FilterChip>}
-      {fromDate && <FilterChip onRemove={() => setFromDate("")}>From: {formatDate(fromDate)}</FilterChip>}
-      {toDate && <FilterChip onRemove={() => setToDate("")}>To: {formatDate(toDate)}</FilterChip>}
-      {statusFilter && <FilterChip onRemove={() => setStatusFilter("")}>Status: {filterLabels[statusFilter]}</FilterChip>}
-      {query && <FilterChip onRemove={() => setQuery("")}>Search: {query}</FilterChip>}
-    </ListToolbar>}
+    {hasActiveFilter && (
+      <ActiveFiltersRow onClearAll={clearFilters}>
+        {customerFilter && <FilterChip onRemove={() => setCustomerFilter("")}>Customer: {customerOptions.find(([id]) => id === customerFilter)?.[1]}</FilterChip>}
+        {projectFilter && <FilterChip onRemove={() => setProjectFilter("")}>Project: {projectOptions.find(([id]) => id === projectFilter)?.[1]}</FilterChip>}
+        {fromDate && <FilterChip onRemove={() => setFromDate("")}>From: {formatDate(fromDate)}</FilterChip>}
+        {toDate && <FilterChip onRemove={() => setToDate("")}>To: {formatDate(toDate)}</FilterChip>}
+        {statusFilter && <FilterChip onRemove={() => setStatusFilter("")}>Status: {filterLabels[statusFilter]}</FilterChip>}
+        {query && <FilterChip onRemove={() => setQuery("")}>Search: {query}</FilterChip>}
+      </ActiveFiltersRow>
+    )}
     
     <DataTable 
       table={table}
-        density={density}
-        pinFirstColumn 
+      density={density}
       minWidth="min-w-[1100px]" 
       noResultsMessage="No invoices match these filters"
       noResultsSubtext="Try a different invoice number, customer, date range, or status."
-     onClearFilters={clearFilters}
+      onClearFilters={clearFilters}
     />
   </>;
 }

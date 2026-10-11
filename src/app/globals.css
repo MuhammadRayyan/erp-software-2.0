@@ -164,20 +164,18 @@ button, a { -webkit-tap-highlight-color: transparent; }
 .col-wrap { white-space: normal; }
 .col-nowrap { white-space: nowrap; }
 
-/* Sticky first column */
+/* Sticky first column (seamless without harsh vertical divider) */
 .data-table th.sticky-col {
   position: sticky; 
   left: 0; 
   z-index: 3; /* above other headers */
   background: var(--surface);
-  box-shadow: inset -1px 0 0 var(--border-strong);
 }
 .data-table td.sticky-col {
   position: sticky; 
   left: 0; 
   z-index: 2; 
   background: var(--surface-raised);
-  box-shadow: inset -1px 0 0 var(--border);
 }
 
 /* Single hairline & hover (no zebra) */

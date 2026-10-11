@@ -10,9 +10,8 @@ import {
 } from "@tanstack/react-table/legacy";
 import { type SortingState } from "@tanstack/react-table";
 import { StatusBadge, statusLabel } from "@/components/status-badge";
-import { ListToolbar, SearchInput, ToolbarSelect } from "@/components/list-toolbar";
+import { ListToolbar, SearchInput, ToolbarSelect, ActiveFiltersRow, FilterChip } from "@/components/list-toolbar";
 import { Button } from "@/components/ui/button";
-import { FilterChip } from "@/components/ui/filter-chip";
 import { useColumns } from "@/components/columns-dropdown";
 import { DataTable } from "@/components/ui/data-table";
 import { formatDate, formatMoney } from "@/core/format";
@@ -194,14 +193,14 @@ export function SalesOrderTable({
           value={customerId}
           onChange={setCustomerId}
           ariaLabel="Filter by customer"
-          className="min-w-44"
+          className="min-w-36 max-w-52"
           options={[{ value: "", label: "All customers" }, ...customerOptions.map(([id, name]) => ({ value: id, label: name }))]}
         />
         <ToolbarSelect
           value={projectId}
           onChange={setProjectId}
           ariaLabel="Filter by project"
-          className="min-w-44"
+          className="min-w-36 max-w-52"
           options={[{ value: "", label: "All projects" }, ...projectOptions.map(([id, name]) => ({ value: id, label: name }))]}
         />
         <ToolbarSelect
@@ -216,13 +215,13 @@ export function SalesOrderTable({
             { value: "cancelled", label: "Cancelled" },
           ]}
         />
-        <div className="ml-auto flex items-center gap-2">
+        <div className="ml-auto flex items-center gap-1.5 shrink-0">
           <DensityToggle businessId={businessId} />
           {dropdown}
         </div>
       </ListToolbar>
       {hasActiveFilter && (
-        <ListToolbar>
+        <ActiveFiltersRow onClearAll={clearFilters}>
           {customerId && (
             <FilterChip onRemove={() => setCustomerId("")}>
               Customer: {customerOptions.find(([id]) => id === customerId)?.[1]}
@@ -235,17 +234,16 @@ export function SalesOrderTable({
           )}
           {status && <FilterChip onRemove={() => setStatus("")}>Status: {statusLabel(status)}</FilterChip>}
           {query && <FilterChip onRemove={() => setQuery("")}>Search: {query}</FilterChip>}
-        </ListToolbar>
+        </ActiveFiltersRow>
       )}
       
       <DataTable 
         table={table}
         density={density}
-        pinFirstColumn 
         minWidth="min-w-[780px]" 
         noResultsMessage="No sales orders match" 
-       onClearFilters={clearFilters}
-    />
+        onClearFilters={clearFilters}
+      />
     </>
   );
 }

@@ -10,10 +10,8 @@ import {
 } from "@tanstack/react-table/legacy";
 import { type SortingState } from "@tanstack/react-table";
 import { StatusBadge, statusLabel } from "@/components/status-badge";
-import { ListToolbar, SearchInput, ToolbarSelect } from "@/components/list-toolbar";
+import { ListToolbar, SearchInput, ToolbarSelect, DateRangeFilter, ActiveFiltersRow, FilterChip } from "@/components/list-toolbar";
 import { Button } from "@/components/ui/button";
-import { FilterChip } from "@/components/ui/filter-chip";
-import { Input } from "@/components/ui/input";
 import { useColumns } from "@/components/columns-dropdown";
 import { DataTable } from "@/components/ui/data-table";
 import { formatDate, formatMoney } from "@/core/format";
@@ -173,32 +171,39 @@ export function PurchaseOrderTable({
   return <>
     <ListToolbar>
       <SearchInput value={query} onChange={setQuery} placeholder="Search purchase orders…" ariaLabel="Search purchase orders" />
-      <ToolbarSelect value={supplierId} onChange={setSupplierId} ariaLabel="Filter by supplier" className="min-w-44" options={[{ value: "", label: "All suppliers" }, ...supplierOptions.map(([id, name]) => ({ value: id, label: name }))]} />
-      <ToolbarSelect value={projectId} onChange={setProjectId} ariaLabel="Filter by project" className="min-w-44" options={[{ value: "", label: "All projects" }, ...projectOptions.map(([id, name]) => ({ value: id, label: name }))]} />
-      <Input type="date" value={fromDate} onChange={(event) => setFromDate(event.target.value)} aria-label="Order date from" className="w-38" />
-      <Input type="date" value={toDate} onChange={(event) => setToDate(event.target.value)} aria-label="Order date to" className="w-38" />
+      <ToolbarSelect value={supplierId} onChange={setSupplierId} ariaLabel="Filter by supplier" className="min-w-36 max-w-52" options={[{ value: "", label: "All suppliers" }, ...supplierOptions.map(([id, name]) => ({ value: id, label: name }))]} />
+      <ToolbarSelect value={projectId} onChange={setProjectId} ariaLabel="Filter by project" className="min-w-36 max-w-52" options={[{ value: "", label: "All projects" }, ...projectOptions.map(([id, name]) => ({ value: id, label: name }))]} />
+      <DateRangeFilter
+        fromDate={fromDate}
+        toDate={toDate}
+        onFromChange={setFromDate}
+        onToChange={setToDate}
+        fromAriaLabel="Order date from"
+        toAriaLabel="Order date to"
+      />
       <ToolbarSelect value={status} onChange={setStatus} ariaLabel="Filter by status" options={[{ value: "", label: "All statuses" }, { value: "draft", label: "Draft" }, { value: "issued", label: "Issued" }, { value: "closed", label: "Closed" }, { value: "cancelled", label: "Cancelled" }]} />
-      <div className="ml-auto flex items-center gap-2">
-          <DensityToggle businessId={businessId} />
-          {dropdown}
-        </div>
+      <div className="ml-auto flex items-center gap-1.5 shrink-0">
+        <DensityToggle businessId={businessId} />
+        {dropdown}
+      </div>
     </ListToolbar>
-    {hasActiveFilter && <ListToolbar>
-      {supplierId && <FilterChip onRemove={() => setSupplierId("")}>Supplier: {supplierOptions.find(([id]) => id === supplierId)?.[1]}</FilterChip>}
-      {projectId && <FilterChip onRemove={() => setProjectId("")}>Project: {projectOptions.find(([id]) => id === projectId)?.[1]}</FilterChip>}
-      {fromDate && <FilterChip onRemove={() => setFromDate("")}>From: {formatDate(fromDate)}</FilterChip>}
-      {toDate && <FilterChip onRemove={() => setToDate("")}>To: {formatDate(toDate)}</FilterChip>}
-      {status && <FilterChip onRemove={() => setStatus("")}>Status: {statusLabel(status)}</FilterChip>}
-      {query && <FilterChip onRemove={() => setQuery("")}>Search: {query}</FilterChip>}
-    </ListToolbar>}
+    {hasActiveFilter && (
+      <ActiveFiltersRow onClearAll={clearFilters}>
+        {supplierId && <FilterChip onRemove={() => setSupplierId("")}>Supplier: {supplierOptions.find(([id]) => id === supplierId)?.[1]}</FilterChip>}
+        {projectId && <FilterChip onRemove={() => setProjectId("")}>Project: {projectOptions.find(([id]) => id === projectId)?.[1]}</FilterChip>}
+        {fromDate && <FilterChip onRemove={() => setFromDate("")}>From: {formatDate(fromDate)}</FilterChip>}
+        {toDate && <FilterChip onRemove={() => setToDate("")}>To: {formatDate(toDate)}</FilterChip>}
+        {status && <FilterChip onRemove={() => setStatus("")}>Status: {statusLabel(status)}</FilterChip>}
+        {query && <FilterChip onRemove={() => setQuery("")}>Search: {query}</FilterChip>}
+      </ActiveFiltersRow>
+    )}
 
     <DataTable 
       table={table}
-        density={density}
-        pinFirstColumn 
+      density={density}
       minWidth="min-w-[780px]" 
       noResultsMessage="No purchase orders match" 
-     onClearFilters={clearFilters}
+      onClearFilters={clearFilters}
     />
   </>;
 }

@@ -10,10 +10,8 @@ import {
 } from "@tanstack/react-table/legacy";
 import { type SortingState } from "@tanstack/react-table";
 import { StatusBadge, statusLabel } from "@/components/status-badge";
-import { ListToolbar, SearchInput, ToolbarSelect } from "@/components/list-toolbar";
+import { ListToolbar, SearchInput, ToolbarSelect, StatusFilterSelect, ActiveFiltersRow, FilterChip } from "@/components/list-toolbar";
 import { Button } from "@/components/ui/button";
-import { FilterChip } from "@/components/ui/filter-chip";
-import { StatusFilterSelect } from "@/components/status-filter-select";
 import { useColumns } from "@/components/columns-dropdown";
 import { DataTable } from "@/components/ui/data-table";
 import { formatDate, formatMoney } from "@/core/format";
@@ -218,6 +216,12 @@ export function PurchaseInvoiceTable({
 
   const statusValue = status.split(":")[1] as PurchaseInvoiceStatus | PurchasePaymentStatus | undefined;
   const statusText = statusLabel(statusValue ?? "");
+  const clearFilters = () => {
+    setQuery("");
+    setStatus("");
+    setSupplierId("");
+    setProjectId("");
+  };
   const hasActiveFilter = Boolean(supplierId || projectId || status || query);
 
   return (
@@ -228,14 +232,14 @@ export function PurchaseInvoiceTable({
           value={supplierId}
           onChange={setSupplierId}
           ariaLabel="Filter by supplier"
-          className="min-w-44"
+          className="min-w-36 max-w-52"
           options={[{ value: "", label: "All suppliers" }, ...supplierOptions.map(([id, name]) => ({ value: id, label: name }))]}
         />
         <ToolbarSelect
           value={projectId}
           onChange={setProjectId}
           ariaLabel="Filter by project"
-          className="min-w-44"
+          className="min-w-36 max-w-52"
           options={[{ value: "", label: "All projects" }, ...projectOptions.map(([id, name]) => ({ value: id, label: name }))]}
         />
         <StatusFilterSelect
@@ -257,13 +261,13 @@ export function PurchaseInvoiceTable({
             ]},
           ]}
         />
-        <div className="ml-auto flex items-center gap-2">
+        <div className="ml-auto flex items-center gap-1.5 shrink-0">
           <DensityToggle businessId={businessId} />
           {dropdown}
         </div>
       </ListToolbar>
       {hasActiveFilter && (
-        <ListToolbar>
+        <ActiveFiltersRow onClearAll={clearFilters}>
           {supplierId && (
             <FilterChip onRemove={() => setSupplierId("")}>
               Supplier: {supplierOptions.find(([id]) => id === supplierId)?.[1]}
@@ -276,14 +280,14 @@ export function PurchaseInvoiceTable({
           )}
           {status && <FilterChip onRemove={() => setStatus("")}>Status: {statusText}</FilterChip>}
           {query && <FilterChip onRemove={() => setQuery("")}>Search: {query}</FilterChip>}
-        </ListToolbar>
+        </ActiveFiltersRow>
       )}
       <DataTable 
         table={table}
         density={density}
-        pinFirstColumn 
         minWidth="min-w-[640px]" 
         noResultsMessage="No purchase invoices match" 
+        onClearFilters={clearFilters}
       />
     </>
   );
