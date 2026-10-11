@@ -2,9 +2,10 @@
  * Core utility for exporting arrays of objects to a CSV file on the client side.
  */
 
-export type CsvColumn<T> = {
+export type CsvColumn<T = any> = {
   header: string;
-  accessorFn: (row: T) => string | number | boolean | null | undefined;
+  accessorKey?: string;
+  accessorFn?: (row: T) => string | number | boolean | null | undefined;
 };
 
 function escapeCsvCell(cell: unknown): string {
@@ -21,9 +22,20 @@ function escapeCsvCell(cell: unknown): string {
   return str;
 }
 
-export function exportCsv<T>(filename: string, columns: CsvColumn<T>[], data: T[]) {
+export function exportCsv<T extends Record<string, any>>(filename: string, columns: CsvColumn<T>[], data: T[]) {
   const headers = columns.map((col) => escapeCsvCell(col.header)).join(",");
-  const rows = data.map((row) => columns.map((col) => escapeCsvCell(col.accessorFn(row))).join(","));
+  const rows = data.map((row) =>
+    columns
+      .map((col) => {
+        const val = col.accessorFn
+          ? col.accessorFn(row)
+          : col.accessorKey
+          ? row[col.accessorKey]
+          : "";
+        return escapeCsvCell(val);
+      })
+      .join(",")
+  );
   const csvContent = [headers, ...rows].join("\n");
 
   const blob = new Blob(["\uFEFF" + csvContent], { type: "text/csv;charset=utf-8;" }); // BOM for Excel UTF-8

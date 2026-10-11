@@ -15,7 +15,7 @@ import {
   TEMPLATE_VARIABLES,
   DEFAULT_TEMPLATES,
   interpolateEmailTemplate,
-} from "../email-template-service";
+} from "../email-template-types";
 import { saveEmailTemplateAction, resetEmailTemplateAction } from "../actions";
 
 const SAMPLE_DATA: Record<string, string> = {

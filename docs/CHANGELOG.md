@@ -63,6 +63,24 @@ Full per-task detail (file lists, verification transcripts, QA walkthroughs) liv
 - **Automated Verification Suite (`tests/manager-erp-features.test.ts`)**:
   - Comprehensive automated tests covering all new features, expanding the test suite to 83 passing tests (0 failures, 0 TypeScript errors).
 
+- **Playwright End-to-End Real Browser Suite (`e2e/manager-features-browser.spec.ts`)**:
+  - Validated all 10 interactive flows and scenarios across the application in Chromium:
+    1. Settings Hub live search filtering and module navigation.
+    2. Payment Terms Presets Manager CRUD and dynamic due date calculation.
+    3. Units of Measure (UOM) Catalog CRUD and active toggle.
+    4. Email Templates Studio dynamic token insertion, live interpolated preview card, and save action.
+    5. Guided Opening Balances Onboarding Engine debit/credit self-balancing.
+    6. Global Financial Lock Date period closing controls and period unlock.
+    7. Chart of Accounts universal clickable balance drill-down into General Ledger.
+    8. Profit & Loss reports drill-down, CSV export, and Cash vs Accrual basis toggle.
+    9. Commercial register multi-select batch operations floating dock.
+    10. Sticky Action Dock on commercial forms with running subtotal, tax, and total.
+  - All 19 Playwright tests (10 new flows + 9 settings tests) passing cleanly.
+
+- **Next.js RSC Boundary & Client Bundle Hardening**:
+  - Refactored `ExportCsvButton` and `exportCsv` to support serialized `accessorKey` properties across React Server Component (RSC) boundaries without function serialization errors.
+  - Extracted `src/modules/email/email-template-types.ts` to separate pure client-side types and string interpolation helpers from server-side database code (`better-sqlite3`, `node:crypto`).
+
 
 ## Settings Hub, Business Profile, Localization & Numbering Overhaul (improvements-settings-v1)
 - **Centralized Settings Hub (`/settings`)**:

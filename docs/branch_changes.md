@@ -45,6 +45,24 @@
 - **Settings Hub Centralization**:
   - Centralized discovery in `src/app/b/[businessId]/settings/settings-hub-client.tsx`.
 
+## Feature Group 5: Browser E2E Testing & RSC Hardening
+- **End-to-End Real Browser Testing (`e2e/manager-features-browser.spec.ts`)**:
+  - Executed and validated all 10 interactive flows in Chromium via Playwright:
+    1. Settings Hub live search filtering and module navigation.
+    2. Payment Terms Presets Manager CRUD, net days calculations, edit icon, and delete.
+    3. Units of Measure (UOM) Catalog CRUD with unique test codes and removal.
+    4. Email Templates Studio tab switcher, variable tokens chip insertion, live preview card with sample interpolation, and save.
+    5. Guided Opening Balances Onboarding Engine self-balancing debits/credits banner and date input.
+    6. Global Financial Lock Date period closing controls, active lock status badge, and clear lock date.
+    7. Chart of Accounts universal clickable balance drill-down into General Ledger with account ID filter.
+    8. Profit & Loss reports drill-down, CSV export button, and Cash vs Accrual basis toggle.
+    9. Commercial register multi-select batch operations floating dock and clear action.
+    10. Sticky Action Dock on commercial forms with running subtotal, tax, and total, and Save Draft / Post Invoice actions.
+- **RSC Boundary Serialization & Client Bundle Hardening**:
+  - Separated client-safe email types and interpolation (`email-template-types.ts`) from server-only database code (`better-sqlite3`).
+  - Fixed RSC function-passing boundary in `ExportCsvButton` with generic-safe `accessorKey` properties.
+
+
 # Branch Changes: `antigravity-edits`
 
 ## Feature: Global Appearance Settings

@@ -45,11 +45,18 @@ export default async function ProfitAndLossReportPage({
 
   const netProfit = totalIncome - totalExpenses;
 
+  const csvData = rows.map((r) => ({
+    name: r.name,
+    type: r.type,
+    subtype: r.subtype,
+    net_amount: (r.net_minor / 100).toFixed(2),
+  }));
+
   const csvColumns = [
-    { header: "Account", accessorFn: (r: any) => r.name },
-    { header: "Type", accessorFn: (r: any) => r.type },
-    { header: "Subtype", accessorFn: (r: any) => r.subtype },
-    { header: "Net Amount", accessorFn: (r: any) => (r.net_minor / 100).toFixed(2) },
+    { header: "Account", accessorKey: "name" },
+    { header: "Type", accessorKey: "type" },
+    { header: "Subtype", accessorKey: "subtype" },
+    { header: "Net Amount", accessorKey: "net_amount" },
   ];
 
   function renderGroup(title: string, data: typeof rows, total: number) {
@@ -106,7 +113,7 @@ export default async function ProfitAndLossReportPage({
         <ExportCsvButton 
           filename={`profit-loss-${new Date().toISOString().slice(0, 10)}.csv`} 
           columns={csvColumns} 
-          data={rows} 
+          data={csvData} 
         />
       </div>
 

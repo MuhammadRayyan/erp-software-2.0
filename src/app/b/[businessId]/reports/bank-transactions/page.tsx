@@ -45,16 +45,28 @@ export default async function BankTransactionsReportPage({
   
   const rows = allRows.slice((effectivePage - 1) * pageSize, effectivePage * pageSize);
 
+  const csvData = allRows.map((r: any) => ({
+    bank_account_name: r.bank_account_name,
+    date: r.date,
+    source: journalSourceLabel(r.source_type),
+    reference: r.reference || r.entry_number || "",
+    description: r.description || "",
+    money_in: (r.money_in_minor / 100).toFixed(2),
+    money_out: (r.money_out_minor / 100).toFixed(2),
+    balance: (r.balance_minor / 100).toFixed(2),
+    reconciled: r.reconciled ? "Yes" : "No",
+  }));
+
   const csvColumns = [
-    { header: "Account", accessorFn: (r: any) => r.bank_account_name },
-    { header: "Date", accessorFn: (r: any) => r.date },
-    { header: "Source", accessorFn: (r: any) => journalSourceLabel(r.source_type) },
-    { header: "Reference", accessorFn: (r: any) => r.reference || r.entry_number },
-    { header: "Description", accessorFn: (r: any) => r.description },
-    { header: "Money In", accessorFn: (r: any) => (r.money_in_minor / 100).toFixed(2) },
-    { header: "Money Out", accessorFn: (r: any) => (r.money_out_minor / 100).toFixed(2) },
-    { header: "Balance", accessorFn: (r: any) => (r.balance_minor / 100).toFixed(2) },
-    { header: "Reconciled", accessorFn: (r: any) => r.reconciled ? "Yes" : "No" },
+    { header: "Account", accessorKey: "bank_account_name" },
+    { header: "Date", accessorKey: "date" },
+    { header: "Source", accessorKey: "source" },
+    { header: "Reference", accessorKey: "reference" },
+    { header: "Description", accessorKey: "description" },
+    { header: "Money In", accessorKey: "money_in" },
+    { header: "Money Out", accessorKey: "money_out" },
+    { header: "Balance", accessorKey: "balance" },
+    { header: "Reconciled", accessorKey: "reconciled" },
   ];
 
   return (
@@ -71,7 +83,7 @@ export default async function BankTransactionsReportPage({
         <ExportCsvButton 
           filename={`bank-transactions-${new Date().toISOString().slice(0, 10)}.csv`} 
           columns={csvColumns} 
-          data={allRows} 
+          data={csvData} 
         />
       </div>
 

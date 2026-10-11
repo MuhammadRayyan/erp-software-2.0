@@ -4,7 +4,7 @@ import { Download } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { exportCsv, type CsvColumn } from "@/lib/export-csv";
 
-type ExportCsvButtonProps<T> = {
+type ExportCsvButtonProps<T extends Record<string, any> = Record<string, any>> = {
   filename: string;
   columns: CsvColumn<T>[];
   data: T[];
@@ -12,7 +12,13 @@ type ExportCsvButtonProps<T> = {
   variant?: "primary" | "secondary" | "ghost" | "danger";
 };
 
-export function ExportCsvButton<T>({ filename, columns, data, className, variant = "secondary" }: ExportCsvButtonProps<T>) {
+export function ExportCsvButton<T extends Record<string, any> = Record<string, any>>({
+  filename,
+  columns,
+  data,
+  className,
+  variant = "secondary",
+}: ExportCsvButtonProps<T>) {
   return (
     <Button
       variant={variant}

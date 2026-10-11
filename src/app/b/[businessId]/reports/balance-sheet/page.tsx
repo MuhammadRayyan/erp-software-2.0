@@ -48,15 +48,26 @@ export default async function BalanceSheetReportPage({
 
   const totalLiabilitiesAndEquity = totalLiabilities + totalEquity;
 
+  const filteredBalanceSheetRows = rows.filter(
+    (r) => r.type === "asset" || r.type === "liability" || r.type === "equity" || r.debit_total > 0 || r.credit_total > 0
+  );
+
+  const csvData = filteredBalanceSheetRows.map((r) => {
+    const normalBalance = r.type === "asset" || r.type === "expense" ? "debit" : "credit";
+    const net = normalBalance === "debit" ? r.debit_total - r.credit_total : r.credit_total - r.debit_total;
+    return {
+      name: r.name,
+      type: r.type,
+      subtype: r.subtype,
+      net_amount: (net / 100).toFixed(2),
+    };
+  });
+
   const csvColumns = [
-    { header: "Account", accessorFn: (r: any) => r.name },
-    { header: "Type", accessorFn: (r: any) => r.type },
-    { header: "Subtype", accessorFn: (r: any) => r.subtype },
-    { header: "Net Amount", accessorFn: (r: any) => {
-      const normalBalance = (r.type === "asset" || r.type === "expense") ? "debit" : "credit";
-      const net = normalBalance === "debit" ? r.debit_total - r.credit_total : r.credit_total - r.debit_total;
-      return (net / 100).toFixed(2);
-    }},
+    { header: "Account", accessorKey: "name" },
+    { header: "Type", accessorKey: "type" },
+    { header: "Subtype", accessorKey: "subtype" },
+    { header: "Net Amount", accessorKey: "net_amount" },
   ];
 
   function renderGroup(title: string, data: typeof rows, normalBalance: "debit" | "credit", total: number) {
@@ -125,7 +136,7 @@ export default async function BalanceSheetReportPage({
         <ExportCsvButton 
           filename={`balance-sheet-${new Date().toISOString().slice(0, 10)}.csv`} 
           columns={csvColumns} 
-          data={rows.filter(r => r.type === "asset" || r.type === "liability" || r.type === "equity" || r.debit_total > 0 || r.credit_total > 0)} 
+          data={csvData} 
         />
       </div>
 

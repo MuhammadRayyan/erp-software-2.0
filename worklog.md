@@ -1739,5 +1739,21 @@ Work Log:
   - `npm run typecheck`: 0 errors.
   - `npm run lint`: 0 errors.
 
+- Playwright End-to-End Real Browser Testing (`e2e/manager-features-browser.spec.ts`):
+  - Created comprehensive 10-flow browser test spec executed in real Chromium via Playwright:
+    1. Settings Hub displays new Manager.io modules and filters correctly by keyword.
+    2. Payment Terms Presets Manager CRUD, net days calculations, edit icon, and delete.
+    3. Units of Measure (UOM) Catalog CRUD with unique test codes and removal.
+    4. Email Templates Studio tab switcher, variable tokens chip insertion, live preview card with sample interpolation, and save.
+    5. Guided Opening Balances Onboarding Engine self-balancing debits/credits banner and date input.
+    6. Global Financial Lock Date period closing controls, active lock status badge, and clear lock date.
+    7. Chart of Accounts universal clickable balance drill-down into General Ledger with account ID filter.
+    8. Profit & Loss reports drill-down, CSV export button, and Cash vs Accrual basis toggle.
+    9. Commercial register multi-select batch operations floating dock and clear action.
+    10. Sticky Action Dock on commercial forms with running subtotal, tax, and total, and Save Draft / Post Invoice actions.
+  - Resolved Next.js RSC boundary serialization for `ExportCsvButton` across Server Components (`profit-loss`, `balance-sheet`, `bank-transactions`).
+  - Separated client-safe email types and interpolation (`email-template-types.ts`) from server-only database code (`better-sqlite3`).
+  - Test run status: 19/19 Playwright browser tests passing (11 manager features + 8 settings tests).
+
 Stage Summary:
-- Manager.io Core Enhancements, operational flow improvements, UI/UX batch & sticky docks, and dynamic settings customizers are fully implemented, verified, tested, and documented.
+- Manager.io Core Enhancements, operational flow improvements, UI/UX batch & sticky docks, and dynamic settings customizers are fully implemented, verified, tested, and documented. Complete manual and automated real-browser testing passed 100%.
