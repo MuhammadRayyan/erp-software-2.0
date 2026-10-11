@@ -18,6 +18,7 @@ import { formatDate, formatMoney } from "@/core/format";
 import type { PurchaseInvoiceStatus, PurchasePaymentStatus } from "./purchase-invoice-service";
 import { DensityToggle } from "@/components/density-toggle";
 import { useTableDensity } from "@/components/use-table-density";
+import { TableTotalsBar, renderMultiCurrencyString } from "@/components/table-totals-bar";
 
 type Row = {
   id: string;
@@ -224,6 +225,32 @@ export function PurchaseInvoiceTable({
   };
   const hasActiveFilter = Boolean(supplierId || projectId || status || query);
 
+  const totalBilledStr = useMemo(
+    () =>
+      renderMultiCurrencyString(
+        rows.map((r) => ({
+          amount: r.total_minor,
+          currency: r.currency_code,
+          minorUnit: r.currency_minor_unit,
+        }))
+      ),
+    [rows]
+  );
+  const totalBalanceStr = useMemo(() => {
+    const postedRows = rows.filter((r) => r.document_status === "posted");
+    return renderMultiCurrencyString(
+      postedRows.map((r) => ({
+        amount: r.balanceMinor,
+        currency: r.currency_code,
+        minorUnit: r.currency_minor_unit,
+      }))
+    );
+  }, [rows]);
+  const overdueCount = useMemo(
+    () => rows.filter((r) => r.paymentStatus === "overdue").length,
+    [rows]
+  );
+
   return (
     <>
       <ListToolbar>
@@ -289,6 +316,25 @@ export function PurchaseInvoiceTable({
         noResultsMessage="No purchase invoices match" 
         onClearFilters={clearFilters}
       />
+
+      {rows.length > 0 && (
+        <TableTotalsBar
+          filteredCount={rows.length}
+          totalCount={invoices.length}
+          itemLabel="bills"
+          metrics={[
+            { label: "Total Billed", value: totalBilledStr, tone: "primary" },
+            {
+              label: "Balance Payable",
+              value: totalBalanceStr,
+              tone: totalBalanceStr !== "—" && totalBalanceStr !== "0.00" ? "danger" : "default",
+            },
+            ...(overdueCount > 0
+              ? [{ label: "Overdue", value: `${overdueCount} bills`, tone: "danger" as const }]
+              : []),
+          ]}
+        />
+      )}
     </>
   );
 }

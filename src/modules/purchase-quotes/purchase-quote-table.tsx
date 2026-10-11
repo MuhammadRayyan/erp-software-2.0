@@ -18,6 +18,7 @@ import { formatDate, formatMoney } from "@/core/format";
 import type { PurchaseQuoteStatus } from "./purchase-quote-service";
 import { DensityToggle } from "@/components/density-toggle";
 import { useTableDensity } from "@/components/use-table-density";
+import { TableTotalsBar, renderMultiCurrencyString } from "@/components/table-totals-bar";
 
 type Row = {
   id: string;
@@ -196,6 +197,22 @@ export function PurchaseQuoteTable({
 
   const hasActiveFilter = Boolean(supplierId || projectId || status || query);
 
+  const totalQuoteValueStr = useMemo(
+    () =>
+      renderMultiCurrencyString(
+        rows.map((r) => ({
+          amount: r.total_minor,
+          currency: r.currency_code,
+          minorUnit: r.currency_minor_unit,
+        }))
+      ),
+    [rows]
+  );
+  const acceptedCount = useMemo(
+    () => rows.filter((r) => r.documentStatus === "accepted").length,
+    [rows]
+  );
+
   return (
     <>
       <ListToolbar>
@@ -261,6 +278,20 @@ export function PurchaseQuoteTable({
         noResultsMessage="No purchase quotes match"
         onClearFilters={clearFilters}
       />
+
+      {rows.length > 0 && (
+        <TableTotalsBar
+          filteredCount={rows.length}
+          totalCount={quotes.length}
+          itemLabel="quotes"
+          metrics={[
+            { label: "Total Quoted Value", value: totalQuoteValueStr, tone: "primary" },
+            ...(acceptedCount > 0
+              ? [{ label: "Accepted", value: `${acceptedCount} quotes`, tone: "success" as const }]
+              : []),
+          ]}
+        />
+      )}
     </>
   );
 }

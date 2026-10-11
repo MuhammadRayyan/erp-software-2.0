@@ -80,17 +80,16 @@ export function getSalesQuote(businessId: string, userId: string, quoteId: strin
   const lines = context.db.select().from(salesQuoteLines).where(eq(salesQuoteLines.quoteId, quoteId)).orderBy(asc(salesQuoteLines.position)).all();
   const accounts = context.sqlite.prepare("SELECT id, name FROM accounts").all() as { id: string; name: string }[];
   const taxes = context.sqlite.prepare("SELECT id, name, rate_basis_points FROM tax_codes").all() as { id: string; name: string; rate_basis_points: number }[];
-  const relatedInvoices = [] as { id: string; internal_number: string; document_documentStatus: string; total_minor: number }[];
   const accountById = new Map(accounts.map((row) => [row.id, row]));
   const taxById = new Map(taxes.map((row) => [row.id, row]));
   const projects = context.sqlite.prepare("SELECT id, code, name FROM projects").all() as { id: string; code: string; name: string }[];
   const projectById = new Map(projects.map((project) => [project.id, project]));
   const itemRows = context.sqlite.prepare("SELECT id, sku, name, unit_name FROM inventory_items").all() as { id: string; sku: string | null; name: string; unit_name: string }[];
   const itemById = new Map(itemRows.map((item) => [item.id, item]));
-  const receivedRows = [] as { line_id: string; received_micros: number }[];
-  const receivedByLine = new Map(receivedRows.map((row) => [row.line_id, row.received_micros]));
-  const goodsReceipts = [] as { id: string; receipt_number: string; date: string; document_documentStatus: string }[];
-  return { ...header, project: header.quote.projectId ? projectById.get(header.quote.projectId) ?? null : null, lines: lines.map((line) => ({ ...line, item: line.itemId ? itemById.get(line.itemId) ?? null : null, receivedMicros: receivedByLine.get(line.id) ?? 0, remainingMicros: Math.max(0, line.quantityMicros - (receivedByLine.get(line.id) ?? 0)), salesAccount: line.salesAccountId ? accountById.get(line.salesAccountId) ?? null : null, taxCode: taxById.get(line.taxCodeId) ?? null, project: effectiveProjectId(line.projectId, header.quote.projectId) ? projectById.get(effectiveProjectId(line.projectId, header.quote.projectId)!) ?? null : null })),  };
+  const linkedOrders = context.sqlite
+    .prepare("SELECT id, order_number, document_status FROM sales_orders WHERE sales_quote_id = ? ORDER BY created_at DESC")
+    .all(quoteId) as { id: string; order_number: string; document_status: string }[];
+  return { ...header, project: header.quote.projectId ? projectById.get(header.quote.projectId) ?? null : null, lines: lines.map((line) => ({ ...line, item: line.itemId ? itemById.get(line.itemId) ?? null : null, salesAccount: line.salesAccountId ? accountById.get(line.salesAccountId) ?? null : null, taxCode: taxById.get(line.taxCodeId) ?? null, project: effectiveProjectId(line.projectId, header.quote.projectId) ? projectById.get(effectiveProjectId(line.projectId, header.quote.projectId)!) ?? null : null })), linkedOrders };
 }
 
 export function saveSalesQuote(businessId: string, userId: string, input: SalesQuoteInput, intent: SalesQuoteIntent, quoteId?: string) {

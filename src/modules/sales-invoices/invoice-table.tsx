@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import Link from "next/link";
-import { Filter, ChevronRight } from "lucide-react";
+import { ChevronRight } from "lucide-react";
 import { 
   useLegacyTable as useTable,
   getCoreRowModel as createCoreRowModel,
@@ -20,6 +20,7 @@ import type { DocumentStatus, PaymentStatus } from "./invoice-service";
 import type { ColumnVisibility } from "@/components/use-column-visibility";
 import { DensityToggle } from "@/components/density-toggle";
 import { useTableDensity } from "@/components/use-table-density";
+import { TableTotalsBar, renderMultiCurrencyString } from "@/components/table-totals-bar";
 
 export type InvoiceRow = {
   id: string;
@@ -207,6 +208,32 @@ export function InvoiceTable({
   const clearFilters = () => { setQuery(""); setStatusFilter(""); setCustomerFilter(""); setProjectFilter(""); setFromDate(""); setToDate(""); };
   const hasActiveFilter = Boolean(customerFilter || projectFilter || fromDate || toDate || statusFilter || query);
 
+  const totalInvoicedStr = useMemo(
+    () =>
+      renderMultiCurrencyString(
+        rows.map((r) => ({
+          amount: r.totalMinor,
+          currency: r.currencyCode,
+          minorUnit: r.currencyMinorUnit,
+        }))
+      ),
+    [rows]
+  );
+  const totalBalanceStr = useMemo(() => {
+    const postedRows = rows.filter((r) => r.documentStatus === "posted");
+    return renderMultiCurrencyString(
+      postedRows.map((r) => ({
+        amount: r.balanceMinor,
+        currency: r.currencyCode,
+        minorUnit: r.currencyMinorUnit,
+      }))
+    );
+  }, [rows]);
+  const overdueCount = useMemo(
+    () => rows.filter((r) => r.paymentStatus === "overdue").length,
+    [rows]
+  );
+
   return <>
     <ListToolbar>
       <SearchInput value={query} onChange={setQuery} placeholder="Search invoices…" ariaLabel="Search invoices" />
@@ -265,5 +292,24 @@ export function InvoiceTable({
       noResultsSubtext="Try a different invoice number, customer, date range, or status."
       onClearFilters={clearFilters}
     />
+
+    {rows.length > 0 && (
+      <TableTotalsBar
+        filteredCount={rows.length}
+        totalCount={invoices.length}
+        itemLabel="invoices"
+        metrics={[
+          { label: "Total Invoiced", value: totalInvoicedStr, tone: "primary" },
+          {
+            label: "Balance Due",
+            value: totalBalanceStr,
+            tone: totalBalanceStr !== "—" && totalBalanceStr !== "0.00" ? "danger" : "default",
+          },
+          ...(overdueCount > 0
+            ? [{ label: "Overdue", value: `${overdueCount} overdue`, tone: "danger" as const }]
+            : []),
+        ]}
+      />
+    )}
   </>;
 }

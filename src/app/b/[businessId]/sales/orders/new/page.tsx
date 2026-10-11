@@ -7,14 +7,24 @@ import { listCustomFieldDefinitions } from "@/modules/custom-fields/custom-field
 import { listProjectOptions } from "@/modules/projects/project-service";
 import { listInventoryItemOptions } from "@/modules/inventory/inventory-item-service";
 import { getCurrencySettings } from "@/modules/currency/exchange-rate";
+import { quantityMicrosToInput } from "@/modules/accounting/calculations/money";
+import { minorToCurrencyInput } from "@/modules/currency/conversion";
+import { getSalesQuote } from "@/modules/sales-quotes/quote-service";
 import { SalesOrderForm } from "@/modules/sales-orders/sales-order-form";
 import { BackLink } from "@/components/back-link";
 
-export default async function NewOrderPage({ params, searchParams }: { params: Promise<{ businessId: string }>; searchParams: Promise<{ customerId?: string; projectId?: string }> }) {
+export default async function NewOrderPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ businessId: string }>;
+  searchParams: Promise<{ customerId?: string; projectId?: string; quoteId?: string }>;
+}) {
   const { businessId } = await params;
   const query = await searchParams;
   const { user, access } = await requireModule(businessId, "sales");
 
+  const sourceQuote = query.quoteId ? getSalesQuote(businessId, user.id, query.quoteId) : null;
   const customers = listCustomers(businessId, user.id);
   const accounts = getSalesAccountOptions(businessId, user.id);
   const taxes = getActiveTaxCodes(businessId, user.id).filter(
@@ -28,10 +38,40 @@ export default async function NewOrderPage({ params, searchParams }: { params: P
   const today = new Date().toISOString().slice(0, 10);
   const defaultTax =
     taxes.find((tax) => tax.rateBasisPoints === 500 && tax.vatCategory === "standard")?.id ?? taxes[0]?.id ?? "";
-  const projectId = projects.some((project) => project.id === query.projectId) ? query.projectId! : "";
-  const customerId = customers.some((customer) => customer.id === query.customerId) ? query.customerId! : "";
+  const projectId = sourceQuote?.quote.projectId ?? (projects.some((project) => project.id === query.projectId) ? query.projectId! : "");
+  const customerId = sourceQuote?.quote.customerId ?? (customers.some((customer) => customer.id === query.customerId) ? query.customerId! : "");
   const documentCurrency =
-    customers.find((customer) => customer.id === customerId)?.defaultCurrencyCode ?? access.business.currency;
+    sourceQuote?.quote.currencyCode ??
+    customers.find((customer) => customer.id === customerId)?.defaultCurrencyCode ??
+    access.business.currency;
+  const documentMinorUnit =
+    currencySettings.currencies.find((c) => c.code === documentCurrency)?.minor_unit ?? 2;
+
+  const lines = sourceQuote?.lines.length
+    ? sourceQuote.lines.map((line) => ({
+        itemId: line.itemId ?? "",
+        description: line.description,
+        quantity: quantityMicrosToInput(line.quantityMicros),
+        unitPrice: minorToCurrencyInput(line.unitPriceMinor, documentMinorUnit),
+        discountType: line.discountType ?? "none",
+        discountValue: line.discountValue ?? "0",
+        salesAccountId: line.salesAccountId ?? accounts[0]?.id ?? "",
+        taxCodeId: line.taxCodeId ?? defaultTax,
+        projectId: line.projectId ?? "",
+      }))
+    : [
+        {
+          itemId: "",
+          description: "",
+          quantity: "1",
+          unitPrice: "0.00",
+          discountType: "none" as const,
+          discountValue: "0",
+          salesAccountId: accounts[0]?.id ?? "",
+          taxCodeId: defaultTax,
+          projectId: "",
+        },
+      ];
 
   return (
     <div className="page-container">
@@ -67,30 +107,19 @@ export default async function NewOrderPage({ params, searchParams }: { params: P
         }))}
         initial={{
           currencyCode: documentCurrency,
-          exchangeRateToBase: documentCurrency === access.business.currency ? "1" : "",
-          exchangeRateDate: documentCurrency === access.business.currency ? today : "",
-          exchangeRateSource: documentCurrency === access.business.currency ? "Base" : "",
+          exchangeRateToBase: sourceQuote?.quote.exchangeRateToBase ?? (documentCurrency === access.business.currency ? "1" : ""),
+          exchangeRateDate: sourceQuote?.quote.exchangeRateDate ?? (documentCurrency === access.business.currency ? today : ""),
+          exchangeRateSource: (sourceQuote?.quote.exchangeRateSource as any) ?? (documentCurrency === access.business.currency ? "Base" : ""),
+          salesQuoteId: sourceQuote?.quote.id ?? "",
           customerId,
           projectId,
           date: today,
-          expectedDate: "",
-          reference: "",
-          notes: "",
-          terms: "",
-          amountsIncludeTax: false,
-          lines: [
-            {
-              itemId: "",
-              description: "",
-              quantity: "1",
-              unitPrice: "0.00",
-              discountType: "none",
-              discountValue: "0",
-              salesAccountId: "",
-              taxCodeId: defaultTax,
-              projectId: "",
-            },
-          ],
+          expectedDate: sourceQuote?.quote.expiryDate ?? "",
+          reference: sourceQuote?.quote.reference || sourceQuote?.quote.quoteNumber || "",
+          notes: sourceQuote?.quote.notes ?? "",
+          terms: sourceQuote?.quote.terms ?? "",
+          amountsIncludeTax: Boolean(sourceQuote?.quote.amountsIncludeTax),
+          lines,
         }}
       />
     </div>

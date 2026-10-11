@@ -1,3 +1,5 @@
+"use client";
+
 import { useMemo } from "react";
 import type { Control, FieldValues } from "react-hook-form";
 import { useWatch } from "react-hook-form";

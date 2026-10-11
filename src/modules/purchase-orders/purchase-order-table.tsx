@@ -18,6 +18,7 @@ import { formatDate, formatMoney } from "@/core/format";
 import type { PurchaseOrderStatus } from "./purchase-order-service";
 import { DensityToggle } from "@/components/density-toggle";
 import { useTableDensity } from "@/components/use-table-density";
+import { TableTotalsBar, renderMultiCurrencyString } from "@/components/table-totals-bar";
 
 type Row = {
   id: string;
@@ -168,6 +169,22 @@ export function PurchaseOrderTable({
   const clearFilters = () => { setQuery(""); setStatus(""); setSupplierId(""); setProjectId(""); setFromDate(""); setToDate(""); };
   const hasActiveFilter = Boolean(supplierId || projectId || fromDate || toDate || status || query);
 
+  const totalPOValueStr = useMemo(
+    () =>
+      renderMultiCurrencyString(
+        rows.map((r) => ({
+          amount: r.total_minor,
+          currency: r.currency_code,
+          minorUnit: r.currency_minor_unit,
+        }))
+      ),
+    [rows]
+  );
+  const activeCount = useMemo(
+    () => rows.filter((r) => r.status === "issued" || r.status === "draft").length,
+    [rows]
+  );
+
   return <>
     <ListToolbar>
       <SearchInput value={query} onChange={setQuery} placeholder="Search purchase orders…" ariaLabel="Search purchase orders" />
@@ -205,5 +222,17 @@ export function PurchaseOrderTable({
       noResultsMessage="No purchase orders match" 
       onClearFilters={clearFilters}
     />
+
+    {rows.length > 0 && (
+      <TableTotalsBar
+        filteredCount={rows.length}
+        totalCount={orders.length}
+        itemLabel="orders"
+        metrics={[
+          { label: "Total PO Value", value: totalPOValueStr, tone: "primary" },
+          { label: "Active Orders", value: `${activeCount} orders` },
+        ]}
+      />
+    )}
   </>;
 }

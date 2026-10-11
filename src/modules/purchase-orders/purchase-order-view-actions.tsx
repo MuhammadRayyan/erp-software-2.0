@@ -1,7 +1,7 @@
-﻿"use client";
+"use client";
 
 import Link from "next/link";
-import { PackagePlus, RefreshCw, GitBranch, Mail } from "lucide-react";
+import { PackagePlus, RefreshCw, GitBranch, ReceiptText, ArrowDownToLine } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -10,7 +10,6 @@ import type { PurchaseOrderStatus } from "./purchase-order-service";
 import { DocumentViewActions } from "@/components/document-view-actions";
 import { useState } from "react";
 import { DocumentEmailDialog, type DocumentEmailDefaults } from "@/modules/email/email-compose-dialog";
-import { DropdownMenuItem } from "@/components/ui/dropdown-menu";
 
 export function PurchaseOrderViewActions({
   businessId, orderId, orderNumber, status, inventoryEnabled, hasReceivableItems, emailDefaults
@@ -57,6 +56,21 @@ export function PurchaseOrderViewActions({
         editHref={editable ? `/b/${businessId}/purchases/orders/${orderId}/edit` : undefined}
         pdfHref={`/api/businesses/${businessId}/documents/purchase-order/${orderId}/pdf`}
         onEmail={() => setEmailOpen(true)}
+        copyToActions={status !== "cancelled" && status !== "superseded" ? [
+          {
+            label: "Purchase Invoice",
+            href: `/b/${businessId}/purchases/invoices/new?orderId=${orderId}`,
+            icon: ReceiptText,
+          },
+          ...(inventoryEnabled ? [
+            {
+              label: "Goods Receipt",
+              href: `/b/${businessId}/purchases/goods-receipts/new?orderId=${orderId}`,
+              icon: ArrowDownToLine,
+              disabled: !hasReceivableItems,
+            }
+          ] : []),
+        ] : undefined}
         onClose={status === "issued" ? {
           label: "Close order",
           description: "The order remains available for history.",
@@ -87,18 +101,8 @@ export function PurchaseOrderViewActions({
             router.push(`/b/${businessId}/purchases/orders`);
           }
         } : undefined}
-        extraActions={
-          <>
-            <DropdownMenuItem onSelect={() => setEmailOpen(true)}>
-              <Mail className="size-4 mr-2" /> Email
-            </DropdownMenuItem>
-          </>
-        }
         extraPrimaryActions={
           <>
-            <Button variant="secondary" onClick={() => setEmailOpen(true)}>
-              <Mail className="mr-1.5 size-3.5" /> Email
-            </Button>
             {status !== "cancelled" && status !== "superseded" && (
               <Button variant="secondary" onClick={handleRevise} disabled={revising}>
                 <GitBranch className={`size-4 ${revising ? "animate-spin" : ""}`} /> 
@@ -107,7 +111,7 @@ export function PurchaseOrderViewActions({
             )}
             {status === "issued" && inventoryEnabled && (
               <Button asChild variant="secondary" disabled={!hasReceivableItems}>
-                <Link href={`/b/${businessId}/purchases/receipts/new?orderId=${orderId}`}><PackagePlus className="size-4 mr-2" /> Receive Goods</Link>
+                <Link href={`/b/${businessId}/purchases/goods-receipts/new?orderId=${orderId}`}><PackagePlus className="size-4 mr-2" /> Receive Goods</Link>
               </Button>
             )}
             {status === "issued" && (

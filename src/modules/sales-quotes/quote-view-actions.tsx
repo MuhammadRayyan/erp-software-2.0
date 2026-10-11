@@ -1,7 +1,6 @@
-﻿"use client";
+"use client";
 
-import Link from "next/link";
-import { GitBranch, ReceiptText, RefreshCw, Mail } from "lucide-react";
+import { GitBranch, ReceiptText, RefreshCw, ShoppingCart } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -10,7 +9,6 @@ import type { SalesQuoteStatus } from "./quote-service";
 import { DocumentViewActions } from "@/components/document-view-actions";
 import { useState } from "react";
 import { DocumentEmailDialog, type DocumentEmailDefaults } from "@/modules/email/email-compose-dialog";
-import { DropdownMenuItem } from "@/components/ui/dropdown-menu";
 
 export function SalesQuoteViewActions({
   businessId, quoteId, quoteNumber, documentStatus, emailDefaults
@@ -57,6 +55,18 @@ export function SalesQuoteViewActions({
         editHref={editable ? `/b/${businessId}/sales/quotes/${quoteId}/edit` : undefined}
         pdfHref={`/api/businesses/${businessId}/documents/sales-quote/${quoteId}/pdf`}
         onEmail={() => setEmailOpen(true)}
+        copyToActions={documentStatus !== "cancelled" && documentStatus !== "superseded" ? [
+          {
+            label: "Sales Order",
+            href: `/b/${businessId}/sales/orders/new?quoteId=${quoteId}`,
+            icon: ShoppingCart,
+          },
+          {
+            label: "Sales Invoice",
+            href: `/b/${businessId}/sales/invoices/new?quoteId=${quoteId}`,
+            icon: ReceiptText,
+          },
+        ] : undefined}
         onClose={documentStatus === "sent" ? {
           label: "Close quote",
           description: "The quote remains available for history.",
@@ -87,18 +97,8 @@ export function SalesQuoteViewActions({
             router.push(`/b/${businessId}/sales/quotes`);
           }
         } : undefined}
-        extraActions={
-          <>
-            <DropdownMenuItem onSelect={() => setEmailOpen(true)}>
-              <Mail className="size-4 mr-2" /> Email
-            </DropdownMenuItem>
-          </>
-        }
         extraPrimaryActions={
           <>
-            <Button variant="secondary" onClick={() => setEmailOpen(true)}>
-              <Mail className="mr-1.5 size-3.5" /> Email
-            </Button>
             {documentStatus !== "cancelled" && documentStatus !== "superseded" && (
               <Button variant="secondary" onClick={handleRevise} disabled={revising}>
                 <GitBranch className={`size-4 ${revising ? "animate-spin" : ""}`} /> 
@@ -109,11 +109,6 @@ export function SalesQuoteViewActions({
               <Button variant="secondary" onClick={handleConvert} disabled={converting}>
                 <RefreshCw className={`size-4 ${converting ? "animate-spin" : ""}`} /> 
                 Convert to Order
-              </Button>
-            )}
-            {documentStatus !== "cancelled" && documentStatus !== "superseded" && (
-              <Button asChild variant="secondary">
-                <Link href={`/b/${businessId}/sales/invoices/new?quoteId=${quoteId}`}><ReceiptText className="size-4 mr-2" /> Create Invoice</Link>
               </Button>
             )}
           </>

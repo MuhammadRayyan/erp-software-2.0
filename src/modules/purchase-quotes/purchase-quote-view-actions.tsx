@@ -1,9 +1,9 @@
-﻿"use client";
+"use client";
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { GitBranch, RefreshCw, Mail } from "lucide-react";
+import { GitBranch, RefreshCw, ShoppingCart, ReceiptText } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   cancelPurchaseQuoteAction,
@@ -15,7 +15,6 @@ import {
 import type { PurchaseQuoteStatus } from "./purchase-quote-service";
 import { DocumentViewActions } from "@/components/document-view-actions";
 import { DocumentEmailDialog, type DocumentEmailDefaults } from "@/modules/email/email-compose-dialog";
-import { DropdownMenuItem } from "@/components/ui/dropdown-menu";
 
 export function PurchaseQuoteViewActions({
   businessId,
@@ -70,6 +69,18 @@ export function PurchaseQuoteViewActions({
         editHref={editable ? `/b/${businessId}/purchases/quotes/${quoteId}/edit` : undefined}
         pdfHref={`/api/businesses/${businessId}/documents/purchase-quote/${quoteId}/pdf`}
         onEmail={() => setEmailOpen(true)}
+        copyToActions={documentStatus !== "cancelled" && documentStatus !== "superseded" ? [
+          {
+            label: "Purchase Order",
+            href: `/b/${businessId}/purchases/orders/new?quoteId=${quoteId}`,
+            icon: ShoppingCart,
+          },
+          {
+            label: "Purchase Invoice",
+            href: `/b/${businessId}/purchases/invoices/new?quoteId=${quoteId}`,
+            icon: ReceiptText,
+          },
+        ] : undefined}
         onClose={
           documentStatus === "sent"
             ? {
@@ -112,18 +123,8 @@ export function PurchaseQuoteViewActions({
               }
             : undefined
         }
-        extraActions={
-          <>
-            <DropdownMenuItem onSelect={() => setEmailOpen(true)}>
-              <Mail className="size-4 mr-2" /> Email
-            </DropdownMenuItem>
-          </>
-        }
         extraPrimaryActions={
           <>
-            <Button variant="secondary" onClick={() => setEmailOpen(true)}>
-              <Mail className="mr-1.5 size-3.5" /> Email
-            </Button>
             {documentStatus !== "cancelled" && documentStatus !== "superseded" && (
               <Button variant="secondary" onClick={handleRevise} disabled={revising}>
                 <GitBranch className={`size-4 ${revising ? "animate-spin" : ""}`} />

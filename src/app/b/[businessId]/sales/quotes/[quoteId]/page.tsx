@@ -14,8 +14,8 @@ import { QuoteRevisionSwitcher } from "@/modules/sales-quotes/quote-revision-swi
 import { ProjectLinks } from "@/modules/projects/project-links";
 import { buildDocumentEmailContext, buildDocumentEmailDefaults } from "@/modules/email/email-defaults";
 import { emirateLabels, type Emirate } from "@/modules/tax/uae-vat-config";
+import { DocumentFlowStepper, type FlowStep } from "@/components/documents/document-flow-stepper";
 import { BackLink } from "@/components/back-link";
-
 
 export default async function QuoteViewPage({ params, searchParams }: { params: Promise<{ businessId: string; quoteId: string }>; searchParams: Promise<{ notice?: string }> }) {
   const { businessId, quoteId } = await params;
@@ -34,6 +34,35 @@ export default async function QuoteViewPage({ params, searchParams }: { params: 
   const revisions = listSalesQuoteRevisions(businessId, user.id, quoteId);
   const latestRevision = revisions.find((r) => r.is_latest_revision);
   const isViewingOlderRevision = !quote.isLatestRevision || quote.documentStatus === "superseded";
+
+  const linkedOrder = record.linkedOrders?.[0];
+  const flowSteps: FlowStep[] = [
+    {
+      key: "quote",
+      label: "Sales Quote",
+      documentNumber: quote.quoteNumber,
+      statusLabel: quote.documentStatus,
+      state: "current",
+    },
+    {
+      key: "order",
+      label: "Sales Order",
+      documentNumber: linkedOrder?.order_number,
+      href: linkedOrder ? `/b/${businessId}/sales/orders/${linkedOrder.id}` : undefined,
+      statusLabel: linkedOrder ? linkedOrder.document_status : quote.documentStatus === "accepted" ? "Ready" : undefined,
+      state: linkedOrder ? "completed" : "pending",
+    },
+    {
+      key: "invoice",
+      label: "Sales Invoice",
+      state: "pending",
+    },
+    {
+      key: "settlement",
+      label: "Fulfillment & Settlement",
+      state: "pending",
+    },
+  ];
   const emailContext = buildDocumentEmailContext(
     access.business.name,
     "Sales Quote",
@@ -90,6 +119,7 @@ export default async function QuoteViewPage({ params, searchParams }: { params: 
         </div>
         <SalesQuoteViewActions businessId={businessId} quoteId={quote.id} quoteNumber={quote.quoteNumber} documentStatus={quote.documentStatus} emailDefaults={emailDefaults} />
       </div>
+      <DocumentFlowStepper steps={flowSteps} />
       {currency !== access.business.currency && <section aria-label="Currency snapshot" className="mb-5 rounded-lg border border-border bg-surface-raised p-4"><dl className="grid gap-4 text-sm sm:grid-cols-2 lg:grid-cols-4"><div><dt className="text-xs text-muted-foreground">Stored rate</dt><dd className="money mt-1">1 {currency} = {quote.exchangeRateToBase} {access.business.currency}</dd></div><div><dt className="text-xs text-muted-foreground">Rate date</dt><dd className="mt-1">{formatDate(quote.exchangeRateDate)}</dd></div><div><dt className="text-xs text-muted-foreground">Rate source</dt><dd className="mt-1">{quote.exchangeRateSource}</dd></div><div><dt className="text-xs text-muted-foreground">Base equivalent</dt><dd className="money mt-1 font-semibold">{formatMoney(quote.baseTotalMinor, access.business.currency)}</dd></div></dl><p className="mt-3 text-xs text-muted-foreground">Base VAT {formatMoney(quote.baseTaxMinor, access.business.currency)} · Posted snapshots never follow later rate-table changes.</p></section>}
       <article className="rounded-xl border border-border bg-surface-raised shadow-sm p-5 sm:p-7 dark:shadow-none">
         <div className="grid gap-6 border-b border-border pb-6 sm:grid-cols-2 -mx-5 -mt-5 bg-surface-muted/30 p-5 sm:-mx-7 sm:-mt-7 sm:p-7 rounded-t-xl"><div><p className="text-xs font-semibold tracking-[0.08em] text-muted-foreground uppercase">Bill to</p><p className="mt-2 font-semibold">{customer.name}</p>{customer.email && <p className="mt-1 text-sm text-muted-foreground">{customer.email}</p>}{customer.phone && <p className="text-sm text-muted-foreground">{customer.phone}</p>}</div><dl className="grid grid-cols-2 gap-x-5 gap-y-3 text-sm sm:justify-self-end"><dt className="text-muted-foreground">Quote date</dt><dd className="text-right">{formatDate(quote.quoteDate)}</dd>{quote.expiryDate && <><dt className="text-muted-foreground">Expiry date</dt><dd className="text-right">{formatDate(quote.expiryDate)}</dd></>}<dt className="text-muted-foreground">Reference</dt><dd className="text-right">{quote.reference || "—"}</dd><dt className="text-muted-foreground">Project</dt><dd className="text-right"><ProjectLinks businessId={businessId} projects={linkedProjects} /></dd></dl></div>

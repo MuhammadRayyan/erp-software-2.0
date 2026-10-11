@@ -13,6 +13,7 @@ import { InvoiceViewActions } from "@/modules/sales-invoices/invoice-view-action
 import { ProjectLinks } from "@/modules/projects/project-links";
 import { emirateLabels, type Emirate } from "@/modules/tax/uae-vat-config";
 import { buildDocumentEmailContext, buildDocumentEmailDefaults } from "@/modules/email/email-defaults";
+import { DocumentFlowStepper, type FlowStep } from "@/components/documents/document-flow-stepper";
 import { BackLink } from "@/components/back-link";
 
 export default async function InvoiceViewPage({ params, searchParams }: { params: Promise<{ businessId: string; invoiceId: string }>; searchParams: Promise<{ notice?: string }> }) {
@@ -29,6 +30,58 @@ export default async function InvoiceViewPage({ params, searchParams }: { params
   const customFieldValues = customFieldDefinitions.length
     ? getCustomFieldValuesForEntities(businessId, user.id, "sales_invoice", [invoiceId]).get(invoiceId) ?? {}
     : {};
+
+  const flowSteps: FlowStep[] = [
+    {
+      key: "quote",
+      label: "Sales Quote",
+      documentNumber: record.linkedQuote?.quote_number,
+      href: record.linkedQuote ? `/b/${businessId}/sales/quotes/${record.linkedQuote.id}` : undefined,
+      statusLabel: record.linkedQuote?.document_status,
+      state: record.linkedQuote ? "completed" : "skipped",
+    },
+    {
+      key: "order",
+      label: "Sales Order",
+      documentNumber: record.linkedOrder?.order_number,
+      href: record.linkedOrder ? `/b/${businessId}/sales/orders/${record.linkedOrder.id}` : undefined,
+      statusLabel: record.linkedOrder?.document_status,
+      state: record.linkedOrder ? "completed" : "skipped",
+    },
+    {
+      key: "invoice",
+      label: "Sales Invoice",
+      documentNumber: invoice.invoiceNumber,
+      statusLabel: invoice.documentStatus,
+      state: "current",
+    },
+    {
+      key: "settlement",
+      label: "Payment & Delivery",
+      documentNumber:
+        record.paymentStatus === "paid" && lines.every((l) => l.remainingToDeliverMicros === 0)
+          ? "Settled & Delivered"
+          : record.paymentStatus === "paid"
+          ? "Paid"
+          : record.receipts.length
+          ? "Partially Paid"
+          : "Pending",
+      statusLabel: record.paymentStatus ?? undefined,
+      detail:
+        invoice.documentStatus === "posted"
+          ? record.balanceMinor === 0
+            ? "Full settlement"
+            : `Balance: ${formatMoney(record.balanceMinor, currency)}`
+          : "Draft non-posting",
+      state:
+        record.paymentStatus === "paid"
+          ? "completed"
+          : invoice.documentStatus === "posted"
+          ? "pending"
+          : "pending",
+    },
+  ];
+
   const emailContext = buildDocumentEmailContext(
     access.business.name,
     "Invoice",
@@ -53,6 +106,7 @@ export default async function InvoiceViewPage({ params, searchParams }: { params
         <div><div className="flex flex-wrap items-center gap-2"><h1 className="page-title tabular">{invoice.invoiceNumber}</h1><DocumentStatusBadge status={invoice.documentStatus} />{record.paymentStatus && <PaymentStatusBadge status={record.paymentStatus} />}</div><p className="mt-2 text-base font-medium">{customer.name}</p><p className="mt-1 text-sm text-muted-foreground">Invoice date: {formatDate(invoice.invoiceDate)}{invoice.dueDate ? ` · Due: ${formatDate(invoice.dueDate)}` : ""}</p><div className="mt-3 flex flex-wrap items-baseline gap-x-5 gap-y-1"><span className="money text-xl font-semibold">{formatMoney(invoice.totalMinor, currency)}</span>{invoice.documentStatus === "posted" ? <span className="money text-sm text-muted-foreground">Balance <strong className="font-semibold text-foreground">{formatMoney(record.balanceMinor, currency)}</strong></span> : <span className="text-sm text-muted-foreground">No ledger impact</span>}</div></div>
         <InvoiceViewActions businessId={businessId} invoiceId={invoice.id} invoiceNumber={invoice.invoiceNumber} documentStatus={invoice.documentStatus} balanceMinor={record.balanceMinor} journalEntryId={record.journal?.id ?? null} inventoryEnabled={access.modules.includes("inventory")} hasDeliverableItems={lines.some((line) => Boolean(line.itemId) && line.remainingToDeliverMicros > 0)} emailDefaults={emailDefaults} />
       </div>
+      <DocumentFlowStepper steps={flowSteps} />
       {currency !== access.business.currency && <section aria-label="Currency snapshot" className="mb-5 rounded-lg border border-border bg-surface-raised p-4"><dl className="grid gap-4 text-sm sm:grid-cols-2 lg:grid-cols-4"><div><dt className="text-xs text-muted-foreground">Stored rate</dt><dd className="money mt-1">1 {currency} = {invoice.exchangeRateToBase} {access.business.currency}</dd></div><div><dt className="text-xs text-muted-foreground">Rate date</dt><dd className="mt-1">{formatDate(invoice.exchangeRateDate)}</dd></div><div><dt className="text-xs text-muted-foreground">Rate source</dt><dd className="mt-1">{invoice.exchangeRateSource}</dd></div><div><dt className="text-xs text-muted-foreground">Base equivalent</dt><dd className="money mt-1 font-semibold">{formatMoney(invoice.baseTotalMinor, access.business.currency)}</dd></div></dl><p className="mt-3 text-xs text-muted-foreground">Base VAT {formatMoney(invoice.baseTaxMinor, access.business.currency)} · Posted snapshots never follow later rate-table changes.</p></section>}
       <article className="rounded-xl border border-border bg-surface-raised shadow-sm p-5 sm:p-7 dark:shadow-none">
         <div className="grid gap-6 border-b border-border pb-6 sm:grid-cols-2 -mx-5 -mt-5 bg-surface-muted/30 p-5 sm:-mx-7 sm:-mt-7 sm:p-7 rounded-t-xl"><div><p className="text-xs font-semibold tracking-[0.08em] text-muted-foreground uppercase">Bill to</p><p className="mt-2 font-semibold">{customer.name}</p>{customer.email && <p className="mt-1 text-sm text-muted-foreground">{customer.email}</p>}{customer.phone && <p className="text-sm text-muted-foreground">{customer.phone}</p>}</div><dl className="grid grid-cols-2 gap-x-5 gap-y-3 text-sm sm:justify-self-end"><dt className="text-muted-foreground">Invoice date</dt><dd className="text-right">{formatDate(invoice.invoiceDate)}</dd><dt className="text-muted-foreground">VAT tax date</dt><dd className="text-right">{formatDate(invoice.taxDate)}</dd><dt className="text-muted-foreground">Supply Emirate</dt><dd className="text-right">{invoice.supplyEmirate ? emirateLabels[invoice.supplyEmirate as Emirate] : "Business default"}</dd>{invoice.dueDate && <><dt className="text-muted-foreground">Due date</dt><dd className="text-right">{formatDate(invoice.dueDate)}</dd></>}<dt className="text-muted-foreground">Reference</dt><dd className="text-right">{invoice.reference || "—"}</dd><dt className="text-muted-foreground">Project</dt><dd className="text-right"><ProjectLinks businessId={businessId} projects={linkedProjects} /></dd></dl></div>

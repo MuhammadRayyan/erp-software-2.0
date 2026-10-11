@@ -8,6 +8,7 @@ import { Columns3, LoaderCircle, Plus, Trash2 } from "lucide-react";
 import { useFieldArray, useForm, useWatch } from "react-hook-form";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { saveDeliveryNoteAction } from "./delivery-note-actions";
 import {
@@ -168,7 +169,7 @@ export function DeliveryNoteForm({
             <Label htmlFor="notes">
               Notes <span className="font-normal text-muted-foreground">(optional)</span>
             </Label>
-            <Input id="notes" {...register("notes")} />
+            <Textarea id="notes" rows={2} placeholder="Delivery notes and transport instructions..." {...register("notes")} />
           </div>
         </div>
       </section>

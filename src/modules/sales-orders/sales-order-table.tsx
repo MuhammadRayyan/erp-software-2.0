@@ -18,6 +18,7 @@ import { formatDate, formatMoney } from "@/core/format";
 import type { SalesOrderStatus } from "./sales-order-service";
 import { DensityToggle } from "@/components/density-toggle";
 import { useTableDensity } from "@/components/use-table-density";
+import { TableTotalsBar, renderMultiCurrencyString } from "@/components/table-totals-bar";
 
 type Row = {
   id: string;
@@ -185,6 +186,22 @@ export function SalesOrderTable({
   };
   const hasActiveFilter = Boolean(customerId || projectId || status || query);
 
+  const totalOrderValueStr = useMemo(
+    () =>
+      renderMultiCurrencyString(
+        rows.map((r) => ({
+          amount: r.total_minor,
+          currency: r.currency_code,
+          minorUnit: r.currency_minor_unit,
+        }))
+      ),
+    [rows]
+  );
+  const activeCount = useMemo(
+    () => rows.filter((r) => r.documentStatus === "active" || r.documentStatus === "draft").length,
+    [rows]
+  );
+
   return (
     <>
       <ListToolbar>
@@ -210,8 +227,8 @@ export function SalesOrderTable({
           options={[
             { value: "", label: "All statuses" },
             { value: "draft", label: "Draft" },
-            { value: "issued", label: "Issued" },
-            { value: "closed", label: "Closed" },
+            { value: "active", label: "Active" },
+            { value: "completed", label: "Completed" },
             { value: "cancelled", label: "Cancelled" },
           ]}
         />
@@ -244,6 +261,18 @@ export function SalesOrderTable({
         noResultsMessage="No sales orders match" 
         onClearFilters={clearFilters}
       />
+
+      {rows.length > 0 && (
+        <TableTotalsBar
+          filteredCount={rows.length}
+          totalCount={orders.length}
+          itemLabel="orders"
+          metrics={[
+            { label: "Total Order Value", value: totalOrderValueStr, tone: "primary" },
+            { label: "Active Orders", value: `${activeCount} orders` },
+          ]}
+        />
+      )}
     </>
   );
 }

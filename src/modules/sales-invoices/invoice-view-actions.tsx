@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { BookOpenText, CircleDollarSign, FileMinus2, Mail, PackageCheck } from "lucide-react";
+import { BookOpenText, CircleDollarSign, FileMinus2, PackageCheck } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -45,6 +45,27 @@ export function InvoiceViewActions({
         editHref={documentStatus !== "void" ? `/b/${businessId}/sales/invoices/${invoiceId}/edit` : undefined}
         pdfHref={`/api/businesses/${businessId}/documents/sales-invoice/${invoiceId}/pdf`}
         onEmail={() => { setEmailOpen(true); }}
+        copyToActions={documentStatus === "posted" ? [
+          ...(canReceive ? [
+            {
+              label: "Customer Receipt",
+              href: `/b/${businessId}/sales/receipts/new?invoiceId=${invoiceId}`,
+              icon: CircleDollarSign,
+            },
+            {
+              label: "Credit Note",
+              href: `/b/${businessId}/sales/credit-notes/new?invoiceId=${invoiceId}`,
+              icon: FileMinus2,
+            },
+          ] : []),
+          ...(inventoryEnabled && hasDeliverableItems ? [
+            {
+              label: "Delivery Note",
+              href: `/b/${businessId}/sales/delivery-notes/new?invoiceId=${invoiceId}`,
+              icon: PackageCheck,
+            },
+          ] : []),
+        ] : undefined}
         onDuplicate={async () => {
           const result = await duplicateInvoiceAction(businessId, invoiceId);
           if (result?.error) throw new Error(result.error);
@@ -71,9 +92,6 @@ export function InvoiceViewActions({
         } : undefined}
         extraPrimaryActions={
           <>
-            <Button variant="secondary" onClick={() => setEmailOpen(true)}>
-              <Mail className="mr-1.5 size-3.5" /> Email
-            </Button>
             {inventoryEnabled && hasDeliverableItems && documentStatus === "posted" && (
               <Button asChild variant="secondary">
                 <Link href={`/b/${businessId}/sales/delivery-notes/new?invoiceId=${invoiceId}`}><PackageCheck className="mr-1.5 size-3.5" /> Create Delivery Note</Link>
@@ -88,9 +106,6 @@ export function InvoiceViewActions({
         }
         extraActions={
           <>
-            <DropdownMenuItem onSelect={() => setEmailOpen(true)}>
-              <Mail className="size-4" /> Email
-            </DropdownMenuItem>
             {canReceive && (
               <DropdownMenuItem asChild>
                 <Link href={`/b/${businessId}/sales/credit-notes/new?invoiceId=${invoiceId}`}><FileMinus2 className="size-4" /> Create Credit Note</Link>

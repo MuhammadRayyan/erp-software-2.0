@@ -12,6 +12,7 @@ import { PurchaseQuoteRevisionSwitcher } from "@/modules/purchase-quotes/purchas
 import { ProjectLinks } from "@/modules/projects/project-links";
 import { buildDocumentEmailContext, buildDocumentEmailDefaults } from "@/modules/email/email-defaults";
 import { BackLink } from "@/components/back-link";
+import { DocumentFlowStepper, type FlowStep } from "@/components/documents/document-flow-stepper";
 
 export default async function PurchaseQuoteViewPage({
   params,
@@ -49,6 +50,35 @@ export default async function PurchaseQuoteViewPage({
     supplier.email ?? ""
   );
   const emailDefaults = buildDocumentEmailDefaults(emailContext, record.supplier.email ?? "");
+
+  const linkedOrder = record.linkedOrders?.[0];
+  const flowSteps: FlowStep[] = [
+    {
+      key: "quote",
+      label: "Purchase Quote",
+      documentNumber: quote.quoteNumber,
+      statusLabel: quote.documentStatus,
+      state: "current",
+    },
+    {
+      key: "order",
+      label: "Purchase Order",
+      documentNumber: linkedOrder?.order_number,
+      href: linkedOrder ? `/b/${businessId}/purchases/orders/${linkedOrder.id}` : undefined,
+      statusLabel: linkedOrder ? linkedOrder.status : quote.documentStatus === "accepted" ? "Ready" : undefined,
+      state: linkedOrder ? "completed" : "pending",
+    },
+    {
+      key: "invoice",
+      label: "Purchase Invoice",
+      state: "pending",
+    },
+    {
+      key: "receipt",
+      label: "Goods Receipt",
+      state: "pending",
+    },
+  ];
 
   return (
     <div className="page-container">
@@ -100,6 +130,8 @@ export default async function PurchaseQuoteViewPage({
           emailDefaults={emailDefaults}
         />
       </div>
+
+      <DocumentFlowStepper steps={flowSteps} />
 
       {currency !== access.business.currency && (
         <section aria-label="Currency snapshot" className="mb-5 rounded-lg border border-border bg-surface-raised p-4">

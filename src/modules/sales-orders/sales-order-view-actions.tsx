@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { Truck, RefreshCw, GitBranch, Mail } from "lucide-react";
+import { Truck, RefreshCw, GitBranch, ReceiptText, PackageCheck, ShoppingCart } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -10,7 +10,6 @@ import type { SalesOrderStatus } from "./sales-order-service";
 import { DocumentViewActions } from "@/components/document-view-actions";
 import { useState } from "react";
 import { DocumentEmailDialog, type DocumentEmailDefaults } from "@/modules/email/email-compose-dialog";
-import { DropdownMenuItem } from "@/components/ui/dropdown-menu";
 
 export function SalesOrderViewActions({
   businessId, orderId, orderNumber, documentStatus, inventoryEnabled, hasDeliverableItems, emailDefaults
@@ -63,6 +62,25 @@ export function SalesOrderViewActions({
         editHref={editable ? `/b/${businessId}/sales/orders/${orderId}/edit` : undefined}
         pdfHref={`/api/businesses/${businessId}/documents/sales-order/${orderId}/pdf`}
         onEmail={() => setEmailOpen(true)}
+        copyToActions={documentStatus !== "cancelled" && documentStatus !== "superseded" ? [
+          {
+            label: "Sales Invoice",
+            href: `/b/${businessId}/sales/invoices/new?orderId=${orderId}`,
+            icon: ReceiptText,
+          },
+          ...(inventoryEnabled ? [
+            {
+              label: "Delivery Note",
+              href: `/b/${businessId}/sales/delivery-notes/new?orderId=${orderId}`,
+              icon: PackageCheck,
+            }
+          ] : []),
+          {
+            label: "Purchase Order (Back-to-Back)",
+            href: `/b/${businessId}/purchases/orders/new?salesOrderId=${orderId}`,
+            icon: ShoppingCart,
+          },
+        ] : undefined}
         onClose={documentStatus === "active" ? {
           label: "Close order",
           description: "The order remains available for history.",
@@ -93,18 +111,8 @@ export function SalesOrderViewActions({
             router.push(`/b/${businessId}/sales/orders`);
           }
         } : undefined}
-        extraActions={
-          <>
-            <DropdownMenuItem onSelect={() => setEmailOpen(true)}>
-              <Mail className="size-4 mr-2" /> Email
-            </DropdownMenuItem>
-          </>
-        }
         extraPrimaryActions={
           <>
-            <Button variant="secondary" onClick={() => setEmailOpen(true)}>
-              <Mail className="mr-1.5 size-3.5" /> Email
-            </Button>
             {documentStatus !== "cancelled" && documentStatus !== "superseded" && (
               <Button variant="secondary" onClick={handleRevise} disabled={revising}>
                 <GitBranch className={`size-4 ${revising ? "animate-spin" : ""}`} />

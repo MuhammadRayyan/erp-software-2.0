@@ -8,6 +8,10 @@ import { getActiveTaxCodes } from "@/modules/accounting/services/tax-code-servic
 import { listCustomers } from "@/modules/customers/customer-service";
 import { listCustomFieldDefinitions } from "@/modules/custom-fields/custom-field-service";
 import { listProjectOptions } from "@/modules/projects/project-service";
+import { quantityMicrosToInput } from "@/modules/accounting/calculations/money";
+import { minorToCurrencyInput } from "@/modules/currency/conversion";
+import { getSalesQuote } from "@/modules/sales-quotes/quote-service";
+import { getSalesOrder } from "@/modules/sales-orders/sales-order-service";
 import { InvoiceForm } from "@/modules/sales-invoices/invoice-form";
 import { listInventoryItemOptions } from "@/modules/inventory/inventory-item-service";
 import { getCurrencySettings } from "@/modules/currency/exchange-rate";
@@ -18,11 +22,15 @@ export default async function NewInvoicePage({
   searchParams,
 }: {
   params: Promise<{ businessId: string }>;
-  searchParams: Promise<{ customerId?: string; projectId?: string }>;
+  searchParams: Promise<{ customerId?: string; projectId?: string; quoteId?: string; orderId?: string }>;
 }) {
   const { businessId } = await params;
   const query = await searchParams;
   const { user, access } = await requireModule(businessId, "sales");
+
+  const sourceQuote = query.quoteId ? getSalesQuote(businessId, user.id, query.quoteId) : null;
+  const sourceOrder = query.orderId ? getSalesOrder(businessId, user.id, query.orderId) : null;
+
   const customers = listCustomers(businessId, user.id);
   const salesAccounts = getSalesAccountOptions(businessId, user.id);
   const taxCodes = getActiveTaxCodes(businessId, user.id).filter(
@@ -41,13 +49,27 @@ export default async function NewInvoicePage({
     }),
   );
   const currencySettings = getCurrencySettings(businessId, user.id);
-  const selectedProject = projects.find((project) => project.id === query.projectId);
+
+  const selectedProject =
+    (sourceOrder?.order.projectId ? projects.find((p) => p.id === sourceOrder.order.projectId) : null) ??
+    (sourceQuote?.quote.projectId ? projects.find((p) => p.id === sourceQuote.quote.projectId) : null) ??
+    projects.find((project) => project.id === query.projectId);
+
   const selectedCustomerId =
+    sourceOrder?.order.customerId ??
+    sourceQuote?.quote.customerId ??
     selectedProject?.customer_id ??
     (customers.some((customer) => customer.id === query.customerId) ? query.customerId! : "");
+
   const documentCurrency =
+    sourceOrder?.order.currencyCode ??
+    sourceQuote?.quote.currencyCode ??
     customers.find((customer) => customer.id === selectedCustomerId)?.defaultCurrencyCode ??
     access.business.currency;
+
+  const documentMinorUnit =
+    currencySettings.currencies.find((c) => c.code === documentCurrency)?.minor_unit ?? 2;
+
   const today = new Date();
   const due = new Date(today);
   due.setDate(due.getDate() + 14);
@@ -55,6 +77,33 @@ export default async function NewInvoicePage({
   const defaultTaxCode =
     taxCodes.find((taxCode) => taxCode.vatCategory === "standard" && taxCode.rateBasisPoints === 500) ??
     taxCodes[0];
+
+  const sourceLines = sourceOrder?.lines ?? sourceQuote?.lines ?? [];
+  const lines = sourceLines.length
+    ? sourceLines.map((line) => ({
+        itemId: line.itemId ?? "",
+        description: line.description,
+        quantity: quantityMicrosToInput(line.quantityMicros),
+        unitPrice: minorToCurrencyInput(line.unitPriceMinor, documentMinorUnit),
+        discountType: ((line.discountType as any) ?? "none") as "none" | "percentage" | "fixed",
+        discountValue: line.discountValue ?? "0",
+        salesAccountId: line.salesAccountId ?? settings.defaultSalesAccountId,
+        taxCodeId: line.taxCodeId ?? defaultTaxCode.id,
+        projectId: line.projectId ?? "",
+      }))
+    : [
+        {
+          itemId: "",
+          description: "",
+          quantity: "1",
+          unitPrice: "0.00",
+          discountType: "none" as const,
+          discountValue: "0",
+          salesAccountId: settings.defaultSalesAccountId,
+          taxCodeId: defaultTaxCode.id,
+          projectId: "",
+        },
+      ];
 
   const ready = customers.length && salesAccounts.length && taxCodes.length;
 
@@ -101,27 +150,34 @@ export default async function NewInvoicePage({
           }))}
           initial={{
             currencyCode: documentCurrency,
-            exchangeRateToBase: documentCurrency === access.business.currency ? "1" : "",
-            exchangeRateDate: documentCurrency === access.business.currency ? iso(today) : "",
-            exchangeRateSource: documentCurrency === access.business.currency ? "Base" : "",
+            exchangeRateToBase:
+              sourceOrder?.order.exchangeRateToBase ??
+              sourceQuote?.quote.exchangeRateToBase ??
+              (documentCurrency === access.business.currency ? "1" : ""),
+            exchangeRateDate:
+              sourceOrder?.order.exchangeRateDate ??
+              sourceQuote?.quote.exchangeRateDate ??
+              (documentCurrency === access.business.currency ? iso(today) : ""),
+            exchangeRateSource:
+              ((sourceOrder?.order.exchangeRateSource ?? sourceQuote?.quote.exchangeRateSource) as any) ??
+              (documentCurrency === access.business.currency ? "Base" : ""),
+            salesOrderId: sourceOrder?.order.id ?? "",
             customerId: selectedCustomerId,
             projectId: selectedProject?.id ?? "",
             invoiceDate: iso(today),
             taxDate: iso(today),
             supplyEmirate: "",
             dueDate: iso(due),
-            reference: "",
-            lines: [
-              {
-                itemId: "",
-                description: "",
-                quantity: "1",
-                unitPrice: "0.00",
-                salesAccountId: settings.defaultSalesAccountId,
-                taxCodeId: defaultTaxCode.id,
-                projectId: "",
-              },
-            ],
+            reference:
+              sourceOrder?.order.orderNumber ??
+              (sourceQuote?.quote.reference || sourceQuote?.quote.quoteNumber) ??
+              "",
+            notes: sourceOrder?.order.notes ?? sourceQuote?.quote.notes ?? "",
+            terms: sourceOrder?.order.terms ?? sourceQuote?.quote.terms ?? "",
+            amountsIncludeTax: Boolean(
+              sourceOrder?.order.amountsIncludeTax ?? sourceQuote?.quote.amountsIncludeTax
+            ),
+            lines,
           }}
         />
       ) : (

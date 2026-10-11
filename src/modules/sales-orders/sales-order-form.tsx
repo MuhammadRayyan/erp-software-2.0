@@ -7,6 +7,7 @@ import { LoaderCircle } from "lucide-react";
 import { useFieldArray, useForm, useWatch } from "react-hook-form";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { formatMoney } from "@/core/format";
 import { saveSalesOrderAction } from "./actions";
@@ -29,7 +30,17 @@ export function SalesOrderForm({ businessId, orderId, status = "draft", customer
   const [globalTaxCodeId, setGlobalTaxCodeId] = useState(() => initial.lines[0]?.taxCodeId || taxCodes.find((taxCode) => taxCode.rateBasisPoints === 500)?.id || taxCodes[0]?.id || "");
   const form = useForm<SalesOrderInput>({ resolver: zodResolver(salesOrderInputSchema), defaultValues: initial });
   const { register, control, handleSubmit, setError, setValue, formState: { errors, isSubmitting } } = form;
-  const { fields, append, remove } = useFieldArray({ control, name: "lines" });
+  const { fields, append, remove, insert, move } = useFieldArray({ control, name: "lines" });
+  function duplicateLine(index: number) {
+    const currentLine = form.getValues(`lines.${index}`);
+    insert(index + 1, { ...currentLine });
+  }
+  function moveLineUp(index: number) {
+    if (index > 0) move(index, index - 1);
+  }
+  function moveLineDown(index: number) {
+    if (index < fields.length - 1) move(index, index + 1);
+  }
   const currencyCode = useWatch({ control, name: "currencyCode" }) || currency;
   const exchangeRateToBase = useWatch({ control, name: "exchangeRateToBase" }) || "";
   const exchangeRateDate = useWatch({ control, name: "exchangeRateDate" }) || "";
@@ -72,8 +83,16 @@ export function SalesOrderForm({ businessId, orderId, status = "draft", customer
       <div className="space-y-1.5"><Label htmlFor="expectedDate">Expected date <span className="font-normal text-muted-foreground">(optional)</span></Label><Input id="expectedDate" type="date" {...register("expectedDate")} /></div>
       <div className="space-y-1.5"><Label htmlFor="projectId">Project <span className="font-normal text-muted-foreground">(optional)</span></Label><SelectNative id="projectId"  {...register("projectId")}><option value="">No project</option>{projects.map((project) => <option key={project.id} value={project.id}>{project.code} — {project.name}</option>)}</SelectNative></div>
       <div className="space-y-1.5"><Label htmlFor="reference">Reference <span className="font-normal text-muted-foreground">(optional)</span></Label><Input id="reference" {...register("reference")} /></div>
-      <div className="space-y-1.5"><Label htmlFor="notes">Notes <span className="font-normal text-muted-foreground">(optional)</span></Label><Input id="notes" placeholder="Notes for customer..." {...register("notes")} /></div>
-      <div className="space-y-1.5 md:col-span-3"><Label htmlFor="terms">Terms & conditions <span className="font-normal text-muted-foreground">(optional)</span></Label><Input id="terms" placeholder="Order delivery and payment terms..." {...register("terms")} /></div>
+      <div className="space-y-1.5 md:col-span-3 grid md:grid-cols-2 gap-5">
+        <div className="space-y-1.5">
+          <Label htmlFor="notes">Notes <span className="font-normal text-muted-foreground">(optional)</span></Label>
+          <Textarea id="notes" rows={2} placeholder="Notes for customer..." {...register("notes")} />
+        </div>
+        <div className="space-y-1.5">
+          <Label htmlFor="terms">Terms & conditions <span className="font-normal text-muted-foreground">(optional)</span></Label>
+          <Textarea id="terms" rows={2} placeholder="Order delivery and payment terms..." {...register("terms")} />
+        </div>
+      </div>
     </div></section>
     <section className="form-section"><h2 className="mb-4 text-base font-semibold">Commitment currency</h2><DocumentCurrencyFields baseCurrencyCode={currency} currencies={currencies} rates={rates} currencyCode={currencyCode} exchangeRateToBase={exchangeRateToBase} exchangeRateDate={exchangeRateDate} exchangeRateSource={exchangeRateSource} relevantDate={orderDate} disabled={status === "active"} onChange={(field, value) => setValue(field, value)} /><p className="mt-3 text-xs text-muted-foreground">This is an operational commitment snapshot only. A later Purchase Invoice uses its own posting and VAT rate.</p></section>
     <section className="form-section">
@@ -119,6 +138,9 @@ export function SalesOrderForm({ businessId, orderId, status = "draft", customer
           })
         }
         onRemove={remove}
+        onDuplicate={duplicateLine}
+        onMoveUp={moveLineUp}
+        onMoveDown={moveLineDown}
         items={items}
         onItemSelect={selectItem}
         accounts={expenseAccounts}

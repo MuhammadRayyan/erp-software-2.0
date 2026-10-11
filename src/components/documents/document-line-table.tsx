@@ -1,8 +1,8 @@
 "use client";
 
-import { ReactNode, useState } from "react";
+import { useState } from "react";
 import type { UseFormRegister, FieldErrors, UseFormRegisterReturn } from "react-hook-form";
-import { Plus, Trash2 } from "lucide-react";
+import { ArrowDown, ArrowUp, Copy, Plus, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { SelectNative } from "@/components/ui/select-native";
@@ -42,6 +42,9 @@ export interface DocumentLineTableProps {
   lines: any[];
   onAppend: () => void;
   onRemove: (index: number) => void;
+  onDuplicate?: (index: number) => void;
+  onMoveUp?: (index: number) => void;
+  onMoveDown?: (index: number) => void;
 
   // Options
   items?: DocumentLineItemOption[];
@@ -96,6 +99,9 @@ export function DocumentLineTable({
   lines,
   onAppend,
   onRemove,
+  onDuplicate,
+  onMoveUp,
+  onMoveDown,
   items,
   onItemSelect,
   accounts,
@@ -205,8 +211,8 @@ export function DocumentLineTable({
                 </>
               )}
               <th className="w-24 min-w-[80px] text-right!">Total</th>
-              <th className="w-10 text-center">
-                <span className="sr-only">Remove</span>
+              <th className={onDuplicate || onMoveUp || onMoveDown ? "w-28 text-center" : "w-10 text-center"}>
+                <span className="sr-only">Actions</span>
               </th>
             </tr>
           </thead>
@@ -277,6 +283,14 @@ export function DocumentLineTable({
                       min="0"
                       aria-label={`Line ${index + 1} rate`}
                       {...register(`lines.${index}.unitPrice`)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" && !e.shiftKey) {
+                          e.preventDefault();
+                          if (index === fields.length - 1) {
+                            onAppend();
+                          }
+                        }
+                      }}
                     />
                   </td>
 
@@ -385,19 +399,62 @@ export function DocumentLineTable({
                     {formatMoney(preview?.grossMinor ?? 0, currencyCode, minorUnit)}
                   </td>
 
-                  <td className="align-top text-center pt-1">
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="icon"
-                      className="size-8 text-muted-foreground hover:text-danger hover:bg-danger/10"
-                      aria-label={`Remove line ${index + 1}`}
-                      disabled={fields.length === 1}
-                      title={fields.length === 1 ? "At least one line is required" : undefined}
-                      onClick={() => onRemove(index)}
-                    >
-                      <Trash2 className="size-3.5" />
-                    </Button>
+                  <td className="align-top text-center pt-1 whitespace-nowrap">
+                    <div className="flex items-center justify-center gap-0.5">
+                      {onDuplicate && (
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          className="size-7 text-muted-foreground hover:text-foreground hover:bg-surface-muted"
+                          aria-label={`Duplicate line ${index + 1}`}
+                          title="Duplicate line"
+                          onClick={() => onDuplicate(index)}
+                        >
+                          <Copy className="size-3" />
+                        </Button>
+                      )}
+                      {onMoveUp && (
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          className="size-7 text-muted-foreground hover:text-foreground hover:bg-surface-muted"
+                          aria-label={`Move line ${index + 1} up`}
+                          title="Move line up"
+                          disabled={index === 0}
+                          onClick={() => onMoveUp(index)}
+                        >
+                          <ArrowUp className="size-3" />
+                        </Button>
+                      )}
+                      {onMoveDown && (
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          className="size-7 text-muted-foreground hover:text-foreground hover:bg-surface-muted"
+                          aria-label={`Move line ${index + 1} down`}
+                          title="Move line down"
+                          disabled={index === fields.length - 1}
+                          onClick={() => onMoveDown(index)}
+                        >
+                          <ArrowDown className="size-3" />
+                        </Button>
+                      )}
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        className="size-7 text-muted-foreground hover:text-danger hover:bg-danger/10"
+                        aria-label={`Remove line ${index + 1}`}
+                        disabled={fields.length === 1}
+                        title={fields.length === 1 ? "At least one line is required" : "Delete line"}
+                        onClick={() => onRemove(index)}
+                      >
+                        <Trash2 className="size-3" />
+                      </Button>
+                    </div>
                   </td>
                 </tr>
               );

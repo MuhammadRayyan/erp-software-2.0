@@ -8,6 +8,7 @@ import { Columns3, LoaderCircle, Plus, Trash2 } from "lucide-react";
 import { useFieldArray, useForm } from "react-hook-form";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { minorToCurrencyInput } from "@/modules/currency/conversion";
 import { saveGoodsReceiptAction } from "./goods-receipt-actions";
@@ -178,7 +179,7 @@ export function GoodsReceiptForm({
             <Label htmlFor="notes">
               Notes <span className="font-normal text-muted-foreground">(optional)</span>
             </Label>
-            <Input id="notes" {...register("notes")} />
+            <Textarea id="notes" rows={2} placeholder="Receiving and storage notes..." {...register("notes")} />
           </div>
         </div>
       </section>

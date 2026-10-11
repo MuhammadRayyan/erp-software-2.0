@@ -8,6 +8,7 @@ import { LoaderCircle } from "lucide-react";
 import { useFieldArray, useForm, useWatch } from "react-hook-form";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { formatMoney } from "@/core/format";
 import { savePurchaseQuoteAction } from "./actions";
@@ -69,7 +70,17 @@ export function PurchaseQuoteForm({
     setValue,
     formState: { errors, isSubmitting },
   } = form;
-  const { fields, append, remove } = useFieldArray({ control, name: "lines" });
+  const { fields, append, remove, insert, move } = useFieldArray({ control, name: "lines" });
+  function duplicateLine(index: number) {
+    const currentLine = form.getValues(`lines.${index}`);
+    insert(index + 1, { ...currentLine });
+  }
+  function moveLineUp(index: number) {
+    if (index > 0) move(index, index - 1);
+  }
+  function moveLineDown(index: number) {
+    if (index < fields.length - 1) move(index, index + 1);
+  }
   const lines = useWatch({ control, name: "lines" }) ?? [];
   const currencyCode = useWatch({ control, name: "currencyCode" }) || currency;
   const exchangeRateToBase = useWatch({ control, name: "exchangeRateToBase" }) || "";
@@ -185,17 +196,19 @@ export function PurchaseQuoteForm({
             </Label>
             <Input id="reference" {...register("reference")} />
           </div>
-          <div className="space-y-1.5">
-            <Label htmlFor="notes">
-              Notes <span className="font-normal text-muted-foreground">(optional)</span>
-            </Label>
-            <Input id="notes" placeholder="Notes..." {...register("notes")} />
-          </div>
-          <div className="space-y-1.5 md:col-span-3">
-            <Label htmlFor="terms">
-              Terms & conditions <span className="font-normal text-muted-foreground">(optional)</span>
-            </Label>
-            <Input id="terms" placeholder="Supplier terms and delivery conditions..." {...register("terms")} />
+          <div className="space-y-1.5 md:col-span-3 grid md:grid-cols-2 gap-5">
+            <div className="space-y-1.5">
+              <Label htmlFor="notes">
+                Notes <span className="font-normal text-muted-foreground">(optional)</span>
+              </Label>
+              <Textarea id="notes" rows={2} placeholder="Notes..." {...register("notes")} />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="terms">
+                Terms & conditions <span className="font-normal text-muted-foreground">(optional)</span>
+              </Label>
+              <Textarea id="terms" rows={2} placeholder="Supplier terms and delivery conditions..." {...register("terms")} />
+            </div>
           </div>
         </div>
       </section>
@@ -265,6 +278,9 @@ export function PurchaseQuoteForm({
             })
           }
           onRemove={remove}
+          onDuplicate={duplicateLine}
+          onMoveUp={moveLineUp}
+          onMoveDown={moveLineDown}
           items={items}
           onItemSelect={selectItem}
           accounts={expenseAccounts}

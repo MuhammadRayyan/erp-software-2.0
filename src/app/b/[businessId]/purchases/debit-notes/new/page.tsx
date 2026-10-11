@@ -1,12 +1,14 @@
-﻿import Link from "next/link";
+import Link from "next/link";
 import { Truck } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { requireModule } from "@/core/permissions/require-module";
 import { getExpenseAccountOptions } from "@/modules/accounting/services/account-service";
 import { getAccountingSettings } from "@/modules/accounting/services/accounting-settings-service";
 import { getActiveTaxCodes } from "@/modules/accounting/services/tax-code-service";
+import { quantityMicrosToInput } from "@/modules/accounting/calculations/money";
+import { minorToCurrencyInput } from "@/modules/currency/conversion";
+import { getPurchaseInvoice, listPurchaseInvoices } from "@/modules/purchase-invoices/purchase-invoice-service";
 import { listActiveSuppliers } from "@/modules/suppliers/supplier-service";
-import { listPurchaseInvoices } from "@/modules/purchase-invoices/purchase-invoice-service";
 import { listProjectOptions } from "@/modules/projects/project-service";
 import { DebitNoteForm } from "@/modules/debit-notes/debit-note-form";
 import { getCurrencySettings } from "@/modules/currency/exchange-rate";
@@ -22,6 +24,8 @@ export default async function NewDebitNotePage({
   const { businessId } = await params;
   const query = await searchParams;
   const { user, access } = await requireModule(businessId, "purchases");
+
+  const sourceInvoice = query.invoiceId ? getPurchaseInvoice(businessId, user.id, query.invoiceId) : null;
   const suppliers = listActiveSuppliers(businessId, user.id);
   const expenseAccounts = getExpenseAccountOptions(businessId, user.id);
   const taxCodes = getActiveTaxCodes(businessId, user.id).filter(
@@ -33,17 +37,51 @@ export default async function NewDebitNotePage({
   const eligibleInvoices = allInvoices.filter((inv) => inv.document_status === "posted");
   const currencySettings = getCurrencySettings(businessId, user.id);
 
-  const selectedSupplierId = suppliers.some((s) => s.id === query.supplierId) ? query.supplierId! : "";
-  const selectedProject = projects.find((p) => p.id === query.projectId);
+  const selectedSupplierId =
+    sourceInvoice?.invoice.supplierId ??
+    (suppliers.some((s) => s.id === query.supplierId) ? query.supplierId! : "");
+
+  const selectedProject =
+    (sourceInvoice?.invoice.projectId ? projects.find((p) => p.id === sourceInvoice.invoice.projectId) : null) ??
+    projects.find((p) => p.id === query.projectId);
+
   const documentCurrency =
+    sourceInvoice?.invoice.currencyCode ??
     suppliers.find((s) => s.id === selectedSupplierId)?.defaultCurrencyCode ??
     access.business.currency;
+
+  const documentMinorUnit =
+    currencySettings.currencies.find((c) => c.code === documentCurrency)?.minor_unit ?? 2;
 
   const today = new Date();
   const iso = (date: Date) => date.toISOString().slice(0, 10);
   const defaultTaxCode =
     taxCodes.find((tc) => tc.vatCategory === "standard" && tc.rateBasisPoints === 500) ??
     taxCodes[0];
+
+  const lines = sourceInvoice?.lines.length
+    ? sourceInvoice.lines.map((line) => ({
+        description: line.description,
+        quantity: quantityMicrosToInput(line.quantityMicros),
+        unitPrice: minorToCurrencyInput(line.unitPriceMinor, documentMinorUnit),
+        discountType: "none" as const,
+        discountValue: "0",
+        expenseAccountId: line.expenseAccountId ?? settings.defaultPurchaseExpenseAccountId,
+        taxCodeId: line.taxCodeId ?? defaultTaxCode?.id ?? "",
+        projectId: line.projectId ?? "",
+      }))
+    : [
+        {
+          description: "",
+          quantity: "1",
+          unitPrice: "0.00",
+          discountType: "none" as const,
+          discountValue: "0",
+          expenseAccountId: settings.defaultPurchaseExpenseAccountId,
+          taxCodeId: defaultTaxCode?.id ?? "",
+          projectId: "",
+        },
+      ];
 
   const ready = suppliers.length && expenseAccounts.length && taxCodes.length;
 
@@ -82,28 +120,26 @@ export default async function NewDebitNotePage({
           currency={access.business.currency}
           initial={{
             currencyCode: documentCurrency,
-            exchangeRateToBase: documentCurrency === access.business.currency ? "1" : "",
-            exchangeRateDate: documentCurrency === access.business.currency ? iso(today) : "",
-            exchangeRateSource: documentCurrency === access.business.currency ? "Base" : "",
+            exchangeRateToBase:
+              sourceInvoice?.invoice.exchangeRateToBase ??
+              (documentCurrency === access.business.currency ? "1" : ""),
+            exchangeRateDate:
+              sourceInvoice?.invoice.exchangeRateDate ??
+              (documentCurrency === access.business.currency ? iso(today) : ""),
+            exchangeRateSource:
+              ((sourceInvoice?.invoice.exchangeRateSource as any) ??
+              (documentCurrency === access.business.currency ? "Base" : "")),
             supplierId: selectedSupplierId,
             projectId: selectedProject?.id ?? "",
             purchaseInvoiceId: query.invoiceId ?? "",
             amountsIncludeTax: false,
             date: iso(today),
             taxDate: iso(today),
-            reference: "",
-            lines: [
-              {
-                description: "",
-                quantity: "1",
-                unitPrice: "0.00",
-                discountType: "none",
-                discountValue: "0",
-                expenseAccountId: settings.defaultPurchaseExpenseAccountId,
-                taxCodeId: defaultTaxCode?.id ?? "",
-                projectId: "",
-              },
-            ],
+            reference:
+              sourceInvoice?.invoice.supplierInvoiceNumber ||
+              sourceInvoice?.invoice.internalNumber ||
+              "",
+            lines,
           }}
         />
       ) : (

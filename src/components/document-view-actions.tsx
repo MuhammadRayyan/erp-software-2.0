@@ -1,11 +1,19 @@
 "use client";
 import { useState } from "react";
 import Link from "next/link";
-import { Ban, Copy, Download, FileEdit, FileText, LoaderCircle, Mail, MoreHorizontal, Trash2 } from "lucide-react";
+import { Ban, ChevronDown, Copy, Download, FileEdit, FileText, LoaderCircle, Mail, MoreHorizontal, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { DialogContent, DialogDescription, DialogRoot, DialogTitle } from "@/components/ui/dialog";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { FormError } from "@/components/form-error";
+
+export type CopyToAction = {
+  label: string;
+  href?: string;
+  action?: () => Promise<void>;
+  icon?: React.ComponentType<{ className?: string }>;
+  disabled?: boolean;
+};
 
 type DocumentViewActionsProps = {
   documentNumber: string;
@@ -19,6 +27,7 @@ type DocumentViewActionsProps = {
   onVoid?: { label: string; description: string; action: () => Promise<void> };
   onDelete?: { label: string; description: string; action: () => Promise<void> };
   onClose?: { label: string; description: string; action: () => Promise<void> };
+  copyToActions?: CopyToAction[];
   extraActions?: React.ReactNode;
   extraPrimaryActions?: React.ReactNode;
 };
@@ -36,6 +45,7 @@ export function DocumentViewActions({
   onVoid,
   onDelete,
   onClose,
+  copyToActions,
   extraActions,
   extraPrimaryActions,
 }: DocumentViewActionsProps) {
@@ -69,6 +79,57 @@ export function DocumentViewActions({
         )}
 
         {extraPrimaryActions}
+
+        {copyToActions && copyToActions.length > 0 && (
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="secondary" className="inline-flex items-center gap-1.5" aria-label="Copy to other document">
+                <Copy className="size-4" />
+                <span>Copy to</span>
+                <ChevronDown className="size-3.5 opacity-70" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-56">
+              {copyToActions.map((actionItem, idx) => {
+                const Icon = actionItem.icon;
+                if (actionItem.href) {
+                  return (
+                    <DropdownMenuItem key={idx} asChild disabled={actionItem.disabled}>
+                      <Link href={actionItem.href} className="flex items-center gap-2">
+                        {Icon && <Icon className="size-4 text-muted-foreground" />}
+                        <span>{actionItem.label}</span>
+                      </Link>
+                    </DropdownMenuItem>
+                  );
+                }
+                if (actionItem.action) {
+                  return (
+                    <DropdownMenuItem
+                      key={idx}
+                      disabled={actionItem.disabled || pending}
+                      onSelect={async () => {
+                        setPending(true);
+                        setError("");
+                        try {
+                          await actionItem.action!();
+                        } catch (err: any) {
+                          setError(err.message || "Action failed");
+                        } finally {
+                          setPending(false);
+                        }
+                      }}
+                      className="flex items-center gap-2"
+                    >
+                      {Icon && <Icon className="size-4 text-muted-foreground" />}
+                      <span>{actionItem.label}</span>
+                    </DropdownMenuItem>
+                  );
+                }
+                return null;
+              })}
+            </DropdownMenuContent>
+          </DropdownMenu>
+        )}
 
         {onEmail && (
           <Button variant="secondary" className="hidden md:inline-flex" onClick={onEmail}>

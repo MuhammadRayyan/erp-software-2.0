@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { BookOpenText, CircleDollarSign, PackagePlus } from "lucide-react";
+import { BookOpenText, CircleDollarSign, ArrowDownToLine, PackagePlus } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -23,6 +23,29 @@ export function PurchaseInvoiceViewActions({
       documentType="Bill"
       editHref={documentStatus !== "void" ? `/b/${businessId}/purchases/invoices/${invoiceId}/edit` : undefined}
       pdfHref={`/api/businesses/${businessId}/documents/purchase-invoice/${invoiceId}/pdf`}
+      copyToActions={documentStatus !== "void" ? [
+        ...(documentStatus === "posted" && balanceMinor > 0 ? [
+          {
+            label: "Supplier Payment",
+            href: `/b/${businessId}/purchases/payments/new?invoiceId=${invoiceId}`,
+            icon: CircleDollarSign,
+          },
+        ] : []),
+        ...(inventoryEnabled && hasInventoryLines ? [
+          {
+            label: "Goods Receipt",
+            href: `/b/${businessId}/purchases/goods-receipts/new?invoiceId=${invoiceId}`,
+            icon: ArrowDownToLine,
+          },
+        ] : []),
+        ...(documentStatus === "posted" ? [
+          {
+            label: "Debit Note",
+            href: `/b/${businessId}/purchases/debit-notes/new?invoiceId=${invoiceId}`,
+            icon: BookOpenText,
+          },
+        ] : []),
+      ] : undefined}
       onDuplicate={async () => {
         const result = await duplicatePurchaseInvoiceAction(businessId, invoiceId);
         if (result?.error) throw new Error(result.error);

@@ -7,6 +7,7 @@ import { LoaderCircle } from "lucide-react";
 import { useFieldArray, useForm, useWatch } from "react-hook-form";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { convertToBase, minorToCurrencyInput } from "@/modules/currency/conversion";
 import { DocumentCurrencyFields, type DocumentCurrencyOption, type DocumentRateOption } from "@/modules/currency/document-currency-fields";
@@ -71,7 +72,17 @@ export function InvoiceForm({
   });
   const form = useForm<InvoiceInput>({ resolver: zodResolver(invoiceInputSchema), defaultValues: initial });
   const { register, control, handleSubmit, setError, setValue, formState: { errors, isSubmitting } } = form;
-  const { fields, append, remove } = useFieldArray({ control, name: "lines" });
+  const { fields, append, remove, insert, move } = useFieldArray({ control, name: "lines" });
+  function duplicateLine(index: number) {
+    const currentLine = form.getValues(`lines.${index}`);
+    insert(index + 1, { ...currentLine });
+  }
+  function moveLineUp(index: number) {
+    if (index > 0) move(index, index - 1);
+  }
+  function moveLineDown(index: number) {
+    if (index < fields.length - 1) move(index, index + 1);
+  }
   const customerId = useWatch({ control, name: "customerId" });
   const currencyCode = useWatch({ control, name: "currencyCode" }) || currency;
   const exchangeRateToBase = useWatch({ control, name: "exchangeRateToBase" }) || "";
@@ -176,8 +187,16 @@ export function InvoiceForm({
           <div className="space-y-1.5"><Label htmlFor="supplyEmirate">Supply Emirate</Label><SelectNative id="supplyEmirate"  {...register("supplyEmirate")}><option value="">Use business default</option>{emirates.map((emirate) => <option key={emirate} value={emirate}>{emirateLabels[emirate]}</option>)}</SelectNative><p className="text-xs text-muted-foreground">Reviewed for standard-rated Sales reporting.</p></div>
           <div className="space-y-1.5"><Label htmlFor="projectId">Project <span className="font-normal text-muted-foreground">(optional)</span></Label><SelectNative id="projectId"  {...register("projectId")} aria-invalid={!!errors.projectId}><option value="">No project</option>{availableProjects.map((project) => <option key={project.id} value={project.id}>{project.code} — {project.name}</option>)}</SelectNative>{errors.projectId && <p className="field-error">{errors.projectId.message}</p>}</div>
           <div className="space-y-1.5"><Label htmlFor="reference">Reference <span className="font-normal text-muted-foreground">(optional)</span></Label><Input id="reference" {...register("reference")} /></div>
-          <div className="space-y-1.5"><Label htmlFor="notes">Notes <span className="font-normal text-muted-foreground">(optional)</span></Label><Input id="notes" placeholder="Customer-facing notes..." {...register("notes")} /></div>
-          <div className="space-y-1.5"><Label htmlFor="terms">Terms & conditions <span className="font-normal text-muted-foreground">(optional)</span></Label><Input id="terms" placeholder="Payment or warranty terms..." {...register("terms")} /></div>
+          <div className="space-y-1.5 md:col-span-3 grid md:grid-cols-2 gap-5">
+            <div className="space-y-1.5">
+              <Label htmlFor="notes">Notes <span className="font-normal text-muted-foreground">(optional)</span></Label>
+              <Textarea id="notes" rows={2} placeholder="Customer-facing notes..." {...register("notes")} />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="terms">Terms & conditions <span className="font-normal text-muted-foreground">(optional)</span></Label>
+              <Textarea id="terms" rows={2} placeholder="Payment or warranty terms..." {...register("terms")} />
+            </div>
+          </div>
         </div>
       </section>
       <section className="form-section">
@@ -211,6 +230,9 @@ export function InvoiceForm({
             })
           }
           onRemove={remove}
+          onDuplicate={duplicateLine}
+          onMoveUp={moveLineUp}
+          onMoveDown={moveLineDown}
           items={items}
           onItemSelect={selectItem}
           accounts={salesAccounts}

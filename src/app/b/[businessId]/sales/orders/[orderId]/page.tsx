@@ -14,9 +14,8 @@ import { SalesOrderViewActions } from "@/modules/sales-orders/sales-order-view-a
 import { OrderRevisionSwitcher } from "@/modules/sales-orders/order-revision-switcher";
 import { ProjectLinks } from "@/modules/projects/project-links";
 import { buildDocumentEmailContext, buildDocumentEmailDefaults } from "@/modules/email/email-defaults";
-import { emirateLabels, type Emirate } from "@/modules/tax/uae-vat-config";
+import { DocumentFlowStepper, type FlowStep } from "@/components/documents/document-flow-stepper";
 import { BackLink } from "@/components/back-link";
-
 
 export default async function OrderViewPage({ params, searchParams }: { params: Promise<{ businessId: string; orderId: string }>; searchParams: Promise<{ notice?: string }> }) {
   const { businessId, orderId } = await params;
@@ -33,7 +32,53 @@ export default async function OrderViewPage({ params, searchParams }: { params: 
   const customFieldValues = customFieldDefinitions.length
     ? getCustomFieldValuesForEntities(businessId, user.id, "sales_order", [orderId]).get(orderId) ?? {}
     : {};
-  
+
+  const allDelivered = lines.every((l) => !l.itemId || l.remainingMicros === 0);
+  const partiallyDelivered = lines.some((l) => l.receivedMicros > 0);
+
+  const flowSteps: FlowStep[] = [
+    {
+      key: "quote",
+      label: "Sales Quote",
+      documentNumber: record.linkedQuote?.quote_number,
+      href: record.linkedQuote ? `/b/${businessId}/sales/quotes/${record.linkedQuote.id}` : undefined,
+      statusLabel: record.linkedQuote?.document_status,
+      state: record.linkedQuote ? "completed" : "skipped",
+    },
+    {
+      key: "order",
+      label: "Sales Order",
+      documentNumber: order.orderNumber,
+      statusLabel: order.documentStatus,
+      state: "current",
+    },
+    {
+      key: "invoice",
+      label: "Sales Invoice",
+      documentNumber:
+        record.relatedInvoices.length > 0
+          ? record.relatedInvoices.length === 1
+            ? record.relatedInvoices[0].invoice_number
+            : `${record.relatedInvoices.length} Invoices`
+          : undefined,
+      href:
+        record.relatedInvoices.length === 1
+          ? `/b/${businessId}/sales/invoices/${record.relatedInvoices[0].id}`
+          : record.relatedInvoices.length > 1
+          ? `/b/${businessId}/sales/invoices`
+          : undefined,
+      statusLabel: record.relatedInvoices.length > 0 ? record.relatedInvoices[0].document_status : "Not invoiced",
+      state: record.relatedInvoices.length > 0 ? "completed" : "pending",
+    },
+    {
+      key: "fulfillment",
+      label: "Fulfillment",
+      documentNumber: allDelivered ? "Delivered" : partiallyDelivered ? "Partially Delivered" : "Awaiting Delivery",
+      statusLabel: allDelivered ? "Complete" : partiallyDelivered ? "Partial" : "Pending",
+      state: allDelivered ? "completed" : "pending",
+    },
+  ];
+
   const emailContext = buildDocumentEmailContext(
     access.business.name,
     "Sales order",
@@ -54,9 +99,10 @@ export default async function OrderViewPage({ params, searchParams }: { params: 
       <NoticeToast message={notice} />
       <BackLink href={`/b/${businessId}/sales/orders`}>Sales Orders</BackLink>
       <div className="mb-5 flex flex-col justify-between gap-4 lg:flex-row lg:items-start">
-        <div><div className="flex flex-wrap items-center gap-2"><h1 className="page-title tabular">{order.orderNumber}</h1> <OrderRevisionSwitcher               businessId={businessId}               currentOrderId={order.id}               revisions={revisions}             /><StatusBadge status={order.documentStatus} /></div><p className="mt-2 text-base font-medium">{customer.name}</p><p className="mt-1 text-sm text-muted-foreground">Order date: {formatDate(order.orderDate)}{order.deliveryDate ? ` — Delivery: ${formatDate(order.deliveryDate)}` : ""}</p><div className="mt-3 flex flex-wrap items-baseline gap-x-5 gap-y-1"><span className="money text-xl font-semibold">{formatMoney(order.totalMinor, currency)}</span><span className="text-sm text-muted-foreground">No ledger impact</span></div></div>
+        <div><div className="flex flex-wrap items-center gap-2"><h1 className="page-title tabular">{order.orderNumber}</h1> <OrderRevisionSwitcher businessId={businessId} currentOrderId={order.id} revisions={revisions} /><StatusBadge status={order.documentStatus} /></div><p className="mt-2 text-base font-medium">{customer.name}</p><p className="mt-1 text-sm text-muted-foreground">Order date: {formatDate(order.orderDate)}{order.deliveryDate ? ` — Delivery: ${formatDate(order.deliveryDate)}` : ""}</p><div className="mt-3 flex flex-wrap items-baseline gap-x-5 gap-y-1"><span className="money text-xl font-semibold">{formatMoney(order.totalMinor, currency)}</span><span className="text-sm text-muted-foreground">No ledger impact</span></div></div>
         <SalesOrderViewActions businessId={businessId} orderId={order.id} orderNumber={order.orderNumber} documentStatus={order.documentStatus} inventoryEnabled={access.modules.includes("inventory")} hasDeliverableItems={lines.some((line) => Boolean(line.itemId) && line.remainingMicros > 0)} emailDefaults={emailDefaults} />
       </div>
+      <DocumentFlowStepper steps={flowSteps} />
       {currency !== access.business.currency && <section aria-label="Currency snapshot" className="mb-5 rounded-lg border border-border bg-surface-raised p-4"><dl className="grid gap-4 text-sm sm:grid-cols-2 lg:grid-cols-4"><div><dt className="text-xs text-muted-foreground">Stored rate</dt><dd className="money mt-1">1 {currency} = {order.exchangeRateToBase} {access.business.currency}</dd></div><div><dt className="text-xs text-muted-foreground">Rate date</dt><dd className="mt-1">{formatDate(order.exchangeRateDate)}</dd></div><div><dt className="text-xs text-muted-foreground">Rate source</dt><dd className="mt-1">{order.exchangeRateSource}</dd></div><div><dt className="text-xs text-muted-foreground">Base equivalent</dt><dd className="money mt-1 font-semibold">{formatMoney(order.baseTotalMinor, access.business.currency)}</dd></div></dl><p className="mt-3 text-xs text-muted-foreground">Base VAT {formatMoney(order.baseTaxMinor, access.business.currency)} · Posted snapshots never follow later rate-table changes.</p></section>}
       <article className="rounded-xl border border-border bg-surface-raised shadow-sm p-5 sm:p-7 dark:shadow-none">
         <div className="grid gap-6 border-b border-border pb-6 sm:grid-cols-2 -mx-5 -mt-5 bg-surface-muted/30 p-5 sm:-mx-7 sm:-mt-7 sm:p-7 rounded-t-xl"><div><p className="text-xs font-semibold tracking-[0.08em] text-muted-foreground uppercase">Bill to</p><p className="mt-2 font-semibold">{customer.name}</p>{customer.email && <p className="mt-1 text-sm text-muted-foreground">{customer.email}</p>}{customer.phone && <p className="text-sm text-muted-foreground">{customer.phone}</p>}</div><dl className="grid grid-cols-2 gap-x-5 gap-y-3 text-sm sm:justify-self-end"><dt className="text-muted-foreground">Order date</dt><dd className="text-right">{formatDate(order.orderDate)}</dd>{order.deliveryDate && <><dt className="text-muted-foreground">Delivery date</dt><dd className="text-right">{formatDate(order.deliveryDate)}</dd></>}<dt className="text-muted-foreground">Reference</dt><dd className="text-right">{order.reference || "—"}</dd><dt className="text-muted-foreground">Project</dt><dd className="text-right"><ProjectLinks businessId={businessId} projects={linkedProjects} /></dd></dl></div>

@@ -1,5 +1,4 @@
 import Link from "next/link";
-import { } from "lucide-react";
 import { notFound } from "next/navigation";
 import { NoticeToast } from "@/components/notice-toast";
 import { StatusBadge } from "@/components/status-badge";
@@ -11,9 +10,16 @@ import { buildDocumentEmailContext, buildDocumentEmailDefaults } from "@/modules
 import { getPurchaseOrder, listPurchaseOrderRevisions } from "@/modules/purchase-orders/purchase-order-service";
 import { PurchaseOrderViewActions } from "@/modules/purchase-orders/purchase-order-view-actions";
 import { OrderRevisionSwitcher } from "@/modules/purchase-orders/order-revision-switcher";
+import { DocumentFlowStepper, type FlowStep } from "@/components/documents/document-flow-stepper";
 import { BackLink } from "@/components/back-link";
 
-export default async function PurchaseOrderViewPage({ params, searchParams }: { params: Promise<{ businessId: string; orderId: string }>; searchParams: Promise<{ notice?: string }> }) {
+export default async function PurchaseOrderViewPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ businessId: string; orderId: string }>;
+  searchParams: Promise<{ notice?: string }>;
+}) {
   const { businessId, orderId } = await params;
   const { notice } = await searchParams;
   const { user, access } = await requireModule(businessId, "purchases");
@@ -22,8 +28,57 @@ export default async function PurchaseOrderViewPage({ params, searchParams }: { 
   if (!record) notFound();
   const { order, supplier, lines } = record;
   const currency = order.currencyCode;
-  const linkedProjects = Array.from(new Map(lines.flatMap((line) => line.project ? [[line.project.id, line.project] as const] : [])).values());
+  const linkedProjects = Array.from(
+    new Map(lines.flatMap((line) => (line.project ? [[line.project.id, line.project] as const] : []))).values()
+  );
   const showLineProjects = linkedProjects.length > 1;
+
+  const allReceived = lines.every((l) => !l.itemId || l.remainingMicros === 0);
+  const partiallyReceived = lines.some((l) => l.receivedMicros > 0);
+
+  const flowSteps: FlowStep[] = [
+    {
+      key: "quote",
+      label: "Purchase Quote",
+      documentNumber: record.linkedQuote?.quote_number,
+      href: record.linkedQuote ? `/b/${businessId}/purchases/quotes/${record.linkedQuote.id}` : undefined,
+      statusLabel: record.linkedQuote?.document_status,
+      state: record.linkedQuote ? "completed" : "skipped",
+    },
+    {
+      key: "order",
+      label: "Purchase Order",
+      documentNumber: order.orderNumber,
+      statusLabel: order.status,
+      state: "current",
+    },
+    {
+      key: "invoice",
+      label: "Purchase Invoice",
+      documentNumber:
+        record.relatedInvoices.length > 0
+          ? record.relatedInvoices.length === 1
+            ? record.relatedInvoices[0].internal_number
+            : `${record.relatedInvoices.length} Bills`
+          : undefined,
+      href:
+        record.relatedInvoices.length === 1
+          ? `/b/${businessId}/purchases/invoices/${record.relatedInvoices[0].id}`
+          : record.relatedInvoices.length > 1
+          ? `/b/${businessId}/purchases/invoices`
+          : undefined,
+      statusLabel: record.relatedInvoices.length > 0 ? record.relatedInvoices[0].document_status : "Not billed",
+      state: record.relatedInvoices.length > 0 ? "completed" : "pending",
+    },
+    {
+      key: "receipt",
+      label: "Goods Receipt",
+      documentNumber: allReceived ? "Received" : partiallyReceived ? "Partially Received" : "Awaiting Receipt",
+      statusLabel: allReceived ? "Complete" : partiallyReceived ? "Partial" : "Pending",
+      state: allReceived ? "completed" : "pending",
+    },
+  ];
+
   const emailContext = buildDocumentEmailContext(
     access.business.name,
     "Purchase Order",
@@ -39,19 +94,184 @@ export default async function PurchaseOrderViewPage({ params, searchParams }: { 
   );
   const emailDefaults = buildDocumentEmailDefaults(emailContext, record.supplier.email ?? "");
 
-  return <div className="page-container">
-    <NoticeToast message={notice} />
-    <BackLink href={`/b/${businessId}/purchases/orders`}>Purchase Orders</BackLink>
-    <div className="mb-5 flex flex-col justify-between gap-4 lg:flex-row lg:items-start"><div><div className="flex flex-wrap items-center gap-2"><h1 className="page-title tabular">{order.orderNumber}</h1> <OrderRevisionSwitcher               businessId={businessId}               currentOrderId={order.id}               revisions={revisions}             /><StatusBadge status={order.status} /></div><p className="mt-2 text-base font-medium">{supplier.name}</p><p className="mt-1 text-sm text-muted-foreground">Order date: {formatDate(order.date)}{order.expectedDate ? ` · Expected: ${formatDate(order.expectedDate)}` : ""}</p><div className="mt-3 flex flex-wrap items-baseline gap-4"><span className="money text-xl font-semibold">{formatMoney(order.totalMinor, currency)}</span><span className="text-sm text-muted-foreground">No ledger impact</span></div></div><PurchaseOrderViewActions businessId={businessId} orderId={order.id} orderNumber={order.orderNumber} status={order.status} inventoryEnabled={access.modules.includes("inventory")} hasReceivableItems={lines.some((line) => Boolean(line.itemId) && line.remainingMicros > 0)} emailDefaults={emailDefaults} /></div>
-    {currency !== access.business.currency && <section aria-label="Currency snapshot" className="mb-5 rounded-lg border border-border bg-surface-raised p-4"><dl className="grid gap-4 text-sm sm:grid-cols-2 lg:grid-cols-4"><div><dt className="text-xs text-muted-foreground">Commitment rate</dt><dd className="money mt-1">1 {currency} = {order.exchangeRateToBase} {access.business.currency}</dd></div><div><dt className="text-xs text-muted-foreground">Rate date</dt><dd className="mt-1">{formatDate(order.exchangeRateDate)}</dd></div><div><dt className="text-xs text-muted-foreground">Rate source</dt><dd className="mt-1">{order.exchangeRateSource}</dd></div><div><dt className="text-xs text-muted-foreground">Base commitment</dt><dd className="money mt-1 font-semibold">{formatMoney(order.baseTotalMinor, access.business.currency)}</dd></div></dl><p className="mt-3 text-xs text-muted-foreground">Operational snapshot only; a later Purchase Invoice uses its own posting and VAT rate.</p></section>}
-    <article className="rounded-xl border border-border bg-surface-raised shadow-sm p-5 sm:p-7 dark:shadow-none">
-      <div className="grid gap-6 border-b border-border pb-6 sm:grid-cols-2 -mx-5 -mt-5 bg-surface-muted/30 p-5 sm:-mx-7 sm:-mt-7 sm:p-7 rounded-t-xl"><div><p className="text-xs font-semibold tracking-[0.08em] text-muted-foreground uppercase">Supplier</p><p className="mt-2 font-semibold">{supplier.name}</p>{supplier.email && <p className="mt-1 text-sm text-muted-foreground">{supplier.email}</p>}{supplier.phone && <p className="text-sm text-muted-foreground">{supplier.phone}</p>}</div><dl className="grid grid-cols-2 gap-x-5 gap-y-3 text-sm sm:justify-self-end"><dt className="text-muted-foreground">Order date</dt><dd className="text-right">{formatDate(order.date)}</dd><dt className="text-muted-foreground">Expected</dt><dd className="text-right">{order.expectedDate ? formatDate(order.expectedDate) : "—"}</dd><dt className="text-muted-foreground">Reference</dt><dd className="text-right">{order.reference || "—"}</dd><dt className="text-muted-foreground">Project</dt><dd className="text-right"><ProjectLinks businessId={businessId} projects={linkedProjects} /></dd></dl></div>
-      <div className="mt-6 overflow-x-auto"><table className={`data-table ${showLineProjects ? "min-w-[1080px]" : "min-w-[960px]"}`}><thead><tr><th>Item / Description</th><th className="text-right!">Ordered</th><th className="text-right!">Received</th><th className="text-right!">Remaining</th><th className="text-right!">Rate</th><th>VAT</th>{showLineProjects && <th>Project</th>}<th className="text-right!">Amount</th></tr></thead><tbody>{lines.map((line) => <tr key={line.id}><td><span className="font-medium">{line.item ? `${line.item.sku ? `${line.item.sku} · ` : ""}${line.item.name}` : line.description}</span>{line.item && <span className="mt-0.5 block text-xs text-muted-foreground">{line.description}</span>}<span className="mt-0.5 block text-xs text-muted-foreground">{line.expenseAccount ? line.expenseAccount.name : line.item ? "Inventory Asset from item" : "Expense account chosen on bill"}</span></td><td className="money text-right">{quantityMicrosToInput(line.quantityMicros)}</td><td className="money text-right">{line.item ? quantityMicrosToInput(line.receivedMicros) : "—"}</td><td className="money text-right">{line.item ? quantityMicrosToInput(line.remainingMicros) : "—"}</td><td className="money text-right">{formatMoney(line.unitPriceMinor, currency)}</td><td>{line.taxCode ? `${line.taxCode.name} (${rateBasisPointsToPercent(line.taxCode.rate_basis_points)}%)` : "—"}</td>{showLineProjects && <td><ProjectLinks businessId={businessId} projects={line.project ? [line.project] : []} empty="—" /></td>}<td className="money text-right">{formatMoney(line.grossAmountMinor, currency)}</td></tr>)}</tbody></table></div>
-      <dl className="mt-6 ml-auto w-full max-w-xs space-y-2 text-sm"><div className="flex justify-between"><dt className="text-muted-foreground">Subtotal</dt><dd className="money">{formatMoney(order.subtotalMinor, currency)}</dd></div><div className="flex justify-between"><dt className="text-muted-foreground">VAT</dt><dd className="money">{formatMoney(order.taxMinor, currency)}</dd></div><div className="flex justify-between border-t border-border pt-2 text-base font-semibold"><dt>Total</dt><dd className="money">{formatMoney(order.totalMinor, currency)}</dd></div></dl>
-      {order.notes && <section className="mt-8 border-t border-border pt-5"><h2 className="text-sm font-semibold">Notes</h2><p className="mt-2 text-sm text-muted-foreground">{order.notes}</p></section>}
-      <section className="mt-8 border-t border-border pt-5"><h2 className="text-sm font-semibold">Related Purchase Invoices</h2>{record.relatedInvoices.length ? <div className="mt-3 overflow-x-auto rounded-md border border-border"><table className="data-table min-w-[520px]"><thead><tr><th>Bill</th><th>Status</th><th className="text-right!">Total</th></tr></thead><tbody>{record.relatedInvoices.map((invoice) => <tr key={invoice.id}><td><Link href={`/b/${businessId}/purchases/invoices/${invoice.id}`} className="tabular font-medium text-primary hover:underline">{invoice.internal_number}</Link></td><td className="capitalize">{invoice.document_status}</td><td className="money text-right">{formatMoney(invoice.total_minor, currency)}</td></tr>)}</tbody></table></div> : <p className="mt-2 text-sm text-muted-foreground">No purchase invoices linked yet.</p>}</section>
-      <section className="mt-8 border-t border-border pt-5"><h2 className="text-sm font-semibold">Goods Receipts</h2>{record.goodsReceipts.length ? <div className="mt-3 overflow-x-auto rounded-md border border-border"><table className="data-table min-w-[520px]"><thead><tr><th>Receipt</th><th>Date</th><th>Status</th></tr></thead><tbody>{record.goodsReceipts.map((receipt) => <tr key={receipt.id}><td><Link href={`/b/${businessId}/purchases/goods-receipts/${receipt.id}`} className="tabular font-medium text-primary hover:underline">{receipt.receipt_number}</Link></td><td>{formatDate(receipt.date)}</td><td className="capitalize">{receipt.document_status}</td></tr>)}</tbody></table></div> : <p className="mt-2 text-sm text-muted-foreground">No goods receipts linked yet.</p>}</section>
-    </article>
-  </div>;
-}
+  return (
+    <div className="page-container">
+      <NoticeToast message={notice} />
+      <BackLink href={`/b/${businessId}/purchases/orders`}>Purchase Orders</BackLink>
+      <div className="mb-5 flex flex-col justify-between gap-4 lg:flex-row lg:items-start">
+        <div>
+          <div className="flex flex-wrap items-center gap-2">
+            <h1 className="page-title tabular">{order.orderNumber}</h1>
+            <OrderRevisionSwitcher businessId={businessId} currentOrderId={order.id} revisions={revisions} />
+            <StatusBadge status={order.status} />
+          </div>
+          <p className="mt-2 text-base font-medium">{supplier.name}</p>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Order date: {formatDate(order.date)}{order.expectedDate ? ` · Expected: ${formatDate(order.expectedDate)}` : ""}
+          </p>
+          <div className="mt-3 flex flex-wrap items-baseline gap-4">
+            <span className="money text-xl font-semibold">{formatMoney(order.totalMinor, currency)}</span>
+            <span className="text-sm text-muted-foreground">No ledger impact</span>
+          </div>
+        </div>
+        <PurchaseOrderViewActions
+          businessId={businessId}
+          orderId={order.id}
+          orderNumber={order.orderNumber}
+          status={order.status}
+          inventoryEnabled={access.modules.includes("inventory")}
+          hasReceivableItems={lines.some((line) => Boolean(line.itemId) && line.remainingMicros > 0)}
+          emailDefaults={emailDefaults}
+        />
+      </div>
 
+      <DocumentFlowStepper steps={flowSteps} />
+
+      {currency !== access.business.currency && (
+        <section aria-label="Currency snapshot" className="mb-5 rounded-lg border border-border bg-surface-raised p-4">
+          <dl className="grid gap-4 text-sm sm:grid-cols-2 lg:grid-cols-4">
+            <div>
+              <dt className="text-xs text-muted-foreground">Commitment rate</dt>
+              <dd className="money mt-1">1 {currency} = {order.exchangeRateToBase} {access.business.currency}</dd>
+            </div>
+            <div>
+              <dt className="text-xs text-muted-foreground">Rate date</dt>
+              <dd className="mt-1">{formatDate(order.exchangeRateDate)}</dd>
+            </div>
+            <div>
+              <dt className="text-xs text-muted-foreground">Rate source</dt>
+              <dd className="mt-1">{order.exchangeRateSource}</dd>
+            </div>
+            <div>
+              <dt className="text-xs text-muted-foreground">Base commitment</dt>
+              <dd className="money mt-1 font-semibold">{formatMoney(order.baseTotalMinor, access.business.currency)}</dd>
+            </div>
+          </dl>
+          <p className="mt-3 text-xs text-muted-foreground">Operational snapshot only; a later Purchase Invoice uses its own posting and VAT rate.</p>
+        </section>
+      )}
+
+      <article className="rounded-xl border border-border bg-surface-raised shadow-sm p-5 sm:p-7 dark:shadow-none">
+        <div className="grid gap-6 border-b border-border pb-6 sm:grid-cols-2 -mx-5 -mt-5 bg-surface-muted/30 p-5 sm:-mx-7 sm:-mt-7 sm:p-7 rounded-t-xl">
+          <div>
+            <p className="text-xs font-semibold tracking-[0.08em] text-muted-foreground uppercase">Supplier</p>
+            <p className="mt-2 font-semibold">{supplier.name}</p>
+            {supplier.email && <p className="mt-1 text-sm text-muted-foreground">{supplier.email}</p>}
+            {supplier.phone && <p className="text-sm text-muted-foreground">{supplier.phone}</p>}
+          </div>
+          <dl className="grid grid-cols-2 gap-x-5 gap-y-3 text-sm sm:justify-self-end">
+            <dt className="text-muted-foreground">Order date</dt>
+            <dd className="text-right">{formatDate(order.date)}</dd>
+            <dt className="text-muted-foreground">Expected</dt>
+            <dd className="text-right">{order.expectedDate ? formatDate(order.expectedDate) : "—"}</dd>
+            <dt className="text-muted-foreground">Reference</dt>
+            <dd className="text-right">{order.reference || "—"}</dd>
+            <dt className="text-muted-foreground">Project</dt>
+            <dd className="text-right"><ProjectLinks businessId={businessId} projects={linkedProjects} /></dd>
+          </dl>
+        </div>
+
+        <div className="mt-6 overflow-x-auto">
+          <table className={`data-table ${showLineProjects ? "min-w-[1080px]" : "min-w-[960px]"}`}>
+            <thead>
+              <tr>
+                <th>Item / Description</th>
+                <th className="text-right!">Ordered</th>
+                <th className="text-right!">Received</th>
+                <th className="text-right!">Remaining</th>
+                <th className="text-right!">Rate</th>
+                <th>VAT</th>
+                {showLineProjects && <th>Project</th>}
+                <th className="text-right!">Amount</th>
+              </tr>
+            </thead>
+            <tbody>
+              {lines.map((line) => (
+                <tr key={line.id}>
+                  <td>
+                    <span className="font-medium">{line.item ? `${line.item.sku ? `${line.item.sku} · ` : ""}${line.item.name}` : line.description}</span>
+                    {line.item && <span className="mt-0.5 block text-xs text-muted-foreground">{line.description}</span>}
+                    <span className="mt-0.5 block text-xs text-muted-foreground">{line.expenseAccount ? line.expenseAccount.name : line.item ? "Inventory Asset from item" : "Expense account chosen on bill"}</span>
+                  </td>
+                  <td className="money text-right">{quantityMicrosToInput(line.quantityMicros)}</td>
+                  <td className="money text-right">{line.item ? quantityMicrosToInput(line.receivedMicros) : "—"}</td>
+                  <td className="money text-right">{line.item ? quantityMicrosToInput(line.remainingMicros) : "—"}</td>
+                  <td className="money text-right">{formatMoney(line.unitPriceMinor, currency)}</td>
+                  <td>{line.taxCode ? `${line.taxCode.name} (${rateBasisPointsToPercent(line.taxCode.rate_basis_points)}%)` : "—"}</td>
+                  {showLineProjects && <td><ProjectLinks businessId={businessId} projects={line.project ? [line.project] : []} empty="—" /></td>}
+                  <td className="money text-right">{formatMoney(line.grossAmountMinor, currency)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+
+        <dl className="mt-6 ml-auto w-full max-w-xs space-y-2 text-sm">
+          <div className="flex justify-between">
+            <dt className="text-muted-foreground">Subtotal</dt>
+            <dd className="money">{formatMoney(order.subtotalMinor, currency)}</dd>
+          </div>
+          <div className="flex justify-between">
+            <dt className="text-muted-foreground">VAT</dt>
+            <dd className="money">{formatMoney(order.taxMinor, currency)}</dd>
+          </div>
+          <div className="flex justify-between border-t border-border pt-2 text-base font-semibold">
+            <dt>Total</dt>
+            <dd className="money">{formatMoney(order.totalMinor, currency)}</dd>
+          </div>
+        </dl>
+
+        {order.notes && (
+          <section className="mt-8 border-t border-border pt-5">
+            <h2 className="text-sm font-semibold">Notes</h2>
+            <p className="mt-2 text-sm text-muted-foreground">{order.notes}</p>
+          </section>
+        )}
+
+        <section className="mt-8 border-t border-border pt-5">
+          <h2 className="text-sm font-semibold">Related Purchase Invoices</h2>
+          {record.relatedInvoices.length ? (
+            <div className="mt-3 overflow-x-auto rounded-md border border-border">
+              <table className="data-table min-w-[520px]">
+                <thead><tr><th>Bill</th><th>Status</th><th className="text-right!">Total</th></tr></thead>
+                <tbody>
+                  {record.relatedInvoices.map((invoice) => (
+                    <tr key={invoice.id}>
+                      <td><Link href={`/b/${businessId}/purchases/invoices/${invoice.id}`} className="tabular font-medium text-primary hover:underline">{invoice.internal_number}</Link></td>
+                      <td className="capitalize">{invoice.document_status}</td>
+                      <td className="money text-right">{formatMoney(invoice.total_minor, currency)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            <p className="mt-2 text-sm text-muted-foreground">No purchase invoices linked yet.</p>
+          )}
+        </section>
+
+        <section className="mt-8 border-t border-border pt-5">
+          <h2 className="text-sm font-semibold">Goods Receipts</h2>
+          {record.goodsReceipts.length ? (
+            <div className="mt-3 overflow-x-auto rounded-md border border-border">
+              <table className="data-table min-w-[520px]">
+                <thead><tr><th>Receipt</th><th>Date</th><th>Status</th></tr></thead>
+                <tbody>
+                  {record.goodsReceipts.map((receipt) => (
+                    <tr key={receipt.id}>
+                      <td><Link href={`/b/${businessId}/purchases/goods-receipts/${receipt.id}`} className="tabular font-medium text-primary hover:underline">{receipt.receipt_number}</Link></td>
+                      <td>{formatDate(receipt.date)}</td>
+                      <td className="capitalize">{receipt.document_status}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            <p className="mt-2 text-sm text-muted-foreground">No goods receipts linked yet.</p>
+          )}
+        </section>
+      </article>
+    </div>
+  );
+}

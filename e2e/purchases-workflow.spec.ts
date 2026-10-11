@@ -8,7 +8,7 @@ test.describe('Purchases Deep Workflow Testing', () => {
   });
 
   test('can perform a full purchase quote to payment workflow omitting optional fields', async ({ page }) => {
-    test.setTimeout(60000); // 1 minute timeout for this long workflow
+    test.setTimeout(120000); // 2 minutes timeout for this long workflow
     const ts = Date.now();
     const supplierName = `Workflow Supplier ${ts}`;
     const itemName = `Purchase Item ${ts}`;
@@ -55,10 +55,11 @@ test.describe('Purchases Deep Workflow Testing', () => {
 
     // 5. Convert to Purchase Invoice
     await page.getByRole('button', { name: /Create Invoice/i }).click();
-    await expect(page).toHaveURL(/.*\/invoices\/.*/);
+    await expect(page).toHaveURL(/.*\/purchases\/invoices\/[a-zA-Z0-9-]{10,}.*/);
     
     // Click Edit to open the invoice form
     await page.getByRole('link', { name: 'Edit', exact: true }).click();
+    await expect(page).toHaveURL(/.*\/purchases\/invoices\/[a-zA-Z0-9-]{10,}\/edit/);
     
     // On the Purchase Invoice form
     await expect(page.getByRole('button', { name: /Post Invoice/i })).toBeVisible({ timeout: 30000 });

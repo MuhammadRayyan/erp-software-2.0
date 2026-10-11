@@ -277,6 +277,9 @@ export function getPurchaseInvoice(businessId: string, userId: string, invoiceId
     payments: payments.map((row) => ({ id: row.id, paymentNumber: row.payment_number, date: row.date, reference: row.reference, allocatedMinor: row.allocated_minor })),
     journal: journal ? { id: journal.id, entryNumber: journal.entry_number } : null,
     order: order ? { id: order.id, orderNumber: order.order_number } : null,
+    linkedQuote: header.invoice.purchaseOrderId
+      ? (context.sqlite.prepare("SELECT pq.id, pq.quote_number, pq.document_status FROM purchase_quotes pq INNER JOIN purchase_orders po ON po.purchase_quote_id = pq.id WHERE po.id = ?").get(header.invoice.purchaseOrderId) as { id: string; quote_number: string; document_status: string } | undefined)
+      : undefined,
     goodsReceipts: context.sqlite.prepare("SELECT id, receipt_number, date, document_status FROM goods_receipts WHERE purchase_invoice_id = ? ORDER BY date DESC, created_at DESC").all(invoiceId) as { id: string; receipt_number: string; date: string; document_status: string }[],
   };
 }

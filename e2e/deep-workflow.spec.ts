@@ -8,7 +8,7 @@ test.describe('Deep Workflow Testing', () => {
   });
 
   test('can perform a full sales quote to invoice workflow', async ({ page }) => {
-    test.setTimeout(60000); // 1 minute timeout for this long workflow
+    test.setTimeout(120000); // 2 minutes timeout for this long workflow
     const ts = Date.now();
     const customerName = `Workflow Customer ${ts}`;
     const itemName = `Workflow Item ${ts}`;

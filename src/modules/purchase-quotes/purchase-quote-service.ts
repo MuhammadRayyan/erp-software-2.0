@@ -105,6 +105,10 @@ export function getPurchaseQuote(businessId: string, userId: string, quoteId: st
   const itemRows = context.sqlite.prepare("SELECT id, sku, name, unit_name FROM inventory_items").all() as { id: string; sku: string | null; name: string; unit_name: string }[];
   const itemById = new Map(itemRows.map((item) => [item.id, item]));
 
+  const linkedOrders = context.sqlite
+    .prepare("SELECT id, order_number, status FROM purchase_orders WHERE purchase_quote_id = ? ORDER BY created_at DESC")
+    .all(quoteId) as { id: string; order_number: string; status: string }[];
+
   return {
     ...header,
     project: header.quote.projectId ? projectById.get(header.quote.projectId) ?? null : null,
@@ -115,6 +119,7 @@ export function getPurchaseQuote(businessId: string, userId: string, quoteId: st
       taxCode: taxById.get(line.taxCodeId) ?? null,
       project: effectiveProjectId(line.projectId, header.quote.projectId) ? projectById.get(effectiveProjectId(line.projectId, header.quote.projectId)!) ?? null : null,
     })),
+    linkedOrders,
   };
 }
 

@@ -455,6 +455,12 @@ export function getInvoice(businessId: string, userId: string, invoiceId: string
     })),
     journal: journal ? { id: journal.id, entryNumber: journal.entry_number } : null,
     deliveryNotes: context.sqlite.prepare("SELECT id, delivery_number, date, document_status FROM delivery_notes WHERE sales_invoice_id = ? ORDER BY date DESC, created_at DESC").all(invoiceId) as { id: string; delivery_number: string; date: string; document_status: string }[],
+    linkedOrder: header.invoice.salesOrderId
+      ? (context.sqlite.prepare("SELECT id, order_number, document_status, sales_quote_id FROM sales_orders WHERE id = ?").get(header.invoice.salesOrderId) as { id: string; order_number: string; document_status: string; sales_quote_id: string | null } | undefined)
+      : undefined,
+    linkedQuote: header.invoice.salesOrderId
+      ? (context.sqlite.prepare("SELECT sq.id, sq.quote_number, sq.document_status FROM sales_quotes sq INNER JOIN sales_orders so ON so.sales_quote_id = sq.id WHERE so.id = ?").get(header.invoice.salesOrderId) as { id: string; quote_number: string; document_status: string } | undefined)
+      : undefined,
   };
 }
 
@@ -496,8 +502,9 @@ export function createInvoice(
           project_id, document_status, subtotal_minor, tax_minor, total_minor,
           currency_code, exchange_rate_to_base, exchange_rate_date, exchange_rate_source,
           base_subtotal_minor, base_tax_minor, base_total_minor, notes, terms,
+          sales_order_id, amounts_include_tax,
           created_by, created_at, updated_at, posted_at, voided_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'draft', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL)
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'draft', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL)
       `)
       .run(
         id,
@@ -521,6 +528,8 @@ export function createInvoice(
         base.baseTotalMinor,
         data.notes || null,
         data.terms || null,
+        data.salesOrderId || null,
+        data.amountsIncludeTax ? 1 : 0,
         userId,
         now,
         now,
@@ -613,7 +622,8 @@ export function updateInvoice(
         SET customer_id = ?, project_id = ?, invoice_date = ?, tax_date = ?, supply_emirate = ?, due_date = ?, reference = ?,
             subtotal_minor = ?, tax_minor = ?, total_minor = ?,
             currency_code = ?, exchange_rate_to_base = ?, exchange_rate_date = ?, exchange_rate_source = ?,
-            base_subtotal_minor = ?, base_tax_minor = ?, base_total_minor = ?, updated_at = ?
+            base_subtotal_minor = ?, base_tax_minor = ?, base_total_minor = ?,
+            notes = ?, terms = ?, sales_order_id = ?, amounts_include_tax = ?, updated_at = ?
         WHERE id = ?
       `)
       .run(
@@ -634,6 +644,10 @@ export function updateInvoice(
         base.baseSubtotalMinor,
         base.baseTaxMinor,
         base.baseTotalMinor,
+        data.notes || null,
+        data.terms || null,
+        data.salesOrderId || null,
+        data.amountsIncludeTax ? 1 : 0,
         now,
         invoiceId,
       );

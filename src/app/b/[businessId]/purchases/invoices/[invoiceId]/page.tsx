@@ -8,10 +8,16 @@ import { quantityMicrosToInput, rateBasisPointsToPercent } from "@/modules/accou
 import { ProjectLinks } from "@/modules/projects/project-links";
 import { getPurchaseInvoice } from "@/modules/purchase-invoices/purchase-invoice-service";
 import { PurchaseInvoiceViewActions } from "@/modules/purchase-invoices/purchase-invoice-view-actions";
+import { DocumentFlowStepper, type FlowStep } from "@/components/documents/document-flow-stepper";
 import { BackLink } from "@/components/back-link";
 
-
-export default async function PurchaseInvoiceViewPage({ params, searchParams }: { params: Promise<{ businessId: string; invoiceId: string }>; searchParams: Promise<{ notice?: string }> }) {
+export default async function PurchaseInvoiceViewPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ businessId: string; invoiceId: string }>;
+  searchParams: Promise<{ notice?: string }>;
+}) {
   const { businessId, invoiceId } = await params;
   const { notice } = await searchParams;
   const { user, access } = await requireModule(businessId, "purchases");
@@ -19,21 +25,261 @@ export default async function PurchaseInvoiceViewPage({ params, searchParams }: 
   if (!record) notFound();
   const { invoice, supplier, lines } = record;
   const currency = invoice.currencyCode;
-  const linkedProjects = Array.from(new Map(lines.flatMap((line) => line.project ? [[line.project.id, line.project] as const] : [])).values());
+  const linkedProjects = Array.from(
+    new Map(lines.flatMap((line) => (line.project ? [[line.project.id, line.project] as const] : []))).values()
+  );
   const showLineProjects = linkedProjects.length > 1;
-  return <div className="page-container">
-    <NoticeToast message={notice} />
-    <BackLink href={`/b/${businessId}/purchases/invoices`}>Purchase Invoices</BackLink>
-    <div className="mb-5 flex flex-col justify-between gap-4 lg:flex-row lg:items-start"><div><div className="flex flex-wrap items-center gap-2"><h1 className="page-title tabular">{invoice.internalNumber}</h1><StatusBadge status={invoice.documentStatus} />{record.paymentStatus && <StatusBadge status={record.paymentStatus} />}</div><p className="mt-2 text-base font-medium">{supplier.name}</p><p className="mt-1 text-sm text-muted-foreground">Supplier invoice: {invoice.supplierInvoiceNumber} · Invoice date: {formatDate(invoice.invoiceDate)} · Due: {formatDate(invoice.dueDate)}</p><div className="mt-3 flex flex-wrap items-baseline gap-x-5 gap-y-1"><span className="money text-xl font-semibold">{formatMoney(invoice.totalMinor, currency)}</span>{invoice.documentStatus === "posted" ? <span className="money text-sm text-muted-foreground">Balance <strong className="font-semibold text-foreground">{formatMoney(record.balanceMinor, currency)}</strong></span> : <span className="text-sm text-muted-foreground">No ledger impact</span>}</div></div><PurchaseInvoiceViewActions businessId={businessId} invoiceId={invoice.id} internalNumber={invoice.internalNumber} documentStatus={invoice.documentStatus} balanceMinor={record.balanceMinor} journalEntryId={record.journal?.id ?? null} inventoryEnabled={access.modules.includes("inventory")} hasInventoryLines={lines.some((line) => Boolean(line.itemId))} /></div>
-    {currency !== access.business.currency && <section aria-label="Currency snapshot" className="mb-5 rounded-lg border border-border bg-surface-raised p-4"><dl className="grid gap-4 text-sm sm:grid-cols-2 lg:grid-cols-4"><div><dt className="text-xs text-muted-foreground">Stored rate</dt><dd className="money mt-1">1 {currency} = {invoice.exchangeRateToBase} {access.business.currency}</dd></div><div><dt className="text-xs text-muted-foreground">Rate date</dt><dd className="mt-1">{formatDate(invoice.exchangeRateDate)}</dd></div><div><dt className="text-xs text-muted-foreground">Rate source</dt><dd className="mt-1">{invoice.exchangeRateSource}</dd></div><div><dt className="text-xs text-muted-foreground">Base equivalent</dt><dd className="money mt-1 font-semibold">{formatMoney(invoice.baseTotalMinor, access.business.currency)}</dd></div></dl><p className="mt-3 text-xs text-muted-foreground">Base Input VAT {formatMoney(invoice.baseTaxMinor, access.business.currency)} · Inventory purchases remain base historical cost and do not move stock here.</p></section>}
-    <article className="rounded-xl border border-border bg-surface-raised shadow-sm p-5 sm:p-7 dark:shadow-none">
-      <div className="grid gap-6 border-b border-border pb-6 sm:grid-cols-2 -mx-5 -mt-5 bg-surface-muted/30 p-5 sm:-mx-7 sm:-mt-7 sm:p-7 rounded-t-xl"><div><p className="text-xs font-semibold tracking-[0.08em] text-muted-foreground uppercase">Supplier</p><p className="mt-2 font-semibold">{supplier.name}</p>{supplier.email && <p className="mt-1 text-sm text-muted-foreground">{supplier.email}</p>}{supplier.phone && <p className="text-sm text-muted-foreground">{supplier.phone}</p>}</div><dl className="grid grid-cols-2 gap-x-5 gap-y-3 text-sm sm:justify-self-end"><dt className="text-muted-foreground">Supplier invoice</dt><dd className="text-right tabular">{invoice.supplierInvoiceNumber}</dd><dt className="text-muted-foreground">Invoice date</dt><dd className="text-right">{formatDate(invoice.invoiceDate)}</dd><dt className="text-muted-foreground">VAT tax date</dt><dd className="text-right">{formatDate(invoice.taxDate)}</dd><dt className="text-muted-foreground">Due date</dt><dd className="text-right">{formatDate(invoice.dueDate)}</dd><dt className="text-muted-foreground">Reference</dt><dd className="text-right">{invoice.reference || "—"}</dd><dt className="text-muted-foreground">Project</dt><dd className="text-right"><ProjectLinks businessId={businessId} projects={linkedProjects} /></dd></dl></div>
-      <div className="mt-6 overflow-x-auto"><table className={`data-table ${showLineProjects ? "min-w-[940px]" : "min-w-[800px]"}`}><thead><tr><th>Item / Description</th><th className="text-right!">Qty</th><th className="text-right!">Rate</th><th>VAT</th>{showLineProjects && <th>Project</th>}<th className="text-right!">Amount</th></tr></thead><tbody>{lines.map((line) => <tr key={line.id}><td><span className="font-medium">{line.item ? `${line.item.sku ? `${line.item.sku} · ` : ""}${line.item.name}` : line.description}</span>{line.item && <span className="mt-0.5 block text-xs text-muted-foreground">{line.description}</span>}<span className="mt-0.5 block text-xs text-muted-foreground">{line.expenseAccount ? line.expenseAccount.name : line.item ? "Inventory Asset from item" : "Expense account unavailable"}</span></td><td className="money text-right">{quantityMicrosToInput(line.quantityMicros)}</td><td className="money text-right">{formatMoney(line.unitPriceMinor, currency)}</td><td>{line.taxCode ? `${line.taxCode.name} (${rateBasisPointsToPercent(line.taxCode.rate_basis_points)}%)` : "—"}</td>{showLineProjects && <td><ProjectLinks businessId={businessId} projects={line.project ? [line.project] : []} empty="—" /></td>}<td className="money text-right">{formatMoney(line.grossAmountMinor, currency)}</td></tr>)}</tbody></table></div>
-      <dl className="mt-6 ml-auto w-full max-w-xs space-y-2 text-sm"><div className="flex justify-between"><dt className="text-muted-foreground">Subtotal</dt><dd className="money">{formatMoney(invoice.subtotalMinor, currency)}</dd></div><div className="flex justify-between"><dt className="text-muted-foreground">Input VAT</dt><dd className="money">{formatMoney(invoice.taxMinor, currency)}</dd></div><div className="flex justify-between border-t border-border pt-2 text-base font-semibold"><dt>Total</dt><dd className="money">{formatMoney(invoice.totalMinor, currency)}</dd></div>{invoice.documentStatus === "posted" && <div className="flex justify-between border-t border-border pt-2"><dt className="text-muted-foreground">Balance due</dt><dd className="money font-semibold">{formatMoney(record.balanceMinor, currency)}</dd></div>}</dl>
-      <section className="mt-8 border-t border-border pt-5"><h2 className="text-sm font-semibold">Related</h2><dl className="mt-3 grid gap-3 text-sm sm:grid-cols-3"><div><dt className="text-xs text-muted-foreground">Purchase order</dt><dd className="mt-1">{record.order ? <Link href={`/b/${businessId}/purchases/orders/${record.order.id}`} className="tabular font-medium text-primary hover:underline">{record.order.orderNumber}</Link> : "Not linked"}</dd></div><div><dt className="text-xs text-muted-foreground">Project</dt><dd className="mt-1"><ProjectLinks businessId={businessId} projects={linkedProjects} /></dd></div><div><dt className="text-xs text-muted-foreground">Journal entry</dt><dd className="mt-1">{record.journal ? <Link href={`/b/${businessId}/accounting/journal/${record.journal.id}`} className="tabular font-medium text-primary hover:underline">{record.journal.entryNumber}</Link> : "Not posted"}</dd></div></dl></section>
-      <section className="mt-8 border-t border-border pt-5"><h2 className="text-sm font-semibold">Goods Receipts</h2>{record.goodsReceipts.length ? <div className="mt-3 overflow-x-auto rounded-md border border-border"><table className="data-table min-w-[520px]"><thead><tr><th>Receipt</th><th>Date</th><th>Status</th></tr></thead><tbody>{record.goodsReceipts.map((receipt) => <tr key={receipt.id}><td><Link href={`/b/${businessId}/purchases/goods-receipts/${receipt.id}`} className="tabular font-medium text-primary hover:underline">{receipt.receipt_number}</Link></td><td>{formatDate(receipt.date)}</td><td className="capitalize">{receipt.document_status}</td></tr>)}</tbody></table></div> : <p className="mt-2 text-sm text-muted-foreground">No goods receipts linked yet.</p>}</section>
-      <section className="mt-8 border-t border-border pt-5"><h2 className="text-sm font-semibold">Payments</h2>{record.payments.length ? <div className="mt-3 overflow-x-auto rounded-md border border-border"><table className="data-table min-w-[560px]"><thead><tr><th>Payment</th><th>Date</th><th>Reference</th><th className="text-right!">Allocated</th></tr></thead><tbody>{record.payments.map((payment) => <tr key={payment.id}><td><Link href={`/b/${businessId}/purchases/payments/${payment.id}`} className="tabular font-medium text-primary hover:underline">{payment.paymentNumber}</Link></td><td>{formatDate(payment.date)}</td><td className="text-muted-foreground">{payment.reference || "—"}</td><td className="money text-right">{formatMoney(payment.allocatedMinor, currency)}</td></tr>)}</tbody></table></div> : <p className="mt-2 text-sm text-muted-foreground">{invoice.documentStatus === "posted" ? "No supplier payments recorded." : "Payments become available after posting."}</p>}</section>
-    </article>
-  </div>;
-}
 
+  const flowSteps: FlowStep[] = [
+    {
+      key: "quote",
+      label: "Purchase Quote",
+      documentNumber: record.linkedQuote?.quote_number,
+      href: record.linkedQuote ? `/b/${businessId}/purchases/quotes/${record.linkedQuote.id}` : undefined,
+      statusLabel: record.linkedQuote?.document_status,
+      state: record.linkedQuote ? "completed" : "skipped",
+    },
+    {
+      key: "order",
+      label: "Purchase Order",
+      documentNumber: record.order?.orderNumber,
+      href: record.order ? `/b/${businessId}/purchases/orders/${record.order.id}` : undefined,
+      state: record.order ? "completed" : "skipped",
+    },
+    {
+      key: "invoice",
+      label: "Purchase Invoice",
+      documentNumber: invoice.internalNumber,
+      statusLabel: invoice.documentStatus,
+      state: "current",
+    },
+    {
+      key: "settlement",
+      label: "Payment & Goods Receipt",
+      documentNumber:
+        record.paymentStatus === "paid" && record.goodsReceipts.length
+          ? "Paid & Received"
+          : record.paymentStatus === "paid"
+          ? "Paid"
+          : record.payments.length
+          ? "Partially Paid"
+          : "Pending",
+      statusLabel: record.paymentStatus ?? undefined,
+      detail:
+        invoice.documentStatus === "posted"
+          ? record.balanceMinor === 0
+            ? "Full settlement"
+            : `Balance: ${formatMoney(record.balanceMinor, currency)}`
+          : "Draft non-posting",
+      state: record.paymentStatus === "paid" ? "completed" : "pending",
+    },
+  ];
+
+  return (
+    <div className="page-container">
+      <NoticeToast message={notice} />
+      <BackLink href={`/b/${businessId}/purchases/invoices`}>Purchase Invoices</BackLink>
+      <div className="mb-5 flex flex-col justify-between gap-4 lg:flex-row lg:items-start">
+        <div>
+          <div className="flex flex-wrap items-center gap-2">
+            <h1 className="page-title tabular">{invoice.internalNumber}</h1>
+            <StatusBadge status={invoice.documentStatus} />
+            {record.paymentStatus && <StatusBadge status={record.paymentStatus} />}
+          </div>
+          <p className="mt-2 text-base font-medium">{supplier.name}</p>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Supplier invoice: {invoice.supplierInvoiceNumber} · Invoice date: {formatDate(invoice.invoiceDate)} · Due: {formatDate(invoice.dueDate)}
+          </p>
+          <div className="mt-3 flex flex-wrap items-baseline gap-x-5 gap-y-1">
+            <span className="money text-xl font-semibold">{formatMoney(invoice.totalMinor, currency)}</span>
+            {invoice.documentStatus === "posted" ? (
+              <span className="money text-sm text-muted-foreground">
+                Balance <strong className="font-semibold text-foreground">{formatMoney(record.balanceMinor, currency)}</strong>
+              </span>
+            ) : (
+              <span className="text-sm text-muted-foreground">No ledger impact</span>
+            )}
+          </div>
+        </div>
+        <PurchaseInvoiceViewActions
+          businessId={businessId}
+          invoiceId={invoice.id}
+          internalNumber={invoice.internalNumber}
+          documentStatus={invoice.documentStatus}
+          balanceMinor={record.balanceMinor}
+          journalEntryId={record.journal?.id ?? null}
+          inventoryEnabled={access.modules.includes("inventory")}
+          hasInventoryLines={lines.some((line) => Boolean(line.itemId))}
+        />
+      </div>
+
+      <DocumentFlowStepper steps={flowSteps} />
+
+      {currency !== access.business.currency && (
+        <section aria-label="Currency snapshot" className="mb-5 rounded-lg border border-border bg-surface-raised p-4">
+          <dl className="grid gap-4 text-sm sm:grid-cols-2 lg:grid-cols-4">
+            <div>
+              <dt className="text-xs text-muted-foreground">Stored rate</dt>
+              <dd className="money mt-1">1 {currency} = {invoice.exchangeRateToBase} {access.business.currency}</dd>
+            </div>
+            <div>
+              <dt className="text-xs text-muted-foreground">Rate date</dt>
+              <dd className="mt-1">{formatDate(invoice.exchangeRateDate)}</dd>
+            </div>
+            <div>
+              <dt className="text-xs text-muted-foreground">Rate source</dt>
+              <dd className="mt-1">{invoice.exchangeRateSource}</dd>
+            </div>
+            <div>
+              <dt className="text-xs text-muted-foreground">Base equivalent</dt>
+              <dd className="money mt-1 font-semibold">{formatMoney(invoice.baseTotalMinor, access.business.currency)}</dd>
+            </div>
+          </dl>
+          <p className="mt-3 text-xs text-muted-foreground">Base Input VAT {formatMoney(invoice.baseTaxMinor, access.business.currency)} · Inventory purchases remain base historical cost and do not move stock here.</p>
+        </section>
+      )}
+
+      <article className="rounded-xl border border-border bg-surface-raised shadow-sm p-5 sm:p-7 dark:shadow-none">
+        <div className="grid gap-6 border-b border-border pb-6 sm:grid-cols-2 -mx-5 -mt-5 bg-surface-muted/30 p-5 sm:-mx-7 sm:-mt-7 sm:p-7 rounded-t-xl">
+          <div>
+            <p className="text-xs font-semibold tracking-[0.08em] text-muted-foreground uppercase">Supplier</p>
+            <p className="mt-2 font-semibold">{supplier.name}</p>
+            {supplier.email && <p className="mt-1 text-sm text-muted-foreground">{supplier.email}</p>}
+            {supplier.phone && <p className="text-sm text-muted-foreground">{supplier.phone}</p>}
+          </div>
+          <dl className="grid grid-cols-2 gap-x-5 gap-y-3 text-sm sm:justify-self-end">
+            <dt className="text-muted-foreground">Supplier invoice</dt>
+            <dd className="text-right tabular">{invoice.supplierInvoiceNumber}</dd>
+            <dt className="text-muted-foreground">Invoice date</dt>
+            <dd className="text-right">{formatDate(invoice.invoiceDate)}</dd>
+            <dt className="text-muted-foreground">VAT tax date</dt>
+            <dd className="text-right">{formatDate(invoice.taxDate)}</dd>
+            <dt className="text-muted-foreground">Due date</dt>
+            <dd className="text-right">{formatDate(invoice.dueDate)}</dd>
+            <dt className="text-muted-foreground">Reference</dt>
+            <dd className="text-right">{invoice.reference || "—"}</dd>
+            <dt className="text-muted-foreground">Project</dt>
+            <dd className="text-right"><ProjectLinks businessId={businessId} projects={linkedProjects} /></dd>
+          </dl>
+        </div>
+
+        <div className="mt-6 overflow-x-auto">
+          <table className={`data-table ${showLineProjects ? "min-w-[940px]" : "min-w-[800px]"}`}>
+            <thead>
+              <tr>
+                <th>Item / Description</th>
+                <th className="text-right!">Qty</th>
+                <th className="text-right!">Rate</th>
+                <th>VAT</th>
+                {showLineProjects && <th>Project</th>}
+                <th className="text-right!">Amount</th>
+              </tr>
+            </thead>
+            <tbody>
+              {lines.map((line) => (
+                <tr key={line.id}>
+                  <td>
+                    <span className="font-medium">{line.item ? `${line.item.sku ? `${line.item.sku} · ` : ""}${line.item.name}` : line.description}</span>
+                    {line.item && <span className="mt-0.5 block text-xs text-muted-foreground">{line.description}</span>}
+                    <span className="mt-0.5 block text-xs text-muted-foreground">{line.expenseAccount ? line.expenseAccount.name : line.item ? "Inventory Asset from item" : "Expense account unavailable"}</span>
+                  </td>
+                  <td className="money text-right">{quantityMicrosToInput(line.quantityMicros)}</td>
+                  <td className="money text-right">{formatMoney(line.unitPriceMinor, currency)}</td>
+                  <td>{line.taxCode ? `${line.taxCode.name} (${rateBasisPointsToPercent(line.taxCode.rate_basis_points)}%)` : "—"}</td>
+                  {showLineProjects && <td><ProjectLinks businessId={businessId} projects={line.project ? [line.project] : []} empty="—" /></td>}
+                  <td className="money text-right">{formatMoney(line.grossAmountMinor, currency)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+
+        <dl className="mt-6 ml-auto w-full max-w-xs space-y-2 text-sm">
+          <div className="flex justify-between">
+            <dt className="text-muted-foreground">Subtotal</dt>
+            <dd className="money">{formatMoney(invoice.subtotalMinor, currency)}</dd>
+          </div>
+          <div className="flex justify-between">
+            <dt className="text-muted-foreground">Input VAT</dt>
+            <dd className="money">{formatMoney(invoice.taxMinor, currency)}</dd>
+          </div>
+          <div className="flex justify-between border-t border-border pt-2 text-base font-semibold">
+            <dt>Total</dt>
+            <dd className="money">{formatMoney(invoice.totalMinor, currency)}</dd>
+          </div>
+          {invoice.documentStatus === "posted" && (
+            <div className="flex justify-between border-t border-border pt-2">
+              <dt className="text-muted-foreground">Balance due</dt>
+              <dd className="money font-semibold">{formatMoney(record.balanceMinor, currency)}</dd>
+            </div>
+          )}
+        </dl>
+
+        <section className="mt-8 border-t border-border pt-5">
+          <h2 className="text-sm font-semibold">Related</h2>
+          <dl className="mt-3 grid gap-3 text-sm sm:grid-cols-3">
+            <div>
+              <dt className="text-xs text-muted-foreground">Purchase order</dt>
+              <dd className="mt-1">{record.order ? <Link href={`/b/${businessId}/purchases/orders/${record.order.id}`} className="tabular font-medium text-primary hover:underline">{record.order.orderNumber}</Link> : "Not linked"}</dd>
+            </div>
+            <div>
+              <dt className="text-xs text-muted-foreground">Project</dt>
+              <dd className="mt-1"><ProjectLinks businessId={businessId} projects={linkedProjects} /></dd>
+            </div>
+            <div>
+              <dt className="text-xs text-muted-foreground">Journal entry</dt>
+              <dd className="mt-1">{record.journal ? <Link href={`/b/${businessId}/accounting/journal/${record.journal.id}`} className="tabular font-medium text-primary hover:underline">{record.journal.entryNumber}</Link> : "Not posted"}</dd>
+            </div>
+          </dl>
+        </section>
+
+        <section className="mt-8 border-t border-border pt-5">
+          <h2 className="text-sm font-semibold">Goods Receipts</h2>
+          {record.goodsReceipts.length ? (
+            <div className="mt-3 overflow-x-auto rounded-md border border-border">
+              <table className="data-table min-w-[520px]">
+                <thead><tr><th>Receipt</th><th>Date</th><th>Status</th></tr></thead>
+                <tbody>
+                  {record.goodsReceipts.map((receipt) => (
+                    <tr key={receipt.id}>
+                      <td><Link href={`/b/${businessId}/purchases/goods-receipts/${receipt.id}`} className="tabular font-medium text-primary hover:underline">{receipt.receipt_number}</Link></td>
+                      <td>{formatDate(receipt.date)}</td>
+                      <td className="capitalize">{receipt.document_status}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            <p className="mt-2 text-sm text-muted-foreground">No goods receipts linked yet.</p>
+          )}
+        </section>
+
+        <section className="mt-8 border-t border-border pt-5">
+          <h2 className="text-sm font-semibold">Payments</h2>
+          {record.payments.length ? (
+            <div className="mt-3 overflow-x-auto rounded-md border border-border">
+              <table className="data-table min-w-[560px]">
+                <thead><tr><th>Payment</th><th>Date</th><th>Reference</th><th className="text-right!">Allocated</th></tr></thead>
+                <tbody>
+                  {record.payments.map((payment) => (
+                    <tr key={payment.id}>
+                      <td><Link href={`/b/${businessId}/purchases/payments/${payment.id}`} className="tabular font-medium text-primary hover:underline">{payment.paymentNumber}</Link></td>
+                      <td>{formatDate(payment.date)}</td>
+                      <td className="text-muted-foreground">{payment.reference || "—"}</td>
+                      <td className="money text-right">{formatMoney(payment.allocatedMinor, currency)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            <p className="mt-2 text-sm text-muted-foreground">
+              {invoice.documentStatus === "posted" ? "No supplier payments recorded." : "Payments become available after posting."}
+            </p>
+          )}
+        </section>
+      </article>
+    </div>
+  );
+}

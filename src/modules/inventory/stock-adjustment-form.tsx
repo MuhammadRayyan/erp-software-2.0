@@ -8,6 +8,7 @@ import { LoaderCircle } from "lucide-react";
 import { useForm, useWatch } from "react-hook-form";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { saveStockAdjustmentAction } from "./stock-adjustment-actions";
 import {
@@ -167,7 +168,7 @@ export function StockAdjustmentForm({
             <Label htmlFor="notes">
               Notes <span className="font-normal text-muted-foreground">(optional)</span>
             </Label>
-            <Input id="notes" {...register("notes")} />
+            <Textarea id="notes" rows={2} placeholder="Reason for inventory adjustment / discrepancy notes..." {...register("notes")} />
           </div>
         </div>
       </section>
