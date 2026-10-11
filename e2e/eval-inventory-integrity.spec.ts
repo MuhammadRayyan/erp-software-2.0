@@ -29,6 +29,7 @@ test.describe('Evaluation Suite A: Inventory Integrity', () => {
 
     // 3. Attempt to post Delivery Note for 5 units
     await page.goto(`/b/${businessId}/sales/delivery-notes/new`);
+    await page.waitForTimeout(2000);
     await page.getByLabel(/customer/i).first().selectOption({ label: customerName });
     await page.getByLabel(/Line 1 item/i).selectOption({ label: itemName });
     await page.getByLabel(/Line 1 quantity/i).fill('5');
@@ -51,6 +52,7 @@ test.describe('Evaluation Suite A: Inventory Integrity', () => {
 
     // 2. Attempt positive Stock Adjustment (Reason: Adjustment)
     await page.goto(`/b/${businessId}/inventory/adjustments/new`);
+    await page.waitForTimeout(2000);
     await page.getByLabel(/inventory item/i).selectOption({ label: itemName });
     await page.getByLabel(/quantity change/i).fill('10');
     await page.getByLabel(/reason/i).selectOption({ label: 'Stock count correction' }); // Not Opening Balance

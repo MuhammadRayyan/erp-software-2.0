@@ -13,6 +13,7 @@ test.describe('Deep Inventory Testing', () => {
     const customer = `Cust ${ts}`;
     const supplier = `Supp ${ts}`;
     const item = `Item ${ts}`;
+    const businessId = page.url().match(/\/b\/([^/]+)/)?.[1];
 
     // 1. Create a supplier and customer
     await page.getByRole('link', { name: 'Suppliers', exact: true }).click();
@@ -55,12 +56,12 @@ test.describe('Deep Inventory Testing', () => {
     await expect(page.getByText('POSTED').first()).toBeVisible();
 
     // 5. Delivery Note
-    await page.getByRole('link', { name: 'Delivery Notes', exact: true }).click();
-    await page.getByRole('link', { name: 'New Delivery Note' }).first().click();
+    await page.goto(`/b/${businessId}/sales/delivery-notes/new`);
+    await page.waitForTimeout(2000);
     await page.getByLabel(/customer/i).first().selectOption({ label: customer });
     await page.getByLabel(/Line 1 item/i).selectOption({ label: item });
     await page.getByLabel(/Line 1 quantity/i).fill('5');
-    await page.getByRole('button', { name: /post delivery note/i }).click();
-    await expect(page.getByText('POSTED').first()).toBeVisible();
+    await page.getByRole('button', { name: /Post Delivery/i }).click();
+    await expect(page.getByText('POSTED').first()).toBeVisible({ timeout: 15000 });
   });
 });

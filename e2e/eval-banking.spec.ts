@@ -13,6 +13,7 @@ test.describe('Evaluation Suite F: Banking & Reconciliation', () => {
     // Go to Bank Transactions
     const businessId = page.url().match(/\/b\/([^/]+)/)?.[1];
     await page.goto(`/b/${businessId}/banking/transactions/new`);
+    await page.waitForTimeout(2000);
 
     // Select money in
     await page.getByLabel(/direction/i).selectOption({ label: 'Money In' });

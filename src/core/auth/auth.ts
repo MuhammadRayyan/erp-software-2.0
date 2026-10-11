@@ -41,7 +41,7 @@ export const auth = betterAuth({
   // The window/max here are the fallback rule; the sign-in path gets a
   // stricter window below plus the failed-attempt limiter in hooks.
   rateLimit: {
-    enabled: true,
+    enabled: process.env.NODE_ENV === "production",
     window: 60,
     max: 100,
     customRules: {

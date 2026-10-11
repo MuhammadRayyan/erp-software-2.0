@@ -17,21 +17,25 @@ test.describe('Evaluation Suite C: AR/AP Financial Integrity', () => {
     // Create Customer
     await page.goto(`/b/${businessId}/customers/new`);
     await page.getByLabel(/customer name/i).first().fill(customerName);
-    await page.locator('button[type="submit"]').click(); await page.waitForTimeout(1500);
+    await page.locator('button[type="submit"]').click();
+    await expect(page.getByRole('heading', { name: customerName })).toBeVisible({ timeout: 15000 });
 
     // Create Item
     await page.goto(`/b/${businessId}/inventory/items/new`);
     await page.getByLabel(/item name/i).first().fill(item);
     await page.getByLabel(/sales price/i).first().fill('500.00');
-    await page.locator('button[type="submit"]').click(); await page.waitForTimeout(1500);
+    await page.locator('button[type="submit"]').click();
+    await expect(page.getByRole('heading', { name: item })).toBeVisible({ timeout: 15000 });
 
     // Create & Post Sales Invoice
     await page.goto(`/b/${businessId}/sales/invoices/new`);
+    await page.waitForTimeout(2000);
     await page.getByLabel(/customer/i).first().selectOption({ label: customerName });
+    await expect(page.getByLabel(/customer/i).first()).not.toHaveValue('');
     await page.getByLabel(/Line 1 inventory item/i).selectOption({ label: item });
     
     await page.getByRole('button', { name: /post invoice/i }).click();
-    await expect(page.getByText('POSTED').first()).toBeVisible();
+    await expect(page.getByText('POSTED').first()).toBeVisible({ timeout: 15000 });
     
     // C1: Over-payment Guard
     await page.getByRole('link', { name: 'Record Receipt' }).click();

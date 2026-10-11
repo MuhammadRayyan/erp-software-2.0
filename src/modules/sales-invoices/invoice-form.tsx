@@ -3,14 +3,12 @@ import { useRouter } from "next/navigation";
 import { FormError } from "@/components/form-error";
 import { useState } from "react";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { Columns3, LoaderCircle, Plus, Trash2 } from "lucide-react";
+import { LoaderCircle } from "lucide-react";
 import { useFieldArray, useForm, useWatch } from "react-hook-form";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { formatMoney } from "@/core/format";
-import { convertToBase, minorToCurrencyInput, parseCurrencyAmountToMinor } from "@/modules/currency/conversion";
-import { calculateTax, multiplyMoneyByQuantity, parseQuantityToMicros } from "@/modules/accounting/calculations/money";
+import { convertToBase, minorToCurrencyInput } from "@/modules/currency/conversion";
 import { DocumentCurrencyFields, type DocumentCurrencyOption, type DocumentRateOption } from "@/modules/currency/document-currency-fields";
 import { CustomFieldInputs, type CustomFieldInputDefinition } from "@/modules/custom-fields/custom-field-inputs";
 import { firstMissingRequiredCustomField } from "@/modules/custom-fields/custom-field-display";
@@ -20,24 +18,13 @@ import type { DocumentStatus, InvoiceSaveIntent } from "./invoice-service";
 import { emirateLabels, emirates } from "@/modules/tax/uae-vat-config";
 import { DocumentFormFooter } from "@/components/document-form-footer";
 import { SelectNative } from "@/components/ui/select-native";
+import { DocumentLineTable, useDocumentTotals } from "@/components/documents";
 
 type CustomerOption = { id: string; name: string; defaultCurrencyCode: string | null; paymentTermsDays: number; creditLimitMinor: number | null };
 type AccountOption = { id: string; name: string };
 type TaxCodeOption = { id: string; name: string; rateBasisPoints: number };
 type ProjectOption = { id: string; code: string; name: string; customerId: string | null };
 type ItemOption = { id: string; sku: string | null; name: string; salesPriceMinor: number | null; salesAccountId: string };
-
-
-function previewLine(line: InvoiceInput["lines"][number] | undefined, taxCodes: TaxCodeOption[], minorUnit: number) {
-  try {
-    const unitPriceMinor = parseCurrencyAmountToMinor(String(line?.unitPrice || "0"), minorUnit, "Unit price");
-    const quantityMicros = parseQuantityToMicros(String(line?.quantity || "0"));
-    const netMinor = multiplyMoneyByQuantity(unitPriceMinor, quantityMicros);
-    const rate = taxCodes.find((taxCode) => taxCode.id === line?.taxCodeId)?.rateBasisPoints ?? 0;
-    const taxMinor = calculateTax(netMinor, rate);
-    return { netMinor, taxMinor, grossMinor: netMinor + taxMinor };
-  } catch { return { netMinor: 0, taxMinor: 0, grossMinor: 0 }; }
-}
 
 export function InvoiceForm({
   onDefaultSave,
@@ -74,7 +61,6 @@ export function InvoiceForm({
 }) {
   const router = useRouter();
   const [serverError, setServerError] = useState("");
-  const [showLineProjects, setShowLineProjects] = useState(() => initial.lines.some((line) => Boolean(line.projectId)));
   const [customValues, setCustomValues] = useState<Record<string, string>>(() => {
     const initialCustomValues: Record<string, string> = {};
     for (const definition of customFields) {
@@ -86,7 +72,6 @@ export function InvoiceForm({
   const form = useForm<InvoiceInput>({ resolver: zodResolver(invoiceInputSchema), defaultValues: initial });
   const { register, control, handleSubmit, setError, setValue, formState: { errors, isSubmitting } } = form;
   const { fields, append, remove } = useFieldArray({ control, name: "lines" });
-  const lines = useWatch({ control, name: "lines" }) ?? [];
   const customerId = useWatch({ control, name: "customerId" });
   const currencyCode = useWatch({ control, name: "currencyCode" }) || currency;
   const exchangeRateToBase = useWatch({ control, name: "exchangeRateToBase" }) || "";
@@ -97,9 +82,7 @@ export function InvoiceForm({
   const availableProjects = projects.filter((project) => !project.customerId || project.customerId === customerId);
   const minorUnit = currencies.find((entry) => entry.code === currencyCode)?.minorUnit ?? 2;
   const baseMinorUnit = currencies.find((entry) => entry.code === currency)?.minorUnit ?? 2;
-  const previews = lines.map((line) => previewLine(line, taxCodes, minorUnit));
-  const subtotalMinor = previews.reduce((sum, line) => sum + line.netMinor, 0);
-  const taxMinor = previews.reduce((sum, line) => sum + line.taxMinor, 0);
+  const { lines, amountsIncludeTax, previews, subtotalMinor, taxMinor } = useDocumentTotals({ control, taxCodes, minorUnit });
   let baseEquivalentMinor: number | null = null;
   if (currencyCode !== currency && exchangeRateToBase) {
     try { baseEquivalentMinor = convertToBase(subtotalMinor + taxMinor, minorUnit, baseMinorUnit, exchangeRateToBase); } catch { baseEquivalentMinor = null; }
@@ -151,7 +134,42 @@ export function InvoiceForm({
       <section className="form-section">
         <h2 className="text-base font-semibold">Invoice details</h2>
         <div className="mt-5 grid gap-5 md:grid-cols-3">
-          <div className="space-y-1.5"><Label htmlFor="customerId">Customer</Label><SelectNative id="customerId"  {...register("customerId", { onChange: (event) => { if (documentStatus === "draft") { const customer = customers.find((c) => c.id === event.target.value); const code = customer?.defaultCurrencyCode ?? currency; setValue("currencyCode", code); setValue("exchangeRateToBase", code === currency ? "1" : ""); setValue("exchangeRateDate", code === currency ? (taxDate || invoiceDate) : ""); setValue("exchangeRateSource", code === currency ? "Base" : ""); if (customer?.paymentTermsDays) { const baseDate = invoiceDate || new Date().toISOString().slice(0, 10); const d = new Date(baseDate); if (!Number.isNaN(d.valueOf())) { d.setDate(d.getDate() + customer.paymentTermsDays); setValue("dueDate", d.toISOString().slice(0, 10)); } } } } })} aria-invalid={!!errors.customerId}><option value="">Choose a customer…</option>{customers.map((customer) => <option key={customer.id} value={customer.id}>{customer.name}</option>)}</SelectNative>{errors.customerId && <p className="field-error">{errors.customerId.message}</p>}</div>
+          <div className="space-y-1.5">
+            <Label htmlFor="customerId">Customer</Label>
+            <SelectNative
+              id="customerId"
+              {...register("customerId", {
+                onChange: (event) => {
+                  const newCustomerId = event.target.value;
+                  if (documentStatus === "draft") {
+                    const customer = customers.find((c) => c.id === newCustomerId);
+                    const code = customer?.defaultCurrencyCode ?? currency;
+                    setValue("currencyCode", code);
+                    setValue("exchangeRateToBase", code === currency ? "1" : "");
+                    setValue("exchangeRateDate", code === currency ? (taxDate || invoiceDate) : "");
+                    setValue("exchangeRateSource", code === currency ? "Base" : "");
+                    if (customer?.paymentTermsDays) {
+                      const baseDate = invoiceDate || new Date().toISOString().slice(0, 10);
+                      const d = new Date(baseDate);
+                      if (!Number.isNaN(d.valueOf())) {
+                        d.setDate(d.getDate() + customer.paymentTermsDays);
+                        setValue("dueDate", d.toISOString().slice(0, 10));
+                      }
+                    }
+                  }
+                },
+              })}
+              aria-invalid={!!errors.customerId}
+            >
+              <option value="">Choose a customer…</option>
+              {customers.map((customer) => (
+                <option key={customer.id} value={customer.id}>
+                  {customer.name}
+                </option>
+              ))}
+            </SelectNative>
+            {errors.customerId && <p className="field-error">{errors.customerId.message}</p>}
+          </div>
           <div className="space-y-1.5"><Label htmlFor="invoiceDate">Invoice date</Label><Input id="invoiceDate" type="date" {...register("invoiceDate", { onChange: (event) => { if (documentStatus === "draft") { const customer = customers.find((c) => c.id === customerId); if (customer?.paymentTermsDays && event.target.value) { const d = new Date(event.target.value); if (!Number.isNaN(d.valueOf())) { d.setDate(d.getDate() + customer.paymentTermsDays); setValue("dueDate", d.toISOString().slice(0, 10)); } } } } })} aria-invalid={!!errors.invoiceDate} />{errors.invoiceDate && <p className="field-error">{errors.invoiceDate.message}</p>}</div>
           <div className="space-y-1.5"><Label htmlFor="taxDate">VAT tax date</Label><Input id="taxDate" type="date" {...register("taxDate")} aria-invalid={!!errors.taxDate} />{errors.taxDate && <p className="field-error">{errors.taxDate.message}</p>}</div>
           <div className="space-y-1.5"><Label htmlFor="dueDate">Due date</Label><Input id="dueDate" type="date" {...register("dueDate")} aria-invalid={!!errors.dueDate} />{errors.dueDate && <p className="field-error">{errors.dueDate.message}</p>}</div>
@@ -166,18 +184,48 @@ export function InvoiceForm({
         {currencyCode !== currency && <p className="mt-3 text-xs text-muted-foreground">UAE VAT-relevant invoices require a stored CBUAE-labelled rate for the VAT tax date. Posting preserves this exact snapshot.</p>}
       </section>
       <section className="form-section">
-        <div className="mb-3 flex flex-wrap items-end justify-between gap-3"><div><h2 className="text-base font-semibold">Line items</h2><p className="mt-1 text-sm text-muted-foreground">Select an item for inventory sales, or leave it blank for a service line.</p></div><div className="flex gap-2"><Button type="button" variant="ghost" size="sm" onClick={() => setShowLineProjects((value) => !value)} aria-pressed={showLineProjects}><Columns3 className="size-4" /> {showLineProjects ? "Hide line Projects" : "Show Project per line"}</Button></div></div>
-        {typeof errors.lines?.message === "string" && <p className="field-error mb-2">{errors.lines.message}</p>}
-        <div className="overflow-x-auto pb-4 -mx-2 px-2">
-          <table className={`line-item-table ${showLineProjects ? "min-w-[1480px]" : "min-w-[1270px]"}`}>
-            <thead><tr><th className="w-56">Item <span className="font-normal text-muted-foreground">(optional)</span></th><th className="min-w-[250px]">Description</th><th className="w-24 text-right!">Qty</th><th className="w-32 text-right!">Rate</th><th className="w-48">Account</th><th className="w-40">VAT</th>{showLineProjects && <th className="w-52">Project override</th>}<th className="w-32 text-right!">Amount</th><th className="w-12"><span className="sr-only">Remove</span></th></tr></thead>
-            <tbody>{fields.map((field, index) => <tr key={field.id} ><td><SelectNative  aria-label={`Line ${index + 1} inventory item`} {...register(`lines.${index}.itemId`, { onChange: (event) => selectItem(index, event.target.value) })}><option value="">Service / free text</option>{items.map((item) => <option key={item.id} value={item.id}>{item.sku ? `${item.sku} — ` : ""}{item.name}</option>)}</SelectNative></td><td className="align-top"><Input aria-label={`Line ${index + 1} description`} {...register(`lines.${index}.description`)} />{errors.lines?.[index]?.description && <p className="field-error">{errors.lines[index]?.description?.message}</p>}</td><td className="align-top"><Input className="money text-right" type="number" step="0.0001" min="0.0001" aria-label={`Line ${index + 1} quantity`} {...register(`lines.${index}.quantity`)} /></td><td className="align-top"><Input className="money text-right" type="number" step="0.000001" min="0" aria-label={`Line ${index + 1} rate`} {...register(`lines.${index}.unitPrice`)} /></td><td className="align-top">{lines[index]?.itemId ? <><input type="hidden" {...register(`lines.${index}.salesAccountId`)} /><span className="text-sm text-muted-foreground">From item</span></> : <SelectNative  aria-label={`Line ${index + 1} sales account`} {...register(`lines.${index}.salesAccountId`)}>{salesAccounts.map((account) => <option key={account.id} value={account.id}>{account.name}</option>)}</SelectNative>}</td><td className="align-top"><SelectNative  aria-label={`Line ${index + 1} tax code`} {...register(`lines.${index}.taxCodeId`)}>{taxCodes.map((taxCode) => <option key={taxCode.id} value={taxCode.id}>{taxCode.name}</option>)}</SelectNative></td>{showLineProjects && <td className="align-top"><SelectNative  aria-label={`Line ${index + 1} project override`} {...register(`lines.${index}.projectId`)}><option value="">Use document Project</option>{availableProjects.map((project) => <option key={project.id} value={project.id}>{project.code} — {project.name}</option>)}</SelectNative></td>}<td className="money text-right">{formatMoney(previews[index]?.grossMinor ?? 0, currencyCode, minorUnit)}</td><td><Button type="button" variant="ghost" size="icon" aria-label={`Remove line ${index + 1}`} disabled={fields.length === 1} title={fields.length === 1 ? "An invoice needs at least one line" : undefined} onClick={() => remove(index)}><Trash2 className="size-4 text-muted-foreground" /></Button></td></tr>)}</tbody>
-          </table>
+        <div className="mb-3 flex flex-wrap items-end justify-between gap-3">
+          <div>
+            <h2 className="text-base font-semibold">Line items</h2>
+            <p className="mt-1 text-sm text-muted-foreground">Select an item for inventory sales, or leave it blank for a service line.</p>
           </div>
-          <button type="button" className="dashed-add-button mt-2" onClick={() => append({ itemId: "", description: "", quantity: "1", unitPrice: "0.00", salesAccountId: defaultSalesAccountId, taxCodeId: defaultTaxCodeId, projectId: "" })}>
-            <Plus className="size-4" /> Add line
-          </button>
-        <dl className="mt-5 ml-auto w-full max-w-xs space-y-2 text-sm"><div className="flex justify-between"><dt className="text-muted-foreground">Subtotal</dt><dd className="money">{formatMoney(subtotalMinor, currencyCode, minorUnit)}</dd></div><div className="flex justify-between"><dt className="text-muted-foreground">VAT</dt><dd className="money">{formatMoney(taxMinor, currencyCode, minorUnit)}</dd></div><div className="flex justify-between border-t border-border pt-2 text-base font-semibold"><dt>Total</dt><dd className="money">{formatMoney(subtotalMinor + taxMinor, currencyCode, minorUnit)}</dd></div>{baseEquivalentMinor != null && <div className="flex justify-between border-t border-border pt-2"><dt className="text-muted-foreground">Base equivalent</dt><dd className="money">{formatMoney(baseEquivalentMinor, currency, baseMinorUnit)}</dd></div>}</dl>
+        </div>
+        <DocumentLineTable
+          register={register}
+          errors={errors}
+          fields={fields}
+          lines={lines}
+          onAppend={() =>
+            append({
+              itemId: "",
+              description: "",
+              quantity: "1",
+              unitPrice: "0.00",
+              salesAccountId: defaultSalesAccountId,
+              taxCodeId: defaultTaxCodeId,
+              projectId: "",
+              discountType: "none",
+              discountValue: "0",
+            })
+          }
+          onRemove={remove}
+          items={items}
+          onItemSelect={selectItem}
+          accounts={salesAccounts}
+          accountFieldName="salesAccountId"
+          taxCodes={taxCodes}
+          projects={availableProjects}
+          currencyCode={currencyCode}
+          minorUnit={minorUnit}
+          previews={previews}
+          amountsIncludeTax={amountsIncludeTax}
+          subtotalMinor={subtotalMinor}
+          taxMinor={taxMinor}
+          baseEquivalentMinor={baseEquivalentMinor}
+          baseCurrencyCode={currency}
+          baseMinorUnit={baseMinorUnit}
+          registerAmountsIncludeTax={register("amountsIncludeTax")}
+        />
       </section>
       {customFields.length > 0 && (
         <section className="form-section">
