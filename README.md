@@ -2,7 +2,18 @@
 
 A compact, Manager.io-inspired multi-business accounting/ERP application for local and self-hosted use.
 
-**Current release: v2.4.1** — Centralized Document Revision Engine (Orders & Quotes), Complete Sales & Procurement parity, Purchase Quotes (RFQ) module, Sequential Document Revisions & Versioning with interactive dropdown switcher and superseded state management, One-Click Document Conversions (Quote $\rightarrow$ Order $\rightarrow$ Invoice), Form Defaults configuration, Manager.io-inspired subtractive discounts and inclusive tax splitting, sent emails with PDF attachments, multi-currency foundation, and UAE VAT. See `docs/CHANGELOG.md` for the full history and `docs/CURRENT_STATE.md` for authoritative behavior.
+**Current release: v2.5.0** — Comprehensive Manager.io & Modern ERP Feature Suite:
+- **Global Financial Lock Date (Period Closing)**: Hard period closure enforcement preventing backdated postings or edits in closed periods.
+- **Universal Clickable Balance Drill-Down**: Interactive drill-down from Chart of Accounts, Trial Balance, Balance Sheet, and Profit & Loss directly into the General Ledger.
+- **Cash Basis vs. Accrual Basis Toggle in Profit & Loss**: Dynamic cash-allocation reporting engine recognizing revenue and expenses upon realized settlement vs. invoice accrual.
+- **Guided Opening Balances Engine**: Self-balancing onboarding engine with live debit/credit indicator and automated equity offset.
+- **Payment Terms Presets & Auto Due Dates**: Manager for Net 15, Net 30, EOM with dynamic invoice due-date calculation.
+- **Email Templates with Dynamic Variables**: Customizable templates supporting `{{customer_name}}`, `{{document_number}}`, `{{total_amount}}`, `{{balance_due}}`, `{{due_date}}`, `{{business_name}}`.
+- **Units of Measure (UOM) Standard**: Standardized measurement units across inventory items, line items, and document forms.
+- **Multi-Select Batch Operations Bar**: Floating action dock for multi-row selection, batch CSV export, and batch print across commercial registers.
+- **Sticky Form Action Dock**: Always-visible form footer displaying document status, running subtotal, tax amount, and formatted totals.
+- **Centralized Settings Hub**: Fully categorized and searchable settings dashboard.
+See `docs/CHANGELOG.md` for the full history and `docs/CURRENT_STATE.md` for authoritative behavior.
 
 ## Working context for future phases
 

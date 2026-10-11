@@ -5,6 +5,65 @@ All notable changes since the original `erp-software-2.0-antigravity-edits` uplo
 Full per-task detail (file lists, verification transcripts, QA walkthroughs) lives in `worklog.md` at the repository root.
 
 
+## Manager.io & Modern ERP Feature Suite (improvements-settings-v1)
+
+- **Migration 27 (`manager_features_lock_uom_terms_email`)**:
+  - Added `financial_lock_date` and `opening_balances_date` to `business_accounting_settings`.
+  - Created `units_of_measure` table (pre-seeded with `pcs`, `hrs`, `days`, `kg`, `m`, `box`, `set`, `ltr`, `ton`, `sqm`).
+  - Added `unit_of_measure` to `inventory_items` and commercial line tables (`sales_invoice_lines`, `purchase_invoice_lines`, `sales_quote_lines`, `sales_order_lines`, `purchase_quote_lines`, `purchase_order_lines`, `delivery_note_lines`, `goods_receipt_lines`).
+  - Created `payment_terms` table (pre-seeded with `Due on Receipt`, `Net 15`, `Net 30`, `Net 45`, `Net 60`, `End of Month`) and foreign key column `payment_terms_id` on `customers` and `suppliers`.
+  - Created `email_templates` table (pre-seeded with standard templates for 7 document types).
+
+- **Global Financial Lock Date (Period Closing) (`/settings/lock-date`)**:
+  - Created `financial-lock-service.ts` with `getFinancialLockDate`, `setFinancialLockDate`, and `assertFinancialLock`.
+  - Enforced in `posting-service.ts` (`postTransaction`): blocks posting, editing, or voiding transactions dated on or prior to the financial lock date.
+  - Dedicated settings page with quick preset buttons (End of Last Month, End of Last Quarter, End of Last Fiscal Year).
+
+- **Universal Clickable Balance Drill-Down**:
+  - Upgraded `listAccountsWithBalances` in `account-service.ts`.
+  - Made account balances interactive links across the Chart of Accounts (`/accounting/chart-of-accounts`), Trial Balance (`/reports/trial-balance`), Balance Sheet (`/reports/balance-sheet`), and Profit & Loss (`/reports/profit-loss`).
+  - Clicking any balance navigates directly to the General Ledger (`/accounting/general-ledger?accountId=...`), preserving date ranges.
+
+- **Cash Basis vs. Accrual Basis Toggle in Profit & Loss (`/reports/profit-loss`)**:
+  - Enhanced `getProfitAndLoss` in `report-service.ts` supporting `basis: "accrual" | "cash"`.
+  - Accrual basis: calculates revenue and expenses from posted sales and purchase invoices.
+  - Cash basis: recognizes revenue and expenses strictly upon realized cash receipts and supplier payments, apportioning receipts/payments proportionally across invoice line accounts.
+  - Added an interactive basis switcher toggle to the report UI.
+
+- **Guided Opening Balances Onboarding Engine (`/settings/opening-balances`)**:
+  - Implemented `opening-balances-service.ts` with `getOpeningBalances` and `saveOpeningBalances`.
+  - UI groups accounts by type (Assets, Liabilities, Equity, Historical Income, Historical Expenses).
+  - Live debit/credit summary banner: automatically creates an opening balance journal entry, offsetting any imbalance to Retained Earnings / Equity.
+
+- **Units of Measure (UOM) Standard (`/settings/units-of-measure`)**:
+  - Created `uom-service.ts` and interactive UOM management interface.
+  - Standardized measurement units across inventory items, line items, and document forms.
+
+- **Multi-Select Batch Operations Bar (`src/components/batch-action-bar.tsx`)**:
+  - Floating bottom action dock appearing whenever rows are selected in registers.
+  - Integrated into Sales Invoices (`/sales-invoices`), Purchase Invoices (`/purchase-invoices`), and Sales Quotes (`/sales-quotes`).
+  - Supports multi-select, select-all, batch CSV export, and batch print triggers.
+
+- **Sticky Action Dock on Long Forms (`src/components/document-form-footer.tsx`)**:
+  - Modernized document form footer with sticky bottom positioning, frosted glass backdrop blur, and responsive layout.
+  - Displays document status badge, live running subtotal, tax amount, and formatted total always in view.
+  - Integrated across Sales Invoices, Purchase Invoices, and Sales Quotes.
+
+- **Payment Terms Presets & Auto Due Dates (`/settings/payment-terms`)**:
+  - Implemented `payment-terms-service.ts` with flexible calculation (`calculateDueDate`) supporting fixed days (`Net 15`, `Net 30`, `Net 45`, `Net 60`) and End of Month (`EOM`, `EOM + X days`).
+  - Selecting a customer or supplier with default payment terms automatically computes and populates invoice due dates based on issue date.
+
+- **Email Templates with Dynamic Variables (`/settings/email-templates`)**:
+  - Implemented `email-template-service.ts` with variable placeholder interpolation (`{{customer_name}}`, `{{document_number}}`, `{{total_amount}}`, `{{balance_due}}`, `{{due_date}}`, `{{business_name}}`).
+  - Studio UI with quick variable insertion chips, live sample preview, and per-document-type configuration.
+
+- **Settings Hub Centralization**:
+  - Integrated all new configuration views into `SettingsHubClient` with quick search indexing and badges.
+
+- **Automated Verification Suite (`tests/manager-erp-features.test.ts`)**:
+  - Comprehensive automated tests covering all new features, expanding the test suite to 83 passing tests (0 failures, 0 TypeScript errors).
+
+
 ## Settings Hub, Business Profile, Localization & Numbering Overhaul (improvements-settings-v1)
 - **Centralized Settings Hub (`/settings`)**:
   - Replaced flat unorganized settings grid with a categorized 4-section architecture:

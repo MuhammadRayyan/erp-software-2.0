@@ -1,5 +1,50 @@
 > Historical record. Some referenced files were never created — see docs/CURRENT_STATE.md for the authoritative state.
 
+# Branch Changes: `improvements-settings-v1`
+
+## Feature Group 1: Accounting Core & Controls
+- **Global Financial Lock Date (Period Closing)**:
+  - Added `financial_lock_date` to `business_accounting_settings` in Migration 27.
+  - Implemented `financial-lock-service.ts` with `getFinancialLockDate`, `setFinancialLockDate`, and `assertFinancialLock`.
+  - Enforced in `posting-service.ts` `postTransaction` to block backdated ledger postings or modifications on or prior to the locked date.
+  - Dedicated settings page at `/b/[businessId]/settings/lock-date` with quick presets (End of Last Month, End of Last Quarter, End of Last Fiscal Year).
+- **Universal Clickable Balance Drill-Down**:
+  - Upgraded `listAccountsWithBalances` in `account-service.ts`.
+  - Clickable account balances in Chart of Accounts (`/accounting/chart-of-accounts`), Trial Balance (`/reports/trial-balance`), Balance Sheet (`/reports/balance-sheet`), and Profit & Loss (`/reports/profit-loss`) drilling directly into the General Ledger (`/accounting/general-ledger?accountId=...`).
+- **Cash Basis vs. Accrual Basis Toggle in Profit & Loss**:
+  - Dual-basis reporting engine in `report-service.ts` (`getProfitAndLoss`) supporting both accrual and cash realization.
+  - Cash basis proportionally apportions cash receipts and supplier payments across invoice line item accounts.
+  - Interactive basis switcher toggle on the Profit & Loss report page (`/reports/profit-loss`).
+- **Guided Opening Balances Engine**:
+  - Implemented `opening-balances-service.ts` (`getOpeningBalances`, `saveOpeningBalances`).
+  - Automatically posts opening balances journal with differences self-balanced against Retained Earnings / Equity.
+  - Onboarding UI at `/b/[businessId]/settings/opening-balances` with live debit/credit indicator.
+
+## Feature Group 2: Operational Flow & Productivity
+- **Units of Measure (UOM) Standard**:
+  - Migration 27 creates `units_of_measure` table (pre-seeded with 10 standard units: pcs, hrs, days, kg, m, box, set, ltr, ton, sqm) and adds `unit_of_measure` to `inventory_items` and line item tables.
+  - Implemented `uom-service.ts` and management page at `/b/[businessId]/settings/units-of-measure`.
+
+## Feature Group 3: UI/UX & Ergonomics
+- **Multi-Select Batch Operations Bar**:
+  - Created `src/components/batch-action-bar.tsx` with floating bottom dock.
+  - Integrated into Sales Invoices, Purchase Invoices, and Sales Quotes tables with multi-selection, select-all, batch CSV export, and batch print.
+- **Sticky Action Dock on Long Forms**:
+  - Upgraded `src/components/document-form-footer.tsx` with sticky bottom positioning, frosted glass backdrop blur, live status badge, and running subtotal, tax, and total.
+  - Integrated across Sales Invoices, Purchase Invoices, and Sales Quotes forms.
+
+## Feature Group 4: Settings & Customizability
+- **Payment Terms Presets & Auto Due Dates**:
+  - Migration 27 creates `payment_terms` table and adds `payment_terms_id` to customers/suppliers.
+  - Implemented `payment-terms-service.ts` supporting Net X days and End of Month rules with automatic due date calculation on invoice forms.
+  - Management UI at `/b/[businessId]/settings/payment-terms`.
+- **Email Templates with Dynamic Variables**:
+  - Migration 27 creates `email_templates` table pre-seeded for 7 document types.
+  - Implemented `email-template-service.ts` supporting `{{customer_name}}`, `{{document_number}}`, `{{total_amount}}`, `{{balance_due}}`, `{{due_date}}`, `{{business_name}}`.
+  - Studio UI at `/b/[businessId]/settings/email-templates` with variable chip insertion, sample interpolation preview, and reset to defaults.
+- **Settings Hub Centralization**:
+  - Centralized discovery in `src/app/b/[businessId]/settings/settings-hub-client.tsx`.
+
 # Branch Changes: `antigravity-edits`
 
 ## Feature: Global Appearance Settings

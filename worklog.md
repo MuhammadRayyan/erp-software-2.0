@@ -1689,4 +1689,55 @@ Work Log:
 Stage Summary:
 - Purchase Quotes (RFQ) module is completely implemented with end-to-end procurement cycle parity (Purchase Quote -> Purchase Order -> Goods Receipt -> Purchase Invoice -> Supplier Payment / Debit Note). All tests pass with zero regressions.
 
+---
+Task ID: 8
+Agent: Antigravity AI
+Task: Manager.io Core Enhancements: Financial Lock Date, Balance Drill-Down, Cash/Accrual P&L, Opening Balances, UOM, Batch Dock, Sticky Dock, Payment Terms, and Dynamic Email Templates
 
+Work Log:
+- Database Schema & Migration 27 (`manager_features_lock_uom_terms_email`):
+  - Created Migration 27 adding `financial_lock_date` and `opening_balances_date` to `business_accounting_settings`.
+  - Created `units_of_measure` table (pre-seeded with `pcs`, `hrs`, `days`, `kg`, `m`, `box`, `set`, `ltr`, `ton`, `sqm`) and added `unit_of_measure` column to `inventory_items` and 8 line tables.
+  - Created `payment_terms` table (pre-seeded with `Due on Receipt`, `Net 15`, `Net 30`, `Net 45`, `Net 60`, `End of Month`) and added `payment_terms_id` to customers/suppliers.
+  - Created `email_templates` table (pre-seeded with 7 standard document templates).
+- 1.A Global Financial Lock Date (Period Closing):
+  - Created `src/modules/accounting/services/financial-lock-service.ts` with `getFinancialLockDate`, `setFinancialLockDate`, and `assertFinancialLock`.
+  - Integrated `assertFinancialLock` into `postTransaction` in `posting-service.ts` to block backdated postings or alterations on or prior to the lock date.
+  - Added UI at `/b/[businessId]/settings/lock-date` with quick presets (End of Last Month, End of Last Quarter, End of Last Fiscal Year).
+- 1.B Universal Balance Drill-Down Everywhere:
+  - Upgraded `listAccountsWithBalances` in `account-service.ts`.
+  - Added clickable balance links across Chart of Accounts (`/accounting/chart-of-accounts`), Trial Balance (`/reports/trial-balance`), Balance Sheet (`/reports/balance-sheet`), and Profit & Loss (`/reports/profit-loss`) targeting the General Ledger (`/accounting/general-ledger?accountId=...`).
+- 1.C Cash Basis vs. Accrual Basis Toggle in Profit & Loss:
+  - Implemented dual-basis reporting in `report-service.ts` (`getProfitAndLoss`).
+  - Cash basis proportionally apportions cash receipts and supplier payments across invoice line item accounts.
+  - Added interactive basis switcher toggle in the Profit & Loss report UI (`/reports/profit-loss`).
+- 1.D Guided Opening Balances Onboarding Engine:
+  - Implemented `opening-balances-service.ts` (`getOpeningBalances`, `saveOpeningBalances`).
+  - Automatically posts opening balances journal entry with differences self-balanced against Retained Earnings / Equity.
+  - Created onboarding UI at `/b/[businessId]/settings/opening-balances` with live debit/credit indicator.
+- 2.E Units of Measure (UOM) Standard:
+  - Created `uom-service.ts` and settings page at `/b/[businessId]/settings/units-of-measure`.
+- 3.B Multi-Select Batch Operations Bar:
+  - Built `src/components/batch-action-bar.tsx` floating dock.
+  - Integrated into Sales Invoices, Purchase Invoices, and Sales Quotes tables with multi-selection, select-all, batch CSV export, and batch print.
+- 3.C Sticky Action Dock on Long Forms:
+  - Upgraded `src/components/document-form-footer.tsx` with sticky bottom positioning, frosted glass backdrop blur, live status badge, and running subtotal, tax, and total.
+  - Integrated across Sales Invoices, Purchase Invoices, and Sales Quotes forms.
+- 4.A Payment Terms Presets & Auto Due Dates:
+  - Implemented `payment-terms-service.ts` supporting Net X days and End of Month rules with automatic due date calculation on invoice forms.
+  - Created management UI at `/b/[businessId]/settings/payment-terms`.
+- 4.B Live Split-Screen Document Template Customizer:
+  - Integrated live split-screen editor at `/b/[businessId]/settings/document-templates` with real-time embedded PDF rendering and customization studio.
+- 4.C Email Templates with Dynamic Variables:
+  - Implemented `email-template-service.ts` supporting `{{customer_name}}`, `{{document_number}}`, `{{total_amount}}`, `{{balance_due}}`, `{{due_date}}`, `{{business_name}}`.
+  - Created template studio UI at `/b/[businessId]/settings/email-templates` with variable chip insertion, sample interpolation preview, and reset to defaults.
+- Settings Hub Integration:
+  - Centralized discovery in `src/app/b/[businessId]/settings/settings-hub-client.tsx`.
+- Automated Testing & Build Verification:
+  - Created comprehensive test suite `tests/manager-erp-features.test.ts` verifying all new features and invariants.
+  - `npm test`: 83/83 tests passing (100%).
+  - `npm run typecheck`: 0 errors.
+  - `npm run lint`: 0 errors.
+
+Stage Summary:
+- Manager.io Core Enhancements, operational flow improvements, UI/UX batch & sticky docks, and dynamic settings customizers are fully implemented, verified, tested, and documented.
