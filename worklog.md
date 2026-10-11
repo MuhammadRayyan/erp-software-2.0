@@ -1765,5 +1765,22 @@ Work Log:
   - 7. Resilient Financial Lock Error Boundaries (`financial-lock-service.ts`): Refined catch block to only tolerate missing schema columns during baseline migrations, re-throwing all real SQLite errors.
   - Verification: 83/83 unit/integration tests passing (100%), 20/20 Playwright browser tests passing (100%), 0 TypeScript compiler errors.
 
+- Comprehensive Edge-Cases & Top-Down Invariants Suite (`tests/comprehensive-edge-cases.test.ts`):
+  - Created 11 rigorous edge case & stress invariant test blocks:
+    1. Precision money & discount boundary conditions ($0\%$, $100\%$, $0.01\%$, $19.99\%$, negative discount throws, fixed discounts capped at line totals, fractional micro quantities, zero quantity guards).
+    2. Multi-currency split tax conversions with zero rounding drift ($baseTotalMinor \equiv baseSubtotalMinor + baseTaxMinor$).
+    3. Payment terms due date leap year (Feb 29), month-end transitions, year roll-overs, and Net 30 calculations.
+    4. SQL injection attack immunity with strict table/column whitelisting rejection.
+    5. Unicode & Arabic string preservation and script tag safety in email token interpolation.
+    6. Financial lock date boundary enforcement (strict rejection on or before lock date, clearance restoration).
+    7. Account relational integrity enforcement guarding non-system configured accounts and system accounts from deletion.
+    8. Document numbering auto-collision recovery detecting sequence gaps and advancing cleanly past existing rows.
+    9. Multi-line mixed document double-entry general ledger balancing invariant down to the penny.
+    10. Guided opening balances self-balancing equity offset integrity.
+    11. Document revision lifecycle, active draft duplication guard, and clean rollback upon draft deletion.
+  - Identified & fixed subtle edge case bug in `revision-engine.ts`: aliased status column in draft revision detection query caused draft checks to miss active drafts; fixed to check both `r.status` and `r[statusCol]`.
+  - Fixed strict mode locator in `e2e/eval-tax-vat.spec.ts` where sticky footer total and summary table total coexisted.
+  - Verification results: 95/95 unit/integration assertions passing across 16 suites (100%), 58/58 Playwright browser tests passing in Chromium (100%), 0 TypeScript compiler errors.
+
 Stage Summary:
-- Manager.io Core Enhancements, operational flow improvements, UI/UX batch & sticky docks, dynamic settings customizers, and deep security/concurrency hardening are fully implemented, verified, tested, and documented. Complete manual and automated real-browser testing passed 100%.
+- Manager.io Core Enhancements, operational flow improvements, UI/UX batch & sticky docks, dynamic settings customizers, deep security/concurrency hardening, and comprehensive top-down edge cases verification are fully implemented, verified, tested, and documented. Complete manual and automated real-browser testing passed 100%.

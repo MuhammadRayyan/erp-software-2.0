@@ -93,7 +93,9 @@ export function createDocumentRevision(
     .all(rootId, rootId) as any[];
 
   const statusCol = config.statusColumn || "document_status";
-  const draftRevision = familyRevisions.find((r) => r.is_latest_revision && r[statusCol] === "draft");
+  const draftRevision = familyRevisions.find(
+    (r) => Boolean(r.is_latest_revision) && (r.status === "draft" || r[statusCol] === "draft")
+  );
   if (draftRevision) {
     throw new Error("A draft revision already exists for this document.");
   }

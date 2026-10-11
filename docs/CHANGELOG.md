@@ -87,8 +87,24 @@ Full per-task detail (file lists, verification transcripts, QA walkthroughs) liv
   - Exact Basis-Point Decimal Discount Parsing (`money.ts`): Eliminated `parseFloat` in `calculateDiscount`, standardizing on exact integer BigInt basis points (`parseScaledDecimal`).
   - Atomic Account Deletion (`account-service.ts`): Wrapped multi-table dependency checks and account removal inside an immediate transaction (`transaction.immediate()`).
   - Strict SQL Whitelisting & Parameterization (`revision-engine.ts`): Enforced header/line table whitelisting, column name sanitization (`/^[a-zA-Z0-9_]+$/`), and parameterized SQL values.
+  - Draft Revision Status Collision Guard (`revision-engine.ts`): Fixed aliased `as status` lookup in draft detection query to prevent concurrent duplicate draft revisions.
   - Database WAL Checkpointing (`business.ts`): Added passive WAL checkpointing before closing SQLite connections to ensure clean state and avoid uncheckpointed WAL frames.
   - Financial Lock Error Boundary (`financial-lock-service.ts`): Refined catch block to only tolerate missing schema columns during baseline migrations, rethrowing real SQLite database exceptions.
+
+- **Comprehensive Edge-Case & Stress Invariants Test Suite (`tests/comprehensive-edge-cases.test.ts`)**:
+  - Expanded test coverage across 11 edge case categories:
+    1. Precision money & discount boundary conditions ($0\%$, $100\%$, $0.01\%$, $19.99\%$, negative discount throws, fixed discounts capped at line totals, fractional micro quantities, zero quantity guards).
+    2. Multi-currency split tax conversions with zero rounding drift ($baseTotalMinor \equiv baseSubtotalMinor + baseTaxMinor$).
+    3. Payment terms due date leap year (Feb 29), month-end transitions, year roll-overs, and Net 30 calculations.
+    4. SQL injection attack immunity with strict table/column whitelisting rejection.
+    5. Unicode & Arabic string preservation and script tag safety in email token interpolation.
+    6. Financial lock date boundary enforcement (strict rejection on or before lock date, clearance restoration).
+    7. Account relational integrity enforcement guarding non-system configured accounts and system accounts from deletion.
+    8. Document numbering auto-collision recovery detecting sequence gaps and advancing cleanly past existing rows.
+    9. Multi-line mixed document double-entry general ledger balancing invariant down to the penny.
+    10. Guided opening balances self-balancing equity offset integrity.
+    11. Document revision lifecycle, active draft duplication guard, and clean rollback upon draft deletion.
+  - Test suite status: 95/95 unit/integration assertions passing across 16 test suites; 58/58 Playwright end-to-end browser tests passing in Chromium. Zero TypeScript errors.
 
 
 ## Settings Hub, Business Profile, Localization & Numbering Overhaul (improvements-settings-v1)

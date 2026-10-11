@@ -48,8 +48,8 @@ test.describe('Evaluation Suite B: Tax & VAT Calculations', () => {
     await page.getByLabel(/Line 2 tax code/i).selectOption(/Zero/i);
 
     // Assert UI totals
-    await expect(page.locator('text=Subtotal').locator('..').getByText('200.00')).toBeVisible();
-    await expect(page.locator('text=VAT').locator('..').getByText('5.00')).toBeVisible();
+    await expect(page.locator('text=Subtotal').locator('..').getByText('200.00').first()).toBeVisible();
+    await expect(page.locator('text=VAT').locator('..').getByText('5.00').first()).toBeVisible();
     await expect(page.locator('text=Total').locator('..').getByText('205.00').first()).toBeVisible();
   });
 
