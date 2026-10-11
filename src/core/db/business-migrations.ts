@@ -2332,6 +2332,16 @@ export const businessMigrations = [
         }
       },
     },
+    {
+      version: 26,
+      name: "align_debit_note_lines_expense_account",
+      up: (sqlite) => {
+        const cols = (sqlite.prepare("PRAGMA table_info(debit_note_lines)").all() as { name: string }[]).map((c) => c.name);
+        if (cols.includes("purchase_account_id") && !cols.includes("expense_account_id")) {
+          sqlite.exec(`ALTER TABLE debit_note_lines RENAME COLUMN purchase_account_id TO expense_account_id;`);
+        }
+      },
+    },
   ] satisfies readonly SqliteMigration[];
 
 
@@ -2509,7 +2519,7 @@ export function upgradeToPhase15(db: Database.Database) {
       unit_price_minor INTEGER NOT NULL,
       discount_type TEXT NOT NULL DEFAULT 'none',
       discount_value TEXT NOT NULL DEFAULT '0',
-      purchase_account_id TEXT NOT NULL REFERENCES accounts(id),
+      expense_account_id TEXT NOT NULL REFERENCES accounts(id),
       tax_code_id TEXT NOT NULL REFERENCES tax_codes(id),
       project_id TEXT REFERENCES projects(id),
       item_id TEXT REFERENCES inventory_items(id),

@@ -3,7 +3,7 @@ import { eq } from "drizzle-orm";
 import { getBusinessDb } from "@/core/db/business";
 import { getSystemDb } from "@/core/db/system";
 import { businesses } from "@/core/db/system-schema";
-import { businessProfile, businessTaxSettings, businessEInvoiceSettings } from "@/core/db/business-schema";
+import { businessProfile, businessTaxSettings } from "@/core/db/business-schema";
 import { getBusinessForUser } from "@/core/businesses/business-service";
 import {
   businessProfileInputSchema,
@@ -45,7 +45,7 @@ export const getBusinessProfile = cache((businessId: string, userId: string): Re
   const sysCountry = sysAccess?.business.country ?? "United Arab Emirates";
   const sysFiscalMonth = sysAccess?.business.financialYearStartMonth ?? 1;
 
-  let row = db.select().from(businessProfile).where(eq(businessProfile.id, "default")).get();
+  const row = db.select().from(businessProfile).where(eq(businessProfile.id, "default")).get();
 
   if (!row) {
     // If not seeded yet, attempt to read TRN or EInvoice if configured

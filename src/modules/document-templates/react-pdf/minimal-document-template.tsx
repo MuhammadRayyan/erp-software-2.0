@@ -1,5 +1,5 @@
 import { Document, Page, Text, View, StyleSheet, Image } from "@react-pdf/renderer";
-import { minimalStyles as styles, colors, getLogoDimensions, getFontScale } from "./primitives";
+import { minimalStyles as styles, getLogoDimensions, getFontScale } from "./primitives";
 import type { TemplateSettings } from "../template-settings";
 import type { DocumentTemplateData, DocumentTemplateVariant } from "./modern-document-template";
 

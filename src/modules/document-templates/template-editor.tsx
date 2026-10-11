@@ -9,13 +9,10 @@ import {
   ExternalLink,
   Download,
   Palette,
-  Type,
   ImageIcon,
   FileText,
   LayoutGrid,
-  Stamp,
   Sparkles,
-  Check,
 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -64,12 +61,12 @@ export function TemplateEditor({
   const [settings, setSettings] = useState<TemplateSettings>(initialSettings);
   const [activeTab, setActiveTab] = useState<TabKey>("style");
   const [saving, setSaving] = useState(false);
-  const [refreshKey, setRefreshKey] = useState<number>(Date.now());
+  const [refreshKey, setRefreshKey] = useState<number>(0);
   const [previewLoading, setPreviewLoading] = useState(false);
 
   const typeLabel = TYPE_LABELS[documentType] || "Document";
 
-  const previewUrl = `/api/businesses/${businessId}/document-templates/preview-pdf?type=${documentType}&_t=${refreshKey}`;
+  const previewUrl = `/api/businesses/${businessId}/document-templates/preview-pdf?type=${documentType}${refreshKey ? `&_t=${refreshKey}` : ""}`;
 
   const handleImageUpload = (key: keyof TemplateSettings) => (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];

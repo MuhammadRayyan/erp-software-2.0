@@ -58,6 +58,19 @@ Full per-task detail (file lists, verification transcripts, QA walkthroughs) liv
     - Dynamic Page Numbering (`Page X of Y`) on multi-page PDF output.
     - Granular table column toggles: Tax/VAT, Discount, Project, Client TRN, Company address, Company TRN, Custom fields.
   - **Brand Inheritance Fallback (`template-service.ts`)**:
+    - Unconfigured document types automatically inherit company logo, font family, color scheme, watermark, and footer notes from the primary sales-invoice template while allowing custom layout overrides.
+- **Migration 26 & Debit Note Parity (`align_debit_note_lines_expense_account`)**:
+  - Added Migration 26 to reconcile `debit_note_lines` column naming (`purchase_account_id` -> `expense_account_id`), ensuring complete alignment with purchase invoices and general ledger expense accounts.
+  - Fixed `s.default_currency_code` resolution in `getDebitNote` to prevent SQLite runtime lookup errors.
+- **Complete System Code Audit & Verification Suite (`tests/complete-system-audit.test.ts`)**:
+  - Implemented end-to-end audit test suite covering:
+    1. *Mathematical & Precision Invariants*: Currency minor unit conversions, 4-decimal quantity micros (`10_000` scale), line discounts, and UAE 5% VAT calculations.
+    2. *Universal Double-Entry Bookkeeping Audit*: Asserts that every posted journal entry in the database has debits equal to credits with 0 imbalance, and trial balance matches.
+    3. *Complete Sales Cycle*: Revision lifecycle (Rev 0 -> Rev 1 -> Rev 2), conversion to Sales Order, transformation to Sales Invoice, partial receipt allocation, and credit note issuance.
+    4. *Complete Purchases Cycle*: RFQ -> Purchase Order -> Purchase Invoice -> Debit Note -> Supplier Payment settlement.
+    5. *UAE FTA VAT Form 201 Return*: Multi-emirate reporting across 7 UAE Emirates with working papers reconciliation.
+    6. *Multi-Format PDF Engine*: Buffer generation validation for Modern, Classic, and Minimal Swiss layouts.
+  - Full suite expanded to 13 test suites (72 passing tests) alongside 27 passing Playwright browser E2E tests.
     - Unconfigured document types (Quotes, Orders, Delivery Notes, etc.) automatically inherit company branding from the primary invoice template, eliminating unbranded documents across the ERP.
   - **Rich Document Context in `pdf-service.ts`**:
     - All 10 supported document types now extract and supply full party address, TRN, contact email, phone, notes, terms, discounts, taxes, and status to the PDF generator.

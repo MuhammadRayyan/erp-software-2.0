@@ -33,6 +33,14 @@ const {
   isFormType,
 } = await import("../src/modules/form-defaults/form-defaults-service");
 const { formatDate } = await import("../src/core/format");
+const {
+  templateSettingsSchema,
+  defaultSettings,
+} = await import("../src/modules/document-templates/template-settings");
+const {
+  getTemplateSettings,
+  saveTemplateSettings,
+} = await import("../src/modules/document-templates/template-service");
 
 const seeded = await seedDemoData();
 const businessId = seeded.business.id;
@@ -215,3 +223,103 @@ test("formatDate supports custom pattern strings", () => {
   assert.equal(formatDate(d, "MM/DD/YYYY"), "10/15/2026");
   assert.equal(formatDate(d, "DD MMM YYYY"), "15 Oct 2026");
 });
+
+test("template settings schema validates layout, colors, and typography", () => {
+  // Valid settings pass
+  const valid = templateSettingsSchema.parse({
+    templateType: "minimal",
+    primaryColor: "#059669",
+    accentColor: "#10b981",
+    fontName: "Roboto",
+    fontSize: "small",
+    watermarkText: "DRAFT ONLY",
+    showSignatureBlock: true,
+    signatureLabel: "Managing Director",
+  });
+  assert.equal(valid.templateType, "minimal");
+  assert.equal(valid.primaryColor, "#059669");
+  assert.equal(valid.fontName, "Roboto");
+  assert.equal(valid.watermarkText, "DRAFT ONLY");
+
+  // Invalid hex color is rejected
+  assert.throws(() => {
+    templateSettingsSchema.parse({
+      primaryColor: "not-a-hex-color",
+    });
+  });
+
+  // Invalid template type is rejected
+  assert.throws(() => {
+    templateSettingsSchema.parse({
+      templateType: "unknown-layout-type",
+    });
+  });
+
+  // Invalid font name is rejected
+  assert.throws(() => {
+    templateSettingsSchema.parse({
+      fontName: "Comic Sans",
+    });
+  });
+});
+
+test("unconfigured documents inherit brand styling from sales-invoice master template", () => {
+  // Before configuring sales-invoice, unconfigured documents get defaultSettings
+  const initialQuoteStyle = getTemplateSettings(businessId, adminId, "sales-quote");
+  assert.equal(initialQuoteStyle.primaryColor, defaultSettings.primaryColor);
+
+  // Configure master sales-invoice with custom brand styling
+  saveTemplateSettings(businessId, adminId, "sales-invoice", {
+    templateType: "classic",
+    primaryColor: "#7c3aed",
+    accentColor: "#a78bfa",
+    fontName: "Lato",
+    fontSize: "large",
+    headerText: "ACME GLOBAL HOLDINGS - OFFICIAL DOCUMENT",
+    watermarkText: "ORIGINAL",
+    showSignatureBlock: true,
+    signatureLabel: "Chief Financial Officer",
+    paymentInstructions: "Bank: First Abu Dhabi Bank | IBAN: AE000000000000000000001",
+  });
+
+  // Now, sales-quote, sales-order, and purchase-order without explicit configs inherit the sales-invoice brand!
+  const inheritedQuote = getTemplateSettings(businessId, adminId, "sales-quote");
+  assert.equal(inheritedQuote.primaryColor, "#7c3aed");
+  assert.equal(inheritedQuote.templateType, "classic");
+  assert.equal(inheritedQuote.fontName, "Lato");
+  assert.equal(inheritedQuote.watermarkText, "ORIGINAL");
+  assert.equal(inheritedQuote.signatureLabel, "Chief Financial Officer");
+
+  const inheritedOrder = getTemplateSettings(businessId, adminId, "sales-order");
+  assert.equal(inheritedOrder.primaryColor, "#7c3aed");
+
+  const inheritedPO = getTemplateSettings(businessId, adminId, "purchase-order");
+  assert.equal(inheritedPO.primaryColor, "#7c3aed");
+
+  // Specific override for purchase-order maintains its own dedicated styling
+  saveTemplateSettings(businessId, adminId, "purchase-order", {
+    templateType: "minimal",
+    primaryColor: "#dc2626",
+    fontName: "Inter",
+  });
+
+  const customPO = getTemplateSettings(businessId, adminId, "purchase-order");
+  assert.equal(customPO.primaryColor, "#dc2626");
+  assert.equal(customPO.templateType, "minimal");
+
+  // sales-quote still inherits sales-invoice styling
+  const stillInheritedQuote = getTemplateSettings(businessId, adminId, "sales-quote");
+  assert.equal(stillInheritedQuote.primaryColor, "#7c3aed");
+});
+
+test("document numbering sequence padding handles boundary overflows gracefully", () => {
+  // If nextNumber is larger than padding width (e.g. 5 digits with padding 3), it does not truncate
+  sqlite.transaction(() => {
+    sqlite
+      .prepare(`UPDATE business_accounting_settings SET sales_order_next_number = 10050, sales_order_padding = 4 WHERE id = 'default'`)
+      .run();
+    const allocated = allocateNumber(sqlite, "salesOrder");
+    assert.equal(allocated, "ORD-10050");
+  })();
+});
+
