@@ -31,6 +31,10 @@ export function assertFinancialLock(sqlite: Database.Database, date: string, act
     if (err instanceof Error && err.message.includes("closed")) {
       throw err;
     }
-    // Column or table might not exist in baseline migrations, ignore silently
+    // Only tolerate missing column or table from baseline migrations before migration 27
+    if (err instanceof Error && (err.message.includes("no such column") || err.message.includes("no such table"))) {
+      return;
+    }
+    throw err;
   }
 }

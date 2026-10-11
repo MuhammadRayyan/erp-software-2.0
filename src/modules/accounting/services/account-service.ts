@@ -53,38 +53,41 @@ export function updateAccount(
 
 export function deleteAccount(businessId: string, userId: string, accountId: string) {
   const context = getBusinessDb(businessId, userId);
-  const account = context.db.select().from(accounts).where(eq(accounts.id, accountId)).get();
-  if (!account) throw new Error("Account not found.");
-  if (account.isSystem) throw new Error("System accounts cannot be deleted.");
+  const run = context.sqlite.transaction(() => {
+    const account = context.db.select().from(accounts).where(eq(accounts.id, accountId)).get();
+    if (!account) throw new Error("Account not found.");
+    if (account.isSystem) throw new Error("System accounts cannot be deleted.");
 
-  const usageQueries = [
-    "SELECT 1 FROM journal_lines WHERE account_id = ? LIMIT 1",
-    "SELECT 1 FROM sales_invoice_lines WHERE sales_account_id = ? LIMIT 1",
-    "SELECT 1 FROM receipts WHERE bank_account_id = ? LIMIT 1",
-    "SELECT 1 FROM tax_codes WHERE sales_tax_account_id = ? LIMIT 1",
-    "SELECT 1 FROM tax_codes WHERE purchase_tax_account_id = ? LIMIT 1",
-    "SELECT 1 FROM purchase_order_lines WHERE expense_account_id = ? LIMIT 1",
-    "SELECT 1 FROM purchase_invoice_lines WHERE expense_account_id = ? LIMIT 1",
-    "SELECT 1 FROM supplier_payments WHERE bank_account_id = ? LIMIT 1",
-    "SELECT 1 FROM bank_accounts WHERE ledger_account_id = ? LIMIT 1",
-    "SELECT 1 FROM bank_transaction_lines WHERE account_id = ? LIMIT 1",
-    "SELECT 1 FROM sales_credit_note_lines WHERE sales_account_id = ? LIMIT 1",
-    `SELECT 1 FROM inventory_items
-       WHERE sales_account_id = ? OR inventory_asset_account_id = ?
-          OR cost_of_sales_account_id = ? LIMIT 1`,
-    `SELECT 1 FROM business_accounting_settings
-       WHERE accounts_receivable_account_id = ? OR default_sales_account_id = ?
-          OR default_bank_account_id = ? OR vat_output_account_id = ?
-          OR accounts_payable_account_id = ? OR input_vat_account_id = ?
-          OR default_purchase_expense_account_id = ? OR default_inventory_asset_account_id = ?
-          OR default_cost_of_sales_account_id = ? OR inventory_adjustment_account_id = ? LIMIT 1`,
-  ];
-  const used = usageQueries.some((query) => {
-    const values = Array.from({ length: query.match(/\?/g)?.length ?? 0 }, () => accountId);
-    return Boolean(context.sqlite.prepare(query).get(...values));
+    const usageQueries = [
+      "SELECT 1 FROM journal_lines WHERE account_id = ? LIMIT 1",
+      "SELECT 1 FROM sales_invoice_lines WHERE sales_account_id = ? LIMIT 1",
+      "SELECT 1 FROM receipts WHERE bank_account_id = ? LIMIT 1",
+      "SELECT 1 FROM tax_codes WHERE sales_tax_account_id = ? LIMIT 1",
+      "SELECT 1 FROM tax_codes WHERE purchase_tax_account_id = ? LIMIT 1",
+      "SELECT 1 FROM purchase_order_lines WHERE expense_account_id = ? LIMIT 1",
+      "SELECT 1 FROM purchase_invoice_lines WHERE expense_account_id = ? LIMIT 1",
+      "SELECT 1 FROM supplier_payments WHERE bank_account_id = ? LIMIT 1",
+      "SELECT 1 FROM bank_accounts WHERE ledger_account_id = ? LIMIT 1",
+      "SELECT 1 FROM bank_transaction_lines WHERE account_id = ? LIMIT 1",
+      "SELECT 1 FROM sales_credit_note_lines WHERE sales_account_id = ? LIMIT 1",
+      `SELECT 1 FROM inventory_items
+         WHERE sales_account_id = ? OR inventory_asset_account_id = ?
+            OR cost_of_sales_account_id = ? LIMIT 1`,
+      `SELECT 1 FROM business_accounting_settings
+         WHERE accounts_receivable_account_id = ? OR default_sales_account_id = ?
+            OR default_bank_account_id = ? OR vat_output_account_id = ?
+            OR accounts_payable_account_id = ? OR input_vat_account_id = ?
+            OR default_purchase_expense_account_id = ? OR default_inventory_asset_account_id = ?
+            OR default_cost_of_sales_account_id = ? OR inventory_adjustment_account_id = ? LIMIT 1`,
+    ];
+    const used = usageQueries.some((query) => {
+      const values = Array.from({ length: query.match(/\?/g)?.length ?? 0 }, () => accountId);
+      return Boolean(context.sqlite.prepare(query).get(...values));
+    });
+    if (used) throw new Error("Cannot delete this account because it has transactions or is configured for accounting.");
+    context.db.delete(accounts).where(eq(accounts.id, accountId)).run();
   });
-  if (used) throw new Error("Cannot delete this account because it has transactions or is configured for accounting.");
-  context.db.delete(accounts).where(eq(accounts.id, accountId)).run();
+  run.immediate();
 }
 
 export function getSalesAccountOptions(businessId: string, userId: string) {

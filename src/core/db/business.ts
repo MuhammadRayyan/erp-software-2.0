@@ -29,6 +29,11 @@ function closeConnection(directoryKey: string) {
   const conn = connections.get(directoryKey);
   if (!conn) return;
   if (conn.idleTimer) clearTimeout(conn.idleTimer);
+  try {
+    conn.sqlite.pragma("wal_checkpoint(PASSIVE)");
+  } catch {
+    // Ignore checkpoint error if database is busy during passive checkpoint
+  }
   conn.sqlite.close();
   connections.delete(directoryKey);
 }

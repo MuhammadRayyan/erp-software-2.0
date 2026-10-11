@@ -42,6 +42,14 @@ const columns: Record<NumberKind, { prefix: string; next: string; padding?: stri
 export function allocateNumber(sqlite: Database.Database, kind: NumberKind) {
   if (!sqlite.inTransaction) throw new Error("Number allocation must run inside a database transaction.");
   const config = columns[kind];
+  const now = new Date().toISOString();
+
+  // Atomically touch the settings row first to immediately upgrade transaction to an exclusive write lock.
+  // This guarantees no concurrent transaction can read or allocate the same sequence number.
+  sqlite
+    .prepare("UPDATE business_accounting_settings SET updated_at = ? WHERE id = 'default'")
+    .run(now);
+
   const row = sqlite
     .prepare(
       `SELECT ${config.prefix} AS prefix, ${config.next} AS next_number${

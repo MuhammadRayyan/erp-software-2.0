@@ -105,12 +105,16 @@ export function calculateDiscount(
     return Math.min(minor, amountMinor); // Cannot discount more than the amount
   }
   if (discountType === "percentage") {
-    const percent = parseFloat(discountValue);
-    if (isNaN(percent) || percent < 0 || percent > 100) {
+    let rateBasisPoints: bigint;
+    try {
+      rateBasisPoints = parseScaledDecimal(discountValue, 2, "Discount percentage");
+    } catch {
+      throw new Error("Invalid discount percentage.");
+    }
+    if (rateBasisPoints < 0n || rateBasisPoints > 10_000n) {
       throw new Error("Invalid discount percentage.");
     }
     const percentScale = 10_000n; // 100.00%
-    const rateBasisPoints = BigInt(Math.round(percent * 100));
     return toSafeNumber(
       divideAndRound(BigInt(amountMinor) * rateBasisPoints, percentScale),
       "Discount amount"

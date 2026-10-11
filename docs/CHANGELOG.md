@@ -81,6 +81,15 @@ Full per-task detail (file lists, verification transcripts, QA walkthroughs) liv
   - Refactored `ExportCsvButton` and `exportCsv` to support serialized `accessorKey` properties across React Server Component (RSC) boundaries without function serialization errors.
   - Extracted `src/modules/email/email-template-types.ts` to separate pure client-side types and string interpolation helpers from server-side database code (`better-sqlite3`, `node:crypto`).
 
+- **Security & Data Integrity Hardening Overhaul**:
+  - Edge Proxy Auth Protection (`src/proxy.ts`): Intercepts unauthenticated requests to protected business paths (`/b/*`, `/businesses/*`) at the Next.js proxy boundary, redirecting to `/login` before server execution.
+  - Numbering Allocation Concurrency Lock (`numbering-service.ts`): Implemented atomic write lock upgrade prior to sequence queries, preventing duplicate document numbers during concurrent requests.
+  - Exact Basis-Point Decimal Discount Parsing (`money.ts`): Eliminated `parseFloat` in `calculateDiscount`, standardizing on exact integer BigInt basis points (`parseScaledDecimal`).
+  - Atomic Account Deletion (`account-service.ts`): Wrapped multi-table dependency checks and account removal inside an immediate transaction (`transaction.immediate()`).
+  - Strict SQL Whitelisting & Parameterization (`revision-engine.ts`): Enforced header/line table whitelisting, column name sanitization (`/^[a-zA-Z0-9_]+$/`), and parameterized SQL values.
+  - Database WAL Checkpointing (`business.ts`): Added passive WAL checkpointing before closing SQLite connections to ensure clean state and avoid uncheckpointed WAL frames.
+  - Financial Lock Error Boundary (`financial-lock-service.ts`): Refined catch block to only tolerate missing schema columns during baseline migrations, rethrowing real SQLite database exceptions.
+
 
 ## Settings Hub, Business Profile, Localization & Numbering Overhaul (improvements-settings-v1)
 - **Centralized Settings Hub (`/settings`)**:

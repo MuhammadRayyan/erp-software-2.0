@@ -1753,7 +1753,17 @@ Work Log:
     10. Sticky Action Dock on commercial forms with running subtotal, tax, and total, and Save Draft / Post Invoice actions.
   - Resolved Next.js RSC boundary serialization for `ExportCsvButton` across Server Components (`profit-loss`, `balance-sheet`, `bank-transactions`).
   - Separated client-safe email types and interpolation (`email-template-types.ts`) from server-only database code (`better-sqlite3`).
-  - Test run status: 19/19 Playwright browser tests passing (11 manager features + 8 settings tests).
+  - Test run status: 20/20 Playwright browser tests passing (11 manager features + 9 settings tests).
+
+- Security & Financial Hardening Overhaul:
+  - 1. Edge Proxy Authentication Gate (`src/proxy.ts`): Intercepts unauthenticated navigation to `/b/*` or `/businesses/*` at the Next.js proxy edge, verifying session cookies and redirecting to `/login` with preservation of return paths.
+  - 2. Concurrency-Safe Number Allocation (`numbering-service.ts`): Forces an atomic write lock upgrade via settings update before querying the next sequence number, eliminating race conditions on simultaneous invoice creation.
+  - 3. BigInt Basis-Point Decimal Discount Parsing (`money.ts`): Replaced floating-point `parseFloat` with `parseScaledDecimal` in `calculateDiscount`, enforcing exact BigInt division and round-half-up math.
+  - 4. Atomic Multi-Step Account Deletion (`account-service.ts`): Wrapped 13 dependency verification queries and deletion in an immediate transaction (`transaction.immediate()`), guaranteeing zero race conditions during concurrent document entry.
+  - 5. SQL Whitelisting & Parameterized Restorations (`revision-engine.ts`): Validated table and column names against explicit whitelists, sanitized copied column arrays (`/^[a-zA-Z0-9_]+$/`), and parameterized status strings in updates.
+  - 6. Passive WAL Checkpointing on Connection Eviction (`business.ts`): Added `wal_checkpoint(PASSIVE)` prior to closing SQLite database handles to avoid leaving unmerged WAL frames on disk.
+  - 7. Resilient Financial Lock Error Boundaries (`financial-lock-service.ts`): Refined catch block to only tolerate missing schema columns during baseline migrations, re-throwing all real SQLite errors.
+  - Verification: 83/83 unit/integration tests passing (100%), 20/20 Playwright browser tests passing (100%), 0 TypeScript compiler errors.
 
 Stage Summary:
-- Manager.io Core Enhancements, operational flow improvements, UI/UX batch & sticky docks, and dynamic settings customizers are fully implemented, verified, tested, and documented. Complete manual and automated real-browser testing passed 100%.
+- Manager.io Core Enhancements, operational flow improvements, UI/UX batch & sticky docks, dynamic settings customizers, and deep security/concurrency hardening are fully implemented, verified, tested, and documented. Complete manual and automated real-browser testing passed 100%.

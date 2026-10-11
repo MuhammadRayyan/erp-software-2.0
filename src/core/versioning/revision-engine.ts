@@ -10,12 +10,65 @@ export type RevisionEngineConfig = {
   statusColumn?: string;
 };
 
+const ALLOWED_HEADER_TABLES = new Set([
+  "sales_quotes",
+  "purchase_quotes",
+  "sales_orders",
+  "purchase_orders",
+]);
+
+const ALLOWED_LINE_TABLES = new Set([
+  "sales_quote_lines",
+  "purchase_quote_lines",
+  "sales_order_lines",
+  "purchase_order_lines",
+]);
+
+const ALLOWED_ID_COLUMNS = new Set([
+  "id",
+  "quote_id",
+  "order_id",
+  "sales_quote_id",
+  "purchase_quote_id",
+  "sales_order_id",
+  "purchase_order_id",
+]);
+
+const ALLOWED_DOC_NUM_COLUMNS = new Set(["quote_number", "order_number"]);
+const ALLOWED_STATUS_COLUMNS = new Set(["status", "document_status"]);
+
+function validateRevisionConfig(config: RevisionEngineConfig): void {
+  if (!ALLOWED_HEADER_TABLES.has(config.headerTable)) {
+    throw new Error(`Unauthorized revision header table: ${config.headerTable}`);
+  }
+  if (!ALLOWED_LINE_TABLES.has(config.lineTable)) {
+    throw new Error(`Unauthorized revision line table: ${config.lineTable}`);
+  }
+  if (!ALLOWED_ID_COLUMNS.has(config.headerIdColumn)) {
+    throw new Error(`Unauthorized revision header ID column: ${config.headerIdColumn}`);
+  }
+  if (!ALLOWED_ID_COLUMNS.has(config.lineHeaderIdColumn)) {
+    throw new Error(`Unauthorized revision line header ID column: ${config.lineHeaderIdColumn}`);
+  }
+  if (!ALLOWED_DOC_NUM_COLUMNS.has(config.documentNumberColumn)) {
+    throw new Error(`Unauthorized document number column: ${config.documentNumberColumn}`);
+  }
+  if (config.statusColumn && !ALLOWED_STATUS_COLUMNS.has(config.statusColumn)) {
+    throw new Error(`Unauthorized status column: ${config.statusColumn}`);
+  }
+}
+
+function sanitizeColumnList(columns: string[]): string[] {
+  return columns.filter((col) => /^[a-zA-Z0-9_]+$/.test(col));
+}
+
 export function createDocumentRevision(
   sqlite: Database.Database,
   config: RevisionEngineConfig,
   userId: string,
   sourceDocumentId: string
 ): string {
+  validateRevisionConfig(config);
   const source = sqlite
     .prepare(`SELECT * FROM ${config.headerTable} WHERE ${config.headerIdColumn} = ?`)
     .get(sourceDocumentId) as any;
@@ -70,7 +123,7 @@ export function createDocumentRevision(
 
     // 2. Insert new revision header
     // We get all columns from the source document, update the relevant ones, and insert.
-    const columns = Object.keys(source);
+    const columns = sanitizeColumnList(Object.keys(source));
     
     const newDoc = { ...source };
     newDoc[config.headerIdColumn] = newDocumentId;
@@ -101,7 +154,7 @@ export function createDocumentRevision(
       .all(sourceDocumentId) as any[];
 
     if (lines.length > 0) {
-      const lineColumns = Object.keys(lines[0]);
+      const lineColumns = sanitizeColumnList(Object.keys(lines[0]));
       const lineInsertCols = lineColumns.join(", ");
       const lineInsertPlaceholders = lineColumns.map(() => "?").join(", ");
       const insertLineStmt = sqlite.prepare(
@@ -123,7 +176,7 @@ export function createDocumentRevision(
       .all(sourceDocumentId) as any[];
 
     if (customFields.length > 0) {
-      const cfCols = Object.keys(customFields[0]);
+      const cfCols = sanitizeColumnList(Object.keys(customFields[0]));
       const cfInsertCols = cfCols.join(", ");
       const cfInsertPlaceholders = cfCols.map(() => "?").join(", ");
       const insertCfStmt = sqlite.prepare(
@@ -149,6 +202,7 @@ export function deleteDraftRevision(
   config: RevisionEngineConfig,
   documentId: string
 ): void {
+  validateRevisionConfig(config);
   const doc = sqlite
     .prepare(`SELECT * FROM ${config.headerTable} WHERE ${config.headerIdColumn} = ?`)
     .get(documentId) as any;
@@ -183,13 +237,13 @@ export function deleteDraftRevision(
           UPDATE ${config.headerTable}
           SET is_latest_revision = 1,
               ${statusCol} = CASE 
-                WHEN ${statusCol} = 'superseded' THEN '${restoredStatus}' 
+                WHEN ${statusCol} = 'superseded' THEN ? 
                 ELSE ${statusCol} 
               END,
               updated_at = ?
           WHERE ${config.headerIdColumn} = ?
         `)
-        .run(now, previous[config.headerIdColumn]);
+        .run(restoredStatus, now, previous[config.headerIdColumn]);
     }
   }).immediate();
 }
