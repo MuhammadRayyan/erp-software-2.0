@@ -6,6 +6,7 @@ import {
   renderDocumentEmailText,
   type DocumentEmailContext,
 } from "./email-template";
+import { getEmailTemplate, interpolateEmailTemplate } from "./email-template-service";
 
 export type InvoiceRecord = NonNullable<Awaited<ReturnType<typeof getInvoice>>>;
 
@@ -53,7 +54,61 @@ export function buildDocumentEmailContext(
   };
 }
 
-export function buildDocumentEmailDefaults(ctx: DocumentEmailContext, toEmail: string) {
+function resolveTemplateType(documentName: string): string {
+  const norm = documentName.toLowerCase();
+  if (norm.includes("quote")) return "sales-quote";
+  if (norm.includes("order")) return norm.includes("purchase") ? "purchase-order" : "sales-order";
+  if (norm.includes("delivery")) return "delivery-note";
+  if (norm.includes("statement")) return "customer-statement";
+  if (norm.includes("receipt")) return "receipt";
+  if (norm.includes("invoice")) return "sales-invoice";
+  return "sales-invoice";
+}
+
+function escapeHtml(text: string): string {
+  return text
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+export function buildDocumentEmailDefaults(
+  ctx: DocumentEmailContext,
+  toEmail: string,
+  businessId?: string,
+  templateType?: string
+) {
+  if (businessId) {
+    try {
+      const type = templateType || resolveTemplateType(ctx.documentName);
+      if (type) {
+        const template = getEmailTemplate(businessId, type);
+        if (template) {
+          const interpolated = interpolateEmailTemplate(template, {
+            customerName: ctx.customerName,
+            documentNumber: ctx.documentNumber,
+            businessName: ctx.businessName,
+            total: ctx.total,
+            balance: ctx.balance,
+            documentDate: ctx.documentDate,
+            dueDate: ctx.dueDate,
+            currency: ctx.currency,
+          });
+          return {
+            to: toEmail,
+            subject: interpolated.subject,
+            bodyHtml: `<div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;font-size:14px;line-height:1.6;color:#0f172a;white-space:pre-wrap;">${escapeHtml(interpolated.body)}</div>`,
+            bodyText: interpolated.body,
+          };
+        }
+      }
+    } catch {
+      // Fallback to default template
+    }
+  }
+
   return {
     to: toEmail,
     subject: defaultDocumentSubject(ctx),

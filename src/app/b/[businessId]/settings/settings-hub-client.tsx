@@ -18,6 +18,12 @@ import {
   ShieldCheck,
   Sun,
   X,
+  Lock,
+  Mail,
+  Ruler,
+  Scale,
+  CalendarClock,
+  BookOpen,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import type { ResolvedBusinessProfile } from "@/modules/business-profile/business-profile-service";
@@ -105,6 +111,27 @@ export function SettingsHubClient({
             keywords: "template pdf invoice print layout color modern classic statement html design",
           },
           {
+            title: "Payment Terms",
+            description: "Configure default settlement terms (Net 30, End of Month, Due on Receipt) with auto-due-date calculation.",
+            href: `/b/${businessId}/settings/payment-terms`,
+            icon: CalendarClock,
+            keywords: "payment terms net 30 due date credit terms settlement",
+          },
+          {
+            title: "Units of Measure",
+            description: "Standard packaging and physical units (pcs, hrs, kg, boxes) for products and commercial documents.",
+            href: `/b/${businessId}/settings/units-of-measure`,
+            icon: Ruler,
+            keywords: "units of measure uom pcs kg hours boxes packaging",
+          },
+          {
+            title: "Email Templates",
+            description: "Customize dispatch messages and subject lines with dynamic tokens (customer name, document number, total, balance due).",
+            href: `/b/${businessId}/settings/email-templates`,
+            icon: Mail,
+            keywords: "email templates tokens customer invoice quote dispatch messages",
+          },
+          {
             title: "Custom Fields",
             description: "Add custom attributes to customers, suppliers, invoices, quotes, and purchase orders.",
             href: `/b/${businessId}/settings/custom-fields`,
@@ -124,6 +151,20 @@ export function SettingsHubClient({
             icon: Coins,
             keywords: "currency currencies exchange rate fx foreign base rate aed usd eur",
             badge: profile.baseCurrency,
+          },
+          {
+            title: "Lock Date (Period Closing)",
+            description: "Prevent retroactive changes, back-dated edits, or ledger transactions prior to closed financial periods.",
+            href: `/b/${businessId}/settings/lock-date`,
+            icon: Lock,
+            keywords: "lock date period closing financial lock prevent edits freeze period",
+          },
+          {
+            title: "Guided Opening Balances",
+            description: "Onboarding balance engine with live debit/credit reconciliation and automated suspense balancing.",
+            href: `/b/${businessId}/settings/opening-balances`,
+            icon: Scale,
+            keywords: "opening balances suspense equity reconciliation ledger setup onboarding",
           },
           {
             title: "UAE VAT Settings",

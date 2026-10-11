@@ -9,7 +9,6 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
-import { formatMoney } from "@/core/format";
 import { minorToCurrencyInput } from "@/modules/currency/conversion";
 import { savePurchaseInvoiceAction } from "./actions";
 import {
@@ -404,7 +403,17 @@ export function PurchaseInvoiceForm({
           taxMinor={totals.taxMinor}
         />
       </section>
-      <DocumentFormFooter onCancel={() => router.push(cancelHref)}>
+      <DocumentFormFooter
+        onCancel={() => router.push(cancelHref)}
+        status={documentStatus}
+        totals={{
+          subtotalMinor: totals.subtotalMinor,
+          taxMinor: totals.taxMinor,
+          totalMinor: totals.subtotalMinor + totals.taxMinor,
+          currencyCode,
+          minorUnit,
+        }}
+      >
         {documentStatus === "posted" ? (
           <Button
             type="button"

@@ -78,7 +78,15 @@ export default async function BalanceSheetReportPage({
                   {row.name}
                 </Link>
               </td>
-              <td className="money text-right">{formatMoney(net, access.business.currency)}</td>
+              <td className="money text-right">
+                <Link
+                  href={`/b/${businessId}/reports/general-ledger?accountId=${row.id}&dateTo=${filters.throughDate || ""}`}
+                  className="tabular font-medium text-primary hover:underline"
+                  title={`View General Ledger for ${row.name}`}
+                >
+                  {formatMoney(net, access.business.currency)}
+                </Link>
+              </td>
             </tr>
           );
         })}

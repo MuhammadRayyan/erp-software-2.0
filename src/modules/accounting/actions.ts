@@ -87,3 +87,40 @@ export async function updateInvoiceNumberingAction(
     return { error: error instanceof Error ? error.message : "Numbering could not be updated." };
   }
 }
+
+export async function updateFinancialLockDateAction(
+  businessId: string,
+  lockDate: string | null,
+): Promise<AccountingActionResult> {
+  const { user } = await requireModule(businessId, "settings");
+  try {
+    const { setFinancialLockDate } = await import("./services/financial-lock-service");
+    setFinancialLockDate(businessId, user.id, lockDate);
+    revalidatePath(`/b/${businessId}/settings/lock-date`);
+    revalidatePath(`/b/${businessId}/settings`);
+    return {};
+  } catch (error) {
+    return { error: error instanceof Error ? error.message : "Financial lock date could not be updated." };
+  }
+}
+
+export async function saveOpeningBalancesAction(
+  businessId: string,
+  date: string,
+  balances: { accountId: string; debitMinor: number; creditMinor: number }[],
+): Promise<AccountingActionResult> {
+  const { user } = await requireModule(businessId, "settings");
+  if (!date || !/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+    return { error: "Please choose a valid opening balance date (YYYY-MM-DD)." };
+  }
+  try {
+    const { saveOpeningBalances } = await import("./services/opening-balances-service");
+    saveOpeningBalances(businessId, user.id, date, balances);
+    revalidatePath(`/b/${businessId}/settings/opening-balances`);
+    revalidatePath(`/b/${businessId}/accounting/chart-of-accounts`);
+    revalidatePath(`/b/${businessId}/reports`);
+    return {};
+  } catch (error) {
+    return { error: error instanceof Error ? error.message : "Opening balances could not be saved." };
+  }
+}

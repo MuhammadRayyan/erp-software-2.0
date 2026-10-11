@@ -79,19 +79,30 @@ export function openBusinessDatabase(directoryKey: string) {
   return { sqlite: conn.sqlite, db: conn.db, paths: conn.paths };
 }
 
-export function getBusinessDb(businessId: string, userId: string) {
-  const row = getSystemDb()
-    .select({ business: businesses, membership: memberships })
+export function getBusinessDb(businessId: string, userId?: string) {
+  if (userId) {
+    const row = getSystemDb()
+      .select({ business: businesses, membership: memberships })
+      .from(businesses)
+      .innerJoin(
+        memberships,
+        and(eq(memberships.businessId, businesses.id), eq(memberships.userId, userId)),
+      )
+      .where(and(eq(businesses.id, businessId), eq(businesses.archived, false)))
+      .get();
+
+    if (!row) throw new Error("BUSINESS_ACCESS_DENIED");
+    return { ...openBusinessDatabase(row.business.directoryKey), ...row };
+  }
+
+  const b = getSystemDb()
+    .select()
     .from(businesses)
-    .innerJoin(
-      memberships,
-      and(eq(memberships.businessId, businesses.id), eq(memberships.userId, userId)),
-    )
     .where(and(eq(businesses.id, businessId), eq(businesses.archived, false)))
     .get();
 
-  if (!row) throw new Error("BUSINESS_ACCESS_DENIED");
-  return { ...openBusinessDatabase(row.business.directoryKey), ...row };
+  if (!b) throw new Error("BUSINESS_NOT_FOUND");
+  return { ...openBusinessDatabase(b.directoryKey), business: b, membership: null as any };
 }
 
 export function closeBusinessConnection(directoryKey: string) {

@@ -2342,6 +2342,189 @@ export const businessMigrations = [
         }
       },
     },
+    {
+      version: 27,
+      name: "manager_features_lock_uom_terms_email",
+      up: (sqlite) => {
+        const acctCols = (sqlite.prepare("PRAGMA table_info(business_accounting_settings)").all() as { name: string }[]).map((c) => c.name);
+        if (!acctCols.includes("financial_lock_date")) {
+          sqlite.exec(`ALTER TABLE business_accounting_settings ADD COLUMN financial_lock_date TEXT;`);
+        }
+        if (!acctCols.includes("opening_balances_date")) {
+          sqlite.exec(`ALTER TABLE business_accounting_settings ADD COLUMN opening_balances_date TEXT;`);
+        }
+
+        // Units of measure
+        sqlite.exec(`
+          CREATE TABLE IF NOT EXISTS units_of_measure (
+            id TEXT PRIMARY KEY NOT NULL,
+            code TEXT NOT NULL UNIQUE,
+            name TEXT NOT NULL,
+            is_active INTEGER NOT NULL DEFAULT 1,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL
+          );
+        `);
+        const now = new Date().toISOString();
+        const defaultUoms = [
+          { id: "uom_pcs", code: "pcs", name: "Pieces" },
+          { id: "uom_hrs", code: "hrs", name: "Hours" },
+          { id: "uom_days", code: "days", name: "Days" },
+          { id: "uom_kg", code: "kg", name: "Kilograms" },
+          { id: "uom_m", code: "m", name: "Meters" },
+          { id: "uom_box", code: "box", name: "Boxes" },
+          { id: "uom_set", code: "set", name: "Sets" },
+          { id: "uom_ltr", code: "ltr", name: "Liters" },
+          { id: "uom_ton", code: "ton", name: "Tons" },
+          { id: "uom_sqm", code: "sqm", name: "Square Meters" },
+        ];
+        const insertUom = sqlite.prepare(`
+          INSERT OR IGNORE INTO units_of_measure (id, code, name, is_active, created_at, updated_at)
+          VALUES (?, ?, ?, 1, ?, ?)
+        `);
+        for (const u of defaultUoms) {
+          insertUom.run(u.id, u.code, u.name, now, now);
+        }
+
+        // Add unit_of_measure to inventory_items
+        const itemCols = (sqlite.prepare("PRAGMA table_info(inventory_items)").all() as { name: string }[]).map((c) => c.name);
+        if (!itemCols.includes("unit_of_measure")) {
+          sqlite.exec(`ALTER TABLE inventory_items ADD COLUMN unit_of_measure TEXT DEFAULT 'pcs';`);
+        }
+
+        // Add unit_of_measure to line tables
+        const lineTables = [
+          "sales_invoice_lines",
+          "sales_quote_lines",
+          "sales_order_lines",
+          "purchase_invoice_lines",
+          "purchase_quote_lines",
+          "purchase_order_lines",
+          "delivery_note_lines",
+          "goods_receipt_lines",
+        ];
+        for (const tbl of lineTables) {
+          try {
+            const cols = (sqlite.prepare(`PRAGMA table_info(${tbl})`).all() as { name: string }[]).map((c) => c.name);
+            if (!cols.includes("unit_of_measure")) {
+              sqlite.exec(`ALTER TABLE ${tbl} ADD COLUMN unit_of_measure TEXT DEFAULT 'pcs';`);
+            }
+          } catch {
+            // ignore if table doesn't exist
+          }
+        }
+
+        // Payment terms
+        sqlite.exec(`
+          CREATE TABLE IF NOT EXISTS payment_terms (
+            id TEXT PRIMARY KEY NOT NULL,
+            name TEXT NOT NULL,
+            days INTEGER NOT NULL DEFAULT 30,
+            is_eom INTEGER NOT NULL DEFAULT 0,
+            is_default INTEGER NOT NULL DEFAULT 0,
+            is_active INTEGER NOT NULL DEFAULT 1,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL
+          );
+        `);
+        const defaultTerms = [
+          { id: "pt_due_on_receipt", name: "Due on Receipt", days: 0, is_eom: 0, is_default: 0 },
+          { id: "pt_net_15", name: "Net 15", days: 15, is_eom: 0, is_default: 0 },
+          { id: "pt_net_30", name: "Net 30", days: 30, is_eom: 0, is_default: 1 },
+          { id: "pt_net_45", name: "Net 45", days: 45, is_eom: 0, is_default: 0 },
+          { id: "pt_net_60", name: "Net 60", days: 60, is_eom: 0, is_default: 0 },
+          { id: "pt_end_of_month", name: "End of Month (EOM)", days: 0, is_eom: 1, is_default: 0 },
+        ];
+        const insertTerm = sqlite.prepare(`
+          INSERT OR IGNORE INTO payment_terms (id, name, days, is_eom, is_default, is_active, created_at, updated_at)
+          VALUES (?, ?, ?, ?, ?, 1, ?, ?)
+        `);
+        for (const t of defaultTerms) {
+          insertTerm.run(t.id, t.name, t.days, t.is_eom, t.is_default, now, now);
+        }
+
+        // Add payment_terms_id to customers and suppliers if missing
+        const custCols = (sqlite.prepare("PRAGMA table_info(customers)").all() as { name: string }[]).map((c) => c.name);
+        if (!custCols.includes("payment_terms_id")) {
+          sqlite.exec(`ALTER TABLE customers ADD COLUMN payment_terms_id TEXT;`);
+        }
+        const suppCols = (sqlite.prepare("PRAGMA table_info(suppliers)").all() as { name: string }[]).map((c) => c.name);
+        if (!suppCols.includes("payment_terms_id")) {
+          sqlite.exec(`ALTER TABLE suppliers ADD COLUMN payment_terms_id TEXT;`);
+        }
+
+        // Email templates
+        sqlite.exec(`
+          CREATE TABLE IF NOT EXISTS email_templates (
+            id TEXT PRIMARY KEY NOT NULL,
+            document_type TEXT NOT NULL UNIQUE,
+            name TEXT NOT NULL,
+            subject TEXT NOT NULL,
+            body TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL
+          );
+        `);
+        const defaultEmailTemplates = [
+          {
+            id: "et_sales_invoice",
+            document_type: "sales_invoice",
+            name: "Sales Invoice",
+            subject: "Invoice {{document_number}} from {{business_name}}",
+            body: "Dear {{customer_name}},\n\nPlease find attached invoice {{document_number}} for {{total_amount}} {{currency}}, due on {{due_date}}.\n\nThank you for your business.\n\nBest regards,\n{{business_name}}",
+          },
+          {
+            id: "et_sales_quote",
+            document_type: "sales_quote",
+            name: "Sales Quote",
+            subject: "Quotation {{document_number}} from {{business_name}}",
+            body: "Dear {{customer_name}},\n\nThank you for your inquiry. Please find attached quotation {{document_number}} totaling {{total_amount}} {{currency}}.\n\nPlease let us know if you have any questions or require amendments.\n\nBest regards,\n{{business_name}}",
+          },
+          {
+            id: "et_sales_order",
+            document_type: "sales_order",
+            name: "Sales Order",
+            subject: "Order Confirmation {{document_number}} - {{business_name}}",
+            body: "Dear {{customer_name}},\n\nWe have received your order {{document_number}} for {{total_amount}} {{currency}}.\n\nWe are processing this order and will update you once fulfilled.\n\nBest regards,\n{{business_name}}",
+          },
+          {
+            id: "et_delivery_note",
+            document_type: "delivery_note",
+            name: "Delivery Note",
+            subject: "Delivery Note {{document_number}} - {{business_name}}",
+            body: "Dear {{customer_name}},\n\nPlease find attached delivery note {{document_number}} for your recent shipment.\n\nBest regards,\n{{business_name}}",
+          },
+          {
+            id: "et_purchase_order",
+            document_type: "purchase_order",
+            name: "Purchase Order",
+            subject: "Purchase Order {{document_number}} from {{business_name}}",
+            body: "Dear {{supplier_name}},\n\nPlease find attached purchase order {{document_number}} totaling {{total_amount}} {{currency}}.\n\nKindly acknowledge receipt and confirm expected delivery schedule.\n\nBest regards,\n{{business_name}}",
+          },
+          {
+            id: "et_customer_statement",
+            document_type: "customer_statement",
+            name: "Customer Statement",
+            subject: "Account Statement from {{business_name}}",
+            body: "Dear {{customer_name}},\n\nPlease find attached your latest statement of account from {{business_name}} showing outstanding balance of {{total_amount}} {{currency}}.\n\nKindly arrange settlement for any overdue amounts at your earliest convenience.\n\nBest regards,\n{{business_name}}",
+          },
+          {
+            id: "et_payment_receipt",
+            document_type: "payment_receipt",
+            name: "Payment Receipt",
+            subject: "Payment Receipt {{document_number}} - Thank You",
+            body: "Dear {{customer_name}},\n\nThank you for your payment of {{total_amount}} {{currency}} received on {{document_date}} (Ref: {{document_number}}).\n\nBest regards,\n{{business_name}}",
+          },
+        ];
+        const insertEmailTpl = sqlite.prepare(`
+          INSERT OR IGNORE INTO email_templates (id, document_type, name, subject, body, created_at, updated_at)
+          VALUES (?, ?, ?, ?, ?, ?, ?)
+        `);
+        for (const et of defaultEmailTemplates) {
+          insertEmailTpl.run(et.id, et.document_type, et.name, et.subject, et.body, now, now);
+        }
+      },
+    },
   ] satisfies readonly SqliteMigration[];
 
 

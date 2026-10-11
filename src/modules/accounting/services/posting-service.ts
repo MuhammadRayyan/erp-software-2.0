@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import type Database from "better-sqlite3";
 import { addMinor } from "../calculations/money";
 import { allocateNumber } from "./numbering-service";
+import { assertFinancialLock } from "./financial-lock-service";
 
 export type JournalLineInput = {
   accountId: string;
@@ -61,6 +62,7 @@ function validateLines(sqlite: Database.Database, lines: JournalLineInput[]) {
 
 export function postTransaction(sqlite: Database.Database, input: PostTransactionInput) {
   if (!sqlite.inTransaction) throw new Error("Ledger posting must run inside a database transaction.");
+  assertFinancialLock(sqlite, input.date, "Transactions");
   validateLines(sqlite, input.lines);
   const existing = sqlite
     .prepare(

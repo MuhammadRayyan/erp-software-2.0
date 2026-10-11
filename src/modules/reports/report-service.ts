@@ -276,10 +276,117 @@ export function getDashboardCounts(businessId: string, userId: string) {
   };
 }
 
-export function getProfitAndLoss(businessId: string, userId: string, fromDate?: string, toDate?: string) {
+export function getProfitAndLoss(
+  businessId: string,
+  userId: string,
+  fromDate?: string,
+  toDate?: string,
+  basis: "accrual" | "cash" = "accrual",
+) {
   const { sqlite } = getBusinessDb(businessId, userId);
   const from = validDate(fromDate) ?? "0000-01-01";
   const to = validDate(toDate) ?? "9999-12-31";
+
+  if (basis === "cash") {
+    // 1. Direct cash receipts/payments & manual entries touching bank/cash
+    const directRows = sqlite
+      .prepare(`
+        SELECT a.id, a.name, a.type, a.subtype,
+               COALESCE(SUM(jl.debit_minor), 0) AS debit_total,
+               COALESCE(SUM(jl.credit_minor), 0) AS credit_total
+        FROM accounts a
+        INNER JOIN journal_lines jl ON a.id = jl.account_id
+        INNER JOIN journal_entries je ON jl.journal_entry_id = je.id
+          AND je.status = 'posted'
+          AND je.date >= ? AND je.date <= ?
+          AND je.source_type NOT IN ('sales_invoice', 'purchase_invoice')
+          AND EXISTS (
+            SELECT 1 FROM journal_lines jl_cash
+            INNER JOIN accounts a_cash ON a_cash.id = jl_cash.account_id
+            WHERE jl_cash.journal_entry_id = je.id AND a_cash.subtype IN ('bank', 'cash')
+          )
+        WHERE a.type IN ('income', 'expense')
+        GROUP BY a.id
+      `)
+      .all(from, to) as {
+        id: string;
+        name: string;
+        type: string;
+        subtype: string;
+        debit_total: number;
+        credit_total: number;
+      }[];
+
+    // 2. Cash collected on sales invoices via receipts in the date range
+    const invoiceReceiptRows = sqlite
+      .prepare(`
+        SELECT sil.sales_account_id as id, a.name, a.type, a.subtype,
+               0 as debit_total,
+               ROUND(SUM(sil.net_amount_minor * CAST(ra.amount_minor AS REAL) / CAST(si.total_minor AS REAL))) as credit_total
+        FROM receipt_allocations ra
+        INNER JOIN receipts r ON r.id = ra.receipt_id
+          AND r.document_status = 'posted'
+          AND r.date >= ? AND r.date <= ?
+        INNER JOIN sales_invoices si ON si.id = ra.sales_invoice_id
+        INNER JOIN sales_invoice_lines sil ON sil.invoice_id = si.id
+        INNER JOIN accounts a ON a.id = sil.sales_account_id
+        WHERE si.total_minor > 0
+        GROUP BY sil.sales_account_id
+      `)
+      .all(from, to) as {
+        id: string;
+        name: string;
+        type: string;
+        subtype: string;
+        debit_total: number;
+        credit_total: number;
+      }[];
+
+    // 3. Cash paid on purchase invoices via supplier payments in the date range
+    const billPaymentRows = sqlite
+      .prepare(`
+        SELECT pil.expense_account_id as id, a.name, a.type, a.subtype,
+               ROUND(SUM(pil.net_amount_minor * CAST(spa.amount_minor AS REAL) / CAST(pi.total_minor AS REAL))) as debit_total,
+               0 as credit_total
+        FROM supplier_payment_allocations spa
+        INNER JOIN supplier_payments sp ON sp.id = spa.payment_id
+          AND sp.document_status = 'posted'
+          AND sp.date >= ? AND sp.date <= ?
+        INNER JOIN purchase_invoices pi ON pi.id = spa.purchase_invoice_id
+        INNER JOIN purchase_invoice_lines pil ON pil.purchase_invoice_id = pi.id
+        INNER JOIN accounts a ON a.id = pil.expense_account_id
+        WHERE pi.total_minor > 0
+        GROUP BY pil.expense_account_id
+      `)
+      .all(from, to) as {
+        id: string;
+        name: string;
+        type: string;
+        subtype: string;
+        debit_total: number;
+        credit_total: number;
+      }[];
+
+    const map = new Map<string, { id: string; name: string; type: string; subtype: string; debit_total: number; credit_total: number }>();
+    for (const r of [...directRows, ...invoiceReceiptRows, ...billPaymentRows]) {
+      const existing = map.get(r.id);
+      if (existing) {
+        existing.debit_total += r.debit_total;
+        existing.credit_total += r.credit_total;
+      } else {
+        map.set(r.id, { ...r });
+      }
+    }
+
+    return Array.from(map.values()).map((r) => {
+      const net_minor = r.type === "income"
+        ? Math.round(r.credit_total - r.debit_total)
+        : Math.round(r.debit_total - r.credit_total);
+      return { ...r, net_minor };
+    }).filter((r) => r.net_minor !== 0);
+  }
+
+  // Accrual basis (default)
   const rows = sqlite
     .prepare(`
       SELECT a.id, a.name, a.type, a.subtype,
@@ -305,7 +412,6 @@ export function getProfitAndLoss(businessId: string, userId: string, fromDate?: 
     }[];
     
   return rows.map((r) => {
-    // Normal balance for income is credit, expense is debit
     const net_minor = r.type === 'income' 
       ? r.credit_total - r.debit_total 
       : r.debit_total - r.credit_total;

@@ -110,3 +110,45 @@ export function getAssetAccountOptions(businessId: string, userId: string) {
     (account) => account.isActive && account.type === "asset",
   );
 }
+
+export function listAccountsWithBalances(businessId: string, userId: string) {
+  const { sqlite } = getBusinessDb(businessId, userId);
+  const rows = sqlite
+    .prepare(`
+      SELECT a.id, a.name, a.type, a.subtype, a.is_system as isSystem, a.is_active as isActive,
+             COALESCE(SUM(CASE WHEN je.status = 'posted' THEN jl.debit_minor ELSE 0 END), 0) as debit_total,
+             COALESCE(SUM(CASE WHEN je.status = 'posted' THEN jl.credit_minor ELSE 0 END), 0) as credit_total
+      FROM accounts a
+      LEFT JOIN journal_lines jl ON jl.account_id = a.id
+      LEFT JOIN journal_entries je ON je.id = jl.journal_entry_id
+      GROUP BY a.id
+      ORDER BY a.name
+    `)
+    .all() as {
+      id: string;
+      name: string;
+      type: "asset" | "liability" | "equity" | "income" | "expense";
+      subtype: AccountInput["subtype"];
+      isSystem: number;
+      isActive: number;
+      debit_total: number;
+      credit_total: number;
+    }[];
+
+  return rows.map((r) => {
+    const isDebitNormal = r.type === "asset" || r.type === "expense";
+    const netBalanceMinor = isDebitNormal
+      ? r.debit_total - r.credit_total
+      : r.credit_total - r.debit_total;
+    return {
+      id: r.id,
+      name: r.name,
+      type: r.type,
+      subtype: r.subtype,
+      isSystem: Boolean(r.isSystem),
+      isActive: Boolean(r.isActive),
+      balanceMinor: netBalanceMinor,
+    };
+  });
+}
+

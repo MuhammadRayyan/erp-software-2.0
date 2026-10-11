@@ -130,3 +130,39 @@ export async function sendDocumentEmailAction(
     };
   }
 }
+
+export async function saveEmailTemplateAction(
+  businessId: string,
+  templateType: string,
+  subject: string,
+  body: string
+) {
+  const { requireModule } = await import("@/core/permissions/require-module");
+  const { revalidatePath } = await import("next/cache");
+  const { saveEmailTemplate } = await import("./email-template-service");
+
+  await requireModule(businessId, "settings");
+  try {
+    const template = saveEmailTemplate(businessId, templateType, { subject, body });
+    revalidatePath(`/b/${businessId}/settings/email-templates`);
+    return { data: template };
+  } catch (error) {
+    return { error: error instanceof Error ? error.message : "Failed to save email template." };
+  }
+}
+
+export async function resetEmailTemplateAction(businessId: string, templateType: string) {
+  const { requireModule } = await import("@/core/permissions/require-module");
+  const { revalidatePath } = await import("next/cache");
+  const { resetEmailTemplate } = await import("./email-template-service");
+
+  await requireModule(businessId, "settings");
+  try {
+    const template = resetEmailTemplate(businessId, templateType);
+    revalidatePath(`/b/${businessId}/settings/email-templates`);
+    return { data: template };
+  } catch (error) {
+    return { error: error instanceof Error ? error.message : "Failed to reset email template." };
+  }
+}
+

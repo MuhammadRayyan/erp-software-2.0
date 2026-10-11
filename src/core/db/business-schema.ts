@@ -71,6 +71,7 @@ export const customers = sqliteTable("customers", {
   buyerReference: text("buyer_reference"),
   defaultCurrencyCode: text("default_currency_code").notNull().default("AED").references(() => currencies.code),
   paymentTermsDays: integer("payment_terms_days").notNull().default(0),
+  paymentTermsId: text("payment_terms_id"),
   creditLimitMinor: integer("credit_limit_minor"),
   isActive: integer("is_active", { mode: "boolean" }).notNull().default(true),
   billingAddress: text("billing_address"),
@@ -96,6 +97,7 @@ export const suppliers = sqliteTable("suppliers", {
   notes: text("notes"),
   defaultCurrencyCode: text("default_currency_code").notNull().default("AED").references(() => currencies.code),
   paymentTermsDays: integer("payment_terms_days").notNull().default(0),
+  paymentTermsId: text("payment_terms_id"),
   creditLimitMinor: integer("credit_limit_minor"),
   isActive: integer("is_active", { mode: "boolean" }).notNull().default(true),
   createdAt: text("created_at").notNull(),
@@ -221,6 +223,38 @@ export const accountingSettings = sqliteTable("business_accounting_settings", {
   journalPrefix: text("journal_prefix").notNull(),
   journalNextNumber: integer("journal_next_number").notNull(),
   journalPadding: integer("journal_padding").notNull().default(4),
+  financialLockDate: text("financial_lock_date"),
+  openingBalancesDate: text("opening_balances_date"),
+  createdAt: text("created_at").notNull(),
+  updatedAt: text("updated_at").notNull(),
+});
+
+export const unitsOfMeasure = sqliteTable("units_of_measure", {
+  id: text("id").primaryKey(),
+  code: text("code").notNull().unique(),
+  name: text("name").notNull(),
+  isActive: integer("is_active", { mode: "boolean" }).notNull().default(true),
+  createdAt: text("created_at").notNull(),
+  updatedAt: text("updated_at").notNull(),
+});
+
+export const paymentTerms = sqliteTable("payment_terms", {
+  id: text("id").primaryKey(),
+  name: text("name").notNull(),
+  days: integer("days").notNull().default(30),
+  isEom: integer("is_eom", { mode: "boolean" }).notNull().default(false),
+  isDefault: integer("is_default", { mode: "boolean" }).notNull().default(false),
+  isActive: integer("is_active", { mode: "boolean" }).notNull().default(true),
+  createdAt: text("created_at").notNull(),
+  updatedAt: text("updated_at").notNull(),
+});
+
+export const emailTemplates = sqliteTable("email_templates", {
+  id: text("id").primaryKey(),
+  documentType: text("document_type").notNull().unique(),
+  name: text("name").notNull(),
+  subject: text("subject").notNull(),
+  body: text("body").notNull(),
   createdAt: text("created_at").notNull(),
   updatedAt: text("updated_at").notNull(),
 });

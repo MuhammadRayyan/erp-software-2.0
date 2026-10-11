@@ -8,7 +8,7 @@ import {
   getCoreRowModel as createCoreRowModel,
   getSortedRowModel as createSortedRowModel
 } from "@tanstack/react-table/legacy";
-import { type SortingState } from "@tanstack/react-table";
+import { type SortingState, type RowSelectionState } from "@tanstack/react-table";
 import { StatusBadge, statusLabel } from "@/components/status-badge";
 import { ListToolbar, SearchInput, ToolbarSelect, StatusFilterSelect, ActiveFiltersRow, FilterChip } from "@/components/list-toolbar";
 import { Button } from "@/components/ui/button";
@@ -19,6 +19,7 @@ import type { PurchaseInvoiceStatus, PurchasePaymentStatus } from "./purchase-in
 import { DensityToggle } from "@/components/density-toggle";
 import { useTableDensity } from "@/components/use-table-density";
 import { TableTotalsBar, renderMultiCurrencyString } from "@/components/table-totals-bar";
+import { BatchActionBar } from "@/components/batch-action-bar";
 
 type Row = {
   id: string;
@@ -71,6 +72,7 @@ export function PurchaseInvoiceTable({
   const [supplierId, setSupplierId] = useState("");
   const [projectId, setProjectId] = useState("");
   const [sorting, setSorting] = useState<SortingState>([]);
+  const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
   const supplierOptions = useMemo(
     () => Array.from(new Map(invoices.map((invoice) => [invoice.supplier_id, invoice.supplier_name])).entries()).sort((a, b) => a[1].localeCompare(b[1])),
     [invoices],
@@ -120,6 +122,29 @@ export function PurchaseInvoiceTable({
   );
   const columns: any[] = useMemo(
     () => [
+      {
+        id: "select",
+        header: ({ table }: any) => (
+          <input
+            type="checkbox"
+            className="size-4 rounded accent-primary cursor-pointer align-middle"
+            checked={table.getIsAllPageRowsSelected()}
+            onChange={table.getToggleAllPageRowsSelectedHandler()}
+            aria-label="Select all bills"
+          />
+        ),
+        cell: ({ row }: any) => (
+          <input
+            type="checkbox"
+            className="size-4 rounded accent-primary cursor-pointer align-middle"
+            checked={row.getIsSelected()}
+            onChange={row.getToggleSelectedHandler()}
+            aria-label={`Select bill ${row.original.internal_number}`}
+          />
+        ),
+        meta: { className: "w-8 text-center" },
+        enableSorting: false,
+      },
       {
         accessorKey: "internal_number",
         header: "Bill",
@@ -209,7 +234,10 @@ export function PurchaseInvoiceTable({
     state: {
       sorting,
       columnVisibility: colVisibility,
+      rowSelection,
     },
+    enableRowSelection: true,
+    onRowSelectionChange: setRowSelection,
     onSortingChange: setSorting,
     getCoreRowModel: createCoreRowModel(),
     getSortedRowModel: createSortedRowModel(),
@@ -335,6 +363,38 @@ export function PurchaseInvoiceTable({
           ]}
         />
       )}
+
+      <BatchActionBar
+        selectedCount={Object.keys(rowSelection).filter((k) => rowSelection[k]).length}
+        totalCount={rows.length}
+        onClearSelection={() => setRowSelection({})}
+        onSelectAll={() => table.toggleAllRowsSelected(true)}
+        onExportSelected={() => {
+          const selected = table.getSelectedRowModel().rows.map((r: any) => r.original);
+          const headers = ["Bill Number", "Supplier", "Supplier Invoice", "Date", "Due Date", "Currency", "Total", "Balance", "Document Status", "Payment Status"];
+          const lines = selected.map((r: any) => [
+            `"${r.internal_number}"`,
+            `"${(r.supplier_name || "").replace(/"/g, '""')}"`,
+            `"${(r.supplier_invoice_number || "").replace(/"/g, '""')}"`,
+            r.invoice_date,
+            r.due_date,
+            r.currency_code,
+            (r.total_minor / 100).toFixed(2),
+            (r.balanceMinor / 100).toFixed(2),
+            r.document_status,
+            r.paymentStatus || "",
+          ]);
+          const csvContent = [headers.join(","), ...lines.map((l: any) => l.join(","))].join("\n");
+          const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement("a");
+          a.href = url;
+          a.download = `purchase-invoices-selected-${new Date().toISOString().slice(0, 10)}.csv`;
+          a.click();
+          URL.revokeObjectURL(url);
+        }}
+        onPrintSelected={() => window.print()}
+      />
     </>
   );
 }

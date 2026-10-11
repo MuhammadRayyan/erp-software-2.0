@@ -14,13 +14,14 @@ export default async function ProfitAndLossReportPage({
   searchParams,
 }: {
   params: Promise<{ businessId: string }>;
-  searchParams: Promise<{ dateFrom?: string; dateTo?: string }>;
+  searchParams: Promise<{ dateFrom?: string; dateTo?: string; basis?: "accrual" | "cash" }>;
 }) {
   const { businessId } = await params;
   const filters = await searchParams;
+  const basis = filters.basis === "cash" ? "cash" : "accrual";
   const { user, access } = await requireModule(businessId, "reports");
 
-  const rows = getProfitAndLoss(businessId, user.id, filters.dateFrom, filters.dateTo);
+  const rows = getProfitAndLoss(businessId, user.id, filters.dateFrom, filters.dateTo, basis);
 
   // Group by subtype
   const sales = rows.filter((r) => r.type === "income" && r.subtype === "sales");
@@ -67,7 +68,15 @@ export default async function ProfitAndLossReportPage({
                 {row.name}
               </Link>
             </td>
-            <td className="money text-right">{formatMoney(row.net_minor, access.business.currency)}</td>
+            <td className="money text-right">
+              <Link
+                href={`/b/${businessId}/reports/general-ledger?accountId=${row.id}&dateFrom=${filters.dateFrom || ""}&dateTo=${filters.dateTo || ""}`}
+                className="tabular font-medium text-primary hover:underline"
+                title={`View General Ledger for ${row.name}`}
+              >
+                {formatMoney(row.net_minor, access.business.currency)}
+              </Link>
+            </td>
           </tr>
         ))}
         <tr>
@@ -110,7 +119,21 @@ export default async function ProfitAndLossReportPage({
           To
           <Input name="dateTo" type="date" defaultValue={filters.dateTo} className="mt-1 w-40 text-foreground" />
         </label>
+        <label className="space-y-1 text-xs text-muted-foreground">
+          Accounting Basis
+          <select
+            name="basis"
+            defaultValue={basis}
+            className="mt-1 flex h-9 w-36 rounded-md border border-input bg-surface px-3 py-1 text-sm shadow-xs focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+          >
+            <option value="accrual">Accrual Basis</option>
+            <option value="cash">Cash Basis</option>
+          </select>
+        </label>
         <Button type="submit" variant="secondary">Update</Button>
+        <span className="ml-auto hidden text-xs text-muted-foreground self-center lg:inline">
+          {basis === "cash" ? "Cash basis: recognized upon payment" : "Accrual basis: recognized when issued"}
+        </span>
       </form>
 
       <div className="data-panel p-6">

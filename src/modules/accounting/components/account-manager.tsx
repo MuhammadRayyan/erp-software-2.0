@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { MoreHorizontal, Pencil, Plus, Trash2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
@@ -16,6 +17,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { formatMoney } from "@/core/format";
 import { accountTypes } from "../account-types";
 import {
   accountSubtypeLabels,
@@ -31,6 +33,7 @@ type AccountRow = AccountInput & {
   id: string;
   isSystem: boolean;
   isActive: boolean;
+  balanceMinor?: number;
 };
 
 
@@ -41,7 +44,15 @@ const emptyAccount: AccountInput = {
   isActive: true,
 };
 
-export function AccountManager({ businessId, accounts }: { businessId: string; accounts: AccountRow[] }) {
+export function AccountManager({
+  businessId,
+  accounts,
+  currency = "AED",
+}: {
+  businessId: string;
+  accounts: AccountRow[];
+  currency?: string;
+}) {
   const router = useRouter();
   const [editing, setEditing] = useState<AccountRow | null | undefined>(undefined);
   const [values, setValues] = useState<AccountInput>(emptyAccount);
@@ -102,13 +113,22 @@ export function AccountManager({ businessId, accounts }: { businessId: string; a
               </div>
               <div className="overflow-x-auto">
                 <table className="data-table min-w-[650px]">
-                  <thead><tr><th>Account</th><th>Subtype</th><th>Status</th><th className="w-12"><span className="sr-only">Actions</span></th></tr></thead>
+                  <thead><tr><th>Account</th><th>Subtype</th><th>Status</th><th className="text-right!">Balance</th><th className="w-12"><span className="sr-only">Actions</span></th></tr></thead>
                   <tbody>
                     {rows.map((account) => (
                       <tr key={account.id}>
                         <td><span className="font-medium">{account.name}</span>{account.isSystem && <Badge className="ml-2">System</Badge>}</td>
                         <td className="text-muted-foreground">{accountSubtypeLabels[account.subtype]}</td>
                         <td><Badge tone={account.isActive ? "success" : "neutral"}>{account.isActive ? "Active" : "Inactive"}</Badge></td>
+                        <td className="money text-right">
+                          <Link
+                            href={`/b/${businessId}/reports/general-ledger?accountId=${account.id}`}
+                            className="tabular font-medium text-primary hover:underline"
+                            title={`View General Ledger for ${account.name}`}
+                          >
+                            {formatMoney(account.balanceMinor ?? 0, currency)}
+                          </Link>
+                        </td>
                         <td>
                           <DropdownMenu>
                             <DropdownMenuTrigger asChild><Button variant="ghost" size="icon" aria-label={`Actions for ${account.name}`}><MoreHorizontal className="size-4" /></Button></DropdownMenuTrigger>

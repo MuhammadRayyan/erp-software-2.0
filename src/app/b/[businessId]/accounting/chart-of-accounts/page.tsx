@@ -1,13 +1,13 @@
 import { requireModule } from "@/core/permissions/require-module";
 import { AccountManager } from "@/modules/accounting/components/account-manager";
-import { listAccounts } from "@/modules/accounting/services/account-service";
+import { listAccountsWithBalances } from "@/modules/accounting/services/account-service";
 
 export const metadata = { title: "Chart of Accounts" };
 
 export default async function ChartOfAccountsPage({ params }: { params: Promise<{ businessId: string }> }) {
   const { businessId } = await params;
-  const { user } = await requireModule(businessId, "accounting");
-  const accounts = listAccounts(businessId, user.id);
+  const { user, access } = await requireModule(businessId, "accounting");
+  const accounts = listAccountsWithBalances(businessId, user.id);
   return (
     <div className="page-container">
       <div className="page-header">
@@ -16,7 +16,7 @@ export default async function ChartOfAccountsPage({ params }: { params: Promise<
           <p className="page-description">Business-local accounts used by automated postings and financial reports.</p>
         </div>
       </div>
-      <AccountManager businessId={businessId} accounts={accounts} />
+      <AccountManager businessId={businessId} accounts={accounts} currency={access.business.currency} />
     </div>
   );
 }
