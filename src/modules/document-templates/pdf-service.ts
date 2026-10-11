@@ -14,6 +14,7 @@ import { getDebitNote } from "@/modules/debit-notes/debit-note-service";
 import { averageUnitCostMicros, formatUnitCostMicros } from "@/modules/inventory/inventory-valuation";
 import { getCustomFieldPairsForEntity } from "@/modules/custom-fields/custom-field-service";
 import { getBusinessProfile } from "@/modules/business-profile/business-profile-service";
+import type { DocumentTemplateData } from "./react-pdf/modern-document-template";
 
 export async function generateDocumentPdf(
   businessId: string,
@@ -28,6 +29,12 @@ export async function generateDocumentPdf(
   let number = "";
   let partyLabel = "BILL TO";
   let partyName = "";
+  let partyAddress: string | undefined = undefined;
+  let partyTrn: string | undefined = undefined;
+  let partyEmail: string | undefined = undefined;
+  let partyPhone: string | undefined = undefined;
+  let docNotes: string | undefined = undefined;
+  let docTerms: string | undefined = undefined;
   let dateLabel = "";
   let dueLabel = "";
   let status: string | undefined = undefined;
@@ -43,7 +50,14 @@ export async function generateDocumentPdf(
     currency = record.invoice.currencyCode;
     title = "INVOICE";
     number = record.invoice.invoiceNumber;
+    status = record.invoice.documentStatus;
     partyName = record.customer.name;
+    partyAddress = record.customer.billingAddress || [record.customer.addressLine1, record.customer.city, record.customer.countrySubdivision, record.customer.countryCode].filter(Boolean).join(", ") || undefined;
+    partyTrn = record.customer.trn || record.customer.taxReference || undefined;
+    partyEmail = record.customer.email || undefined;
+    partyPhone = record.customer.phone || undefined;
+    docNotes = record.invoice.notes || undefined;
+    docTerms = record.invoice.terms || undefined;
     dateLabel = formatDate(record.invoice.invoiceDate);
     dueLabel = `Due: ${formatDate(record.invoice.dueDate)}`;
     if (currency !== baseCurrency) {
@@ -66,8 +80,15 @@ export async function generateDocumentPdf(
     currency = record.invoice.currencyCode;
     title = "PURCHASE INVOICE";
     number = record.invoice.internalNumber;
+    status = (record.invoice as any).documentStatus;
     partyLabel = "SUPPLIER";
     partyName = record.supplier.name;
+    partyAddress = record.supplier.address || undefined;
+    partyTrn = record.supplier.trn || record.supplier.taxReference || undefined;
+    partyEmail = record.supplier.email || undefined;
+    partyPhone = record.supplier.phone || undefined;
+    docNotes = (record.invoice as any).notes || undefined;
+    docTerms = (record.invoice as any).terms || undefined;
     dateLabel = formatDate(record.invoice.invoiceDate);
     dueLabel = `Due: ${formatDate(record.invoice.dueDate)} (Ref: ${record.invoice.supplierInvoiceNumber || "-"})`;
     if (currency !== baseCurrency) {
@@ -83,7 +104,6 @@ export async function generateDocumentPdf(
       amount: formatMoney(line.grossAmountMinor, currency),
       discount: (line as any).discountType === "percentage" ? `${(line as any).discountValue}%` : ((line as any).discountType === "fixed" ? formatMoney(Number((line as any).discountValue), currency) : undefined),
     }));
-    // customFields = getCustomFieldPairsForEntity(businessId, userId, "purchase_invoice", record.invoice.id);
   } else if (documentType === "purchase-order") {
     const record = getPurchaseOrder(businessId, userId, documentId);
     if (!record) throw new Error("Purchase order not found");
@@ -93,6 +113,12 @@ export async function generateDocumentPdf(
     status = (record.order as any).status;
     partyLabel = "SUPPLIER";
     partyName = record.supplier.name;
+    partyAddress = record.supplier.address || undefined;
+    partyTrn = record.supplier.trn || record.supplier.taxReference || undefined;
+    partyEmail = record.supplier.email || undefined;
+    partyPhone = record.supplier.phone || undefined;
+    docNotes = (record.order as any).notes || undefined;
+    docTerms = (record.order as any).terms || undefined;
     dateLabel = formatDate((record.order as any).date || (record.order as any).orderDate);
     dueLabel = (record.order as any).expectedDate ? `Expected Date: ${formatDate((record.order as any).expectedDate)}` : (record.order as any).deliveryDate ? `Delivery Date: ${formatDate((record.order as any).deliveryDate)}` : "-";
     if (currency !== baseCurrency) {
@@ -114,8 +140,15 @@ export async function generateDocumentPdf(
     currency = record.note.currencyCode;
     title = "SALES CREDIT NOTE";
     number = record.note.creditNoteNumber;
+    status = (record.note as any).documentStatus;
     partyLabel = "CREDIT TO";
     partyName = record.customer.name;
+    partyAddress = record.customer.billingAddress || [record.customer.addressLine1, record.customer.city, record.customer.countrySubdivision, record.customer.countryCode].filter(Boolean).join(", ") || undefined;
+    partyTrn = record.customer.trn || record.customer.taxReference || undefined;
+    partyEmail = record.customer.email || undefined;
+    partyPhone = record.customer.phone || undefined;
+    docNotes = (record.note as any).notes || undefined;
+    docTerms = (record.note as any).terms || undefined;
     dateLabel = formatDate(record.note.date);
     dueLabel = `Invoice: ${record.invoice.invoiceNumber}`;
     if (currency !== baseCurrency) {
@@ -139,6 +172,10 @@ export async function generateDocumentPdf(
     number = record.note.debitNoteNumber;
     partyLabel = "SUPPLIER";
     partyName = record.note.supplierName;
+    partyAddress = (record.note as any).supplierAddress || undefined;
+    partyTrn = (record.note as any).supplierTrn || undefined;
+    docNotes = (record.note as any).notes || undefined;
+    docTerms = (record.note as any).terms || undefined;
     dateLabel = formatDate(record.note.debitNoteDate);
     dueLabel = "-";
     subtotalMinor = record.note.subtotalMinor;
@@ -159,6 +196,12 @@ export async function generateDocumentPdf(
     number = record.quote.quoteNumber;
     status = (record.quote as any).documentStatus;
     partyName = record.customer.name;
+    partyAddress = record.customer.billingAddress || [record.customer.addressLine1, record.customer.city, record.customer.countrySubdivision, record.customer.countryCode].filter(Boolean).join(", ") || undefined;
+    partyTrn = record.customer.trn || record.customer.taxReference || undefined;
+    partyEmail = record.customer.email || undefined;
+    partyPhone = record.customer.phone || undefined;
+    docNotes = (record.quote as any).notes || undefined;
+    docTerms = (record.quote as any).terms || undefined;
     dateLabel = formatDate(record.quote.quoteDate);
     dueLabel = record.quote.expiryDate ? `Expiry Date: ${formatDate(record.quote.expiryDate)}` : "-";
     if (currency !== baseCurrency) {
@@ -182,6 +225,12 @@ export async function generateDocumentPdf(
     number = record.order.orderNumber;
     status = (record.order as any).documentStatus;
     partyName = record.customer.name;
+    partyAddress = record.customer.billingAddress || [record.customer.addressLine1, record.customer.city, record.customer.countrySubdivision, record.customer.countryCode].filter(Boolean).join(", ") || undefined;
+    partyTrn = record.customer.trn || record.customer.taxReference || undefined;
+    partyEmail = record.customer.email || undefined;
+    partyPhone = record.customer.phone || undefined;
+    docNotes = (record.order as any).notes || undefined;
+    docTerms = (record.order as any).terms || undefined;
     dateLabel = formatDate(record.order.orderDate);
     dueLabel = record.order.deliveryDate ? `Delivery Date: ${formatDate(record.order.deliveryDate)}` : "-";
     if (currency !== baseCurrency) {
@@ -206,6 +255,12 @@ export async function generateDocumentPdf(
     status = (record.quote as any).documentStatus;
     partyLabel = "SUPPLIER";
     partyName = record.supplier.name;
+    partyAddress = record.supplier.address || undefined;
+    partyTrn = record.supplier.trn || record.supplier.taxReference || undefined;
+    partyEmail = record.supplier.email || undefined;
+    partyPhone = record.supplier.phone || undefined;
+    docNotes = (record.quote as any).notes || undefined;
+    docTerms = (record.quote as any).terms || undefined;
     dateLabel = formatDate(record.quote.quoteDate);
     dueLabel = record.quote.expiryDate ? `Expiry Date: ${formatDate(record.quote.expiryDate)}` : "-";
     if (currency !== baseCurrency) {
@@ -230,6 +285,7 @@ export async function generateDocumentPdf(
     partyName = String(record.receipt.supplier_name);
     dateLabel = formatDate(String(record.receipt.date));
     dueLabel = `Location: ${String(record.receipt.location_code)} - ${String(record.receipt.location_name)}`;
+    docNotes = (record.receipt as any).notes || undefined;
     taxMinor = 0;
     totalMinor = record.lines.reduce((sum, line) => sum + Number(line.value_minor), 0);
     subtotalMinor = totalMinor;
@@ -248,6 +304,7 @@ export async function generateDocumentPdf(
     partyName = String(record.delivery.customer_name);
     dateLabel = formatDate(String(record.delivery.date));
     dueLabel = `Location: ${String(record.delivery.location_code)} - ${String(record.delivery.location_name)}`;
+    docNotes = (record.delivery as any).notes || undefined;
     taxMinor = 0;
     totalMinor = record.lines.reduce((sum, line) => sum + Number(line.value_minor), 0);
     subtotalMinor = totalMinor;
@@ -265,6 +322,9 @@ export async function generateDocumentPdf(
   let resolvedCompanyAddress: string | undefined = undefined;
   let resolvedSellerTrn: string | undefined = undefined;
   let resolvedLogoUrl: string | undefined = undefined;
+  let resolvedCompanyEmail: string | undefined = undefined;
+  let resolvedCompanyPhone: string | undefined = undefined;
+  let resolvedCompanyWebsite: string | undefined = undefined;
 
   try {
     const profile = getBusinessProfile(businessId, userId);
@@ -278,26 +338,38 @@ export async function generateDocumentPdf(
       if (addr) resolvedCompanyAddress = addr;
       if (profile.taxId) resolvedSellerTrn = profile.taxId;
       if (profile.logoUrl) resolvedLogoUrl = profile.logoUrl;
+      if (profile.email) resolvedCompanyEmail = profile.email;
+      if (profile.phone) resolvedCompanyPhone = profile.phone;
+      if (profile.website) resolvedCompanyWebsite = profile.website;
     }
   } catch {
     /* fallback to businessName */
   }
 
-  const data = {
+  const data: DocumentTemplateData = {
     companyName: resolvedCompanyName,
     companyAddress: resolvedCompanyAddress,
+    companyEmail: resolvedCompanyEmail,
+    companyPhone: resolvedCompanyPhone,
+    companyWebsite: resolvedCompanyWebsite,
     sellerTrn: resolvedSellerTrn,
     logoUrl: resolvedLogoUrl,
     invoiceTitle: title,
     invoiceNumber: number,
     customerLabel: partyLabel,
     customerName: partyName,
+    customerAddress: partyAddress,
+    customerTrn: partyTrn,
+    customerEmail: partyEmail,
+    customerPhone: partyPhone,
     invoiceDate: dateLabel,
     dueDate: dueLabel,
     lines: rows,
     subtotal: formatMoney(subtotalMinor, currency),
     tax: formatMoney(taxMinor, currency),
     total: formatMoney(totalMinor, currency),
+    notes: docNotes,
+    terms: docTerms,
     customFields: customFields.length ? customFields : undefined,
     status,
   };

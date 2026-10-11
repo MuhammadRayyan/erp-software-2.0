@@ -128,9 +128,24 @@ test.describe('Settings Module', () => {
     await expect(page.getByRole('heading', { name: /Tax Codes/i })).toBeVisible();
   });
 
-  test('can view document templates settings', async ({ page }) => {
+  test('can view document templates settings and studio preview', async ({ page }) => {
     await page.getByRole('link', { name: 'Settings' }).click();
     await page.locator('main').getByRole('link', { name: /Document Templates/i }).first().click();
     await expect(page.getByRole('heading', { name: /Document Templates/i })).toBeVisible();
+
+    // Verify studio controls and live preview container
+    await expect(page.getByText(/Template Studio/i)).toBeVisible();
+    await expect(page.getByText(/Live Document Preview/i)).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Minimal' })).toBeVisible();
+
+    // Verify tabs
+    await page.getByRole('button', { name: /Logo & Branding/i }).click();
+    await expect(page.getByText(/Company Logo/i)).toBeVisible();
+
+    await page.getByRole('button', { name: /Content & Details/i }).click();
+    await expect(page.getByText(/Document Watermark/i)).toBeVisible();
+
+    await page.getByRole('button', { name: /Columns/i }).click();
+    await expect(page.getByText(/Table Columns/i)).toBeVisible();
   });
 });

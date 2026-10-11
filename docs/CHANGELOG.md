@@ -39,8 +39,28 @@ Full per-task detail (file lists, verification transcripts, QA walkthroughs) liv
   - Integrated theme switcher: Light, Dark, and System (auto-detect OS preference) using `next-themes`.
   - Table grid density settings (Compact, Default, Comfortable) hooked into table styling.
   - Interactive live preview card simulating invoices, status pills, and buttons.
-- **PDF Template Integration (`pdf-service.ts`)**:
-  - Updated both Classic and Modern PDF templates to resolve company name, legal address, contact info, TRN, and logo directly from the Business Profile.
+- **PDF Template Integration & Customization Studio (`/settings/document-templates`)**:
+  - Transformed the template editor into a responsive side-by-side Live Studio:
+    - Left column: 5 categorized configuration tabs (*Style & Engine*, *Logo & Branding*, *Content & Details*, *Columns*, *HTML Source*).
+    - Right column: Sticky Live Document Preview with real-time embedded PDF viewer, full-tab preview, and direct sample PDF download.
+  - **New Minimal / Swiss Typography Template Engine (`minimal`)**:
+    - Introduced an ultra-clean editorial layout featuring Swiss typography, subtle hairline rules, generous white space, and compact totals.
+  - **Color Palette & Typography Controls**:
+    - 7 curated one-click color palette presets (*Executive Navy*, *Modern Indigo*, *Corporate Slate*, *Emerald Green*, *Crimson Wine*, *Sleek Charcoal*, *Sky Blue*) + custom hex picker.
+    - Font family selection (*Inter*, *Roboto*, *Open Sans*, *Lato*) and document density scaling (*Small/Compact*, *Normal*, *Large/Spacious*).
+  - **Advanced Branding & Layout Controls**:
+    - Logo positioning (*Left*, *Center*, *Right*) and sizing (*Small*, *Medium*, *Large*) with live upload/clear.
+    - Full-width header and footer graphic banner support for official corporate stationery.
+    - Remittance bank instructions & payment details editor (Bank Name, IBAN, SWIFT, Account Number) rendered cleanly on PDFs.
+    - Authorized Signature & Company Stamp block with custom signature label and scanned signature/stamp image upload.
+    - Document Watermark support (preset or custom text: *None*, *DRAFT*, *PAID*, *COPY*, *ORIGINAL*, *CONFIDENTIAL*).
+    - Notes & Remarks and Terms & Conditions dynamically extracted from documents and formatted on PDFs.
+    - Dynamic Page Numbering (`Page X of Y`) on multi-page PDF output.
+    - Granular table column toggles: Tax/VAT, Discount, Project, Client TRN, Company address, Company TRN, Custom fields.
+  - **Brand Inheritance Fallback (`template-service.ts`)**:
+    - Unconfigured document types (Quotes, Orders, Delivery Notes, etc.) automatically inherit company branding from the primary invoice template, eliminating unbranded documents across the ERP.
+  - **Rich Document Context in `pdf-service.ts`**:
+    - All 10 supported document types now extract and supply full party address, TRN, contact email, phone, notes, terms, discounts, taxes, and status to the PDF generator.
 
 ## Commercial Document Entry, Table Layout, Versioning & Manager.io Options Sprint
 - **Line Item Entry Horizontal Scroll Resolution**:

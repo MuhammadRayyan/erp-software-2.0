@@ -2,10 +2,12 @@
 import { renderReactPdf } from "./react-pdf/render";
 import { ModernDocumentTemplate, type DocumentTemplateData, type DocumentTemplateVariant } from "./react-pdf/modern-document-template";
 import { ClassicDocumentTemplate } from "./react-pdf/classic-document-template";
+import { MinimalDocumentTemplate } from "./react-pdf/minimal-document-template";
 import { ClassicStatementDocument, type StatementTemplateData } from "./react-pdf/statement-template";
 
 import { renderHtmlTemplate } from "./html-templates/render";
 import { getTemplateSettings } from "./template-service";
+import type { TemplateSettings } from "./template-settings";
 
 export async function renderInvoicePdf(
   businessId: string,
@@ -20,9 +22,10 @@ export async function renderDocumentPdf(
   businessId: string,
   userId: string,
   documentType: string,
-  data: DocumentTemplateData & { invoiceTitle?: string; customerLabel?: string }
+  data: DocumentTemplateData & { invoiceTitle?: string; customerLabel?: string },
+  overrideSettings?: TemplateSettings,
 ): Promise<Buffer> {
-  const settings = getTemplateSettings(businessId, userId, documentType);
+  const settings = overrideSettings || getTemplateSettings(businessId, userId, documentType);
 
   if (settings.templateType === "custom-html" && settings.customHtml) {
     return renderHtmlTemplate(settings.customHtml, data, settings);
@@ -43,6 +46,10 @@ export async function renderDocumentPdf(
 
   if (settings.templateType === "classic") {
     return renderReactPdf(<ClassicDocumentTemplate data={data} settings={settings} variant={variant} />);
+  }
+
+  if (settings.templateType === "minimal") {
+    return renderReactPdf(<MinimalDocumentTemplate data={data} settings={settings} variant={variant} />);
   }
 
   return renderReactPdf(<ModernDocumentTemplate data={data} settings={settings} variant={variant} />);

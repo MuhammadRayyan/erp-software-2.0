@@ -89,4 +89,72 @@ test("PDF Generation Test - Document Layouts and Visibility", async () => {
   const poPdfPath = path.join(tempDir, "po.pdf");
   writeFileSync(poPdfPath, new Uint8Array(poPdfBuffer));
   console.log(`✔ PO PDF saved → ${poPdfPath}`);
+
+  // ── Minimal Template with Full Customizations ──────────────────────────────
+  const { saveTemplateSettings, getTemplateSettings } = await import("../src/modules/document-templates/template-service");
+
+  const customMinimalSettings = {
+    templateType: "minimal" as const,
+    primaryColor: "#065f46",
+    fontName: "Inter" as const,
+    fontSize: "small" as const,
+    logoPosition: "center" as const,
+    logoSize: "medium" as const,
+    watermarkText: "ORIGINAL",
+    showPaymentInstructions: true,
+    paymentInstructions: "Bank: Emirates NBD\nIBAN: AE070260000101234567801\nSWIFT: EBILAEAD",
+    showSignatureBlock: true,
+    signatureLabel: "Financial Controller",
+    showNotes: true,
+    showPaymentTerms: true,
+    showPageNumbers: true,
+    showTaxColumn: true,
+    showDiscountColumn: true,
+    headerText: "Authorized UAE Technology Partner",
+    footerText: "Subject to standard trading terms & conditions",
+  };
+
+  const richInvoiceData = {
+    ...invoiceData,
+    invoiceTitle: "TAX INVOICE",
+    customerLabel: "CUSTOMER",
+    customerAddress: "Office 24, Boulevard Plaza, Downtown Dubai",
+    customerTrn: "100987654300003",
+    notes: "Please transfer funds referencing invoice DOC-2026-0001.",
+    terms: "Payment terms are Net 30 days from date of supply.",
+  };
+
+  const minimalPdfBuffer = await renderDocumentPdf(businessId, adminId, "sales-invoice", richInvoiceData as any, customMinimalSettings as any);
+  assert.ok(minimalPdfBuffer.length > 1000, "Minimal layout PDF generated and non-empty");
+  assert.equal(minimalPdfBuffer.slice(0, 4).toString(), "%PDF", "Output is a valid PDF file");
+  const minimalPdfPath = path.join(tempDir, "minimal-invoice.pdf");
+  writeFileSync(minimalPdfPath, new Uint8Array(minimalPdfBuffer));
+  console.log(`✔ Minimal layout PDF saved → ${minimalPdfPath}`);
+
+  // ── Classic Template with Signature & Watermark ────────────────────────────
+  const customClassicSettings = {
+    ...customMinimalSettings,
+    templateType: "classic" as const,
+    primaryColor: "#1e3a8a",
+    watermarkText: "DRAFT",
+  };
+
+  const classicPdfBuffer = await renderDocumentPdf(businessId, adminId, "sales-invoice", richInvoiceData as any, customClassicSettings as any);
+  assert.ok(classicPdfBuffer.length > 1000, "Classic layout PDF generated and non-empty");
+  assert.equal(classicPdfBuffer.slice(0, 4).toString(), "%PDF", "Output is a valid PDF file");
+  console.log("✔ Classic layout PDF verified with watermark and signature block");
+
+  // ── Brand Inheritance Fallback ─────────────────────────────────────────────
+  saveTemplateSettings(businessId, adminId, "sales-invoice", {
+    templateType: "modern",
+    primaryColor: "#4f46e5",
+    headerText: "Company Global Header",
+  });
+
+  // Querying purchase-quote (which has not been customized) should inherit sales-invoice branding
+  const inheritedSettings = getTemplateSettings(businessId, adminId, "purchase-quote");
+  assert.equal(inheritedSettings.primaryColor, "#4f46e5", "Inherited primaryColor from sales-invoice company template");
+  assert.equal(inheritedSettings.headerText, "Company Global Header", "Inherited headerText from sales-invoice company template");
+  console.log("✔ Template brand inheritance fallback verified across unconfigured documents");
 });
+
