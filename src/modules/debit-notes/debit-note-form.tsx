@@ -354,7 +354,7 @@ export function DebitNoteForm({
           accountAriaLabel="sales account"
           accountPlaceholder="Choose an account..."
           taxCodes={taxCodes}
-          showLineTaxCodes={true}
+          initialShowLineTaxCodes={true}
           projects={eligibleProjects}
           currencyCode={currencyCode}
           minorUnit={minorUnit}

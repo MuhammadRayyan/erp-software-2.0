@@ -45,6 +45,7 @@ export async function deleteSalesQuoteAction(businessId: string, quoteId: string
 }
 
 import { quantityMicrosToInput } from "@/modules/accounting/calculations/money";
+import { minorToDecimalString } from "@/core/format";
 
 export async function convertSalesQuoteToOrderAction(businessId: string, quoteId: string) {
   const { user } = await requireModule(businessId, "sales");
@@ -75,7 +76,7 @@ export async function convertSalesQuoteToOrderAction(businessId: string, quoteId
         quantity: quantityMicrosToInput(l.quantityMicros),
         discountType: l.discountType || "none",
         discountValue: l.discountValue || "0",
-        unitPrice: (l.unitPriceMinor / 100).toFixed(2),
+        unitPrice: minorToDecimalString(l.unitPriceMinor, quoteData.quote.currencyCode),
         salesAccountId: l.salesAccountId || "",
         taxCodeId: l.taxCodeId || "",
         projectId: l.projectId || "",

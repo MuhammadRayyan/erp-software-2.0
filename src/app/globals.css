@@ -257,45 +257,51 @@ input[aria-invalid="true"]:focus, select[aria-invalid="true"]:focus {
 .line-item-table {
   width: 100%;
   border-collapse: separate;
-  border-spacing: 0 8px;
+  border-spacing: 0 6px;
   font-size: 13.5px;
 }
 .line-item-table th {
   font-weight: 600;
   color: var(--muted-foreground);
   text-align: left;
-  padding: 0 12px 0px;
+  padding: 0 8px 4px;
   white-space: nowrap;
   border: none;
   background: transparent;
-  font-size: 12px;
+  font-size: 11.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
 }
 .line-item-table td {
   background: var(--surface-raised);
-  padding: 12px;
+  padding: 7px 8px;
   border-top: 1px solid var(--border);
   border-bottom: 1px solid var(--border);
   vertical-align: top;
 }
 .line-item-table td:first-child {
   border-left: 1px solid var(--border);
-  border-top-left-radius: 10px;
-  border-bottom-left-radius: 10px;
+  border-top-left-radius: 8px;
+  border-bottom-left-radius: 8px;
 }
 .line-item-table td:last-child {
   border-right: 1px solid var(--border);
-  border-top-right-radius: 10px;
-  border-bottom-right-radius: 10px;
+  border-top-right-radius: 8px;
+  border-bottom-right-radius: 8px;
 }
 .line-item-table tbody tr {
-  box-shadow: 0 1px 2px rgba(0,0,0,0.02);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.02);
   transition: all 150ms ease;
 }
 .line-item-table tbody tr:hover {
-  box-shadow: 0 6px 16px rgba(0,0,0,0.06);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
   transform: translateY(-1px);
 }
 .dark .line-item-table tbody tr:hover {
-  box-shadow: 0 6px 16px rgba(0,0,0,0.25);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
+}
+.line-item-table input,
+.line-item-table select {
+  min-width: 0;
 }
 

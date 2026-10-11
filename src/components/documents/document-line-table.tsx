@@ -52,7 +52,6 @@ export interface DocumentLineTableProps {
   accountAriaLabel?: string;
   accountPlaceholder?: string;
   taxCodes?: DocumentLineTaxOption[];
-  showLineTaxCodes?: boolean;
   projects?: DocumentLineProjectOption[];
 
   // Currency & Previews
@@ -70,12 +69,15 @@ export interface DocumentLineTableProps {
   onShowDiscountsChange?: (show: boolean) => void;
   showLineProjects?: boolean;
   onShowLineProjectsChange?: (show: boolean) => void;
+  showLineTaxCodes?: boolean;
+  onShowLineTaxCodesChange?: (show: boolean) => void;
 
   // Initial column toggles (uncontrolled)
   initialShowLineNumber?: boolean;
   initialShowDescription?: boolean;
   initialShowDiscounts?: boolean;
   initialShowProjects?: boolean;
+  initialShowLineTaxCodes?: boolean;
 
   // Totals panel & toggles integration
   showTotalsSection?: boolean;
@@ -102,7 +104,9 @@ export function DocumentLineTable({
   accountAriaLabel,
   accountPlaceholder,
   taxCodes = [],
-  showLineTaxCodes = true,
+  showLineTaxCodes: controlledShowLineTaxCodes,
+  onShowLineTaxCodesChange,
+  initialShowLineTaxCodes,
   projects,
   currencyCode,
   minorUnit,
@@ -137,6 +141,9 @@ export function DocumentLineTable({
   const [internalShowProjects, setInternalShowProjects] = useState(
     () => initialShowProjects ?? lines.some((l) => Boolean(l?.projectId))
   );
+  const [internalShowLineTaxCodes, setInternalShowLineTaxCodes] = useState(
+    () => initialShowLineTaxCodes ?? controlledShowLineTaxCodes ?? true
+  );
 
   const showLineNumber = controlledShowLineNumber ?? internalShowLineNumber;
   const setShowLineNumber = onShowLineNumberChange ?? setInternalShowLineNumber;
@@ -150,6 +157,11 @@ export function DocumentLineTable({
   const showLineProjects = controlledShowLineProjects ?? internalShowProjects;
   const setShowLineProjects = onShowLineProjectsChange ?? setInternalShowProjects;
 
+  const showLineTaxCodes = onShowLineTaxCodesChange !== undefined
+    ? (controlledShowLineTaxCodes ?? internalShowLineTaxCodes)
+    : internalShowLineTaxCodes;
+  const setShowLineTaxCodes = onShowLineTaxCodesChange ?? setInternalShowLineTaxCodes;
+
   const resolvedAccountAria =
     accountAriaLabel ?? (accountFieldName === "salesAccountId" ? "sales account" : "expense account");
 
@@ -159,41 +171,41 @@ export function DocumentLineTable({
         <p className="field-error mb-2">{errors.lines.message}</p>
       )}
 
-      <div className="overflow-x-auto pb-4 -mx-2 px-2">
-        <table className="line-item-table min-w-max w-full">
+      <div className="overflow-x-auto pb-3 -mx-1 px-1">
+        <table className="line-item-table w-full">
           <thead>
             <tr>
               {showLineNumber && (
-                <th className="w-12 text-center text-muted-foreground">#</th>
+                <th className="w-10 text-center text-muted-foreground">#</th>
               )}
               {items && (
-                <th className="w-56 min-w-[200px]">
+                <th className="w-[18%] min-w-[130px]">
                   Item <span className="font-normal text-muted-foreground">(optional)</span>
                 </th>
               )}
               {showDescription && (
-                <th className="min-w-[220px]">Description</th>
+                <th className="min-w-[140px]">Description</th>
               )}
-              <th className="w-24 text-right!">Qty</th>
-              <th className="w-32 text-right!">Rate</th>
+              <th className="w-20 min-w-[68px] text-right!">Qty</th>
+              <th className="w-24 min-w-[80px] text-right!">Rate</th>
               {showDiscounts && (
-                <th className="w-36 text-right!">Discount</th>
+                <th className="w-32 min-w-[105px] text-right!">Discount</th>
               )}
-              <th className="w-48">{accountColumnLabel}</th>
+              <th className="w-[16%] min-w-[125px]">{accountColumnLabel}</th>
               {showLineTaxCodes && (
-                <th className="w-40">VAT</th>
+                <th className="w-[12%] min-w-[95px]">VAT</th>
               )}
               {showLineProjects && (
-                <th className="w-52">Project override</th>
+                <th className="w-[14%] min-w-[105px]">Project override</th>
               )}
               {!amountsIncludeTax && (
                 <>
-                  <th className="w-32 min-w-[110px] text-right!">Amount</th>
-                  <th className="w-32 min-w-[110px] text-right!">Tax</th>
+                  <th className="w-20 min-w-[70px] text-right!">Amount</th>
+                  <th className="w-18 min-w-[65px] text-right!">Tax</th>
                 </>
               )}
-              <th className="w-36 min-w-[130px] text-right!">Total</th>
-              <th className="w-12">
+              <th className="w-24 min-w-[80px] text-right!">Total</th>
+              <th className="w-10 text-center">
                 <span className="sr-only">Remove</span>
               </th>
             </tr>
@@ -207,7 +219,7 @@ export function DocumentLineTable({
               return (
                 <tr key={field.id}>
                   {showLineNumber && (
-                    <td className="text-center text-muted-foreground align-middle py-2">
+                    <td className="text-center text-muted-foreground align-middle py-2 text-xs font-medium">
                       {index + 1}
                     </td>
                   )}
@@ -216,6 +228,7 @@ export function DocumentLineTable({
                     <td className="align-top">
                       <SelectNative
                         aria-label={`Line ${index + 1} inventory item`}
+                        className="w-full text-xs"
                         {...register(`lines.${index}.itemId`, {
                           onChange: (event) => onItemSelect?.(index, event.target.value),
                         })}
@@ -232,9 +245,11 @@ export function DocumentLineTable({
                   )}
 
                   {showDescription && (
-                    <td className="align-top">
+                    <td className="align-top min-w-0">
                       <Input
                         aria-label={`Line ${index + 1} description`}
+                        className="w-full min-w-0 text-xs"
+                        placeholder="Description..."
                         {...register(`lines.${index}.description`)}
                       />
                       {lineError?.description && (
@@ -245,7 +260,7 @@ export function DocumentLineTable({
 
                   <td className="align-top">
                     <Input
-                      className="money text-right"
+                      className="money text-right w-full min-w-0 text-xs"
                       type="number"
                       step="0.0001"
                       min="0.0001"
@@ -256,7 +271,7 @@ export function DocumentLineTable({
 
                   <td className="align-top">
                     <Input
-                      className="money text-right"
+                      className="money text-right w-full min-w-0 text-xs"
                       type="number"
                       step="0.000001"
                       min="0"
@@ -267,10 +282,10 @@ export function DocumentLineTable({
 
                   {showDiscounts && (
                     <td className="align-top">
-                      <div className="flex gap-1 justify-end">
+                      <div className="flex gap-1 justify-end min-w-0">
                         <select
                           aria-label={`Line ${index + 1} discount type`}
-                          className="w-[70px] px-2 py-1 h-9 flex items-center justify-between rounded-md border border-input bg-transparent text-sm shadow-sm ring-offset-background placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
+                          className="w-[62px] px-1.5 py-1 h-9 rounded-md border border-border-strong bg-surface-raised text-xs outline-none focus:border-primary focus:ring-1 focus:ring-ring"
                           {...register(`lines.${index}.discountType`)}
                         >
                           <option value="none">None</option>
@@ -280,7 +295,7 @@ export function DocumentLineTable({
                         {line?.discountType && line.discountType !== "none" && (
                           <Input
                             aria-label={`Line ${index + 1} discount value`}
-                            className="money w-20 text-right px-2 py-1 h-9"
+                            className="money w-16 text-right px-2 py-1 h-9 text-xs"
                             type="number"
                             step="any"
                             min="0"
@@ -293,16 +308,17 @@ export function DocumentLineTable({
 
                   <td className="align-top">
                     {line?.itemId ? (
-                      <>
+                      <div className="h-9 flex items-center px-2.5 rounded-md bg-surface-muted/40 border border-transparent">
                         <input
                           type="hidden"
                           {...register(`lines.${index}.${accountFieldName}`)}
                         />
-                        <span className="text-sm text-muted-foreground">From item</span>
-                      </>
+                        <span className="text-xs text-muted-foreground italic truncate">Auto (item)</span>
+                      </div>
                     ) : (
                       <SelectNative
                         aria-label={`Line ${index + 1} ${resolvedAccountAria}`}
+                        className="w-full text-xs"
                         {...register(`lines.${index}.${accountFieldName}`)}
                       >
                         {accountPlaceholder && (
@@ -321,6 +337,7 @@ export function DocumentLineTable({
                     <td className="align-top">
                       <SelectNative
                         aria-label={`Line ${index + 1} tax code`}
+                        className="w-full text-xs"
                         {...register(`lines.${index}.taxCodeId`)}
                       >
                         {taxCodes.map((taxCode) => (
@@ -339,6 +356,7 @@ export function DocumentLineTable({
                     <td className="align-top">
                       <SelectNative
                         aria-label={`Line ${index + 1} project`}
+                        className="w-full text-xs"
                         {...register(`lines.${index}.projectId`)}
                       >
                         <option value="">Use document Project</option>
@@ -354,30 +372,31 @@ export function DocumentLineTable({
 
                   {!amountsIncludeTax && (
                     <>
-                      <td className="money text-right align-top">
+                      <td className="money text-right align-top text-xs pt-2.5">
                         {formatMoney(preview?.netMinor ?? 0, currencyCode, minorUnit)}
                       </td>
-                      <td className="money text-right align-top text-muted-foreground">
+                      <td className="money text-right align-top text-xs text-muted-foreground pt-2.5">
                         {formatMoney(preview?.taxMinor ?? 0, currencyCode, minorUnit)}
                       </td>
                     </>
                   )}
 
-                  <td className="money text-right align-top font-semibold">
+                  <td className="money text-right align-top text-xs font-semibold pt-2.5">
                     {formatMoney(preview?.grossMinor ?? 0, currencyCode, minorUnit)}
                   </td>
 
-                  <td className="align-top">
+                  <td className="align-top text-center pt-1">
                     <Button
                       type="button"
                       variant="ghost"
                       size="icon"
+                      className="size-8 text-muted-foreground hover:text-danger hover:bg-danger/10"
                       aria-label={`Remove line ${index + 1}`}
                       disabled={fields.length === 1}
                       title={fields.length === 1 ? "At least one line is required" : undefined}
                       onClick={() => onRemove(index)}
                     >
-                      <Trash2 className="size-4 text-muted-foreground" />
+                      <Trash2 className="size-3.5" />
                     </Button>
                   </td>
                 </tr>
@@ -406,6 +425,8 @@ export function DocumentLineTable({
             onShowDiscountsChange={setShowDiscounts}
             showLineProjects={showLineProjects}
             onShowLineProjectsChange={setShowLineProjects}
+            showLineTaxCodes={showLineTaxCodes}
+            onShowLineTaxCodesChange={setShowLineTaxCodes}
             registerAmountsIncludeTax={registerAmountsIncludeTax}
           />
           <DocumentTotalsPanel

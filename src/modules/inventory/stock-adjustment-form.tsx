@@ -77,7 +77,7 @@ export function StockAdjustmentForm({
   }
 
   return (
-    <form className="max-w-4xl space-y-7 max-w-4xl" noValidate>
+    <form className="space-y-7 max-w-none" noValidate>
       {serverError && (
         <FormError message={serverError} />
       )}

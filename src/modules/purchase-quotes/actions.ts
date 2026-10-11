@@ -15,6 +15,7 @@ import {
 } from "./purchase-quote-service";
 import { savePurchaseOrder } from "@/modules/purchase-orders/purchase-order-service";
 import { quantityMicrosToInput } from "@/modules/accounting/calculations/money";
+import { minorToDecimalString } from "@/core/format";
 
 export type PurchaseQuoteActionResult = { error?: string; fieldErrors?: Record<string, string[]> };
 
@@ -92,7 +93,7 @@ export async function convertPurchaseQuoteToOrderAction(businessId: string, quot
         quantity: quantityMicrosToInput(l.quantityMicros),
         discountType: l.discountType || "none",
         discountValue: l.discountValue || "0",
-        unitPrice: (l.unitPriceMinor / 100).toFixed(2),
+        unitPrice: minorToDecimalString(l.unitPriceMinor, quoteData.quote.currencyCode),
         expenseAccountId: l.expenseAccountId || "",
         taxCodeId: l.taxCodeId || "",
         projectId: l.projectId || "",

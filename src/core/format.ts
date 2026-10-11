@@ -2,7 +2,25 @@ import Decimal from "decimal.js";
 
 const BUSINESS_TIME_ZONE = "Asia/Dubai";
 
-const knownMinorUnits: Record<string, number> = { AED: 2, USD: 2, EUR: 2, JPY: 0, KWD: 3 };
+const knownMinorUnits: Record<string, number> = {
+  AED: 2,
+  USD: 2,
+  EUR: 2,
+  JPY: 0,
+  KWD: 3,
+  BHD: 3,
+  OMR: 3,
+  GBP: 2,
+  CAD: 2,
+  AUD: 2,
+  SAR: 2,
+  QAR: 2,
+};
+
+export function minorToDecimalString(minor: number = 0, currency = "AED", minorUnit?: number): string {
+  const resolvedMinorUnit = minorUnit ?? knownMinorUnits[currency.toUpperCase()] ?? 2;
+  return new Decimal(minor).div(new Decimal(10).pow(resolvedMinorUnit)).toFixed(resolvedMinorUnit);
+}
 
 // Cache Intl.NumberFormat instances — construction is expensive and formatters
 // are reused across hundreds of table cells per page render.

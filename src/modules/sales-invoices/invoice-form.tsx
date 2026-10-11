@@ -129,7 +129,7 @@ export function InvoiceForm({
   }
 
   return (
-    <form className="space-y-5 max-w-4xl" noValidate>
+    <form className="space-y-5 max-w-none" noValidate>
       {serverError && <FormError message={serverError} />}
       <section className="form-section">
         <h2 className="text-base font-semibold">Invoice details</h2>
@@ -175,7 +175,9 @@ export function InvoiceForm({
           <div className="space-y-1.5"><Label htmlFor="dueDate">Due date</Label><Input id="dueDate" type="date" {...register("dueDate")} aria-invalid={!!errors.dueDate} />{errors.dueDate && <p className="field-error">{errors.dueDate.message}</p>}</div>
           <div className="space-y-1.5"><Label htmlFor="supplyEmirate">Supply Emirate</Label><SelectNative id="supplyEmirate"  {...register("supplyEmirate")}><option value="">Use business default</option>{emirates.map((emirate) => <option key={emirate} value={emirate}>{emirateLabels[emirate]}</option>)}</SelectNative><p className="text-xs text-muted-foreground">Reviewed for standard-rated Sales reporting.</p></div>
           <div className="space-y-1.5"><Label htmlFor="projectId">Project <span className="font-normal text-muted-foreground">(optional)</span></Label><SelectNative id="projectId"  {...register("projectId")} aria-invalid={!!errors.projectId}><option value="">No project</option>{availableProjects.map((project) => <option key={project.id} value={project.id}>{project.code} — {project.name}</option>)}</SelectNative>{errors.projectId && <p className="field-error">{errors.projectId.message}</p>}</div>
-          <div className="space-y-1.5 md:col-span-2"><Label htmlFor="reference">Reference <span className="font-normal text-muted-foreground">(optional)</span></Label><Input id="reference" {...register("reference")} /></div>
+          <div className="space-y-1.5"><Label htmlFor="reference">Reference <span className="font-normal text-muted-foreground">(optional)</span></Label><Input id="reference" {...register("reference")} /></div>
+          <div className="space-y-1.5"><Label htmlFor="notes">Notes <span className="font-normal text-muted-foreground">(optional)</span></Label><Input id="notes" placeholder="Customer-facing notes..." {...register("notes")} /></div>
+          <div className="space-y-1.5"><Label htmlFor="terms">Terms & conditions <span className="font-normal text-muted-foreground">(optional)</span></Label><Input id="terms" placeholder="Payment or warranty terms..." {...register("terms")} /></div>
         </div>
       </section>
       <section className="form-section">

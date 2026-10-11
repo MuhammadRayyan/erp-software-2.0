@@ -175,15 +175,16 @@ export function deleteDraftRevision(
     if (previous) {
       // Best guess for reverting status from "superseded". 
       // If purchase order, the old status was "issued". For sales, "sent".
+      const statusCol = config.statusColumn || "document_status";
       const restoredStatus = config.headerTable.includes("order") ? (config.headerTable === "purchase_orders" ? "issued" : "active") : "sent";
       const now = new Date().toISOString();
       sqlite
         .prepare(`
           UPDATE ${config.headerTable}
           SET is_latest_revision = 1,
-              ${config.statusColumn || 'document_status'} = CASE 
-                WHEN document_status = 'superseded' THEN '${restoredStatus}' 
-                ELSE ${config.statusColumn || 'document_status'} 
+              ${statusCol} = CASE 
+                WHEN ${statusCol} = 'superseded' THEN '${restoredStatus}' 
+                ELSE ${statusCol} 
               END,
               updated_at = ?
           WHERE ${config.headerIdColumn} = ?

@@ -89,7 +89,7 @@ export function DeliveryNoteForm({
   }
 
   return (
-    <form className="space-y-7 max-w-4xl" noValidate>
+    <form className="space-y-7 max-w-none" noValidate>
       {serverError && (
         <FormError message={serverError} />
       )}
@@ -210,7 +210,7 @@ export function DeliveryNoteForm({
           </div>
         </div>
         <div className="overflow-x-auto rounded-lg border border-border bg-surface-raised">
-          <table className={`data-table ${showProjects ? "min-w-[950px]" : "min-w-[760px]"}`}>
+          <table className="data-table w-full">
             <thead>
               <tr>
                 <th className="w-64">Inventory Item</th>

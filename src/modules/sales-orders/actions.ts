@@ -45,6 +45,7 @@ export async function deleteSalesOrderAction(businessId: string, orderId: string
 }
 
 import { quantityMicrosToInput } from "@/modules/accounting/calculations/money";
+import { minorToDecimalString } from "@/core/format";
 
 export async function convertSalesOrderToInvoiceAction(businessId: string, orderId: string) {
   const { user } = await requireModule(businessId, "sales");
@@ -77,7 +78,7 @@ export async function convertSalesOrderToInvoiceAction(businessId: string, order
         quantity: quantityMicrosToInput(l.quantityMicros),
         discountType: l.discountType || "none",
         discountValue: l.discountValue || "0",
-        unitPrice: (l.unitPriceMinor / 100).toFixed(2),
+        unitPrice: minorToDecimalString(l.unitPriceMinor, orderData.order.currencyCode),
         salesAccountId: l.salesAccountId || "",
         taxCodeId: l.taxCodeId || "",
         projectId: l.projectId || "",

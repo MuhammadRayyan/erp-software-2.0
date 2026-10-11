@@ -47,6 +47,7 @@ import { getPurchaseOrder } from "./purchase-order-service";
 import { savePurchaseInvoice } from "@/modules/purchase-invoices/purchase-invoice-service";
 
 import { quantityMicrosToInput } from "@/modules/accounting/calculations/money";
+import { minorToDecimalString } from "@/core/format";
 
 export async function convertPurchaseOrderToInvoiceAction(businessId: string, orderId: string) {
   const { user } = await requireModule(businessId, "purchases");
@@ -79,7 +80,7 @@ export async function convertPurchaseOrderToInvoiceAction(businessId: string, or
         quantity: quantityMicrosToInput(l.quantityMicros),
         discountType: l.discountType || "none",
         discountValue: l.discountValue || "0",
-        unitPrice: (l.unitPriceMinor / 100).toFixed(2),
+        unitPrice: minorToDecimalString(l.unitPriceMinor, orderData.order.currencyCode),
         expenseAccountId: l.expenseAccountId || "",
         taxCodeId: l.taxCodeId || "",
         projectId: l.projectId || "",

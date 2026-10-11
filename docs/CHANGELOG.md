@@ -5,6 +5,28 @@ All notable changes since the original `erp-software-2.0-antigravity-edits` uplo
 Full per-task detail (file lists, verification transcripts, QA walkthroughs) lives in `worklog.md` at the repository root.
 
 
+## Commercial Document Entry, Table Layout, Versioning & Manager.io Options Sprint
+- **Line Item Entry Horizontal Scroll Resolution**:
+  - Eliminated the horizontal scrollbar bug in `DocumentLineTable` by removing rigid `min-w-max` (`min-width: max-content`) that expanded beyond the viewport.
+  - Refined table column sizing to fluid proportional layout (`w-full`) with compact minimums (`Item`: `w-[18%] min-w-[130px]`, `Description`: `min-w-[140px]`, `Qty`: `w-20 min-w-[68px]`, `Rate`: `w-24 min-w-[80px]`, `Discount`: `w-32 min-w-[105px]`, `Account`: `w-[16%] min-w-[125px]`, `VAT`: `w-[12%] min-w-[95px]`, `Project`: `w-[14%] min-w-[105px]`).
+  - Added `min-w-0` to table inputs, selects, and description cells so typing long descriptions never causes the table to horizontally overflow.
+  - Streamlined `.line-item-table` CSS cell padding (`7px 8px`), row spacing (`0 6px`), and table styling in `src/app/globals.css`.
+  - Replaced narrow `max-w-4xl` containers with `max-w-none` on `invoice-form.tsx`, `delivery-note-form.tsx`, `goods-receipt-form.tsx`, and `stock-adjustment-form.tsx`.
+- **Manager.io-Inspired Document Options & Column Toggles**:
+  - Redesigned `DocumentColumnToggles` into a modern options panel with `SlidersHorizontal` header and structured 2-column grid.
+  - Added full support for toggling `Column · Tax code` (VAT) across all 8 commercial documents (`quote-form`, `sales-order-form`, `invoice-form`, `credit-note-form`, `purchase-quote-form`, `purchase-order-form`, `purchase-invoice-form`, `debit-note-form`).
+  - When line tax codes are unticked, the VAT column is neatly hidden and default/global tax is applied via a hidden input, keeping tables uncluttered. When ticked, per-line tax code dropdowns are rendered.
+  - Added user-facing `notes` and `terms` (Terms & Conditions) input fields to `invoice-form`, `quote-form`, `sales-order-form`, `purchase-quote-form`, `purchase-order-form`, and `purchase-invoice-form`.
+- **Document Versioning & Revision Engine Fixes**:
+  - Fixed SQLite column error in `deleteDraftRevision` (`src/core/versioning/revision-engine.ts`) where `document_status` was hardcoded; updated to use dynamic `statusCol` so deleting draft revisions on purchase orders (which use `status`) executes cleanly.
+  - Fixed multi-currency unit price conversion across all 4 conversion actions (`sales-quotes/actions.ts`, `sales-orders/actions.ts`, `purchase-quotes/actions.ts`, `purchase-orders/actions.ts`): replaced hardcoded `/ 100` division with new `minorToDecimalString(unitPriceMinor, currencyCode, minorUnit)` helper in `src/core/format.ts` supporting 0-minor (JPY), 2-minor (AED, USD, EUR), and 3-minor (KWD, BHD, OMR) currencies.
+- **Automated 1-Click Conversion Pipeline**:
+  - Full end-to-end verification of Quotes -> Orders -> Invoices pipelines for both Sales and Purchases, including automatic status transitions (quotes marked accepted, orders marked completed/closed).
+- **Comprehensive Quality Verification**:
+  - TypeScript compilation: 0 errors (`npx tsc --noEmit`).
+  - Unit & invariant tests: 57/57 passed (`npm test`).
+  - Playwright E2E suites: 14/14 passed (`sales.spec.ts`, `purchases.spec.ts`, `purchases-workflow.spec.ts`, `eval-tax-vat.spec.ts`, `deep-workflow.spec.ts`).
+
 ## Table & Filter Bar Modernization Sprint (Verified & Standardized)
 - **Visual Border & Grid Cleanliness**:
   - Removed arbitrary `box-shadow: inset -1px 0 0` on `.data-table th.sticky-col` and `td.sticky-col` in `globals.css` that was drawing harsh vertical hairline dividers down column 1 in half the app.

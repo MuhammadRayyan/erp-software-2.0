@@ -189,7 +189,13 @@ export function PurchaseQuoteForm({
             <Label htmlFor="notes">
               Notes <span className="font-normal text-muted-foreground">(optional)</span>
             </Label>
-            <Input id="notes" {...register("notes")} />
+            <Input id="notes" placeholder="Notes..." {...register("notes")} />
+          </div>
+          <div className="space-y-1.5 md:col-span-3">
+            <Label htmlFor="terms">
+              Terms & conditions <span className="font-normal text-muted-foreground">(optional)</span>
+            </Label>
+            <Input id="terms" placeholder="Supplier terms and delivery conditions..." {...register("terms")} />
           </div>
         </div>
       </section>
@@ -264,7 +270,7 @@ export function PurchaseQuoteForm({
           accounts={expenseAccounts}
           accountFieldName="expenseAccountId"
           accountAriaLabel="expense account"
-          showLineTaxCodes={false}
+          initialShowLineTaxCodes={false}
           taxCodes={taxCodes}
           projects={projects}
           currencyCode={currencyCode}
