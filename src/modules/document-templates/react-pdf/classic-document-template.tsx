@@ -18,8 +18,12 @@ export function ClassicDocumentTemplate({ data, settings, variant }: { data: Doc
         <View style={styles.header}>
           <View style={{ flex: 1 }}>
             {/* eslint-disable-next-line jsx-a11y/alt-text */}
-            {settings.logoUrl && <Image src={settings.logoUrl} style={{ width: 120, height: 40, objectFit: "contain", marginBottom: 10 }} />}
+            {(settings.logoUrl || data.logoUrl) && (
+              <Image src={(settings.logoUrl || data.logoUrl)!} style={{ width: 120, height: 40, objectFit: "contain", marginBottom: 10 }} />
+            )}
             <Text style={{ fontSize: 14, color: primaryColor, fontWeight: "heavy" }}>{data.companyName}</Text>
+            {data.companyAddress && <Text style={{ fontSize: 8, color: colors.muted, marginTop: 2, maxWidth: 220 }}>{data.companyAddress}</Text>}
+            {data.sellerTrn && <Text style={{ fontSize: 8, color: colors.muted, marginTop: 2 }}>TRN: {data.sellerTrn}</Text>}
             {settings.headerText && <Text style={{ fontSize: 9, color: colors.muted, marginTop: 4 }}>{settings.headerText}</Text>}
           </View>
           <View style={styles.boxedDetails}>

@@ -51,16 +51,11 @@ const dateFormatterCache = new Map<string, Intl.DateTimeFormat>();
 
 const DEFAULT_DATE_OPTIONS: Intl.DateTimeFormatOptions = { day: "2-digit", month: "short", year: "numeric" };
 
-export function formatDate(value?: string | null, options?: Intl.DateTimeFormatOptions) {
+export type DateFormatPattern = "DD/MM/YYYY" | "YYYY-MM-DD" | "MM/DD/YYYY" | "DD MMM YYYY";
+
+export function formatDate(value?: string | null, options?: Intl.DateTimeFormatOptions | DateFormatPattern) {
   if (!value) return "—";
-  const resolvedOptions = options ?? DEFAULT_DATE_OPTIONS;
-  const key = JSON.stringify(resolvedOptions);
-  let fmt = dateFormatterCache.get(key);
-  if (!fmt) {
-    fmt = new Intl.DateTimeFormat("en-AE", { ...resolvedOptions, timeZone: BUSINESS_TIME_ZONE });
-    dateFormatterCache.set(key, fmt);
-  }
-  
+
   let date: Date;
   if (/^\d{4}-\d{2}-\d{2}$/.test(value)) {
     date = new Date(`${value}T00:00:00Z`);
@@ -70,6 +65,33 @@ export function formatDate(value?: string | null, options?: Intl.DateTimeFormatO
   
   if (Number.isNaN(date.getTime())) {
     return "—";
+  }
+
+  if (typeof options === "string") {
+    const day = String(date.getUTCDate()).padStart(2, "0");
+    const month = String(date.getUTCMonth() + 1).padStart(2, "0");
+    const year = String(date.getUTCFullYear());
+    const monthShort = date.toLocaleDateString("en-AE", { month: "short", timeZone: "UTC" });
+
+    switch (options) {
+      case "YYYY-MM-DD":
+        return `${year}-${month}-${day}`;
+      case "MM/DD/YYYY":
+        return `${month}/${day}/${year}`;
+      case "DD MMM YYYY":
+        return `${day} ${monthShort} ${year}`;
+      case "DD/MM/YYYY":
+      default:
+        return `${day}/${month}/${year}`;
+    }
+  }
+
+  const resolvedOptions = options ?? DEFAULT_DATE_OPTIONS;
+  const key = JSON.stringify(resolvedOptions);
+  let fmt = dateFormatterCache.get(key);
+  if (!fmt) {
+    fmt = new Intl.DateTimeFormat("en-AE", { ...resolvedOptions, timeZone: BUSINESS_TIME_ZONE });
+    dateFormatterCache.set(key, fmt);
   }
   
   return fmt.format(date);

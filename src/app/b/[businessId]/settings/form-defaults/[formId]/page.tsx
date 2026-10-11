@@ -11,10 +11,13 @@ const FORM_LABELS: Record<string, string> = {
   "sales-order": "Sales Order",
   "sales-invoice": "Sales Invoice",
   "sales-credit-note": "Sales Credit Note",
+  "delivery-note": "Delivery Note",
   "purchase-quote": "Purchase Quote",
   "purchase-order": "Purchase Order",
   "purchase-invoice": "Purchase Invoice",
   "debit-note": "Debit Note",
+  "goods-receipt": "Goods Receipt",
+  "stock-adjustment": "Stock Adjustment",
 };
 
 export default async function FormDefaultsDetailPage({

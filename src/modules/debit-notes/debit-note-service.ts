@@ -160,7 +160,7 @@ export function saveDebitNote(businessId: string, userId: string, data: DebitNot
  status, amounts.subtotalMinor, amounts.taxMinor, amounts.totalMinor, rate.currencyCode, rate.exchangeRateToBase, rate.exchangeRateDate, rate.exchangeRateSource, base.baseSubtotalMinor, base.baseTaxMinor, baseCarryingAmountReleased, now, noteId);
       context.sqlite.prepare("DELETE FROM debit_note_lines WHERE debit_note_id = ?").run(noteId);
     } else {
-      number = allocateNumber(context.sqlite, "purchaseInvoice");
+      number = allocateNumber(context.sqlite, "debitNote");
       context.sqlite.prepare(`
         INSERT INTO debit_notes (
           id, debit_note_number, supplier_id, project_id, purchase_invoice_id, amounts_include_tax, debit_note_date,

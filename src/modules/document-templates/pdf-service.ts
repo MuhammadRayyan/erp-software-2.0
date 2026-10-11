@@ -13,6 +13,7 @@ import { getDeliveryNote } from "@/modules/inventory/delivery-note-service";
 import { getDebitNote } from "@/modules/debit-notes/debit-note-service";
 import { averageUnitCostMicros, formatUnitCostMicros } from "@/modules/inventory/inventory-valuation";
 import { getCustomFieldPairsForEntity } from "@/modules/custom-fields/custom-field-service";
+import { getBusinessProfile } from "@/modules/business-profile/business-profile-service";
 
 export async function generateDocumentPdf(
   businessId: string,
@@ -260,8 +261,33 @@ export async function generateDocumentPdf(
     throw new Error("Unsupported document type");
   }
 
+  let resolvedCompanyName = businessName;
+  let resolvedCompanyAddress: string | undefined = undefined;
+  let resolvedSellerTrn: string | undefined = undefined;
+  let resolvedLogoUrl: string | undefined = undefined;
+
+  try {
+    const profile = getBusinessProfile(businessId, userId);
+    if (profile) {
+      if (profile.tradingName || profile.legalName) {
+        resolvedCompanyName = profile.tradingName || profile.legalName;
+      }
+      const addr = [profile.addressLine1, profile.addressLine2, profile.city, profile.stateOrEmirate, profile.country]
+        .filter(Boolean)
+        .join(", ");
+      if (addr) resolvedCompanyAddress = addr;
+      if (profile.taxId) resolvedSellerTrn = profile.taxId;
+      if (profile.logoUrl) resolvedLogoUrl = profile.logoUrl;
+    }
+  } catch {
+    /* fallback to businessName */
+  }
+
   const data = {
-    companyName: businessName,
+    companyName: resolvedCompanyName,
+    companyAddress: resolvedCompanyAddress,
+    sellerTrn: resolvedSellerTrn,
+    logoUrl: resolvedLogoUrl,
     invoiceTitle: title,
     invoiceNumber: number,
     customerLabel: partyLabel,

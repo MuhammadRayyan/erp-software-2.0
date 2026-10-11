@@ -2217,6 +2217,121 @@ export const businessMigrations = [
         }
       },
     },
+    {
+      version: 25,
+      name: "business_profile_and_localization",
+      up: (sqlite) => {
+        sqlite.exec(`
+          CREATE TABLE IF NOT EXISTS business_profile (
+            id TEXT PRIMARY KEY NOT NULL,
+            legal_name TEXT,
+            trading_name TEXT,
+            company_registration_number TEXT,
+            tax_id TEXT,
+            email TEXT,
+            phone TEXT,
+            website TEXT,
+            address_line_1 TEXT,
+            address_line_2 TEXT,
+            city TEXT,
+            state_or_emirate TEXT,
+            postal_code TEXT,
+            country TEXT NOT NULL DEFAULT 'United Arab Emirates',
+            country_code TEXT NOT NULL DEFAULT 'AE',
+            logo_url TEXT,
+            date_format TEXT NOT NULL DEFAULT 'DD/MM/YYYY',
+            time_format TEXT NOT NULL DEFAULT '12h',
+            financial_year_start_month INTEGER NOT NULL DEFAULT 1,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL
+          );
+        `);
+
+        const profile = sqlite.prepare("SELECT id FROM business_profile WHERE id = 'default'").get();
+        if (!profile) {
+          const now = new Date().toISOString();
+          let trn: string | null = null;
+          let defaultEmirate: string | null = null;
+          let legalName: string | null = null;
+          let regId: string | null = null;
+          let addr1: string | null = null;
+          let city: string | null = null;
+          let countryCode: string = "AE";
+
+          try {
+            const taxRow = sqlite.prepare("SELECT trn, default_supply_emirate FROM business_tax_settings WHERE id = 'default'").get() as { trn?: string; default_supply_emirate?: string } | undefined;
+            if (taxRow) {
+              trn = taxRow.trn || null;
+              defaultEmirate = taxRow.default_supply_emirate || null;
+            }
+          } catch { /* ignore */ }
+
+          try {
+            const einvoiceRow = sqlite.prepare("SELECT legal_name, legal_registration_identifier, address_line_1, city, country_subdivision, country_code FROM business_einvoice_settings WHERE id = 'default'").get() as { legal_name?: string; legal_registration_identifier?: string; address_line_1?: string; city?: string; country_subdivision?: string; country_code?: string } | undefined;
+            if (einvoiceRow) {
+              legalName = einvoiceRow.legal_name || null;
+              regId = einvoiceRow.legal_registration_identifier || null;
+              addr1 = einvoiceRow.address_line_1 || null;
+              city = einvoiceRow.city || null;
+              if (einvoiceRow.country_subdivision) defaultEmirate = einvoiceRow.country_subdivision;
+              if (einvoiceRow.country_code) countryCode = einvoiceRow.country_code;
+            }
+          } catch { /* ignore */ }
+
+          sqlite.prepare(`
+            INSERT INTO business_profile (
+              id, legal_name, trading_name, company_registration_number, tax_id,
+              address_line_1, city, state_or_emirate, country_code,
+              date_format, time_format, financial_year_start_month, created_at, updated_at
+            ) VALUES (
+              'default', ?, ?, ?, ?,
+              ?, ?, ?, ?,
+              'DD/MM/YYYY', '12h', 1, ?, ?
+            )
+          `).run(
+            legalName,
+            legalName,
+            regId,
+            trn,
+            addr1,
+            city,
+            defaultEmirate,
+            countryCode,
+            now,
+            now
+          );
+        }
+
+        const acctCols = (sqlite.prepare("PRAGMA table_info(business_accounting_settings)").all() as { name: string }[]).map((c) => c.name);
+        if (!acctCols.includes("receipt_padding")) {
+          sqlite.exec(`ALTER TABLE business_accounting_settings ADD COLUMN receipt_padding INTEGER NOT NULL DEFAULT 4;`);
+        }
+        if (!acctCols.includes("credit_note_padding")) {
+          sqlite.exec(`ALTER TABLE business_accounting_settings ADD COLUMN credit_note_padding INTEGER NOT NULL DEFAULT 4;`);
+        }
+        if (!acctCols.includes("purchase_order_padding")) {
+          sqlite.exec(`ALTER TABLE business_accounting_settings ADD COLUMN purchase_order_padding INTEGER NOT NULL DEFAULT 4;`);
+        }
+        if (!acctCols.includes("purchase_invoice_padding")) {
+          sqlite.exec(`ALTER TABLE business_accounting_settings ADD COLUMN purchase_invoice_padding INTEGER NOT NULL DEFAULT 4;`);
+        }
+        if (!acctCols.includes("supplier_payment_padding")) {
+          sqlite.exec(`ALTER TABLE business_accounting_settings ADD COLUMN supplier_payment_padding INTEGER NOT NULL DEFAULT 4;`);
+        }
+        if (!acctCols.includes("debit_note_prefix")) {
+          sqlite.exec(`ALTER TABLE business_accounting_settings ADD COLUMN debit_note_prefix TEXT NOT NULL DEFAULT 'DN-';`);
+        }
+        if (!acctCols.includes("debit_note_next_number")) {
+          sqlite.exec(`ALTER TABLE business_accounting_settings ADD COLUMN debit_note_next_number INTEGER NOT NULL DEFAULT 1;`);
+        }
+        if (!acctCols.includes("debit_note_padding")) {
+          sqlite.exec(`ALTER TABLE business_accounting_settings ADD COLUMN debit_note_padding INTEGER NOT NULL DEFAULT 4;`);
+        }
+        if (!acctCols.includes("journal_padding")) {
+          sqlite.exec(`ALTER TABLE business_accounting_settings ADD COLUMN journal_padding INTEGER NOT NULL DEFAULT 4;`);
+        }
+      },
+    },
   ] satisfies readonly SqliteMigration[];
 
 

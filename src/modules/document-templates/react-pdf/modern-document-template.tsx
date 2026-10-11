@@ -4,6 +4,9 @@ import type { TemplateSettings } from "../template-settings";
 
 export interface DocumentTemplateData {
   companyName: string;
+  companyAddress?: string;
+  sellerTrn?: string;
+  logoUrl?: string;
   invoiceNumber: string;
   invoiceDate: string;
   dueDate: string;
@@ -44,6 +47,7 @@ const styles = StyleSheet.create({
 
 export function ModernDocumentTemplate({ data, settings, variant }: { data: DocumentTemplateData; settings: TemplateSettings; variant: DocumentTemplateVariant }) {
   const primaryColor = settings.primaryColor || colors.text;
+  const activeLogo = settings.logoUrl || data.logoUrl;
 
   return (
     <Document>
@@ -57,8 +61,10 @@ export function ModernDocumentTemplate({ data, settings, variant }: { data: Docu
         <View style={styles.header}>
           <View>
             {/* eslint-disable-next-line jsx-a11y/alt-text */}
-            {settings.logoUrl && <Image src={settings.logoUrl} style={styles.logo} />}
+            {activeLogo && <Image src={activeLogo} style={styles.logo} />}
             <Text style={{ marginTop: 8, color: primaryColor, fontWeight: "heavy" }}>{data.companyName}</Text>
+            {data.companyAddress && <Text style={{ fontSize: 8, color: colors.muted, maxWidth: 220 }}>{data.companyAddress}</Text>}
+            {data.sellerTrn && <Text style={{ fontSize: 8, color: colors.muted }}>TRN: {data.sellerTrn}</Text>}
             {settings.headerText && <Text style={{ fontSize: 8, color: colors.muted }}>{settings.headerText}</Text>}
           </View>
           <View style={{ alignItems: "flex-end" }}>

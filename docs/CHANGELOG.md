@@ -5,6 +5,43 @@ All notable changes since the original `erp-software-2.0-antigravity-edits` uplo
 Full per-task detail (file lists, verification transcripts, QA walkthroughs) lives in `worklog.md` at the repository root.
 
 
+## Settings Hub, Business Profile, Localization & Numbering Overhaul (improvements-settings-v1)
+- **Centralized Settings Hub (`/settings`)**:
+  - Replaced flat unorganized settings grid with a categorized 4-section architecture:
+    1. *Organization & Branding*: Business Profile, Organization Branding, Document Templates.
+    2. *Financial & Accounting*: Chart of Accounts, Accounting Mappings, Tax Codes, UAE VAT Registration, Currency Rates, Realized FX.
+    3. *Document Flow & Defaults*: Document Numbering Sequences, Form Defaults, Payment Terms.
+    4. *System & Preferences*: Appearance & Theming, Electronic Invoicing (PINT-AE), Audit Log, Backup & Export.
+  - Interactive live search bar to filter settings cards in real-time by name, tag, or description.
+  - Company quick summary banner displaying Legal Name, Base Currency badge, VAT TRN badge, and Date Format.
+- **Dedicated Business Profile & Branding (`/settings/business-profile`)**:
+  - Created `businessProfile` table in database schema and Migration 25 (`business_profile_and_localization`).
+  - Stores Legal Business Name, Trading Name, Company Registration Number, Tax ID / TRN, Contact Email, Phone, Website, Full Street Address, City, State/Emirate, Country, Postal Code, and Brand Logo URL.
+  - Instant synchronization with core system business name (`businesses.name`), UAE VAT settings (`business_tax_settings.trn`), and electronic invoice settings (`business_einvoice_settings`).
+  - Interactive live company letterhead preview card rendering the logo and formatted address in real time.
+- **Regional & Localization Controls (`/settings/localization`)**:
+  - Full control over date formatting: `DD/MM/YYYY`, `YYYY-MM-DD`, `MM/DD/YYYY`, and `DD MMM YYYY`.
+  - Time formatting (12-hour AM/PM vs 24-hour military).
+  - Financial Year Start Month configuration (January through December).
+  - Extended core formatting engine (`src/core/format.ts`) to honor localized date formats across the ERP.
+- **Complete 16-Sequence Document Numbering & Debit Note Fix (`/settings/numbering`)**:
+  - Added full prefix, next number, and atomic padding configuration for all 16 document types in the ERP:
+    - Sales: Sales Quotes, Sales Orders, Sales Invoices, Credit Notes, Delivery Notes, Customer Receipts.
+    - Purchases: Purchase Quotes, Purchase Orders, Purchase Invoices, Debit Notes, Goods Receipts, Supplier Payments.
+    - Inventory & Banking: Stock Adjustments, Bank Transfers, Bank Transactions, Manual Journals.
+  - Fixed `debitNote` sequence allocation in `numbering-service.ts` so Debit Notes generate distinct `DN-XXXX` identifiers instead of sharing `purchaseInvoice` sequences.
+  - Upgraded UI into 4 accordion category groups with real-time sequence preview badges (e.g. `INV-000042`).
+- **Expanded Form Defaults & Manager.io Options (`/settings/form-defaults`)**:
+  - Added form default support for Delivery Notes, Goods Receipts, and Stock Adjustments.
+  - Added default payment terms days (`defaultPaymentTermsDays`) and Tax Code column toggle (`showTaxCode`).
+  - Reorganized list page into categorized document groups.
+- **Appearance & Modern Theme Studio (`/settings/appearance`)**:
+  - Integrated theme switcher: Light, Dark, and System (auto-detect OS preference) using `next-themes`.
+  - Table grid density settings (Compact, Default, Comfortable) hooked into table styling.
+  - Interactive live preview card simulating invoices, status pills, and buttons.
+- **PDF Template Integration (`pdf-service.ts`)**:
+  - Updated both Classic and Modern PDF templates to resolve company name, legal address, contact info, TRN, and logo directly from the Business Profile.
+
 ## Commercial Document Entry, Table Layout, Versioning & Manager.io Options Sprint
 - **Line Item Entry Horizontal Scroll Resolution**:
   - Eliminated the horizontal scrollbar bug in `DocumentLineTable` by removing rigid `min-w-max` (`min-width: max-content`) that expanded beyond the viewport.

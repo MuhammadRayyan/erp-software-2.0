@@ -55,6 +55,8 @@ export function FormDefaultsEditor({
   const [showDiscounts, setShowDiscounts] = useState(initial.showDiscounts ?? false);
   const [showLineNumber, setShowLineNumber] = useState(initial.showLineNumber ?? false);
   const [showDescription, setShowDescription] = useState(initial.showDescription ?? true);
+  const [showTaxCode, setShowTaxCode] = useState(initial.showTaxCode ?? true);
+  const [defaultPaymentTermsDays, setDefaultPaymentTermsDays] = useState(initial.defaultPaymentTermsDays ?? 0);
   const [defaultNotes, setDefaultNotes] = useState(initial.defaultNotes ?? "");
   const [defaultTerms, setDefaultTerms] = useState(initial.defaultTerms ?? "");
   const [saving, setSaving] = useState(false);
@@ -67,6 +69,8 @@ export function FormDefaultsEditor({
         showDiscounts,
         showLineNumber,
         showDescription,
+        showTaxCode,
+        defaultPaymentTermsDays: defaultPaymentTermsDays > 0 ? defaultPaymentTermsDays : undefined,
         defaultNotes,
         defaultTerms,
       });
@@ -116,6 +120,32 @@ export function FormDefaultsEditor({
             checked={showDescription}
             onChange={setShowDescription}
           />
+          <Toggle
+            id="showTaxCode"
+            label="Show tax code column"
+            description="Display a per-line tax code selector on the document form."
+            checked={showTaxCode}
+            onChange={setShowTaxCode}
+          />
+        </div>
+      </div>
+
+      <div className="rounded-lg border border-border bg-surface p-5">
+        <h2 className="text-sm font-semibold">Terms & Timing</h2>
+        <div className="mt-4 space-y-4">
+          <div>
+            <Label htmlFor="defaultPaymentTermsDays" className="text-sm font-medium">Default payment terms (days)</Label>
+            <p className="text-xs text-muted-foreground">Default due date offset for new documents (e.g. 30 for Net 30, 0 for due immediately).</p>
+            <input
+              id="defaultPaymentTermsDays"
+              type="number"
+              min="0"
+              max="365"
+              value={defaultPaymentTermsDays}
+              onChange={(e) => setDefaultPaymentTermsDays(Number(e.target.value))}
+              className="mt-1.5 h-9 w-32 rounded-md border border-border bg-surface px-3 py-1 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            />
+          </div>
         </div>
       </div>
 

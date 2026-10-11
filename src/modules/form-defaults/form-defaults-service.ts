@@ -16,6 +16,10 @@ export type FormDefaultValues = {
   showLineNumber?: boolean;
   /** Show a per-line description column. */
   showDescription?: boolean;
+  /** Show a per-line tax code column on the form. */
+  showTaxCode?: boolean;
+  /** Default payment terms in days applied to new documents. */
+  defaultPaymentTermsDays?: number;
   /** Default tax code id applied to new lines. */
   defaultTaxCodeId?: string;
   /** Default sales/expense account id applied to new lines (sales docs). */
@@ -37,6 +41,9 @@ export const FORM_TYPES = [
   "purchase-order",
   "purchase-invoice",
   "debit-note",
+  "delivery-note",
+  "goods-receipt",
+  "stock-adjustment",
 ] as const;
 
 export type FormType = (typeof FORM_TYPES)[number];

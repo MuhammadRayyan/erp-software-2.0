@@ -10,6 +10,7 @@ export type NumberKind =
   | "salesQuote"
   | "salesOrder"
   | "purchaseQuote"
+  | "debitNote"
   | "project"
   | "goodsReceipt"
   | "deliveryNote"
@@ -20,21 +21,22 @@ export type NumberKind =
 
 const columns: Record<NumberKind, { prefix: string; next: string; padding?: string }> = {
   invoice: { prefix: "invoice_prefix", next: "invoice_next_number", padding: "invoice_padding" },
-  receipt: { prefix: "receipt_prefix", next: "receipt_next_number" },
-  creditNote: { prefix: "credit_note_prefix", next: "credit_note_next_number" },
-  purchaseOrder: { prefix: "purchase_order_prefix", next: "purchase_order_next_number" },
-  purchaseInvoice: { prefix: "purchase_invoice_prefix", next: "purchase_invoice_next_number" },
-  supplierPayment: { prefix: "supplier_payment_prefix", next: "supplier_payment_next_number" },
+  receipt: { prefix: "receipt_prefix", next: "receipt_next_number", padding: "receipt_padding" },
+  creditNote: { prefix: "credit_note_prefix", next: "credit_note_next_number", padding: "credit_note_padding" },
+  purchaseOrder: { prefix: "purchase_order_prefix", next: "purchase_order_next_number", padding: "purchase_order_padding" },
+  purchaseInvoice: { prefix: "purchase_invoice_prefix", next: "purchase_invoice_next_number", padding: "purchase_invoice_padding" },
+  supplierPayment: { prefix: "supplier_payment_prefix", next: "supplier_payment_next_number", padding: "supplier_payment_padding" },
   salesQuote: { prefix: "sales_quote_prefix", next: "sales_quote_next_number", padding: "sales_quote_padding" },
   salesOrder: { prefix: "sales_order_prefix", next: "sales_order_next_number", padding: "sales_order_padding" },
   purchaseQuote: { prefix: "purchase_quote_prefix", next: "purchase_quote_next_number", padding: "purchase_quote_padding" },
+  debitNote: { prefix: "debit_note_prefix", next: "debit_note_next_number", padding: "debit_note_padding" },
   project: { prefix: "project_prefix", next: "project_next_number", padding: "project_padding" },
   goodsReceipt: { prefix: "goods_receipt_prefix", next: "goods_receipt_next_number", padding: "goods_receipt_padding" },
   deliveryNote: { prefix: "delivery_note_prefix", next: "delivery_note_next_number", padding: "delivery_note_padding" },
   stockAdjustment: { prefix: "stock_adjustment_prefix", next: "stock_adjustment_next_number", padding: "stock_adjustment_padding" },
   bankTransaction: { prefix: "bank_transaction_prefix", next: "bank_transaction_next_number", padding: "bank_transaction_padding" },
   bankTransfer: { prefix: "bank_transfer_prefix", next: "bank_transfer_next_number", padding: "bank_transfer_padding" },
-  journal: { prefix: "journal_prefix", next: "journal_next_number" },
+  journal: { prefix: "journal_prefix", next: "journal_next_number", padding: "journal_padding" },
 };
 
 export function allocateNumber(sqlite: Database.Database, kind: NumberKind) {
@@ -60,6 +62,7 @@ export function allocateNumber(sqlite: Database.Database, kind: NumberKind) {
     salesQuote: { table: "sales_quotes", column: "quote_number" },
     salesOrder: { table: "sales_orders", column: "order_number" },
     purchaseQuote: { table: "purchase_quotes", column: "quote_number" },
+    debitNote: { table: "debit_notes", column: "debit_note_number" },
     project: { table: "projects", column: "code" },
     goodsReceipt: { table: "goods_receipts", column: "receipt_number" },
     deliveryNote: { table: "delivery_notes", column: "delivery_number" },
