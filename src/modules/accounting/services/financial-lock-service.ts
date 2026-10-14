@@ -38,3 +38,6 @@ export function assertFinancialLock(sqlite: Database.Database, date: string, act
     throw err;
   }
 }
+
+export const assertDateNotLocked = assertFinancialLock;
+

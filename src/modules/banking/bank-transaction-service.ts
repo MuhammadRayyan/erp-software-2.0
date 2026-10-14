@@ -3,6 +3,7 @@ import { getBusinessDb } from "@/core/db/business";
 import { addMinor, minorToInput, parseMoneyToMinor, splitTaxInclusive } from "@/modules/accounting/calculations/money";
 import { allocateNumber } from "@/modules/accounting/services/numbering-service";
 import { reverseTransaction } from "@/modules/accounting/services/posting-service";
+import { assertDateNotLocked } from "@/modules/accounting/services/financial-lock-service";
 import { bankTransactionInputSchema, type BankTransactionInput, type BankTransactionIntent } from "./bank-transaction-input";
 import { postBankTransaction } from "./bank-transaction-posting";
 import { replaceTaxEntries, reverseTaxEntries } from "@/modules/tax/tax-entry-service";
@@ -123,10 +124,14 @@ export function saveBankTransaction(
     if (!bank || !bank.is_active || !bank.ledger_active) throw new Error("Choose an active Bank Account.");
     if (bank.currency_code !== context.business.currency) throw new Error("Only base-currency Bank Accounts are supported in Phase 5.");
     const current = transactionId ? context.sqlite.prepare(`
-      SELECT transaction_number, document_status FROM bank_transactions WHERE id = ?
-    `).get(transactionId) as { transaction_number: string; document_status: string } | undefined : undefined;
+      SELECT transaction_number, document_status, date FROM bank_transactions WHERE id = ?
+    `).get(transactionId) as { transaction_number: string; document_status: string; date: string } | undefined : undefined;
     if (transactionId && !current) throw new Error("Bank Transaction not found.");
     if (current && current.document_status !== "draft") throw new Error("Only draft Bank Transactions can be edited.");
+    if (current) {
+      assertDateNotLocked(context.sqlite, current.date, "Bank transaction");
+    }
+    assertDateNotLocked(context.sqlite, data.date, "Bank transaction");
     const lines = prepareLines(context.sqlite, data, bank.ledger_account_id);
     const totalMinor = addMinor(lines.map((line) => line.grossAmountMinor));
     if (intent === "post") assertVatDateUnlocked(context.sqlite, taxDate, lines.map((line) => line.taxCodeId));
@@ -227,13 +232,14 @@ export function voidBankTransaction(businessId: string, userId: string, transact
   const now = new Date().toISOString();
   context.sqlite.transaction(() => {
     const transaction = context.sqlite.prepare(`
-      SELECT transaction_number, document_status, statement_line_id
+      SELECT transaction_number, document_status, statement_line_id, date, tax_date
       FROM bank_transactions WHERE id = ?
-    `).get(transactionId) as { transaction_number: string; document_status: string; statement_line_id: string | null } | undefined;
+    `).get(transactionId) as { transaction_number: string; document_status: string; statement_line_id: string | null; date: string; tax_date: string } | undefined;
     if (!transaction) throw new Error("Bank Transaction not found.");
     if (transaction.document_status !== "posted") throw new Error("Only a posted Bank Transaction can be voided.");
-    const taxDate = (context.sqlite.prepare("SELECT tax_date FROM bank_transactions WHERE id = ?").get(transactionId) as { tax_date: string }).tax_date;
-    assertVatSourceUnlocked(context.sqlite, "bank_transaction", transactionId, taxDate);
+    assertDateNotLocked(context.sqlite, transaction.date, "Bank transaction");
+    assertDateNotLocked(context.sqlite, now.slice(0, 10), "Bank transaction void");
+    assertVatSourceUnlocked(context.sqlite, "bank_transaction", transactionId, transaction.tax_date);
     const matchedLines = context.sqlite.prepare(`
       SELECT id FROM bank_statement_lines
       WHERE matched_source_type = 'bank_transaction' AND matched_source_id = ?
@@ -251,7 +257,7 @@ export function voidBankTransaction(businessId: string, userId: string, transact
       reversalSourceType: "bank_transaction_void", reversalSourceId: transactionId,
       date: now.slice(0, 10), description: `Reverse Bank Transaction ${transaction.transaction_number}`,
     });
-    reverseTaxEntries(context.sqlite, { originalSourceType: "bank_transaction", sourceId: transactionId, reversalSourceType: "bank_transaction_void", taxDate });
+    reverseTaxEntries(context.sqlite, { originalSourceType: "bank_transaction", sourceId: transactionId, reversalSourceType: "bank_transaction_void", taxDate: transaction.tax_date });
     context.sqlite.prepare("UPDATE bank_transactions SET document_status = 'void', statement_line_id = NULL, voided_at = ?, updated_at = ? WHERE id = ?")
       .run(now, now, transactionId);
     if (matchedLines.length) context.sqlite.prepare(`

@@ -26,6 +26,14 @@ const { savePurchaseInvoice, getPurchaseInvoice } = await import("../src/modules
 const { listSuppliers } = await import("../src/modules/suppliers/supplier-service");
 const { getActiveTaxCodes } = await import("../src/modules/accounting/services/tax-code-service");
 const { getAccountingSettings } = await import("../src/modules/accounting/services/accounting-settings-service");
+const { setFinancialLockDate } = await import("../src/modules/accounting/services/financial-lock-service");
+const { createBankTransfer, voidBankTransfer } = await import("../src/modules/banking/bank-transfer-service");
+const { listBankAccounts } = await import("../src/modules/banking/bank-account-service");
+const { saveBankTransaction, voidBankTransaction } = await import("../src/modules/banking/bank-transaction-service");
+const { saveStockAdjustment, voidStockAdjustment, deleteStockAdjustment } = await import("../src/modules/inventory/stock-adjustment-service");
+const { exportBusinessBackup, importBusinessBackup } = await import("../src/core/businesses/backup-service");
+const JSZip = (await import("jszip")).default;
+const { createHash } = await import("node:crypto");
 
 test("Remediation 1: SQLite busy timeout and synchronous pragmas configured on both connections", async () => {
   const seeded = await seedDemoData();
@@ -297,4 +305,200 @@ test("Remediation 7: Settlement service prevents non-positive and over-allocatio
   assert.ok(updatedPi);
   assert.equal(updatedPi.balanceMinor, 5500);
 });
+
+test("Remediation 8: Secure Backup Import rejects invalid sizes, headers, corrupt files, and bad schemas", async () => {
+  const seeded = await seedDemoData();
+  const businessId = seeded.business.id;
+  const adminId = seeded.admin.id;
+
+  // 1. Exceeds 50MB
+  const oversizedBuffer = new ArrayBuffer(51 * 1024 * 1024);
+  await assert.rejects(
+    async () => importBusinessBackup(oversizedBuffer, adminId),
+    /Backup file exceeds maximum allowed size of 50 MB/
+  );
+
+  // 2. Export a valid backup to use as baseline
+  const validBackup = await exportBusinessBackup(businessId, adminId);
+
+  // 3. Corrupt SQLite header
+  const zipHeaderTest = await JSZip.loadAsync(validBackup);
+  const badHeaderDb = Buffer.from("NOT_A_SQLITE_FILE_CONTENT_HERE_XYZ");
+  zipHeaderTest.file("business.sqlite", badHeaderDb);
+  const manifest = JSON.parse(await zipHeaderTest.file("manifest.json")!.async("string"));
+  manifest.databaseSha256 = createHash("sha256").update(badHeaderDb).digest("hex");
+  zipHeaderTest.file("manifest.json", JSON.stringify(manifest));
+  const badHeaderZip = await zipHeaderTest.generateAsync({ type: "nodebuffer" });
+  await assert.rejects(
+    async () => importBusinessBackup(Uint8Array.from(badHeaderZip).buffer, adminId),
+    /Invalid database format: missing SQLite header/
+  );
+
+  // 4. Invalid schema (missing customers table)
+  const zipSchemaTest = await JSZip.loadAsync(validBackup);
+  const { default: Database } = await import("better-sqlite3");
+  const tempSqlite = new Database(":memory:");
+  tempSqlite.exec("CREATE TABLE something_else (id TEXT);");
+  const emptyDbBuffer = tempSqlite.serialize();
+  tempSqlite.close();
+
+  zipSchemaTest.file("business.sqlite", emptyDbBuffer);
+  const manifestSchema = JSON.parse(await zipSchemaTest.file("manifest.json")!.async("string"));
+  manifestSchema.databaseSha256 = createHash("sha256").update(emptyDbBuffer).digest("hex");
+  zipSchemaTest.file("manifest.json", JSON.stringify(manifestSchema));
+  const badSchemaZip = await zipSchemaTest.generateAsync({ type: "nodebuffer" });
+  await assert.rejects(
+    async () => importBusinessBackup(Uint8Array.from(badSchemaZip).buffer, adminId),
+    /Invalid business backup schema: missing table customers/
+  );
+
+  // 5. Attachment directory traversal attempt
+  const zipTraversalTest = await JSZip.loadAsync(validBackup);
+  zipTraversalTest.file("attachments/../../evil.txt", "malicious payload");
+  const badTraversalZip = await zipTraversalTest.generateAsync({ type: "nodebuffer" });
+  await assert.rejects(
+    async () => importBusinessBackup(Uint8Array.from(badTraversalZip).buffer, adminId),
+    /Backup contains an invalid attachment path/
+  );
+
+  // 6. Valid backup imports successfully
+  const importedId = await importBusinessBackup(Uint8Array.from(validBackup).buffer, adminId);
+  assert.ok(importedId);
+  const importedContext = getBusinessDb(importedId, adminId);
+  assert.ok(importedContext.sqlite);
+});
+
+test("Remediation 9: Financial lock date enforcement on stock adjustment, bank transfer, and bank transaction", async () => {
+  const seeded = await seedDemoData();
+  const businessId = seeded.business.id;
+  const adminId = seeded.admin.id;
+  const { sqlite } = getBusinessDb(businessId, adminId);
+
+  // Lock all periods on or before 2026-06-30
+  setFinancialLockDate(businessId, adminId, "2026-06-30");
+
+  // Bank accounts
+  const bankAccounts = listBankAccounts(businessId, adminId, false);
+  const bank = bankAccounts.find((a) => a.currency_code === "AED" && Boolean(a.is_active)) || bankAccounts[0];
+  const cash = bankAccounts.find((a) => a.id !== bank.id && a.currency_code === "AED" && Boolean(a.is_active)) || bankAccounts[1];
+
+  // 1. Bank transfer in locked period should fail
+  assert.throws(
+    () =>
+      createBankTransfer(businessId, adminId, {
+        fromBankAccountId: bank.id,
+        toBankAccountId: cash.id,
+        date: "2026-06-15",
+        amount: "100.00",
+        reference: "LOCKED-TRANSFER",
+      }),
+    /The financial period on or before 2026-06-30 is closed/
+  );
+
+  // Bank transfer after locked period succeeds
+  const transferId = createBankTransfer(businessId, adminId, {
+    fromBankAccountId: bank.id,
+    toBankAccountId: cash.id,
+    date: "2026-07-05",
+    amount: "100.00",
+    reference: "UNLOCKED-TRANSFER",
+  });
+  assert.ok(transferId);
+
+  // 2. Bank transaction in locked period should fail
+  const accounts = sqlite.prepare("SELECT id FROM accounts WHERE type = 'expense' AND is_active = 1 LIMIT 1").get() as { id: string };
+  const taxCodes = getActiveTaxCodes(businessId, adminId);
+  const tax = taxCodes.find((t) => ["purchases", "both"].includes(t.direction) && t.vatCategory === "standard") || taxCodes[0];
+
+  assert.throws(
+    () =>
+      saveBankTransaction(
+        businessId,
+        adminId,
+        {
+          bankAccountId: bank.id,
+          date: "2026-06-20",
+          type: "money_out",
+          reference: "LOCKED-TX",
+          description: "Office supplies",
+          lines: [
+            {
+              accountId: accounts.id,
+              taxCodeId: tax.id,
+              projectId: "",
+              description: "Supplies",
+              amount: "50.00",
+            },
+          ],
+        },
+        "post"
+      ),
+    /The financial period on or before 2026-06-30 is closed/
+  );
+
+  // Bank transaction after locked period succeeds
+  const txId = saveBankTransaction(
+    businessId,
+    adminId,
+    {
+      bankAccountId: bank.id,
+      date: "2026-07-10",
+      type: "money_out",
+      reference: "UNLOCKED-TX",
+      description: "Office supplies unlocked",
+      lines: [
+        {
+          accountId: accounts.id,
+          taxCodeId: tax.id,
+          projectId: "",
+          description: "Supplies",
+          amount: "50.00",
+        },
+      ],
+    },
+    "post"
+  );
+  assert.ok(txId);
+
+  // 3. Stock adjustment in locked period should fail
+  const item = sqlite.prepare("SELECT id FROM inventory_items WHERE is_active = 1 LIMIT 1").get() as { id: string };
+  const location = sqlite.prepare("SELECT id FROM inventory_locations WHERE is_active = 1 LIMIT 1").get() as { id: string };
+
+  assert.throws(
+    () =>
+      saveStockAdjustment(
+        businessId,
+        adminId,
+        {
+          itemId: item.id,
+          locationId: location.id,
+          quantityChange: "1",
+          unitCost: "10.00",
+          reason: "Opening Balance",
+          date: "2026-06-15",
+          notes: "Locked adjustment",
+        },
+        "post"
+      ),
+    /The financial period on or before 2026-06-30 is closed/
+  );
+
+  // Stock adjustment after locked period succeeds
+  const adjId = saveStockAdjustment(
+    businessId,
+    adminId,
+    {
+      itemId: item.id,
+      locationId: location.id,
+      quantityChange: "1",
+      unitCost: "10.00",
+      reason: "Opening Balance",
+      date: "2026-12-31",
+      notes: "Unlocked adjustment",
+    },
+    "post"
+  );
+  assert.ok(adjId);
+});
+
 

@@ -10,6 +10,7 @@ import {
   postTransaction,
   reverseTransaction,
 } from "@/modules/accounting/services/posting-service";
+import { assertDateNotLocked } from "@/modules/accounting/services/financial-lock-service";
 import { validateProjectReferences } from "@/modules/projects/project-validation";
 import {
   assertInventoryPostingOrder,
@@ -249,17 +250,19 @@ export function saveStockAdjustment(
     let oldMovement: { item_id: string; location_id: string } | undefined;
     if (adjustmentId) {
       const current = context.sqlite.prepare(`
-        SELECT adjustment_number, document_status
+        SELECT adjustment_number, document_status, date
         FROM stock_adjustments
         WHERE id = ?
       `).get(adjustmentId) as {
         adjustment_number: string;
         document_status: InventoryDocumentStatus;
+        date: string;
       } | undefined;
       if (!current) throw new Error("Stock Adjustment not found.");
       if (current.document_status === "void") {
         throw new Error("A void Stock Adjustment cannot be edited.");
       }
+      assertDateNotLocked(context.sqlite, current.date, "Stock adjustment");
       number = current.adjustment_number;
       wasPosted = current.document_status === "posted";
       shouldPost = wasPosted || intent === "post";
@@ -282,6 +285,8 @@ export function saveStockAdjustment(
     } else {
       number = allocateNumber(context.sqlite, "stockAdjustment");
     }
+
+    assertDateNotLocked(context.sqlite, data.date, "Stock adjustment");
 
     if (shouldPost) {
       assertInventoryPostingOrder(
@@ -398,6 +403,8 @@ export function voidStockAdjustment(
     if (adjustment.document_status !== "posted") {
       throw new Error("Only a posted Stock Adjustment can be voided.");
     }
+    assertDateNotLocked(context.sqlite, adjustment.date, "Stock adjustment");
+    assertDateNotLocked(context.sqlite, now.slice(0, 10), "Stock adjustment void");
     assertInventorySourceIsLatest(
       context.sqlite,
       "stock_adjustment",
@@ -461,12 +468,13 @@ export function deleteStockAdjustment(
 ) {
   const { sqlite } = getBusinessDb(businessId, userId);
   const adjustment = sqlite
-    .prepare("SELECT document_status FROM stock_adjustments WHERE id = ?")
-    .get(adjustmentId) as { document_status: string } | undefined;
+    .prepare("SELECT document_status, date FROM stock_adjustments WHERE id = ?")
+    .get(adjustmentId) as { document_status: string; date: string } | undefined;
   if (!adjustment) throw new Error("Stock Adjustment not found.");
   if (adjustment.document_status !== "draft") {
     throw new Error("Only draft Stock Adjustments can be deleted.");
   }
+  assertDateNotLocked(sqlite, adjustment.date, "Stock adjustment");
   sqlite.prepare("DELETE FROM stock_adjustments WHERE id = ?").run(adjustmentId);
 }
 

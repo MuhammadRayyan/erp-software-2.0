@@ -3,6 +3,7 @@ import { getBusinessDb } from "@/core/db/business";
 import { parseMoneyToMinor } from "@/modules/accounting/calculations/money";
 import { allocateNumber } from "@/modules/accounting/services/numbering-service";
 import { postTransaction, reverseTransaction } from "@/modules/accounting/services/posting-service";
+import { assertDateNotLocked } from "@/modules/accounting/services/financial-lock-service";
 import { bankTransferInputSchema, type BankTransferInput } from "./bank-transfer-input";
 
 export function createBankTransfer(businessId: string, userId: string, input: BankTransferInput) {
@@ -12,6 +13,7 @@ export function createBankTransfer(businessId: string, userId: string, input: Ba
   const amountMinor = parseMoneyToMinor(data.amount);
   const now = new Date().toISOString();
   context.sqlite.transaction(() => {
+    assertDateNotLocked(context.sqlite, data.date, "Bank transfer");
     const accounts = context.sqlite.prepare(`
       SELECT ba.id, ba.currency_code, ba.ledger_account_id, ba.is_active, a.is_active AS ledger_active
       FROM bank_accounts ba INNER JOIN accounts a ON a.id = ba.ledger_account_id
@@ -71,10 +73,12 @@ export function voidBankTransfer(businessId: string, userId: string, transferId:
   const now = new Date().toISOString();
   context.sqlite.transaction(() => {
     const transfer = context.sqlite.prepare(`
-      SELECT transfer_number, document_status FROM bank_transfers WHERE id = ?
-    `).get(transferId) as { transfer_number: string; document_status: string } | undefined;
+      SELECT transfer_number, document_status, date FROM bank_transfers WHERE id = ?
+    `).get(transferId) as { transfer_number: string; document_status: string; date: string } | undefined;
     if (!transfer) throw new Error("Bank Transfer not found.");
     if (transfer.document_status !== "posted") throw new Error("Only a posted Bank Transfer can be voided.");
+    assertDateNotLocked(context.sqlite, transfer.date, "Bank transfer");
+    assertDateNotLocked(context.sqlite, now.slice(0, 10), "Bank transfer void");
     const reconciled = context.sqlite.prepare(`
       SELECT 1 FROM bank_statement_lines bsl
       INNER JOIN bank_reconciliation_items bri ON bri.statement_line_id = bsl.id
