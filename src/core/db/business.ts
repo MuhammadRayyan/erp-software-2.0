@@ -8,7 +8,7 @@ import { getSystemDb } from "./system";
 import { migrateBusinessDatabase } from "./business-migrations";
 import * as schema from "./business-schema";
 
-const MAX_CONNECTIONS = 32;
+const MAX_CONNECTIONS = 50;
 const IDLE_TIMEOUT_MS = 5 * 60 * 1000;  // 5 minutes
 // Never evict a connection that was used this recently: a request may hold
 // the handle across an await boundary, and closing it would crash that
@@ -45,6 +45,9 @@ function scheduleIdleClose(directoryKey: string) {
   conn.idleTimer = setTimeout(() => {
     closeConnection(directoryKey);
   }, IDLE_TIMEOUT_MS);
+  if (typeof conn.idleTimer.unref === "function") {
+    conn.idleTimer.unref();
+  }
 }
 
 function evictIfNeeded() {
@@ -74,6 +77,7 @@ export function openBusinessDatabase(directoryKey: string) {
     const sqlite = new Database(paths.database, { timeout: 5000 });
     sqlite.pragma("journal_mode = WAL");
     sqlite.pragma("busy_timeout = 5000");
+    sqlite.pragma("synchronous = NORMAL");
     sqlite.pragma("foreign_keys = ON");
     migrateBusinessDatabase(sqlite, `business database ${directoryKey}`);
     const db = drizzle(sqlite, { schema });

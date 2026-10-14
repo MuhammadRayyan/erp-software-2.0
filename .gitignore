@@ -58,3 +58,11 @@ server.log
 .node-gyp
 .pnpm-store
 /data/
+
+# SQLite databases and WAL files
+*.sqlite
+*.sqlite-wal
+*.sqlite-shm
+
+# Generated downloads
+public/downloads/*.zip

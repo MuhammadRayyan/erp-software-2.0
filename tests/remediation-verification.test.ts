@@ -19,18 +19,27 @@ const { splitTaxInclusive } = await import("../src/modules/accounting/calculatio
 const { getDocumentPdfModule, getDocumentPdfAccess } = await import("../src/core/permissions/document-pdf-access");
 const { saveDebitNote, getDebitNote } = await import("../src/modules/debit-notes/debit-note-service");
 const { generateDocumentPdf } = await import("../src/modules/document-templates/pdf-service");
-const { voidSupplierPayment } = await import("../src/modules/supplier-payments/supplier-payment-service");
+const { createSupplierPayment, voidSupplierPayment } = await import("../src/modules/supplier-payments/supplier-payment-service");
 const { getProfitAndLoss } = await import("../src/modules/reports/report-service");
+const { allocateNumber } = await import("../src/modules/accounting/services/numbering-service");
+const { savePurchaseInvoice, getPurchaseInvoice } = await import("../src/modules/purchase-invoices/purchase-invoice-service");
+const { listSuppliers } = await import("../src/modules/suppliers/supplier-service");
+const { getActiveTaxCodes } = await import("../src/modules/accounting/services/tax-code-service");
+const { getAccountingSettings } = await import("../src/modules/accounting/services/accounting-settings-service");
 
-test("Remediation 1: SQLite busy timeout configured on both connections", async () => {
+test("Remediation 1: SQLite busy timeout and synchronous pragmas configured on both connections", async () => {
   const seeded = await seedDemoData();
   const sysSqlite = getSystemSqlite();
   const sysBusy = sysSqlite.pragma("busy_timeout", { simple: true });
   assert.equal(sysBusy, 5000, "System database busy_timeout must be 5000ms");
+  const sysSync = sysSqlite.pragma("synchronous", { simple: true });
+  assert.equal(sysSync, 1, "System database synchronous must be 1 (NORMAL)");
 
   const { sqlite: bizSqlite } = getBusinessDb(seeded.business.id, seeded.admin.id);
   const bizBusy = bizSqlite.pragma("busy_timeout", { simple: true });
   assert.equal(bizBusy, 5000, "Business database busy_timeout must be 5000ms");
+  const bizSync = bizSqlite.pragma("synchronous", { simple: true });
+  assert.equal(bizSync, 1, "Business database synchronous must be 1 (NORMAL)");
 });
 
 test("Remediation 2: splitTaxInclusive handles zero amounts gracefully", () => {
@@ -186,3 +195,106 @@ test("Remediation 5: Cash-Basis P&L uses base carrying amount for multi-currency
     assert.ok(!Number.isNaN(row.net_minor), "Net minor should be a valid number");
   }
 });
+
+test("Remediation 6: Atomic document numbering executes atomically standalone", async () => {
+  const seeded = await seedDemoData();
+  const businessId = seeded.business.id;
+  const adminId = seeded.admin.id;
+  const { sqlite } = getBusinessDb(businessId, adminId);
+
+  // Standalone call without an existing transaction
+  assert.equal(sqlite.inTransaction, false);
+  const num1 = allocateNumber(sqlite, "invoice");
+  assert.equal(sqlite.inTransaction, false);
+  const num2 = allocateNumber(sqlite, "invoice");
+  assert.equal(sqlite.inTransaction, false);
+
+  assert.ok(num1 && typeof num1 === "string");
+  assert.ok(num2 && typeof num2 === "string");
+  assert.notEqual(num1, num2);
+});
+
+test("Remediation 7: Settlement service prevents non-positive and over-allocation", async () => {
+  const seeded = await seedDemoData();
+  const businessId = seeded.business.id;
+  const adminId = seeded.admin.id;
+  const settings = getAccountingSettings(businessId, adminId);
+  const suppliers = listSuppliers(businessId, adminId);
+  const taxCodes = getActiveTaxCodes(businessId, adminId);
+
+  const supplier = suppliers[0];
+  const standardTax = taxCodes.find((code) => code.rateBasisPoints === 500 && ["purchases", "both"].includes(code.direction))!;
+
+  const piId = savePurchaseInvoice(
+    businessId,
+    adminId,
+    {
+      supplierId: supplier.id,
+      projectId: "",
+      supplierInvoiceNumber: `SUPP-TEST-${Date.now()}`,
+      invoiceDate: "2026-05-01",
+      dueDate: "2026-05-31",
+      reference: "Test settlement validations",
+      purchaseOrderId: "",
+      lines: [
+        {
+          itemId: "",
+          description: "Consulting Service",
+          quantity: "1",
+          unitPrice: "100.00", // 100 + 5% = 105 AED
+          expenseAccountId: settings.defaultPurchaseExpenseAccountId!,
+          taxCodeId: standardTax.id,
+          projectId: "",
+        },
+      ],
+    },
+    "post"
+  );
+  const pi = getPurchaseInvoice(businessId, adminId, piId);
+  assert.ok(pi);
+  assert.equal(pi.invoice.totalMinor, 10500);
+
+  // 1. Zero amount should throw
+  assert.throws(
+    () =>
+      createSupplierPayment(businessId, adminId, {
+        supplierId: supplier.id,
+        purchaseInvoiceId: piId,
+        date: "2026-05-05",
+        bankAccountId: settings.defaultBankAccountId!,
+        amount: "0.00",
+        reference: "ZERO-PAY",
+      }),
+    /greater than zero/i
+  );
+
+  // 2. Over-allocation should throw
+  assert.throws(
+    () =>
+      createSupplierPayment(businessId, adminId, {
+        supplierId: supplier.id,
+        purchaseInvoiceId: piId,
+        date: "2026-05-05",
+        bankAccountId: settings.defaultBankAccountId!,
+        amount: "150.00",
+        reference: "OVER-PAY",
+      }),
+    /Payment amount exceeds the selected payable/
+  );
+
+  // 3. Valid allocation succeeds and reduces balance
+  const payment = createSupplierPayment(businessId, adminId, {
+    supplierId: supplier.id,
+    purchaseInvoiceId: piId,
+    date: "2026-05-05",
+    bankAccountId: settings.defaultBankAccountId!,
+    amount: "50.00",
+    reference: "PART-PAY-1",
+  });
+  assert.ok(payment.id);
+
+  const updatedPi = getPurchaseInvoice(businessId, adminId, piId);
+  assert.ok(updatedPi);
+  assert.equal(updatedPi.balanceMinor, 5500);
+});
+

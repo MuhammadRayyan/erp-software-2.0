@@ -14,6 +14,7 @@ export function getSystemSqlite() {
     systemSqlite = new Database(SYSTEM_DB_PATH, { timeout: 5000 });
     systemSqlite.pragma("journal_mode = WAL");
     systemSqlite.pragma("busy_timeout = 5000");
+    systemSqlite.pragma("synchronous = NORMAL");
     systemSqlite.pragma("foreign_keys = ON");
     migrateSystemDatabase(systemSqlite);
   }

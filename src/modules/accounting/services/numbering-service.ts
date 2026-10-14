@@ -40,59 +40,65 @@ const columns: Record<NumberKind, { prefix: string; next: string; padding?: stri
 };
 
 export function allocateNumber(sqlite: Database.Database, kind: NumberKind) {
-  if (!sqlite.inTransaction) throw new Error("Number allocation must run inside a database transaction.");
-  const config = columns[kind];
-  const now = new Date().toISOString();
+  const allocate = () => {
+    const config = columns[kind];
+    const now = new Date().toISOString();
 
-  // Atomically touch the settings row first to immediately upgrade transaction to an exclusive write lock.
-  // This guarantees no concurrent transaction can read or allocate the same sequence number.
-  sqlite
-    .prepare("UPDATE business_accounting_settings SET updated_at = ? WHERE id = 'default'")
-    .run(now);
-
-  const row = sqlite
-    .prepare(
-      `SELECT ${config.prefix} AS prefix, ${config.next} AS next_number${
-        config.padding ? `, ${config.padding} AS padding` : ""
-      } FROM business_accounting_settings WHERE id = 'default'`,
-    )
-    .get() as { prefix: string; next_number: number; padding?: number } | undefined;
-  if (!row) throw new Error("Accounting numbering is not configured for this business.");
-
-  const padding = row.padding ?? 5;
-  const uniqueness = {
-    invoice: { table: "sales_invoices", column: "invoice_number" },
-    receipt: { table: "receipts", column: "receipt_number" },
-    creditNote: { table: "sales_credit_notes", column: "credit_note_number" },
-    purchaseOrder: { table: "purchase_orders", column: "order_number" },
-    purchaseInvoice: { table: "purchase_invoices", column: "internal_number" },
-    supplierPayment: { table: "supplier_payments", column: "payment_number" },
-    salesQuote: { table: "sales_quotes", column: "quote_number" },
-    salesOrder: { table: "sales_orders", column: "order_number" },
-    purchaseQuote: { table: "purchase_quotes", column: "quote_number" },
-    debitNote: { table: "debit_notes", column: "debit_note_number" },
-    project: { table: "projects", column: "code" },
-    goodsReceipt: { table: "goods_receipts", column: "receipt_number" },
-    deliveryNote: { table: "delivery_notes", column: "delivery_number" },
-    stockAdjustment: { table: "stock_adjustments", column: "adjustment_number" },
-    bankTransaction: { table: "bank_transactions", column: "transaction_number" },
-    bankTransfer: { table: "bank_transfers", column: "transfer_number" },
-    journal: { table: "journal_entries", column: "entry_number" },
-  }[kind];
-  let nextNumber = row.next_number;
-  let number = `${row.prefix}${String(nextNumber).padStart(padding, "0")}`;
-  while (
+    // Atomically touch the settings row first to immediately upgrade transaction to an exclusive write lock.
+    // This guarantees no concurrent transaction can read or allocate the same sequence number.
     sqlite
-      .prepare(`SELECT 1 FROM ${uniqueness.table} WHERE ${uniqueness.column} = ? LIMIT 1`)
-      .get(number)
-  ) {
-    nextNumber += 1;
-    number = `${row.prefix}${String(nextNumber).padStart(padding, "0")}`;
+      .prepare("UPDATE business_accounting_settings SET updated_at = ? WHERE id = 'default'")
+      .run(now);
+
+    const row = sqlite
+      .prepare(
+        `SELECT ${config.prefix} AS prefix, ${config.next} AS next_number${
+          config.padding ? `, ${config.padding} AS padding` : ""
+        } FROM business_accounting_settings WHERE id = 'default'`,
+      )
+      .get() as { prefix: string; next_number: number; padding?: number } | undefined;
+    if (!row) throw new Error("Accounting numbering is not configured for this business.");
+
+    const padding = row.padding ?? 5;
+    const uniqueness = {
+      invoice: { table: "sales_invoices", column: "invoice_number" },
+      receipt: { table: "receipts", column: "receipt_number" },
+      creditNote: { table: "sales_credit_notes", column: "credit_note_number" },
+      purchaseOrder: { table: "purchase_orders", column: "order_number" },
+      purchaseInvoice: { table: "purchase_invoices", column: "internal_number" },
+      supplierPayment: { table: "supplier_payments", column: "payment_number" },
+      salesQuote: { table: "sales_quotes", column: "quote_number" },
+      salesOrder: { table: "sales_orders", column: "order_number" },
+      purchaseQuote: { table: "purchase_quotes", column: "quote_number" },
+      debitNote: { table: "debit_notes", column: "debit_note_number" },
+      project: { table: "projects", column: "code" },
+      goodsReceipt: { table: "goods_receipts", column: "receipt_number" },
+      deliveryNote: { table: "delivery_notes", column: "delivery_number" },
+      stockAdjustment: { table: "stock_adjustments", column: "adjustment_number" },
+      bankTransaction: { table: "bank_transactions", column: "transaction_number" },
+      bankTransfer: { table: "bank_transfers", column: "transfer_number" },
+      journal: { table: "journal_entries", column: "entry_number" },
+    }[kind];
+    let nextNumber = row.next_number;
+    let number = `${row.prefix}${String(nextNumber).padStart(padding, "0")}`;
+    while (
+      sqlite
+        .prepare(`SELECT 1 FROM ${uniqueness.table} WHERE ${uniqueness.column} = ? LIMIT 1`)
+        .get(number)
+    ) {
+      nextNumber += 1;
+      number = `${row.prefix}${String(nextNumber).padStart(padding, "0")}`;
+    }
+    sqlite
+      .prepare(
+        `UPDATE business_accounting_settings SET ${config.next} = ?, updated_at = ? WHERE id = 'default'`,
+      )
+      .run(nextNumber + 1, new Date().toISOString());
+    return number;
+  };
+
+  if (sqlite.inTransaction) {
+    return allocate();
   }
-  sqlite
-    .prepare(
-      `UPDATE business_accounting_settings SET ${config.next} = ?, updated_at = ? WHERE id = 'default'`,
-    )
-    .run(nextNumber + 1, new Date().toISOString());
-  return number;
+  return sqlite.transaction(allocate)();
 }

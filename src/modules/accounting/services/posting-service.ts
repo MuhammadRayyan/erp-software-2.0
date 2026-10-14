@@ -61,69 +61,75 @@ function validateLines(sqlite: Database.Database, lines: JournalLineInput[]) {
 }
 
 export function postTransaction(sqlite: Database.Database, input: PostTransactionInput) {
-  if (!sqlite.inTransaction) throw new Error("Ledger posting must run inside a database transaction.");
-  assertFinancialLock(sqlite, input.date, "Transactions");
-  validateLines(sqlite, input.lines);
-  const existing = sqlite
-    .prepare(
-      "SELECT id, entry_number FROM journal_entries WHERE source_type = ? AND source_id = ?",
-    )
-    .get(input.sourceType, input.sourceId) as { id: string; entry_number: string } | undefined;
-  if (existing && !input.replace) throw new Error("This transaction has already been posted.");
+  const execute = () => {
+    assertFinancialLock(sqlite, input.date, "Transactions");
+    validateLines(sqlite, input.lines);
+    const existing = sqlite
+      .prepare(
+        "SELECT id, entry_number FROM journal_entries WHERE source_type = ? AND source_id = ?",
+      )
+      .get(input.sourceType, input.sourceId) as { id: string; entry_number: string } | undefined;
+    if (existing && !input.replace) throw new Error("This transaction has already been posted.");
 
-  const now = new Date().toISOString();
-  const journalEntryId = existing?.id ?? randomUUID();
-  const entryNumber = existing?.entry_number ?? allocateNumber(sqlite, "journal");
-  if (existing) {
-    sqlite.prepare("DELETE FROM journal_lines WHERE journal_entry_id = ?").run(journalEntryId);
-    sqlite
-      .prepare(`
-        UPDATE journal_entries
-        SET date = ?, description = ?, status = 'posted', posted_at = ?
-        WHERE id = ?
-      `)
-      .run(input.date, input.description, now, journalEntryId);
-  } else {
-    sqlite
-      .prepare(`
-        INSERT INTO journal_entries (
-          id, entry_number, date, source_type, source_id, description, status, created_at, posted_at
-        ) VALUES (?, ?, ?, ?, ?, ?, 'posted', ?, ?)
-      `)
-      .run(
+    const now = new Date().toISOString();
+    const journalEntryId = existing?.id ?? randomUUID();
+    const entryNumber = existing?.entry_number ?? allocateNumber(sqlite, "journal");
+    if (existing) {
+      sqlite.prepare("DELETE FROM journal_lines WHERE journal_entry_id = ?").run(journalEntryId);
+      sqlite
+        .prepare(`
+          UPDATE journal_entries
+          SET date = ?, description = ?, status = 'posted', posted_at = ?
+          WHERE id = ?
+        `)
+        .run(input.date, input.description, now, journalEntryId);
+    } else {
+      sqlite
+        .prepare(`
+          INSERT INTO journal_entries (
+            id, entry_number, date, source_type, source_id, description, status, created_at, posted_at
+          ) VALUES (?, ?, ?, ?, ?, ?, 'posted', ?, ?)
+        `)
+        .run(
+          journalEntryId,
+          entryNumber,
+          input.date,
+          input.sourceType,
+          input.sourceId,
+          input.description,
+          now,
+          now,
+        );
+    }
+
+    const insertLine = sqlite.prepare(`
+      INSERT INTO journal_lines (
+        id, journal_entry_id, account_id, description, debit_minor, credit_minor,
+        customer_id, supplier_id, project_id, reference, position
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `);
+    input.lines.forEach((line, position) => {
+      insertLine.run(
+        randomUUID(),
         journalEntryId,
-        entryNumber,
-        input.date,
-        input.sourceType,
-        input.sourceId,
-        input.description,
-        now,
-        now,
+        line.accountId,
+        line.description,
+        line.debitMinor ?? 0,
+        line.creditMinor ?? 0,
+        line.customerId ?? null,
+        line.supplierId ?? null,
+        line.projectId ?? null,
+        line.reference ?? null,
+        position,
       );
-  }
+    });
+    return { id: journalEntryId, entryNumber };
+  };
 
-  const insertLine = sqlite.prepare(`
-    INSERT INTO journal_lines (
-      id, journal_entry_id, account_id, description, debit_minor, credit_minor,
-      customer_id, supplier_id, project_id, reference, position
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-  `);
-  input.lines.forEach((line, position) => {
-    insertLine.run(
-      randomUUID(),
-      journalEntryId,
-      line.accountId,
-      line.description,
-      line.debitMinor ?? 0,
-      line.creditMinor ?? 0,
-      line.customerId ?? null,
-      line.supplierId ?? null,
-      line.projectId ?? null,
-      line.reference ?? null,
-      position,
-    );
-  });
-  return { id: journalEntryId, entryNumber };
+  if (sqlite.inTransaction) {
+    return execute();
+  }
+  return sqlite.transaction(execute)();
 }
 
 export function reverseTransaction(
