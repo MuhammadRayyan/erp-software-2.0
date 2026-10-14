@@ -39,8 +39,8 @@ test.describe('Evaluation Suite E: Currency & Multi-Currency', () => {
     // Set invoice date and tax date to match stored rate date (2026-08-27)
     await page.getByLabel(/invoice date/i).fill('2026-08-27');
     await page.getByLabel(/vat tax date/i).fill('2026-08-27');
-    // Select stored CBUAE exchange rate
-    await page.getByLabel(/Stored exchange rate/i).selectOption({ index: 1 });
+    // Select stored CBUAE exchange rate matching 2026-08-27
+    await page.locator('#storedExchangeRate').selectOption({ label: '2026-08-27 · 1 USD = 3.672500 AED · CBUAE' });
     
     // Automatically should have USD and exchange rate
     await page.getByRole('button', { name: /post invoice/i }).click();
