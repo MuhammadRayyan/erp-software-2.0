@@ -2525,7 +2525,23 @@ export const businessMigrations = [
         }
       },
     },
+    {
+      version: 28,
+      name: "performance_indexes",
+      up: (sqlite) => {
+        sqlite.exec(`
+          CREATE INDEX IF NOT EXISTS "sales_invoice_status_date_idx" ON "sales_invoices" ("document_status", "invoice_date");
+          CREATE INDEX IF NOT EXISTS "sales_invoice_customer_status_idx" ON "sales_invoices" ("customer_id", "document_status");
+          CREATE INDEX IF NOT EXISTS "purchase_invoice_status_date_idx" ON "purchase_invoices" ("document_status", "invoice_date");
+          CREATE INDEX IF NOT EXISTS "purchase_invoice_supplier_status_idx" ON "purchase_invoices" ("supplier_id", "document_status");
+          CREATE INDEX IF NOT EXISTS "journal_lines_account_entry_idx" ON "journal_lines" ("account_id", "journal_entry_id");
+          CREATE INDEX IF NOT EXISTS "journal_entries_date_status_idx" ON "journal_entries" ("date", "status");
+          CREATE INDEX IF NOT EXISTS "bank_transaction_account_date_status_idx" ON "bank_transactions" ("bank_account_id", "date", "document_status");
+        `);
+      },
+    },
   ] satisfies readonly SqliteMigration[];
+
 
 
 

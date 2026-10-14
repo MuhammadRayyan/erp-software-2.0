@@ -58,16 +58,36 @@ function assertSupplierInvoiceNumberAvailable(
   }
 }
 
-function insertLines(sqlite: ReturnType<typeof getBusinessDb>["sqlite"], invoiceId: string, lines: StoredLine[]) {
-  const statement = sqlite.prepare(`
-    INSERT INTO purchase_invoice_lines (
-      id, purchase_invoice_id, item_id, description, quantity_micros, unit_price_minor,
-      discount_type, discount_value, expense_account_id, tax_code_id, project_id, net_amount_minor, tax_amount_minor,
-      gross_amount_minor, position
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-  `);
-  for (const line of lines) statement.run(line.id, invoiceId, line.itemId, line.description, line.quantityMicros, line.unitPriceMinor, line.discountType || "none", line.discountValue || "0", line.expenseAccountId, line.taxCodeId, line.projectId, line.netAmountMinor, line.taxAmountMinor, line.grossAmountMinor, line.lineIndex);
+import { drizzle } from "drizzle-orm/better-sqlite3";
+import * as businessSchema from "@/core/db/business-schema";
+
+function insertLines(
+  dbOrSqlite: ReturnType<typeof getBusinessDb>["db"] | ReturnType<typeof getBusinessDb>["sqlite"],
+  invoiceId: string,
+  lines: StoredLine[],
+) {
+  if (lines.length === 0) return;
+  const db = "insert" in dbOrSqlite ? dbOrSqlite : drizzle(dbOrSqlite, { schema: businessSchema });
+  const linesArray = lines.map((line) => ({
+    id: line.id,
+    purchaseInvoiceId: invoiceId,
+    description: line.description,
+    quantityMicros: line.quantityMicros,
+    unitPriceMinor: line.unitPriceMinor,
+    discountType: (line.discountType as "none" | "percentage" | "fixed") || "none",
+    discountValue: line.discountValue || "0",
+    expenseAccountId: line.expenseAccountId,
+    taxCodeId: line.taxCodeId,
+    projectId: line.projectId || null,
+    itemId: line.itemId || null,
+    netAmountMinor: line.netAmountMinor,
+    taxAmountMinor: line.taxAmountMinor,
+    grossAmountMinor: line.grossAmountMinor,
+    position: line.lineIndex,
+  }));
+  db.insert(purchaseInvoiceLines).values(linesArray).run();
 }
+
 
 const PAID_MINOR_FRAGMENT = `
   COALESCE((SELECT SUM(spa.amount_minor) FROM supplier_payment_allocations spa
@@ -363,8 +383,9 @@ export function savePurchaseInvoice(
         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'draft', ?, ?, ?, ?, ?, ?, NULL, NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `).run(id, internalNumber, data.supplierId, data.projectId || null, data.supplierInvoiceNumber, data.invoiceDate, taxDate, data.dueDate, data.reference || null, data.purchaseOrderId || null, amounts.subtotalMinor, amounts.taxMinor, amounts.totalMinor, userId, now, now, rate.currencyCode, rate.exchangeRateToBase, rate.exchangeRateDate, rate.exchangeRateSource, base.baseSubtotalMinor, base.baseTaxMinor, base.baseTotalMinor, data.notes || null, data.terms || null);
     }
-    insertLines(context.sqlite, id, lines);
+    insertLines(context.db, id, lines);
     if (shouldPost) {
+
       assertVatDateUnlocked(context.sqlite, taxDate, lines.map((line) => line.taxCodeId));
       const postingLines = lines.map((line) => ({ ...line, projectId: effectiveProjectId(line.projectId, data.projectId) }));
       postPurchaseInvoice(context.sqlite, { id, internalNumber, supplierId: data.supplierId, invoiceDate: data.invoiceDate, totalMinor: amounts.totalMinor, rate }, postingLines, replace);

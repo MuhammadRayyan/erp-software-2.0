@@ -1,6 +1,8 @@
 import { randomUUID } from "crypto";
 import { eq } from "drizzle-orm";
-import { debitNotes } from "@/core/db/business-schema";
+import { drizzle } from "drizzle-orm/better-sqlite3";
+import * as businessSchema from "@/core/db/business-schema";
+import { debitNotes, debitNoteLines } from "@/core/db/business-schema";
 import { getBusinessDb } from "@/core/db/business";
 import { DebitNoteInput } from "./debit-note-input";
 import { allocateNumber, NumberKind } from "@/modules/accounting/services/numbering-service";
@@ -129,11 +131,31 @@ export function saveDebitNote(businessId: string, userId: string, data: DebitNot
     return null;
   }
 
-  function insertLines(sqlite: ReturnType<typeof getBusinessDb>["sqlite"], debitNoteId: string, lines: StoredLine[]) {
-    const statement = sqlite.prepare(`INSERT INTO debit_note_lines (id, debit_note_id, description, quantity_micros, unit_price_minor, discount_type, discount_value, expense_account_id, tax_code_id, project_id, net_amount_minor, tax_amount_minor, gross_amount_minor, position) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
-    for (const line of lines) {
-      statement.run(line.id, debitNoteId, line.description, line.quantityMicros, line.unitPriceMinor, line.discountType, line.discountValue || "0", line.expenseAccountId, line.taxCodeId, line.projectId || null, line.netAmountMinor, line.taxAmountMinor, line.grossAmountMinor, line.lineIndex);
-    }
+  function insertLines(
+    dbOrSqlite: ReturnType<typeof getBusinessDb>["db"] | ReturnType<typeof getBusinessDb>["sqlite"],
+    debitNoteId: string,
+    lines: StoredLine[],
+  ) {
+    if (lines.length === 0) return;
+    const db = "insert" in dbOrSqlite ? dbOrSqlite : drizzle(dbOrSqlite, { schema: businessSchema });
+    const linesArray = lines.map((line) => ({
+      id: line.id,
+      debitNoteId,
+      description: line.description,
+      quantityMicros: line.quantityMicros,
+      unitPriceMinor: line.unitPriceMinor,
+      discountType: (line.discountType as "none" | "percentage" | "fixed") || "none",
+      discountValue: line.discountValue || "0",
+      expenseAccountId: line.expenseAccountId!,
+      taxCodeId: line.taxCodeId,
+      projectId: line.projectId || null,
+      itemId: line.itemId || null,
+      netAmountMinor: line.netAmountMinor,
+      taxAmountMinor: line.taxAmountMinor,
+      grossAmountMinor: line.grossAmountMinor,
+      position: line.lineIndex,
+    }));
+    db.insert(debitNoteLines).values(linesArray).run();
   }
 
   const now = new Date().toISOString();
@@ -176,7 +198,7 @@ export function saveDebitNote(businessId: string, userId: string, data: DebitNot
  status, amounts.subtotalMinor, amounts.taxMinor, amounts.totalMinor, rate.currencyCode, rate.exchangeRateToBase, rate.exchangeRateDate, rate.exchangeRateSource, base.baseSubtotalMinor, base.baseTaxMinor, baseCarryingAmountReleased, userId, now, now);
     }
     
-    insertLines(context.sqlite, id, lines);
+    insertLines(context.db, id, lines);
     
     if (shouldPost) {
       assertVatDateUnlocked(context.sqlite, taxDate, lines.map((line) => line.taxCodeId));

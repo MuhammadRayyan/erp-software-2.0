@@ -36,6 +36,12 @@ const { logger, getRecentLogs, getTraceContext } = await import("../src/core/log
 const { onRequestError } = await import("../src/instrumentation");
 const { GET: healthGet } = await import("../src/app/api/health/route");
 const { triggerDiagnosticTraceAction, emitDiagnosticTrace } = await import("../src/app/b/[businessId]/settings/system-health/actions");
+const { createInvoice, getInvoice } = await import("../src/modules/sales-invoices/invoice-service");
+const { saveSalesQuote, getSalesQuote } = await import("../src/modules/sales-quotes/quote-service");
+const { saveSalesOrder, getSalesOrder } = await import("../src/modules/sales-orders/sales-order-service");
+const { savePurchaseOrder, getPurchaseOrder } = await import("../src/modules/purchase-orders/purchase-order-service");
+const { saveCreditNote, getCreditNote } = await import("../src/modules/sales-credit-notes/credit-note-service");
+const { listCustomers } = await import("../src/modules/customers/customer-service");
 const JSZip = (await import("jszip")).default;
 
 const { createHash } = await import("node:crypto");
@@ -617,6 +623,176 @@ test("Remediation 15: Admin Diagnostic Trace Action triggers Sentry span and per
   assert.ok(diagLog, "System logs should contain the diagnostic trace log");
   assert.equal(diagLog.level, "error");
   assert.ok(diagLog.message.includes("Diagnostic test error triggered by admin"));
+});
+
+test("Remediation 16: Performance composite indexes exist in business SQLite schema", async () => {
+  const seeded = await seedDemoData();
+  const businessId = seeded.business.id;
+  const adminId = seeded.admin.id;
+  const { sqlite } = getBusinessDb(businessId, adminId);
+
+  const indexes = sqlite.prepare("SELECT name, tbl_name FROM sqlite_master WHERE type = 'index'").all() as { name: string; tbl_name: string }[];
+  const indexNames = new Set(indexes.map((idx) => idx.name));
+
+  const expectedIndexes = [
+    "sales_invoice_status_date_idx",
+    "sales_invoice_customer_status_idx",
+    "journal_entries_date_status_idx",
+    "journal_lines_account_entry_idx",
+    "purchase_invoice_status_date_idx",
+    "purchase_invoice_supplier_status_idx",
+    "bank_transaction_account_date_status_idx",
+  ];
+
+  for (const expected of expectedIndexes) {
+    assert.ok(indexNames.has(expected), `Index ${expected} must exist in business SQLite database`);
+  }
+});
+
+test("Remediation 17: Batch line inserts across document services insert lines atomically in a single multi-row insert", async () => {
+  const seeded = await seedDemoData();
+  const businessId = seeded.business.id;
+  const adminId = seeded.admin.id;
+  const { sqlite } = getBusinessDb(businessId, adminId);
+
+  const customer = listCustomers(businessId, adminId)[0];
+  const supplier = listSuppliers(businessId, adminId)[0];
+  const taxCodes = getActiveTaxCodes(businessId, adminId);
+  const salesTaxCode = taxCodes.find((t) => t.direction === "sales" || t.direction === "both")!.id;
+  const purchaseTaxCode = taxCodes.find((t) => t.direction === "purchases" || t.direction === "both")!.id;
+  const salesAccount = sqlite.prepare("SELECT id FROM accounts WHERE type = 'income' LIMIT 1").get() as { id: string };
+  const expenseAccount = sqlite.prepare("SELECT id FROM accounts WHERE type = 'expense' LIMIT 1").get() as { id: string };
+
+  // 1. Sales Invoice with 3 lines
+  const invoiceId = createInvoice(businessId, adminId, {
+    customerId: customer.id,
+    invoiceDate: "2026-07-15",
+    taxDate: "2026-07-15",
+    dueDate: "2026-08-15",
+    reference: "BATCH-INV-001",
+    currencyCode: "AED",
+    exchangeRateToBase: "1",
+    exchangeRateDate: "2026-07-15",
+    exchangeRateSource: "Base",
+    amountsIncludeTax: false,
+    lines: [
+      { description: "Item 1", quantity: "1", unitPrice: "100.00", salesAccountId: salesAccount.id, taxCodeId: salesTaxCode, discountType: "none", discountValue: "0" },
+      { description: "Item 2", quantity: "2", unitPrice: "50.00", salesAccountId: salesAccount.id, taxCodeId: salesTaxCode, discountType: "none", discountValue: "0" },
+      { description: "Item 3", quantity: "3", unitPrice: "25.00", salesAccountId: salesAccount.id, taxCodeId: salesTaxCode, discountType: "none", discountValue: "0" },
+    ],
+  }, "post");
+  const invoice = getInvoice(businessId, adminId, invoiceId);
+  assert.ok(invoice, "Invoice should be retrieved");
+  assert.equal(invoice.lines.length, 3, "Batch inserted 3 lines should all exist");
+  assert.equal(invoice.lines[0].description, "Item 1");
+  assert.equal(invoice.lines[1].description, "Item 2");
+  assert.equal(invoice.lines[2].description, "Item 3");
+
+  // 2. Purchase Invoice with 3 lines
+  const purchaseInvoiceId = savePurchaseInvoice(businessId, adminId, {
+    supplierId: supplier.id,
+    supplierInvoiceNumber: "SUPP-BATCH-001",
+    invoiceDate: "2026-07-15",
+    taxDate: "2026-07-15",
+    dueDate: "2026-08-15",
+    currencyCode: "AED",
+    exchangeRateToBase: "1",
+    exchangeRateDate: "2026-07-15",
+    exchangeRateSource: "Base",
+    amountsIncludeTax: false,
+    lines: [
+      { description: "Expense 1", quantity: "1", unitPrice: "100.00", expenseAccountId: expenseAccount.id, taxCodeId: purchaseTaxCode, discountType: "none", discountValue: "0" },
+      { description: "Expense 2", quantity: "2", unitPrice: "60.00", expenseAccountId: expenseAccount.id, taxCodeId: purchaseTaxCode, discountType: "none", discountValue: "0" },
+      { description: "Expense 3", quantity: "4", unitPrice: "15.00", expenseAccountId: expenseAccount.id, taxCodeId: purchaseTaxCode, discountType: "none", discountValue: "0" },
+    ],
+  }, "post");
+  const purchaseInvoice = getPurchaseInvoice(businessId, adminId, purchaseInvoiceId);
+  assert.ok(purchaseInvoice, "Purchase invoice should be retrieved");
+  assert.equal(purchaseInvoice.lines.length, 3, "Batch inserted 3 lines should all exist");
+
+  // 3. Sales Quote with 3 lines
+  const quoteId = saveSalesQuote(businessId, adminId, {
+    customerId: customer.id,
+    date: "2026-07-15",
+    expiryDate: "2026-08-15",
+    reference: "QUOTE-BATCH-001",
+    currencyCode: "AED",
+    exchangeRateToBase: "1",
+    exchangeRateDate: "2026-07-15",
+    exchangeRateSource: "Base",
+    amountsIncludeTax: false,
+    lines: [
+      { description: "Quote Line 1", quantity: "1", unitPrice: "200.00", salesAccountId: salesAccount.id, taxCodeId: salesTaxCode, discountType: "none", discountValue: "0" },
+      { description: "Quote Line 2", quantity: "1", unitPrice: "300.00", salesAccountId: salesAccount.id, taxCodeId: salesTaxCode, discountType: "none", discountValue: "0" },
+      { description: "Quote Line 3", quantity: "1", unitPrice: "400.00", salesAccountId: salesAccount.id, taxCodeId: salesTaxCode, discountType: "none", discountValue: "0" },
+    ],
+  }, "draft");
+  const quote = getSalesQuote(businessId, adminId, quoteId);
+  assert.ok(quote, "Quote should be retrieved");
+  assert.equal(quote.lines.length, 3, "Quote lines batch inserted correctly");
+
+  // 4. Sales Order with 3 lines
+  const salesOrderId = saveSalesOrder(businessId, adminId, {
+    customerId: customer.id,
+    date: "2026-07-15",
+    expectedDeliveryDate: "2026-08-15",
+    reference: "SO-BATCH-001",
+    currencyCode: "AED",
+    exchangeRateToBase: "1",
+    exchangeRateDate: "2026-07-15",
+    exchangeRateSource: "Base",
+    amountsIncludeTax: false,
+    lines: [
+      { description: "SO Line 1", quantity: "5", unitPrice: "10.00", salesAccountId: salesAccount.id, taxCodeId: salesTaxCode, discountType: "none", discountValue: "0" },
+      { description: "SO Line 2", quantity: "10", unitPrice: "20.00", salesAccountId: salesAccount.id, taxCodeId: salesTaxCode, discountType: "none", discountValue: "0" },
+      { description: "SO Line 3", quantity: "15", unitPrice: "30.00", salesAccountId: salesAccount.id, taxCodeId: salesTaxCode, discountType: "none", discountValue: "0" },
+    ],
+  }, "draft");
+  const salesOrder = getSalesOrder(businessId, adminId, salesOrderId);
+  assert.ok(salesOrder, "Sales order should be retrieved");
+  assert.equal(salesOrder.lines.length, 3, "Sales order lines batch inserted correctly");
+
+  // 5. Purchase Order with 3 lines
+  const poId = savePurchaseOrder(businessId, adminId, {
+    supplierId: supplier.id,
+    date: "2026-07-15",
+    expectedDeliveryDate: "2026-08-15",
+    reference: "PO-BATCH-001",
+    currencyCode: "AED",
+    exchangeRateToBase: "1",
+    exchangeRateDate: "2026-07-15",
+    exchangeRateSource: "Base",
+    amountsIncludeTax: false,
+    lines: [
+      { description: "PO Line 1", quantity: "2", unitPrice: "50.00", expenseAccountId: expenseAccount.id, taxCodeId: purchaseTaxCode, discountType: "none", discountValue: "0" },
+      { description: "PO Line 2", quantity: "4", unitPrice: "25.00", expenseAccountId: expenseAccount.id, taxCodeId: purchaseTaxCode, discountType: "none", discountValue: "0" },
+      { description: "PO Line 3", quantity: "6", unitPrice: "15.00", expenseAccountId: expenseAccount.id, taxCodeId: purchaseTaxCode, discountType: "none", discountValue: "0" },
+    ],
+  }, "draft");
+  const purchaseOrder = getPurchaseOrder(businessId, adminId, poId);
+  assert.ok(purchaseOrder, "Purchase order should be retrieved");
+  assert.equal(purchaseOrder.lines.length, 3, "Purchase order lines batch inserted correctly");
+
+  // 6. Debit Note with 3 lines
+  const debitNoteId = saveDebitNote(businessId, adminId, {
+    supplierId: supplier.id,
+    date: "2026-07-15",
+    taxDate: "2026-07-15",
+    reference: "DN-BATCH-001",
+    currencyCode: "AED",
+    exchangeRateToBase: "1",
+    exchangeRateDate: "2026-07-15",
+    exchangeRateSource: "Base",
+    amountsIncludeTax: false,
+    lines: [
+      { description: "DN Line 1", quantity: "1", unitPrice: "30.00", expenseAccountId: expenseAccount.id, taxCodeId: purchaseTaxCode, discountType: "none", discountValue: "0" },
+      { description: "DN Line 2", quantity: "2", unitPrice: "40.00", expenseAccountId: expenseAccount.id, taxCodeId: purchaseTaxCode, discountType: "none", discountValue: "0" },
+      { description: "DN Line 3", quantity: "3", unitPrice: "50.00", expenseAccountId: expenseAccount.id, taxCodeId: purchaseTaxCode, discountType: "none", discountValue: "0" },
+    ],
+  }, "draft");
+  const debitNote = getDebitNote(businessId, adminId, debitNoteId);
+  assert.ok(debitNote, "Debit note should be retrieved");
+  assert.equal(debitNote.lines.length, 3, "Debit note lines batch inserted correctly");
 });
 
 

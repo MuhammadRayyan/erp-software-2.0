@@ -54,38 +54,36 @@ function allocatedForInvoice(sqlite: ReturnType<typeof getBusinessDb>["sqlite"],
 }
 
 
+import { drizzle } from "drizzle-orm/better-sqlite3";
+import * as businessSchema from "@/core/db/business-schema";
+
 function insertLines(
-  sqlite: ReturnType<typeof getBusinessDb>["sqlite"],
+  dbOrSqlite: ReturnType<typeof getBusinessDb>["db"] | ReturnType<typeof getBusinessDb>["sqlite"],
   invoiceId: string,
   lines: StoredLine[],
 ) {
-  const statement = sqlite.prepare(`
-    INSERT INTO sales_invoice_lines (
-      id, invoice_id, description, quantity_micros, unit_price_minor,
-      discount_type, discount_value, sales_account_id, tax_code_id, net_amount_minor, tax_amount_minor,
-      gross_amount_minor, project_id, item_id, position
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-  `);
-  for (const line of lines) {
-    statement.run(
-      line.id,
-      invoiceId,
-      line.description,
-      line.quantityMicros,
-      line.unitPriceMinor,
-      line.discountType || "none",
-      line.discountValue || "0",
-      line.salesAccountId,
-      line.taxCodeId,
-      line.netAmountMinor,
-      line.taxAmountMinor,
-      line.grossAmountMinor,
-      line.projectId,
-      line.itemId,
-      line.lineIndex,
-    );
-  }
+  if (lines.length === 0) return;
+  const db = "insert" in dbOrSqlite ? dbOrSqlite : drizzle(dbOrSqlite, { schema: businessSchema });
+  const linesArray = lines.map((line) => ({
+    id: line.id,
+    invoiceId,
+    description: line.description,
+    quantityMicros: line.quantityMicros,
+    unitPriceMinor: line.unitPriceMinor,
+    discountType: (line.discountType as "none" | "percentage" | "fixed") || "none",
+    discountValue: line.discountValue || "0",
+    salesAccountId: line.salesAccountId,
+    taxCodeId: line.taxCodeId,
+    projectId: line.projectId || null,
+    itemId: line.itemId || null,
+    netAmountMinor: line.netAmountMinor,
+    taxAmountMinor: line.taxAmountMinor,
+    grossAmountMinor: line.grossAmountMinor,
+    position: line.lineIndex,
+  }));
+  db.insert(salesInvoiceLines).values(linesArray).run();
 }
+
 
 const ALLOCATED_MINOR_FRAGMENT = `
   COALESCE((SELECT SUM(ra.amount_minor) FROM receipt_allocations ra
@@ -534,8 +532,9 @@ export function createInvoice(
         now,
         now,
       );
-    insertLines(context.sqlite, id, lines);
+    insertLines(context.db, id, lines);
     if (customFieldValues) {
+
       saveCustomFieldValuesInTransaction(context.sqlite, "sales_invoice", id, customFieldValues);
     }
     if (intent === "post") {
@@ -652,8 +651,9 @@ export function updateInvoice(
         invoiceId,
       );
     context.sqlite.prepare("DELETE FROM sales_invoice_lines WHERE invoice_id = ?").run(invoiceId);
-    insertLines(context.sqlite, invoiceId, lines);
+    insertLines(context.db, invoiceId, lines);
     if (customFieldValues) {
+
       saveCustomFieldValuesInTransaction(context.sqlite, "sales_invoice", invoiceId, customFieldValues);
     }
     if (shouldPost) {

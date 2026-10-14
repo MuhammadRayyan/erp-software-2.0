@@ -15,13 +15,36 @@ export type SalesQuoteStatus = "draft" | "sent" | "accepted" | "rejected" | "sup
 export type SalesQuoteIntent = "draft" | "issue";
 
 
-function insertLines(sqlite: ReturnType<typeof getBusinessDb>["sqlite"], quoteId: string, lines: StoredLine[]) {
-  const statement = sqlite.prepare(`INSERT INTO sales_quote_lines
-    (id, quote_id, item_id, description, quantity_micros, unit_price_minor, discount_type, discount_value, sales_account_id,
-     tax_code_id, project_id, net_amount_minor, tax_amount_minor, gross_amount_minor, position)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
-  for (const line of lines) statement.run(line.id, quoteId, line.itemId, line.description, line.quantityMicros, line.unitPriceMinor, line.discountType || "none", line.discountValue || "0", line.salesAccountId, line.taxCodeId, line.projectId, line.netAmountMinor, line.taxAmountMinor, line.grossAmountMinor, line.lineIndex);
+import { drizzle } from "drizzle-orm/better-sqlite3";
+import * as businessSchema from "@/core/db/business-schema";
+
+function insertLines(
+  dbOrSqlite: ReturnType<typeof getBusinessDb>["db"] | ReturnType<typeof getBusinessDb>["sqlite"],
+  quoteId: string,
+  lines: StoredLine[],
+) {
+  if (lines.length === 0) return;
+  const db = "insert" in dbOrSqlite ? dbOrSqlite : drizzle(dbOrSqlite, { schema: businessSchema });
+  const linesArray = lines.map((line) => ({
+    id: line.id,
+    quoteId,
+    description: line.description,
+    quantityMicros: line.quantityMicros,
+    unitPriceMinor: line.unitPriceMinor,
+    discountType: (line.discountType as "none" | "percentage" | "fixed") || "none",
+    discountValue: line.discountValue || "0",
+    salesAccountId: line.salesAccountId,
+    taxCodeId: line.taxCodeId,
+    projectId: line.projectId || null,
+    itemId: line.itemId || null,
+    netAmountMinor: line.netAmountMinor,
+    taxAmountMinor: line.taxAmountMinor,
+    grossAmountMinor: line.grossAmountMinor,
+    position: line.lineIndex,
+  }));
+  db.insert(salesQuoteLines).values(linesArray).run();
 }
+
 
 export function listSalesQuotes(
   businessId: string,
@@ -128,8 +151,9 @@ export function saveSalesQuote(businessId: string, userId: string, input: SalesQ
       context.sqlite.prepare(`INSERT INTO sales_quotes (id, quote_number, base_quote_number, root_quote_id, revision_number, is_latest_revision, customer_id, project_id, quote_date, expiry_date, reference, document_status, amounts_include_tax, subtotal_minor, tax_minor, total_minor, currency_code, exchange_rate_to_base, exchange_rate_date, exchange_rate_source, base_subtotal_minor, base_tax_minor, base_total_minor, notes, terms, created_by, created_at, updated_at) VALUES (?, ?, ?, ?, 0, 1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
         .run(id, quoteNumber, quoteNumber, id, data.customerId, data.projectId || null, data.date, data.expectedDate || "", data.reference || null, status, data.amountsIncludeTax ? 1 : 0, amounts.subtotalMinor, amounts.taxMinor, amounts.totalMinor, rate.currencyCode, rate.exchangeRateToBase, rate.exchangeRateDate, rate.exchangeRateSource, base.baseSubtotalMinor, base.baseTaxMinor, base.baseTotalMinor, data.notes || null, data.terms || null, userId, now, now);
     }
-    insertLines(context.sqlite, id, lines);
+    insertLines(context.db, id, lines);
   }).immediate();
+
   return id;
 }
 

@@ -53,10 +53,35 @@ export function getRemainingInvoiceBalance(businessId: string, userId: string, i
 }
 
 
-function insertLines(sqlite: ReturnType<typeof getBusinessDb>["sqlite"], noteId: string, lines: StoredLine[]) {
-  const statement = sqlite.prepare(`INSERT INTO sales_credit_note_lines (id, credit_note_id, description, quantity_micros, unit_price_minor, sales_account_id, tax_code_id, project_id, net_amount_minor, tax_amount_minor, gross_amount_minor, position) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
-  for (const line of lines) statement.run(line.id, noteId, line.description, line.quantityMicros, line.unitPriceMinor, line.salesAccountId, line.taxCodeId, line.projectId, line.netAmountMinor, line.taxAmountMinor, line.grossAmountMinor, line.lineIndex);
+import { drizzle } from "drizzle-orm/better-sqlite3";
+import * as businessSchema from "@/core/db/business-schema";
+
+function insertLines(
+  dbOrSqlite: ReturnType<typeof getBusinessDb>["db"] | ReturnType<typeof getBusinessDb>["sqlite"],
+  noteId: string,
+  lines: StoredLine[],
+) {
+  if (lines.length === 0) return;
+  const db = "insert" in dbOrSqlite ? dbOrSqlite : drizzle(dbOrSqlite, { schema: businessSchema });
+  const linesArray = lines.map((line) => ({
+    id: line.id,
+    creditNoteId: noteId,
+    description: line.description,
+    quantityMicros: line.quantityMicros,
+    unitPriceMinor: line.unitPriceMinor,
+    discountType: (line.discountType as "none" | "percentage" | "fixed") || "none",
+    discountValue: line.discountValue || "0",
+    salesAccountId: line.salesAccountId,
+    taxCodeId: line.taxCodeId,
+    projectId: line.projectId || null,
+    netAmountMinor: line.netAmountMinor,
+    taxAmountMinor: line.taxAmountMinor,
+    grossAmountMinor: line.grossAmountMinor,
+    position: line.lineIndex,
+  }));
+  db.insert(salesCreditNoteLines).values(linesArray).run();
 }
+
 
 export function listCreditNotes(
   businessId: string, 
@@ -169,8 +194,9 @@ export function saveCreditNote(businessId: string, userId: string, input: Credit
         )
       `).run(id, number, data.customerId, data.projectId || null, data.sourceInvoiceId, data.date, taxDate, data.supplyEmirate || null, data.reference || null, data.reason || null, amounts.subtotalMinor, amounts.taxMinor, amounts.totalMinor, rate.currencyCode, rate.exchangeRateToBase, rate.exchangeRateDate, rate.exchangeRateSource, base.baseSubtotalMinor, base.baseTaxMinor, baseCarryingAmountReleased, userId, now, now);
     }
-    insertLines(context.sqlite, id, lines);
+    insertLines(context.db, id, lines);
     if (shouldPost) {
+
       assertVatDateUnlocked(context.sqlite, taxDate, lines.map((line) => line.taxCodeId));
       const postingLines = lines.map((line) => ({ ...line, projectId: effectiveProjectId(line.projectId, data.projectId) }));
       postCreditNote(context.sqlite, { id, creditNoteNumber: number, customerId: data.customerId, date: data.date, totalMinor: amounts.totalMinor, rate, baseCarryingAmountReleased }, postingLines, replace);

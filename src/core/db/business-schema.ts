@@ -432,8 +432,11 @@ export const salesInvoices = sqliteTable(
     uniqueIndex("sales_invoice_number_idx").on(table.invoiceNumber),
     index("sales_invoice_customer_idx").on(table.customerId),
     index("sales_invoice_project_idx").on(table.projectId),
+    index("sales_invoice_status_date_idx").on(table.documentStatus, table.invoiceDate),
+    index("sales_invoice_customer_status_idx").on(table.customerId, table.documentStatus),
   ],
 );
+
 
 export const salesInvoiceLines = sqliteTable(
   "sales_invoice_lines",
@@ -484,6 +487,7 @@ export const journalEntries = sqliteTable(
     uniqueIndex("journal_entry_number_idx").on(table.entryNumber),
     uniqueIndex("journal_source_idx").on(table.sourceType, table.sourceId),
     index("journal_date_idx").on(table.date),
+    index("journal_entries_date_status_idx").on(table.date, table.status),
   ],
 );
 
@@ -509,6 +513,7 @@ export const journalLines = sqliteTable(
   (table) => [
     index("journal_lines_entry_idx").on(table.journalEntryId),
     index("journal_lines_account_idx").on(table.accountId),
+    index("journal_lines_account_entry_idx").on(table.accountId, table.journalEntryId),
     index("journal_lines_customer_idx").on(table.customerId),
     index("journal_lines_supplier_idx").on(table.supplierId),
     index("journal_lines_project_idx").on(table.projectId),
@@ -519,6 +524,7 @@ export const journalLines = sqliteTable(
     ),
   ],
 );
+
 
 export const receipts = sqliteTable(
   "receipts",
@@ -690,8 +696,11 @@ export const purchaseInvoices = sqliteTable(
     index("purchase_invoice_project_idx").on(table.projectId),
     uniqueIndex("purchase_invoice_inbound_source_idx").on(table.inboundEInvoiceDocumentId),
     index("purchase_invoice_supplier_document_idx").on(table.supplierId, table.supplierInvoiceNumber, table.documentStatus),
+    index("purchase_invoice_status_date_idx").on(table.documentStatus, table.invoiceDate),
+    index("purchase_invoice_supplier_status_idx").on(table.supplierId, table.documentStatus),
   ],
 );
+
 
 export const purchaseInvoiceLines = sqliteTable(
   "purchase_invoice_lines",
@@ -1100,9 +1109,11 @@ export const bankTransactions = sqliteTable(
     uniqueIndex("bank_transaction_number_idx").on(table.transactionNumber),
     uniqueIndex("bank_transaction_statement_line_idx").on(table.statementLineId).where(sql`${table.statementLineId} IS NOT NULL`),
     index("bank_transaction_account_idx").on(table.bankAccountId),
+    index("bank_transaction_account_date_status_idx").on(table.bankAccountId, table.date, table.documentStatus),
     check("bank_transaction_positive_total", sql`${table.totalMinor} > 0`),
   ],
 );
+
 
 export const bankTransactionLines = sqliteTable(
   "bank_transaction_lines",
