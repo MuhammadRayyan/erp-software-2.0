@@ -24,7 +24,9 @@ import {
   Scale,
   CalendarClock,
   BookOpen,
+  Activity,
 } from "lucide-react";
+
 import { Badge } from "@/components/ui/badge";
 import type { ResolvedBusinessProfile } from "@/modules/business-profile/business-profile-service";
 
@@ -201,9 +203,18 @@ export function SettingsHubClient({
             icon: LayoutGrid,
             keywords: "preferences columns kpi cards reset ui view display sync",
           },
+          {
+            title: "System Health & Diagnostics",
+            description: "Database WAL metrics, system memory, uptime status, correlated trace logs, and Sentry telemetry.",
+            href: `/b/${businessId}/settings/system-health`,
+            icon: Activity,
+            keywords: "system health diagnostics logs traces sentry memory database wal uptime",
+            badge: "Operational",
+          },
         ],
       },
     ],
+
     [businessId, profile, vatRegistered],
   );
 

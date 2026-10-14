@@ -19,7 +19,7 @@ import {
 import type { ModuleKey } from "@/core/permissions/permissions";
 import { ThemeMenu } from "@/core/theme/theme-menu";
 import { BusinessSwitcher } from "./business-switcher";
-import { primaryNav, settingsNav } from "./nav-items";
+import { primaryNav, settingsNav, systemHealthNav } from "./nav-items";
 import { SidebarNav } from "./sidebar-nav";
 
 type ShellProps = {
@@ -46,8 +46,12 @@ function buildCommands(businessId: string, modules: ModuleKey[], push: (path: st
     }
   }
   if (modules.includes("settings")) {
-    navigation.push({ label: settingsNav.label, hint: "Go to", icon: settingsNav.icon, keywords: "settings preferences configuration", onSelect: go(settingsNav.path) });
+    navigation.push(
+      { label: settingsNav.label, hint: "Go to", icon: settingsNav.icon, keywords: "settings preferences configuration", onSelect: go(settingsNav.path) },
+      { label: systemHealthNav.label, hint: "Go to", icon: systemHealthNav.icon, keywords: "system health diagnostics logs traces sentry metrics wal", onSelect: go(systemHealthNav.path) },
+    );
   }
+
   const actions: CommandItem[] = [];
   if (modules.includes("sales")) {
     actions.push(

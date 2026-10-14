@@ -4,7 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/cn";
 import type { ModuleKey } from "@/core/permissions/permissions";
-import { primaryNav, settingsNav, type NavItem } from "./nav-items";
+import { primaryNav, settingsNav, systemHealthNav, type NavItem } from "./nav-items";
 
 function NavLink({ businessId, item, onNavigate }: { businessId: string; item: NavItem; onNavigate?: () => void }) {
   const pathname = usePathname();
@@ -42,10 +42,12 @@ export function SidebarNav({ businessId, modules, onNavigate }: { businessId: st
         })}
       </div>
       {modules.includes("settings") && (
-        <div className="mt-auto border-t border-border pt-2">
+        <div className="mt-auto border-t border-border pt-2 space-y-0.5">
           <NavLink businessId={businessId} item={settingsNav} onNavigate={onNavigate} />
+          <NavLink businessId={businessId} item={systemHealthNav} onNavigate={onNavigate} />
         </div>
       )}
+
     </nav>
   );
 }

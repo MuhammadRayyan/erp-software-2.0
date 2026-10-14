@@ -17,8 +17,10 @@ import {
   PackageCheck,
   Receipt,
   HandCoins,
+  Activity,
 } from "lucide-react";
 import type { ModuleKey } from "@/core/permissions/permissions";
+
 
 export type NavItem = {
   label: string;
@@ -83,3 +85,10 @@ export const primaryNav: { label?: string; items: NavItem[] }[] = [
 ];
 
 export const settingsNav: NavItem = { label: "Settings", path: "/settings", icon: Settings, module: "settings" };
+export const systemHealthNav: NavItem = {
+  label: "System Health",
+  path: "/settings/system-health",
+  icon: Activity,
+  module: "settings",
+};
+export const settingsNavItems: NavItem[] = [settingsNav, systemHealthNav];

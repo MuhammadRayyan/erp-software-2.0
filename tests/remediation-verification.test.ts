@@ -32,8 +32,14 @@ const { listBankAccounts } = await import("../src/modules/banking/bank-account-s
 const { saveBankTransaction, voidBankTransaction } = await import("../src/modules/banking/bank-transaction-service");
 const { saveStockAdjustment, voidStockAdjustment, deleteStockAdjustment } = await import("../src/modules/inventory/stock-adjustment-service");
 const { exportBusinessBackup, importBusinessBackup } = await import("../src/core/businesses/backup-service");
+const { logger, getRecentLogs, getTraceContext } = await import("../src/core/logger");
+const { onRequestError } = await import("../src/instrumentation");
+const { GET: healthGet } = await import("../src/app/api/health/route");
+const { triggerDiagnosticTraceAction, emitDiagnosticTrace } = await import("../src/app/b/[businessId]/settings/system-health/actions");
 const JSZip = (await import("jszip")).default;
+
 const { createHash } = await import("node:crypto");
+
 
 test("Remediation 1: SQLite busy timeout and synchronous pragmas configured on both connections", async () => {
   const seeded = await seedDemoData();
@@ -500,5 +506,119 @@ test("Remediation 9: Financial lock date enforcement on stock adjustment, bank t
   );
   assert.ok(adjId);
 });
+
+test("Remediation 12: Correlated Logger records structured traces and persists to system_logs", async () => {
+  const seeded = await seedDemoData();
+  const businessId = seeded.business.id;
+  const adminId = seeded.admin.id;
+
+  // Verify trace context extraction
+  const traceCtx = getTraceContext();
+  assert.equal(typeof traceCtx, "object");
+  assert.ok(traceCtx.traceId !== undefined, "Trace ID should be available from Sentry propagation context");
+
+  // Log an info and an error
+  const testMessage = `Test correlated event ${Date.now()}`;
+  logger.info(testMessage, {
+    businessId,
+    userId: adminId,
+    metadata: { source: "test_suite", priority: "high" },
+  });
+
+  const testErrorMessage = `Test simulated error ${Date.now()}`;
+  logger.error(testErrorMessage, {
+    businessId,
+    userId: adminId,
+    error: new Error("Simulated test failure"),
+    metadata: { testKey: "testValue" },
+  });
+
+  // Query recent logs
+  const logs = getRecentLogs({ businessId, limit: 10 });
+  assert.ok(logs.length >= 2, "Should find at least 2 logged events");
+
+  const errorLog = logs.find((l) => l.message === testErrorMessage);
+  assert.ok(errorLog, "Error log should be found in system_logs table");
+  assert.equal(errorLog.level, "error");
+  assert.equal(errorLog.businessId, businessId);
+  assert.equal(errorLog.userId, adminId);
+  assert.ok(errorLog.traceId, "Error log should contain correlated traceId");
+  assert.ok(errorLog.metadataJson, "Error log should contain metadata JSON");
+
+  const parsedMeta = JSON.parse(errorLog.metadataJson);
+  assert.equal(parsedMeta.testKey, "testValue");
+  assert.equal(parsedMeta.error.message, "Simulated test failure");
+});
+
+test("Remediation 13: Next.js Error Instrumentation captures unhandled route errors with correlated metadata", async () => {
+  const seeded = await seedDemoData();
+  const businessId = seeded.business.id;
+
+  const simulatedError = new Error("Unhandled RSC server component explosion");
+  const requestInfo = {
+    path: `/b/${businessId}/reports/profit-and-loss`,
+    method: "GET",
+    headers: { "user-agent": "NodeTestRunner/1.0" },
+  };
+  const contextInfo = {
+    routerKind: "App Router" as const,
+    routePath: "/app/b/[businessId]/reports/profit-and-loss/page.tsx",
+    routeType: "render" as const,
+    renderSource: "react-server-components",
+  };
+
+  // Invoke instrumentation error handler
+  await onRequestError(simulatedError as any, requestInfo, contextInfo as any);
+
+  // Check that the error was persisted to system_logs with businessId and route context
+  const logs = getRecentLogs({ businessId, limit: 10 });
+  const captured = logs.find((l) => l.message.includes("Unhandled RSC server component explosion"));
+
+  assert.ok(captured, "Captured error should appear in system_logs");
+  assert.equal(captured.level, "error");
+  assert.equal(captured.businessId, businessId);
+  assert.ok(captured.metadataJson);
+
+  const meta = JSON.parse(captured.metadataJson);
+  assert.equal(meta.path, `/b/${businessId}/reports/profit-and-loss`);
+  assert.equal(meta.routeType, "render");
+  assert.equal(meta.routerKind, "App Router");
+});
+
+test("Remediation 14: Fast Uptime Health Probe GET /api/health returns database connectivity and memory telemetry", async () => {
+  const response = await healthGet();
+  assert.equal(response.status, 200, "Health endpoint should return HTTP 200");
+  assert.equal(response.headers.get("Cache-Control"), "no-cache, no-store, must-revalidate");
+
+  const data = await response.json();
+  assert.equal(data.status, "ok");
+  assert.equal(typeof data.uptime, "number");
+  assert.ok(data.uptime >= 0);
+  assert.equal(data.database.status, "connected");
+  assert.equal(typeof data.database.latencyMs, "number");
+  assert.ok(data.database.latencyMs >= 0);
+  assert.equal(typeof data.memory.heapUsedMb, "number");
+  assert.equal(typeof data.memory.heapTotalMb, "number");
+  assert.equal(typeof data.memory.rssMb, "number");
+  assert.ok(data.memory.heapUsedMb > 0);
+});
+
+test("Remediation 15: Admin Diagnostic Trace Action triggers Sentry span and persists trace to system_logs", async () => {
+  const seeded = await seedDemoData();
+  const businessId = seeded.business.id;
+
+  const result = await emitDiagnosticTrace(businessId, seeded.admin);
+  assert.equal(result.success, true);
+  assert.ok(result.traceId, "Diagnostic trace ID should be generated");
+  assert.ok(result.spanId, "Diagnostic span ID should be generated");
+
+  const logs = getRecentLogs({ businessId, limit: 5 });
+  const diagLog = logs.find((l) => l.traceId === result.traceId);
+  assert.ok(diagLog, "System logs should contain the diagnostic trace log");
+  assert.equal(diagLog.level, "error");
+  assert.ok(diagLog.message.includes("Diagnostic test error triggered by admin"));
+});
+
+
 
 

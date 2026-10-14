@@ -131,3 +131,24 @@ export const userBusinessPreferences = sqliteTable(
     index("user_business_pref_business_idx").on(table.businessId),
   ],
 );
+
+export const systemLogs = sqliteTable(
+  "system_logs",
+  {
+    id: text("id").primaryKey(),
+    level: text("level", { enum: ["debug", "info", "warn", "error"] }).notNull(),
+    message: text("message").notNull(),
+    traceId: text("trace_id"),
+    spanId: text("span_id"),
+    businessId: text("business_id"),
+    userId: text("user_id"),
+    metadataJson: text("metadata_json"),
+    createdAt: text("created_at").notNull(),
+  },
+  (table) => [
+    index("system_logs_created_idx").on(table.createdAt),
+    index("system_logs_business_idx").on(table.businessId),
+    index("system_logs_level_idx").on(table.level),
+  ],
+);
+

@@ -108,4 +108,29 @@ export const systemMigrations = [
       `);
     },
   },
+  {
+    version: 4,
+    name: "phase_11_system_logs",
+    up(sqlite) {
+      sqlite.exec(`
+        CREATE TABLE IF NOT EXISTS "system_logs" (
+          "id" TEXT PRIMARY KEY NOT NULL,
+          "level" TEXT NOT NULL CHECK ("level" IN ('debug', 'info', 'warn', 'error')),
+          "message" TEXT NOT NULL,
+          "trace_id" TEXT,
+          "span_id" TEXT,
+          "business_id" TEXT,
+          "user_id" TEXT,
+          "metadata_json" TEXT,
+          "created_at" TEXT NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS "system_logs_created_idx"
+          ON "system_logs" ("created_at" DESC);
+        CREATE INDEX IF NOT EXISTS "system_logs_business_idx"
+          ON "system_logs" ("business_id");
+        CREATE INDEX IF NOT EXISTS "system_logs_level_idx"
+          ON "system_logs" ("level");
+      `);
+    },
+  },
 ] satisfies readonly SqliteMigration[];
