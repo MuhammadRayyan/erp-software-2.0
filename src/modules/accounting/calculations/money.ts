@@ -75,9 +75,12 @@ export function calculateTax(netMinor: number, rateBasisPoints: number) {
 }
 
 export function splitTaxInclusive(grossMinor: number, rateBasisPoints: number) {
-  if (!Number.isSafeInteger(grossMinor) || grossMinor <= 0) throw new Error("Gross amount is invalid.");
+  if (!Number.isSafeInteger(grossMinor) || grossMinor < 0) throw new Error("Gross amount is invalid.");
   if (!Number.isInteger(rateBasisPoints) || rateBasisPoints < 0 || rateBasisPoints > 10_000) {
     throw new Error("Tax rate is invalid.");
+  }
+  if (grossMinor === 0) {
+    return { netMinor: 0, taxMinor: 0 };
   }
   const divisor = BASIS_POINT_SCALE + BigInt(rateBasisPoints);
   const netMinor = toSafeNumber(

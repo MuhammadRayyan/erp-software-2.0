@@ -322,7 +322,7 @@ export function getProfitAndLoss(
       .prepare(`
         SELECT sil.sales_account_id as id, a.name, a.type, a.subtype,
                0 as debit_total,
-               ROUND(SUM(sil.net_amount_minor * CAST(ra.amount_minor AS REAL) / CAST(si.total_minor AS REAL))) as credit_total
+               ROUND(SUM(sil.net_amount_minor * CAST(COALESCE(ra.base_carrying_amount_released, ra.amount_minor) AS REAL) / CAST(si.total_minor AS REAL))) as credit_total
         FROM receipt_allocations ra
         INNER JOIN receipts r ON r.id = ra.receipt_id
           AND r.document_status = 'posted'
@@ -346,7 +346,7 @@ export function getProfitAndLoss(
     const billPaymentRows = sqlite
       .prepare(`
         SELECT pil.expense_account_id as id, a.name, a.type, a.subtype,
-               ROUND(SUM(pil.net_amount_minor * CAST(spa.amount_minor AS REAL) / CAST(pi.total_minor AS REAL))) as debit_total,
+               ROUND(SUM(pil.net_amount_minor * CAST(COALESCE(spa.base_carrying_amount_released, spa.amount_minor) AS REAL) / CAST(pi.total_minor AS REAL))) as debit_total,
                0 as credit_total
         FROM supplier_payment_allocations spa
         INNER JOIN supplier_payments sp ON sp.id = spa.payment_id

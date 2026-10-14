@@ -5,6 +5,38 @@ All notable changes since the original `erp-software-2.0-antigravity-edits` uplo
 Full per-task detail (file lists, verification transcripts, QA walkthroughs) lives in `worklog.md` at the repository root.
 
 
+## System Audit, Security & Business Logic Correctness Remediation (improvements-settings-v1)
+
+- **Database Concurrency & Busy Timeout (`system.ts`, `business.ts`)**:
+  - Configured `{ timeout: 5000 }` and `PRAGMA busy_timeout = 5000` on both system and business SQLite connections, eliminating transient lock errors during concurrent write transactions.
+
+- **Authentication & Rate Limiting Hardening (`actions.ts`)**:
+  - Neutralized `reportFailedLogin()` and `clearLoginAttempts()` to safe no-ops, ensuring brute-force rate limit tracking is strictly server-authoritative via Better-Auth hooks on `/sign-in/email`.
+  - Standardized client IP resolution to extract the rightmost entry of `x-forwarded-for` (consistent with `auth.ts`), closing header spoofing vectors.
+
+- **Document Emailing Object-Level Authorization (`email/actions.ts`)**:
+  - Added module resolution via `getDocumentPdfModule(documentType)` in `sendDocumentEmailAction`.
+  - Enforced `requireApiAuth` module checks, preventing unauthorized cross-module document email dispatch.
+
+- **Debit Notes Module Alignment & Broken Routing (`debit-notes/actions.ts`, `document-pdf-access.ts`)**:
+  - Corrected `requireModule` calls from `"sales"` to `"purchases"` across all debit note server actions.
+  - Fixed redirect and revalidation routes from non-existent `/sales/debit-notes` to `/purchases/debit-notes`.
+  - Added `"debit-note": "purchases"` to `documentModules` mapping, enabling debit note PDF generation.
+  - Standardized PDF API route to return `authError` directly.
+
+- **Cash-Basis Multi-Currency P&L Integrity (`report-service.ts`)**:
+  - Updated cash-basis revenue and expense queries to multiply line proportions by `COALESCE(ra.base_carrying_amount_released, ra.amount_minor)` and `COALESCE(spa.base_carrying_amount_released, spa.amount_minor)` rather than nominal invoice currency, ensuring accurate base-currency reporting.
+
+- **Settlement Bank Reconciliation Guard (`settlement-service.ts`)**:
+  - Fixed party type ternary check in `voidSettlement` from `"supplierPayment"` to snake_case `"supplier_payment"`.
+  - Prevents voiding of supplier payments reconciled in completed bank reconciliations.
+
+- **Zero-Price / 100% Discount Tax-Inclusive Line Resilience (`money.ts`)**:
+  - Allowed `grossMinor === 0` in `splitTaxInclusive()`, returning `{ netMinor: 0, taxMinor: 0 }` without error.
+
+- **Automated Regression Suite (`tests/remediation-verification.test.ts`)**:
+  - Added comprehensive test suite verifying busy timeout pragma, zero tax-inclusive splitting, debit note PDF access & generation, supplier payment bank reconciliation void guard, and cash-basis multi-currency reporting. All 100 tests pass.
+
 ## Manager.io & Modern ERP Feature Suite (improvements-settings-v1)
 
 - **Migration 27 (`manager_features_lock_uom_terms_email`)**:

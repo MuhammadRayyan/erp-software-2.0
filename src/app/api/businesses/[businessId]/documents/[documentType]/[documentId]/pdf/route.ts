@@ -1,4 +1,4 @@
-﻿import { NextResponse } from "next/server";
+import { NextResponse } from "next/server";
 import { requireApiAuth } from "@/core/auth/api-auth";
 import { getDocumentPdfModule } from "@/core/permissions/document-pdf-access";
 import { generateDocumentPdf } from "@/modules/document-templates/pdf-service";
@@ -18,7 +18,7 @@ export async function GET(
 
   const { session, access, error: authError } = await requireApiAuth(request, { businessId, module: requiredModule });
   if (authError || !session || !access) {
-    return NextResponse.json({ error: authError || "Unauthorized" }, { status: 401 });
+    return authError ?? NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
   try {

@@ -143,7 +143,7 @@ export function voidSettlement(
   const statementLine = sqlite.prepare(`
     SELECT id FROM bank_statement_lines
     WHERE matched_source_type = ? AND matched_source_id = ?
-  `).get(config.partyType === "customer" ? "receipt" : "supplierPayment", paymentId) as any;
+  `).get(config.partyType === "customer" ? "receipt" : "supplier_payment", paymentId) as any;
 
   if (statementLine && sqlite.prepare(`
     SELECT 1 FROM bank_reconciliation_items bri

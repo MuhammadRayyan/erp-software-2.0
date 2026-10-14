@@ -10,6 +10,7 @@ const documentModules = {
   "purchase-quote": "purchases",
   "purchase-order": "purchases",
   "purchase-invoice": "purchases",
+  "debit-note": "purchases",
   "goods-receipt": "inventory",
 } as const satisfies Record<string, ModuleKey>;
 

@@ -2,6 +2,7 @@
 
 import { z } from "zod";
 import { requireApiAuth } from "@/core/auth/api-auth";
+import { getDocumentPdfModule } from "@/core/permissions/document-pdf-access";
 import { defaultSender } from "./email-template";
 import { parseRecipientList, sendEmail } from "./email-service";
 import { generateDocumentPdf } from "@/modules/document-templates/pdf-service";
@@ -48,12 +49,19 @@ export async function sendDocumentEmailAction(
   documentNumber: string,
   input: unknown,
 ): Promise<SendDocumentEmailResult> {
-  // Use requireApiAuth to easily resolve access for any document type without manually mapping
-  // the documentType to a specific module name (e.g., "sales" vs "purchases").
+  const requiredModule = getDocumentPdfModule(documentType);
+  if (!requiredModule) {
+    return { ok: false, error: "Unsupported document type" };
+  }
+
+  // Use requireApiAuth to resolve and verify access for the specific document's module
   // Since server actions run on POST, we pass a dummy Request object.
   const req = new Request("http://localhost/api/dummy", { method: "POST" });
-  const { session, access } = await requireApiAuth(req, { businessId });
-  if (!session || !access) {
+  const { session, access, error: authError } = await requireApiAuth(req, {
+    businessId,
+    module: requiredModule,
+  });
+  if (authError || !session || !access) {
     return { ok: false, error: "Unauthorized" };
   }
 

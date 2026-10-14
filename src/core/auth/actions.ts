@@ -6,9 +6,12 @@ import { checkRateLimit, recordFailedAttempt, clearAttempts } from "./rate-limit
 async function getClientIp(): Promise<string> {
   const reqHeaders = await headers();
   const forwarded = reqHeaders.get("x-forwarded-for");
-  if (forwarded) return forwarded.split(",")[0].trim();
+  if (forwarded) {
+    const parts = forwarded.split(",").map((p) => p.trim()).filter(Boolean);
+    if (parts.length > 0) return parts[parts.length - 1];
+  }
   const realIp = reqHeaders.get("x-real-ip");
-  if (realIp) return realIp;
+  if (realIp?.trim()) return realIp.trim();
   return "unknown";
 }
 
@@ -19,18 +22,20 @@ export async function preLoginCheck() {
     return {
       allowed: false,
       error: "Too many login attempts. Try again later.",
-      retryAfter: Math.ceil((status.resetAt - Date.now()) / 1000)
+      retryAfter: Math.ceil((status.resetAt - Date.now()) / 1000),
     };
   }
   return { allowed: true };
 }
 
+/**
+ * Note: Failed attempts and clears are handled authoritatively by server-side Better-Auth hooks in auth.ts.
+ * These actions are kept as safe no-ops to prevent unauthenticated client-side manipulation of rate limits.
+ */
 export async function reportFailedLogin() {
-  const ip = await getClientIp();
-  recordFailedAttempt(ip);
+  // Handled authoritatively by auth hooks
 }
 
 export async function clearLoginAttempts() {
-  const ip = await getClientIp();
-  clearAttempts(ip);
+  // Handled authoritatively by auth hooks
 }

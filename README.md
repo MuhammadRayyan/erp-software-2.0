@@ -2,7 +2,7 @@
 
 A compact, Manager.io-inspired multi-business accounting/ERP application for local and self-hosted use.
 
-**Current release: v2.5.0** — Comprehensive Manager.io & Modern ERP Feature Suite:
+**Current release: v2.5.1** — Hardened Core, Concurrency & Manager.io Feature Suite:
 - **Global Financial Lock Date (Period Closing)**: Hard period closure enforcement preventing backdated postings or edits in closed periods.
 - **Universal Clickable Balance Drill-Down**: Interactive drill-down from Chart of Accounts, Trial Balance, Balance Sheet, and Profit & Loss directly into the General Ledger.
 - **Cash Basis vs. Accrual Basis Toggle in Profit & Loss**: Dynamic cash-allocation reporting engine recognizing revenue and expenses upon realized settlement vs. invoice accrual.

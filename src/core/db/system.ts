@@ -11,8 +11,9 @@ let systemSqlite: Database.Database | undefined;
 export function getSystemSqlite() {
   if (!systemSqlite) {
     ensureDataDirectories();
-    systemSqlite = new Database(SYSTEM_DB_PATH);
+    systemSqlite = new Database(SYSTEM_DB_PATH, { timeout: 5000 });
     systemSqlite.pragma("journal_mode = WAL");
+    systemSqlite.pragma("busy_timeout = 5000");
     systemSqlite.pragma("foreign_keys = ON");
     migrateSystemDatabase(systemSqlite);
   }

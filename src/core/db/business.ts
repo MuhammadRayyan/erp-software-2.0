@@ -71,8 +71,9 @@ export function openBusinessDatabase(directoryKey: string) {
     evictIfNeeded();
     const paths = getBusinessPaths(directoryKey);
     mkdirSync(paths.attachments, { recursive: true });
-    const sqlite = new Database(paths.database);
+    const sqlite = new Database(paths.database, { timeout: 5000 });
     sqlite.pragma("journal_mode = WAL");
+    sqlite.pragma("busy_timeout = 5000");
     sqlite.pragma("foreign_keys = ON");
     migrateBusinessDatabase(sqlite, `business database ${directoryKey}`);
     const db = drizzle(sqlite, { schema });
