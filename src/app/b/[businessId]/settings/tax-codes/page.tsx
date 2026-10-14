@@ -1,6 +1,4 @@
 import { SettingsShell } from "@/components/settings-shell";
-import Link from "next/link";
-import { ArrowLeft } from "lucide-react";
 import { requireModule } from "@/core/permissions/require-module";
 import { TaxCodeManager } from "@/modules/accounting/components/tax-code-manager";
 import { listAccounts } from "@/modules/accounting/services/account-service";

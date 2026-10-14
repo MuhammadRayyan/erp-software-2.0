@@ -4,7 +4,7 @@
 import { AlignJustify, LayoutList, Rows2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
-import { useTableDensity, type TableDensity } from "@/components/use-table-density";
+import { useTableDensity } from "@/components/use-table-density";
 
 export function DensityToggle({ businessId }: { businessId?: string }) {
   const { density, setDensity } = useTableDensity(businessId);

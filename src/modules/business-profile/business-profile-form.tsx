@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Building2, Globe, Mail, MapPin, Phone, ShieldCheck, Image as ImageIcon, LoaderCircle } from "lucide-react";
+import { Building2, Mail, MapPin, Image as ImageIcon, LoaderCircle } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -48,7 +48,6 @@ export function BusinessProfileForm({
     logoUrl: initial.logoUrl ?? "",
   });
 
-  const [errors, setErrors] = useState<Record<string, string[]>>({});
   const [serverError, setServerError] = useState("");
   const [pending, setPending] = useState(false);
 
@@ -58,13 +57,11 @@ export function BusinessProfileForm({
 
     setPending(true);
     setServerError("");
-    setErrors({});
 
     const res = await updateBusinessProfileAction(businessId, values);
     setPending(false);
 
     if (res.error) {
-      if (res.fieldErrors) setErrors(res.fieldErrors);
       setServerError(res.error);
       toast.error(res.error);
     } else {

@@ -26,7 +26,6 @@ export function NumberingForm({ businessId, initial }: { businessId: string; ini
     toast.success("Document numbering updated.");
   }
 
-  const padding = Number(values.padding || 0);
   const groups = [
     {
       title: "Sales & Customers",

@@ -1,3 +1,4 @@
+/* eslint-disable jsx-a11y/alt-text */
 import { Document, Page, Text, View, Image } from "@react-pdf/renderer";
 import { classicStyles as styles, colors, getLogoDimensions, getFontScale } from "./primitives";
 import type { TemplateSettings } from "../template-settings";
@@ -38,7 +39,6 @@ export function ClassicDocumentTemplate({ data, settings, variant }: { data: Doc
           <View style={{ flex: 1 }}>
             {activeLogo && (
               <View style={{ marginBottom: 8, alignItems: settings.logoPosition === "center" ? "center" : settings.logoPosition === "right" ? "flex-end" : "flex-start" }}>
-                {/* eslint-disable-next-line jsx-a11y/alt-text */}
                 <Image src={activeLogo} style={{ width: logoDims.width, height: logoDims.height, objectFit: "contain" }} />
               </View>
             )}
@@ -200,7 +200,6 @@ export function ClassicDocumentTemplate({ data, settings, variant }: { data: Doc
           <View style={{ marginTop: 20, flexDirection: "row", justifyContent: "flex-end" }} wrap={false}>
             <View style={{ alignItems: "center", minWidth: 160, borderWidth: 1, borderColor: colors.borderStrong, padding: 8, backgroundColor: colors.surface }}>
               {settings.signatureImageUrl && (
-                // eslint-disable-next-line jsx-a11y/alt-text
                 <Image src={settings.signatureImageUrl} style={{ width: 120, height: 38, objectFit: "contain", marginBottom: 4 }} />
               )}
               <View style={{ width: 140, borderBottomWidth: 1, borderBottomColor: colors.borderStrong, marginBottom: 4, height: settings.signatureImageUrl ? 0 : 30 }} />

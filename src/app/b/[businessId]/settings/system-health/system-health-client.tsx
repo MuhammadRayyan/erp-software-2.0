@@ -5,22 +5,17 @@ import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import {
   Activity,
-  AlertCircle,
-  AlertTriangle,
   Check,
   CheckCircle2,
-  Clock,
   Copy,
   Cpu,
   Database,
   HardDrive,
-  Info,
   Layers,
   Radio,
   RefreshCw,
   Search,
   Sparkles,
-  Terminal,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";

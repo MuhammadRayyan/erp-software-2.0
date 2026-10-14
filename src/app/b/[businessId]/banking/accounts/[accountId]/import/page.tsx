@@ -1,4 +1,3 @@
-import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requireModule } from "@/core/permissions/require-module";
 import { getBankAccount } from "@/modules/banking/bank-account-service";

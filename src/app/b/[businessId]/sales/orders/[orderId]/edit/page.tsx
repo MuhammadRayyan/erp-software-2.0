@@ -6,7 +6,6 @@ import { quantityMicrosToInput } from "@/modules/accounting/calculations/money";
 import { getSalesAccountOptions } from "@/modules/accounting/services/account-service";
 import { getActiveTaxCodes } from "@/modules/accounting/services/tax-code-service";
 import { listCustomers } from "@/modules/customers/customer-service";
-import { getCustomFieldValuesForEntities, listCustomFieldDefinitions } from "@/modules/custom-fields/custom-field-service";
 import { listInventoryItemOptions } from "@/modules/inventory/inventory-item-service";
 import { listProjectOptions } from "@/modules/projects/project-service";
 import { SalesOrderForm } from "@/modules/sales-orders/sales-order-form";

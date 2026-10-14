@@ -1,4 +1,3 @@
-import Link from "next/link";
 import { requireModule } from "@/core/permissions/require-module";
 import { InventoryLocationForm } from "@/modules/inventory/inventory-location-form";
 import { BackLink } from "@/components/back-link";

@@ -1,5 +1,4 @@
 import { BackLink } from "@/components/back-link";
-import { ChevronRight } from "lucide-react";
 import { requireModule } from "@/core/permissions/require-module";
 import { minorToInput } from "@/modules/accounting/calculations/money";
 import { getAccountingSettings } from "@/modules/accounting/services/accounting-settings-service";

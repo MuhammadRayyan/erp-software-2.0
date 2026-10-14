@@ -14,10 +14,10 @@ const { seedDemoData } = await import("../src/core/db/seed");
 const { getBusinessDb } = await import("../src/core/db/business");
 
 // Entities
-const { createCustomer, getCustomer } = await import("../src/modules/customers/customer-service");
-const { createSupplier, getSupplier } = await import("../src/modules/suppliers/supplier-service");
-const { createProject, getProject } = await import("../src/modules/projects/project-service");
-const { saveInventoryItem, getInventoryItem } = await import("../src/modules/inventory/inventory-item-service");
+const { createCustomer } = await import("../src/modules/customers/customer-service");
+const { createSupplier } = await import("../src/modules/suppliers/supplier-service");
+const { createProject } = await import("../src/modules/projects/project-service");
+const { saveInventoryItem } = await import("../src/modules/inventory/inventory-item-service");
 const { saveInventoryLocation } = await import("../src/modules/inventory/inventory-location-service");
 
 // Sales Cycle
@@ -25,31 +25,28 @@ const {
   saveSalesQuote,
   getSalesQuote,
   createSalesQuoteRevision,
-  listSalesQuoteRevisions,
 } = await import("../src/modules/sales-quotes/quote-service");
 const { saveSalesOrder, getSalesOrder } = await import("../src/modules/sales-orders/sales-order-service");
 const { createInvoice, getInvoice } = await import("../src/modules/sales-invoices/invoice-service");
 const { createReceipt } = await import("../src/modules/receipts/receipt-service");
-const { saveCreditNote, getCreditNote } = await import("../src/modules/sales-credit-notes/credit-note-service");
+const { saveCreditNote } = await import("../src/modules/sales-credit-notes/credit-note-service");
 
 // Purchases Cycle
 const {
   savePurchaseQuote,
   getPurchaseQuote,
   createPurchaseQuoteRevision,
-  listPurchaseQuoteRevisions,
 } = await import("../src/modules/purchase-quotes/purchase-quote-service");
 const { savePurchaseOrder, getPurchaseOrder } = await import("../src/modules/purchase-orders/purchase-order-service");
 const { savePurchaseInvoice, getPurchaseInvoice } = await import("../src/modules/purchase-invoices/purchase-invoice-service");
 const { createSupplierPayment } = await import("../src/modules/supplier-payments/supplier-payment-service");
-const { saveDebitNote, getDebitNote } = await import("../src/modules/debit-notes/debit-note-service");
 
 // Inventory Operations
 const { saveGoodsReceipt } = await import("../src/modules/inventory/goods-receipt-service");
 const { getStockOnHandReport } = await import("../src/modules/inventory/inventory-report-service");
 
 // Reports & VAT
-const { getGeneralLedger, getTrialBalance } = await import("../src/modules/reports/report-service");
+const { getTrialBalance } = await import("../src/modules/reports/report-service");
 const { getVatTransactionDetail } = await import("../src/modules/tax/vat-report-service");
 
 // Custom Fields & Form Defaults

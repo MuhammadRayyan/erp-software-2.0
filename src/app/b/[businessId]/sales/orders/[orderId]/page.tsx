@@ -9,7 +9,6 @@ import { getCustomFieldValuesForEntities, listCustomFieldDefinitions } from "@/m
 import { formatCustomFieldValue } from "@/modules/custom-fields/custom-field-display";
 import { getSalesOrder, listSalesOrderRevisions } from "@/modules/sales-orders/sales-order-service";
 import { StatusBadge } from "@/components/status-badge";
-import { PaymentStatusBadge } from "@/modules/sales-invoices/invoice-status";
 import { SalesOrderViewActions } from "@/modules/sales-orders/sales-order-view-actions";
 import { OrderRevisionSwitcher } from "@/modules/sales-orders/order-revision-switcher";
 import { ProjectLinks } from "@/modules/projects/project-links";

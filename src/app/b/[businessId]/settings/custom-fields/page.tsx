@@ -1,6 +1,4 @@
 import { SettingsShell } from "@/components/settings-shell";
-import Link from "next/link";
-import { ArrowLeft } from "lucide-react";
 import { requireModule } from "@/core/permissions/require-module";
 import { CustomFieldsManager } from "@/modules/custom-fields/custom-field-form";
 import { listCustomFieldDefinitions } from "@/modules/custom-fields/custom-field-service";

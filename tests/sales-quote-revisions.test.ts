@@ -18,7 +18,6 @@ const {
   getSalesQuote,
   createSalesQuoteRevision,
   listSalesQuoteRevisions,
-  listSalesQuotes,
 } = await import("../src/modules/sales-quotes/quote-service");
 const { saveSalesOrder, getSalesOrder } = await import("../src/modules/sales-orders/sales-order-service");
 const { quantityMicrosToInput } = await import("../src/modules/accounting/calculations/money");

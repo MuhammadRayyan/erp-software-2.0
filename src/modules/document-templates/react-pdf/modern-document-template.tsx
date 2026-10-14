@@ -1,3 +1,4 @@
+/* eslint-disable jsx-a11y/alt-text */
 import { Document, Page, Text, View, StyleSheet, Image } from "@react-pdf/renderer";
 import { sharedStyles, colors, getLogoDimensions, getFontScale } from "./primitives";
 import type { TemplateSettings } from "../template-settings";
@@ -89,7 +90,6 @@ export function ModernDocumentTemplate({ data, settings, variant }: { data: Docu
           <View style={{ flex: 1 }}>
             {activeLogo && (
               <View style={{ marginBottom: 6, alignItems: settings.logoPosition === "center" ? "center" : settings.logoPosition === "right" ? "flex-end" : "flex-start" }}>
-                {/* eslint-disable-next-line jsx-a11y/alt-text */}
                 <Image src={activeLogo} style={{ width: logoDims.width, height: logoDims.height, objectFit: "contain" }} />
               </View>
             )}
@@ -225,7 +225,6 @@ export function ModernDocumentTemplate({ data, settings, variant }: { data: Docu
           <View style={{ marginTop: 20, flexDirection: "row", justifyContent: "flex-end" }} wrap={false}>
             <View style={{ alignItems: "center", minWidth: 160 }}>
               {settings.signatureImageUrl && (
-                // eslint-disable-next-line jsx-a11y/alt-text
                 <Image src={settings.signatureImageUrl} style={{ width: 120, height: 38, objectFit: "contain", marginBottom: 4 }} />
               )}
               <View style={{ width: 160, borderBottomWidth: 1, borderBottomColor: colors.borderStrong, marginBottom: 4, height: settings.signatureImageUrl ? 0 : 30 }} />

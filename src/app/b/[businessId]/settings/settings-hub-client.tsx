@@ -23,7 +23,6 @@ import {
   Ruler,
   Scale,
   CalendarClock,
-  BookOpen,
   Activity,
 } from "lucide-react";
 

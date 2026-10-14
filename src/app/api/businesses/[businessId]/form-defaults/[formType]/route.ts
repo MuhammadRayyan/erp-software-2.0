@@ -2,8 +2,6 @@ export const runtime = "nodejs";
 import { NextResponse } from "next/server";
 import { getBusinessDb } from "@/core/db/business";
 import { formDefaults } from "@/core/db/business-schema";
-import { requireUser } from "@/core/auth/session";
-import { getBusinessForUser } from "@/core/businesses/business-service";
 import { eq } from "drizzle-orm";
 import { randomUUID } from "crypto";
 

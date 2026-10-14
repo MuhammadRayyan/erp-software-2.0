@@ -13,7 +13,6 @@ import { SalesQuoteViewActions } from "@/modules/sales-quotes/quote-view-actions
 import { QuoteRevisionSwitcher } from "@/modules/sales-quotes/quote-revision-switcher";
 import { ProjectLinks } from "@/modules/projects/project-links";
 import { buildDocumentEmailContext, buildDocumentEmailDefaults } from "@/modules/email/email-defaults";
-import { emirateLabels, type Emirate } from "@/modules/tax/uae-vat-config";
 import { DocumentFlowStepper, type FlowStep } from "@/components/documents/document-flow-stepper";
 import { BackLink } from "@/components/back-link";
 

@@ -1,4 +1,3 @@
-import Link from "next/link";
 import { requireModule } from "@/core/permissions/require-module";
 import { getAssetAccountOptions, getExpenseAccountOptions, getSalesAccountOptions } from "@/modules/accounting/services/account-service";
 import { getAccountingSettings } from "@/modules/accounting/services/accounting-settings-service";

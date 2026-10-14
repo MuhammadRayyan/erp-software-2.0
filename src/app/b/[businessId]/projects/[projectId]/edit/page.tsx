@@ -1,4 +1,3 @@
-import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requireModule } from "@/core/permissions/require-module";
 import { listCustomers } from "@/modules/customers/customer-service";

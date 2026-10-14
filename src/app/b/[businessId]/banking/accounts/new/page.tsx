@@ -1,4 +1,3 @@
-import Link from "next/link";
 import { requireModule } from "@/core/permissions/require-module";
 import { BankAccountForm } from "@/modules/banking/bank-account-form";
 import { listBankLedgerOptions } from "@/modules/banking/bank-account-service";

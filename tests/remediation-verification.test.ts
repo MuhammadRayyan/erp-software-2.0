@@ -12,7 +12,7 @@ Object.assign(process.env, {
   NODE_ENV: "test",
 });
 
-const { getSystemSqlite, getSystemDb } = await import("../src/core/db/system");
+const { getSystemSqlite } = await import("../src/core/db/system");
 const { getBusinessDb } = await import("../src/core/db/business");
 const { seedDemoData } = await import("../src/core/db/seed");
 const { splitTaxInclusive } = await import("../src/modules/accounting/calculations/money");
@@ -27,20 +27,19 @@ const { listSuppliers } = await import("../src/modules/suppliers/supplier-servic
 const { getActiveTaxCodes } = await import("../src/modules/accounting/services/tax-code-service");
 const { getAccountingSettings } = await import("../src/modules/accounting/services/accounting-settings-service");
 const { setFinancialLockDate } = await import("../src/modules/accounting/services/financial-lock-service");
-const { createBankTransfer, voidBankTransfer } = await import("../src/modules/banking/bank-transfer-service");
+const { createBankTransfer } = await import("../src/modules/banking/bank-transfer-service");
 const { listBankAccounts } = await import("../src/modules/banking/bank-account-service");
-const { saveBankTransaction, voidBankTransaction } = await import("../src/modules/banking/bank-transaction-service");
-const { saveStockAdjustment, voidStockAdjustment, deleteStockAdjustment } = await import("../src/modules/inventory/stock-adjustment-service");
+const { saveBankTransaction } = await import("../src/modules/banking/bank-transaction-service");
+const { saveStockAdjustment } = await import("../src/modules/inventory/stock-adjustment-service");
 const { exportBusinessBackup, importBusinessBackup } = await import("../src/core/businesses/backup-service");
 const { logger, getRecentLogs, getTraceContext } = await import("../src/core/logger");
 const { onRequestError } = await import("../src/instrumentation");
 const { GET: healthGet } = await import("../src/app/api/health/route");
-const { triggerDiagnosticTraceAction, emitDiagnosticTrace } = await import("../src/app/b/[businessId]/settings/system-health/actions");
+const { emitDiagnosticTrace } = await import("../src/app/b/[businessId]/settings/system-health/actions");
 const { createInvoice, getInvoice } = await import("../src/modules/sales-invoices/invoice-service");
 const { saveSalesQuote, getSalesQuote } = await import("../src/modules/sales-quotes/quote-service");
 const { saveSalesOrder, getSalesOrder } = await import("../src/modules/sales-orders/sales-order-service");
 const { savePurchaseOrder, getPurchaseOrder } = await import("../src/modules/purchase-orders/purchase-order-service");
-const { saveCreditNote, getCreditNote } = await import("../src/modules/sales-credit-notes/credit-note-service");
 const { listCustomers } = await import("../src/modules/customers/customer-service");
 const JSZip = (await import("jszip")).default;
 
@@ -204,7 +203,6 @@ test("Remediation 5: Cash-Basis P&L uses base carrying amount for multi-currency
   const seeded = await seedDemoData();
   const businessId = seeded.business.id;
   const adminId = seeded.admin.id;
-  const { sqlite } = getBusinessDb(businessId, adminId);
 
   // Generate Cash-basis P&L report
   const cashPnl = getProfitAndLoss(businessId, adminId, "2026-01-01", "2026-12-31", "cash");
@@ -714,7 +712,7 @@ test("Remediation 17: Batch line inserts across document services insert lines a
   const quoteId = saveSalesQuote(businessId, adminId, {
     customerId: customer.id,
     date: "2026-07-15",
-    expiryDate: "2026-08-15",
+    expectedDate: "2026-08-15",
     reference: "QUOTE-BATCH-001",
     currencyCode: "AED",
     exchangeRateToBase: "1",
@@ -735,7 +733,7 @@ test("Remediation 17: Batch line inserts across document services insert lines a
   const salesOrderId = saveSalesOrder(businessId, adminId, {
     customerId: customer.id,
     date: "2026-07-15",
-    expectedDeliveryDate: "2026-08-15",
+    expectedDate: "2026-08-15",
     reference: "SO-BATCH-001",
     currencyCode: "AED",
     exchangeRateToBase: "1",
@@ -756,7 +754,7 @@ test("Remediation 17: Batch line inserts across document services insert lines a
   const poId = savePurchaseOrder(businessId, adminId, {
     supplierId: supplier.id,
     date: "2026-07-15",
-    expectedDeliveryDate: "2026-08-15",
+    expectedDate: "2026-08-15",
     reference: "PO-BATCH-001",
     currencyCode: "AED",
     exchangeRateToBase: "1",

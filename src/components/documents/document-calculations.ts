@@ -85,7 +85,8 @@ export function useDocumentTotals<TFieldValues extends FieldValues = any>({
   taxCodes: DocumentLineTaxOption[];
   minorUnit: number;
 }) {
-  const lines = (useWatch({ control, name: "lines" as any }) ?? []) as any[];
+  const watchedLines = useWatch({ control, name: "lines" as any });
+  const lines = useMemo(() => (watchedLines ?? []) as any[], [watchedLines]);
   const amountsIncludeTax =
     (useWatch({ control, name: "amountsIncludeTax" as any }) as boolean) ?? false;
 

@@ -1,4 +1,3 @@
-import Link from "next/link";
 import { requireModule } from "@/core/permissions/require-module";
 import { listCustomFieldDefinitions } from "@/modules/custom-fields/custom-field-service";
 import { SupplierForm } from "@/modules/suppliers/supplier-form";

@@ -1,5 +1,4 @@
 import Link from "next/link";
-import { } from "lucide-react";
 import { notFound } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { requireModule } from "@/core/permissions/require-module";
@@ -7,7 +6,6 @@ import { quantityMicrosToInput } from "@/modules/accounting/calculations/money";
 import { getSalesAccountOptions } from "@/modules/accounting/services/account-service";
 import { getActiveTaxCodes } from "@/modules/accounting/services/tax-code-service";
 import { listCustomers } from "@/modules/customers/customer-service";
-import { getCustomFieldValuesForEntities, listCustomFieldDefinitions } from "@/modules/custom-fields/custom-field-service";
 import { listInventoryItemOptions } from "@/modules/inventory/inventory-item-service";
 import { listProjectOptions } from "@/modules/projects/project-service";
 import { SalesQuoteForm } from "@/modules/sales-quotes/quote-form";
@@ -31,10 +29,6 @@ export default async function EditQuotePage({ params }: { params: Promise<{ busi
   const items = listInventoryItemOptions(businessId, user.id);
   const currencySettings = getCurrencySettings(businessId, user.id);
   const documentMinorUnit = currencySettings.currencies.find((entry) => entry.code === record.quote.currencyCode)?.minor_unit ?? 2;
-  const customFields = listCustomFieldDefinitions(businessId, user.id, "sales_quote").map(({ id, name, fieldType, selectOptions, isRequired }) => ({ id, name, fieldType, selectOptions, isRequired }));
-  const customFieldValues = customFields.length
-    ? getCustomFieldValuesForEntities(businessId, user.id, "sales_quote", [quoteId]).get(quoteId) ?? {}
-    : {};
   return <div className="page-container">
     <BackLink href={`/b/${businessId}/sales/quotes/${quoteId}`}>{record.quote.quoteNumber}</BackLink>
     <div className="mb-7"><h1 className="page-title">Edit Sales Quote</h1><p className="page-description">{["sent", "accepted"].includes(record.quote.documentStatus) ? "Changes will be saved as a new revision." : "Update the draft, or issue it when ready."}</p></div>

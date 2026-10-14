@@ -1,9 +1,8 @@
-﻿import assert from "node:assert/strict";
+import assert from "node:assert/strict";
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
-import Database from "better-sqlite3";
 
 Object.assign(process.env, {
   ERP_DATA_DIR: mkdtempSync(path.join(tmpdir(), "modern-erp-phase-10-")),
@@ -13,10 +12,6 @@ Object.assign(process.env, {
 
 const { seedDemoData } = await import("../src/core/db/seed");
 const { getBusinessDb } = await import("../src/core/db/business");
-const { createBusiness } = await import("../src/core/businesses/business-service");
-const { businessMigrations, migrateBusinessDatabase } = await import(
-  "../src/core/db/business-migrations"
-);
 const { saveSalesQuote: createQuote, getSalesQuote: getQuote } = await import(
   "../src/modules/sales-quotes/quote-service"
 );

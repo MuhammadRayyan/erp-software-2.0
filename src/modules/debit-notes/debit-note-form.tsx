@@ -15,7 +15,6 @@ import {
   type DebitNoteInput,
 } from "./debit-note-input";
 import type { DebitNoteStatus } from "./debit-note-service";
-import { emirateLabels, emirates } from "@/modules/tax/uae-vat-config";
 import { DocumentFormFooter } from "@/components/document-form-footer";
 import { SelectNative } from "@/components/ui/select-native";
 import { DocumentLineTable, useDocumentTotals } from "@/components/documents";

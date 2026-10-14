@@ -1,6 +1,5 @@
 import { FileText, ShoppingCart, ReceiptText, Truck, FileInput, Package, Banknote, Scale, ContactRound } from "lucide-react";
 import Link from "next/link";
-import { formatMoney } from "@/core/format";
 
 export function ManagerSummary({ businessId, counts }: { businessId: string, counts: any }) {
   const sections = [

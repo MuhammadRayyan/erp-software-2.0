@@ -16,7 +16,6 @@ const { createSupplier } = await import("../src/modules/suppliers/supplier-servi
 const {
   savePurchaseQuote,
   getPurchaseQuote,
-  listPurchaseQuotes,
   createPurchaseQuoteRevision,
   listPurchaseQuoteRevisions,
 } = await import("../src/modules/purchase-quotes/purchase-quote-service");

@@ -1,9 +1,7 @@
-import Link from "next/link";
 import { requireModule } from "@/core/permissions/require-module";
 import { getSalesAccountOptions } from "@/modules/accounting/services/account-service";
 import { getActiveTaxCodes } from "@/modules/accounting/services/tax-code-service";
 import { listCustomers } from "@/modules/customers/customer-service";
-import { listCustomFieldDefinitions } from "@/modules/custom-fields/custom-field-service";
 import { listProjectOptions } from "@/modules/projects/project-service";
 import { listInventoryItemOptions } from "@/modules/inventory/inventory-item-service";
 import { getCurrencySettings } from "@/modules/currency/exchange-rate";
@@ -33,7 +31,6 @@ export default async function NewOrderPage({
   const projects = listProjectOptions(businessId, user.id);
   const items = listInventoryItemOptions(businessId, user.id);
   const currencySettings = getCurrencySettings(businessId, user.id);
-  const customFields = listCustomFieldDefinitions(businessId, user.id, "sales_order").map(({ id, name, fieldType, selectOptions, isRequired }) => ({ id, name, fieldType, selectOptions, isRequired }));
 
   const today = new Date().toISOString().slice(0, 10);
   const defaultTax =

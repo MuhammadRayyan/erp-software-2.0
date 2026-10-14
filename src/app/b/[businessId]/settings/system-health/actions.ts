@@ -4,7 +4,7 @@ import * as Sentry from "@sentry/nextjs";
 import { requireModule } from "@/core/permissions/require-module";
 import { logger } from "@/core/logger";
 
-export function emitDiagnosticTrace(
+export async function emitDiagnosticTrace(
   businessId: string,
   user: { id: string; name: string; email: string },
 ) {
@@ -13,7 +13,7 @@ export function emitDiagnosticTrace(
       name: "admin.diagnostic.trace",
       op: "diagnostic.test",
     },
-    (span) => {
+    async (span) => {
       const spanContext = span?.spanContext();
       const traceId = spanContext?.traceId;
       const spanId = spanContext?.spanId;

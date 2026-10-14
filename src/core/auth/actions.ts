@@ -1,7 +1,7 @@
 "use server";
 
 import { headers } from "next/headers";
-import { checkRateLimit, recordFailedAttempt, clearAttempts } from "./rate-limiter";
+import { checkRateLimit } from "./rate-limiter";
 
 async function getClientIp(): Promise<string> {
   const reqHeaders = await headers();

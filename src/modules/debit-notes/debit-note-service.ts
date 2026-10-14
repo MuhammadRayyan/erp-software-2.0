@@ -5,7 +5,7 @@ import * as businessSchema from "@/core/db/business-schema";
 import { debitNotes, debitNoteLines } from "@/core/db/business-schema";
 import { getBusinessDb } from "@/core/db/business";
 import { DebitNoteInput } from "./debit-note-input";
-import { allocateNumber, NumberKind } from "@/modules/accounting/services/numbering-service";
+import { allocateNumber } from "@/modules/accounting/services/numbering-service";
 import { calculateLines, totalsForLines } from "@/modules/accounting/services/document-line-calculator";
 import { resolveRateSnapshot, storedRateSnapshot } from "@/modules/currency/validation";
 import { convertDocumentLinesToBase } from "@/modules/currency/conversion";

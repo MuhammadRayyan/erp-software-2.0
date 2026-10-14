@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ArrowLeft, ChevronRight, FileText, ShoppingCart, ReceiptText, Truck, FileInput } from "lucide-react";
+import { ChevronRight, FileText, ShoppingCart, ReceiptText, Truck, FileInput } from "lucide-react";
 import { requireUser } from "@/core/auth/session";
 import { getBusinessForUser } from "@/core/businesses/business-service";
 

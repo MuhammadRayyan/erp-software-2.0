@@ -9,11 +9,6 @@ test.describe('Deep Banking Testing', () => {
 
   test('can perform a full banking workflow (accounts -> transfer -> receipt -> payment)', async ({ page }) => {
     test.setTimeout(120000); // 2 minutes timeout for this long workflow
-    const ts = Date.now();
-    const account1 = `Checking ${ts}`;
-    const account2 = `Savings ${ts}`;
-    const code1 = `CHK${ts.toString().slice(-4)}`;
-    const code2 = `SAV${ts.toString().slice(-4)}`;
 
     // Navigate to Banking
     await page.getByRole('link', { name: 'Bank Accounts', exact: true }).click();
