@@ -24,6 +24,7 @@ import {
   Scale,
   CalendarClock,
   Activity,
+  Wand2,
 } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
@@ -182,6 +183,13 @@ export function SettingsHubClient({
             icon: Percent,
             keywords: "tax codes rate percent vat output input standard zero exempt reverse",
           },
+          {
+            title: "Bank Rules & Categorization",
+            description: "Automate GL accounts, tax codes, and descriptions for recurring bank statement deposits and withdrawals.",
+            href: `/b/${businessId}/settings/bank-rules`,
+            icon: Wand2,
+            keywords: "bank rules auto categorization matching automatic statement line rules reconciliation manager import",
+          },
         ],
       },
       {
@@ -238,14 +246,14 @@ export function SettingsHubClient({
   return (
     <div className="space-y-6">
       {/* Top Organization Snapshot Banner */}
-      <div className="rounded-lg border border-border bg-surface-raised p-5 shadow-xs">
+      <div className="rounded-lg border border-border bg-surface-raised p-4 shadow-xs">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex items-center gap-3">
-            <div className="grid size-11 place-items-center rounded-lg bg-primary/10 text-primary font-bold text-base">
+            <div className="grid size-9 place-items-center rounded-lg bg-primary/10 text-primary font-bold text-sm">
               {(profile.tradingName || profile.legalName || "ERP").slice(0, 2).toUpperCase()}
             </div>
             <div>
-              <h2 className="text-base font-bold text-foreground">
+              <h2 className="text-sm font-bold text-foreground sm:text-base">
                 {profile.tradingName || profile.legalName || "Business Settings"}
               </h2>
               <p className="text-xs text-muted-foreground">
@@ -254,7 +262,7 @@ export function SettingsHubClient({
               </p>
             </div>
           </div>
-          <div className="flex flex-wrap items-center gap-2">
+          <div className="flex flex-wrap items-center gap-1.5">
             <Badge tone="info">Base: {profile.baseCurrency}</Badge>
             <Badge tone={vatRegistered ? "success" : "neutral"}>
               {vatRegistered ? `TRN: ${profile.taxId || "Registered"}` : "Non-VAT"}
@@ -266,13 +274,13 @@ export function SettingsHubClient({
 
       {/* Quick Search Bar */}
       <div className="relative">
-        <Search className="absolute left-3.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+        <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
         <input
           type="text"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
-          placeholder="Filter settings by keyword (e.g. TRN, logo, numbering, date format, VAT, theme, users)…"
-          className="h-10 w-full rounded-lg border border-border bg-surface-raised pl-9 pr-9 text-sm text-foreground placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          placeholder="Filter settings by keyword (e.g. TRN, logo, bank rules, numbering, date format, VAT, theme, users)…"
+          className="h-9 w-full rounded-lg border border-border bg-surface-raised pl-9 pr-9 text-xs sm:text-sm text-foreground placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
         />
         {query && (
           <button
@@ -299,7 +307,7 @@ export function SettingsHubClient({
           </button>
         </div>
       ) : (
-        <div className="space-y-8">
+        <div className="space-y-6 sm:space-y-7">
           {query.trim() && (
             <p className="text-xs text-muted-foreground">
               Showing {totalResults} setting{totalResults === 1 ? "" : "s"} matching &ldquo;{query}&rdquo;
@@ -307,36 +315,41 @@ export function SettingsHubClient({
           )}
 
           {filteredGroups.map((group) => (
-            <section key={group.category} className="space-y-3">
-              <div>
-                <h3 className="text-sm font-bold uppercase tracking-wider text-muted-foreground">{group.category}</h3>
-                <p className="text-xs text-muted-foreground">{group.description}</p>
+            <section key={group.category} className="space-y-2.5">
+              <div className="flex items-center justify-between border-b border-border/60 pb-1.5">
+                <div>
+                  <h3 className="text-xs font-bold uppercase tracking-wider text-muted-foreground/90">{group.category}</h3>
+                  <p className="text-[11px] text-muted-foreground">{group.description}</p>
+                </div>
+                <span className="text-[11px] font-medium text-muted-foreground/70">{group.items.length} options</span>
               </div>
 
-              <div className="grid gap-3 sm:grid-cols-2">
+              <div className="grid gap-2.5 sm:grid-cols-2 lg:grid-cols-3">
                 {group.items.map((item) => (
                   <Link
                     key={item.title}
                     href={item.href}
-                    className="group relative flex items-start gap-4 rounded-lg border border-border bg-surface-raised p-4 transition-all hover:border-border-strong hover:bg-surface-muted/50 hover:shadow-xs"
+                    className="group relative flex items-start gap-3 rounded-lg border border-border bg-surface-raised p-3 transition-all duration-150 hover:border-primary/40 hover:bg-surface-muted/30 hover:shadow-xs"
                   >
-                    <div className="grid size-10 shrink-0 place-items-center rounded-md bg-accent text-accent-foreground transition-transform group-hover:scale-105">
-                      <item.icon className="size-5" />
+                    <div className="grid size-8 shrink-0 place-items-center rounded-md bg-muted text-muted-foreground transition-colors group-hover:bg-primary/10 group-hover:text-primary mt-0.5">
+                      <item.icon className="size-4" />
                     </div>
-                    <div className="min-w-0 flex-1 space-y-1">
-                      <div className="flex items-center gap-2">
-                        <span className="font-semibold text-sm text-foreground">{item.title}</span>
+                    <div className="min-w-0 flex-1 space-y-0.5">
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <span className="font-semibold text-xs text-foreground group-hover:text-primary transition-colors">
+                          {item.title}
+                        </span>
                         {item.badge && (
-                          <span className="rounded bg-surface-muted px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">
+                          <span className="rounded bg-surface-muted px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground border border-border/50">
                             {item.badge}
                           </span>
                         )}
                       </div>
-                      <p className="text-xs leading-relaxed text-muted-foreground line-clamp-2">
+                      <p className="text-[11px] leading-relaxed text-muted-foreground line-clamp-2">
                         {item.description}
                       </p>
                     </div>
-                    <ArrowRight className="size-4 shrink-0 text-muted-foreground transition-transform group-hover:translate-x-1 group-hover:text-foreground mt-0.5" />
+                    <ArrowRight className="size-3.5 shrink-0 text-muted-foreground/60 transition-transform group-hover:translate-x-0.5 group-hover:text-foreground mt-0.5" />
                   </Link>
                 ))}
               </div>

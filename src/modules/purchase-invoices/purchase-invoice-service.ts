@@ -10,10 +10,12 @@ import { effectiveProjectId, validateProjectReferences } from "@/modules/project
 import { replaceTaxEntries, reverseTaxEntries } from "@/modules/tax/tax-entry-service";
 import { assertVatDateUnlocked, assertVatSourceUnlocked } from "@/modules/tax/tax-lock-service";
 import { purchaseInvoiceInputSchema, type PurchaseInvoiceInput } from "./purchase-invoice-input";
-import { convertDocumentLinesToBase, minorToCurrencyInput} from "@/modules/currency/conversion";
+import { convertDocumentLinesToBase, minorToCurrencyInput, parseCurrencyAmountToMinor } from "@/modules/currency/conversion";
 import { getCurrency } from "@/modules/currency/currency";
 import { resolveRateSnapshot } from "@/modules/currency/validation";
 import { calculateLines, totalsForLines, type StoredLine } from "@/modules/accounting/services/document-line-calculator";
+import { getSupplierUnallocatedPrepayments, supplierPaymentConfig, type SupplierUnallocatedPrepayment } from "@/modules/supplier-payments/supplier-payment-service";
+import { applySettlementCredit } from "@/modules/settlement/settlement-service";
 
 export type PurchaseInvoiceStatus = "draft" | "posted" | "void";
 export type PurchasePaymentStatus = "unpaid" | "partially_paid" | "paid" | "overdue";
@@ -362,13 +364,14 @@ export function savePurchaseInvoice(
       shouldPost = current.documentStatus === "posted" || intent === "post";
       replace = current.documentStatus === "posted";
       assertSupplierInvoiceNumberAvailable(context.sqlite, data.supplierId, data.supplierInvoiceNumber, invoiceId);
+      const effectivePurchaseOrderId = data.purchaseOrderId || current.purchaseOrderId || null;
       context.sqlite.prepare(`
         UPDATE purchase_invoices SET supplier_id = ?, project_id = ?, supplier_invoice_number = ?,
           invoice_date = ?, tax_date = ?, due_date = ?, reference = ?, purchase_order_id = ?, subtotal_minor = ?,
           tax_minor = ?, total_minor = ?, currency_code = ?, exchange_rate_to_base = ?,
           exchange_rate_date = ?, exchange_rate_source = ?, base_subtotal_minor = ?,
           base_tax_minor = ?, base_total_minor = ?, updated_at = ?, notes = ?, terms = ? WHERE id = ?
-      `).run(data.supplierId, data.projectId || null, data.supplierInvoiceNumber, data.invoiceDate, taxDate, data.dueDate, data.reference || null, data.purchaseOrderId || null, amounts.subtotalMinor, amounts.taxMinor, amounts.totalMinor, rate.currencyCode, rate.exchangeRateToBase, rate.exchangeRateDate, rate.exchangeRateSource, base.baseSubtotalMinor, base.baseTaxMinor, base.baseTotalMinor, now, data.notes || null, data.terms || null, invoiceId);
+      `).run(data.supplierId, data.projectId || null, data.supplierInvoiceNumber, data.invoiceDate, taxDate, data.dueDate, data.reference || null, effectivePurchaseOrderId, amounts.subtotalMinor, amounts.taxMinor, amounts.totalMinor, rate.currencyCode, rate.exchangeRateToBase, rate.exchangeRateDate, rate.exchangeRateSource, base.baseSubtotalMinor, base.baseTaxMinor, base.baseTotalMinor, now, data.notes || null, data.terms || null, invoiceId);
       context.sqlite.prepare("DELETE FROM purchase_invoice_lines WHERE purchase_invoice_id = ?").run(invoiceId);
     } else {
       internalNumber = allocateNumber(context.sqlite, "purchaseInvoice");
@@ -394,6 +397,47 @@ export function savePurchaseInvoice(
         partyName: supplier.name, taxDate, direction: "purchases", rate,
       }, postingLines);
       context.sqlite.prepare("UPDATE purchase_invoices SET document_status = 'posted', posted_at = COALESCE(posted_at, ?) WHERE id = ?").run(now, id);
+
+      if (!invoiceId && data.applyAvailablePrepayment) {
+        const availablePrepayments: SupplierUnallocatedPrepayment[] = getSupplierUnallocatedPrepayments(businessId, userId, data.supplierId)
+          .filter((p: SupplierUnallocatedPrepayment) => p.currencyCode === rate.currencyCode && p.unallocatedAmountMinor > 0);
+
+        if (availablePrepayments.length > 0) {
+          let remainingBillMinor = amounts.totalMinor;
+
+          if (data.applyPrepaymentPaymentId) {
+            const target = availablePrepayments.find((p) => p.paymentId === data.applyPrepaymentPaymentId);
+            if (target) {
+              const maxApplicable = Math.min(remainingBillMinor, target.unallocatedAmountMinor);
+              const customAmountMinor = data.applyPrepaymentAmount
+                ? parseCurrencyAmountToMinor(data.applyPrepaymentAmount, rate.currencyMinorUnit)
+                : maxApplicable;
+              const allocMinor = Math.min(customAmountMinor, maxApplicable);
+              if (allocMinor > 0) {
+                applySettlementCredit(context.sqlite, supplierPaymentConfig, {
+                  paymentId: target.paymentId,
+                  documentId: id,
+                  amount: allocMinor,
+                });
+              }
+            }
+          } else {
+            // Auto-allocate FIFO
+            for (const prepay of availablePrepayments) {
+              if (remainingBillMinor <= 0) break;
+              const allocMinor = Math.min(remainingBillMinor, prepay.unallocatedAmountMinor);
+              if (allocMinor > 0) {
+                applySettlementCredit(context.sqlite, supplierPaymentConfig, {
+                  paymentId: prepay.paymentId,
+                  documentId: id,
+                  amount: allocMinor,
+                });
+                remainingBillMinor -= allocMinor;
+              }
+            }
+          }
+        }
+      }
     }
   }).immediate();
   return id;

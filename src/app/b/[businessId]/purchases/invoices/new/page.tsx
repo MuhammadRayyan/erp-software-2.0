@@ -13,6 +13,7 @@ import { listActiveSuppliers } from "@/modules/suppliers/supplier-service";
 import { listInventoryItemOptions } from "@/modules/inventory/inventory-item-service";
 import { minorToCurrencyInput } from "@/modules/currency/conversion";
 import { getCurrencySettings } from "@/modules/currency/exchange-rate";
+import { getAllSuppliersUnallocatedPrepayments } from "@/modules/supplier-payments/supplier-payment-service";
 
 export default async function NewPurchaseInvoicePage({
   params,
@@ -35,6 +36,7 @@ export default async function NewPurchaseInvoicePage({
   const projects = listProjectOptions(businessId, user.id);
   const items = listInventoryItemOptions(businessId, user.id);
   const currencySettings = getCurrencySettings(businessId, user.id);
+  const availableSupplierPrepayments = getAllSuppliersUnallocatedPrepayments(businessId, user.id);
 
   const sourceOrder = query.orderId ? getPurchaseOrder(businessId, user.id, query.orderId) : null;
   const sourceQuote = query.quoteId ? getPurchaseQuote(businessId, user.id, query.quoteId) : null;
@@ -168,8 +170,14 @@ export default async function NewPurchaseInvoicePage({
           purchaseOrderId: sourceOrder?.order.id ?? "",
           notes: sourceOrder?.order.notes ?? sourceQuote?.quote.notes ?? "",
           terms: sourceOrder?.order.terms ?? sourceQuote?.quote.terms ?? "",
+          applyAvailablePrepayment: Boolean(
+            supplierId && (availableSupplierPrepayments[supplierId]?.length ?? 0) > 0
+          ),
+          applyPrepaymentPaymentId: "",
+          applyPrepaymentAmount: "",
           lines,
         }}
+        availableSupplierPrepayments={availableSupplierPrepayments}
       />
     </div>
   );

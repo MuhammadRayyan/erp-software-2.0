@@ -37,7 +37,12 @@ export async function createInvoiceAction(
   } catch (error) {
     return { error: error instanceof Error ? error.message : "The invoice could not be saved. Your entries are still here." };
   }
-  const notice = intent === "post" ? "Invoice posted" : "Draft saved";
+  const notice =
+    intent === "post"
+      ? parsed.data.applyAvailableCredit
+        ? "Invoice posted & advance credit applied"
+        : "Invoice posted"
+      : "Draft saved";
   redirect(`/b/${businessId}/sales/invoices/${invoiceId}?notice=${encodeURIComponent(notice)}`);
 }
 

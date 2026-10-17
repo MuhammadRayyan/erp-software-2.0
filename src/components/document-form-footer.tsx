@@ -7,6 +7,7 @@ import { cn } from "@/lib/cn";
 export type DocumentTotalsSummary = {
   subtotalMinor?: number;
   taxMinor?: number;
+  creditAppliedMinor?: number;
   totalMinor: number;
   currencyCode: string;
   minorUnit?: number;
@@ -64,10 +65,24 @@ export function DocumentFormFooter({
               </span>
             </div>
           )}
+          {totals.creditAppliedMinor !== undefined && totals.creditAppliedMinor > 0 && (
+            <div className="hidden lg:flex items-center gap-1 text-emerald-600 dark:text-emerald-400">
+              <span>Credit:</span>
+              <span className="font-medium tabular">
+                -{formatMoney(totals.creditAppliedMinor, totals.currencyCode, totals.minorUnit ?? 2)}
+              </span>
+            </div>
+          )}
           <div className="flex items-center gap-1.5 bg-surface-muted px-2.5 py-1 rounded-md border border-border">
-            <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Total:</span>
+            <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+              {totals.creditAppliedMinor && totals.creditAppliedMinor > 0 ? "Net Due:" : "Total:"}
+            </span>
             <span className="text-sm font-bold text-foreground tabular">
-              {formatMoney(totals.totalMinor, totals.currencyCode, totals.minorUnit ?? 2)}
+              {formatMoney(
+                Math.max(0, totals.totalMinor - (totals.creditAppliedMinor ?? 0)),
+                totals.currencyCode,
+                totals.minorUnit ?? 2
+              )}
             </span>
           </div>
         </div>

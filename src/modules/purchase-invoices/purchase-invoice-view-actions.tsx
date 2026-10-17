@@ -11,17 +11,20 @@ import type { PurchaseInvoiceStatus } from "./purchase-invoice-service";
 import { DocumentViewActions } from "@/components/document-view-actions";
 
 export function PurchaseInvoiceViewActions({
-  businessId, invoiceId, internalNumber, documentStatus, balanceMinor, journalEntryId, inventoryEnabled, hasInventoryLines
+  businessId, invoiceId, internalNumber, documentStatus, balanceMinor, totalMinor, journalEntryId, inventoryEnabled, hasInventoryLines, hasGoodsReceipts = false
 }: {
-  businessId: string; invoiceId: string; internalNumber: string; documentStatus: PurchaseInvoiceStatus; balanceMinor: number; journalEntryId: string | null; inventoryEnabled: boolean; hasInventoryLines: boolean
+  businessId: string; invoiceId: string; internalNumber: string; documentStatus: PurchaseInvoiceStatus; balanceMinor: number; totalMinor?: number; journalEntryId: string | null; inventoryEnabled: boolean; hasInventoryLines: boolean; hasGoodsReceipts?: boolean;
 }) {
   const router = useRouter();
+
+  const canEdit = documentStatus !== "void" && !hasGoodsReceipts && (documentStatus === "draft" || totalMinor === undefined || balanceMinor === totalMinor);
+  const canVoid = documentStatus === "posted" && (totalMinor === undefined || balanceMinor === totalMinor);
 
   return (
     <DocumentViewActions
       documentNumber={internalNumber}
       documentType="Bill"
-      editHref={documentStatus !== "void" ? `/b/${businessId}/purchases/invoices/${invoiceId}/edit` : undefined}
+      editHref={canEdit ? `/b/${businessId}/purchases/invoices/${invoiceId}/edit` : undefined}
       pdfHref={`/api/businesses/${businessId}/documents/purchase-invoice/${invoiceId}/pdf`}
       copyToActions={documentStatus !== "void" ? [
         ...(documentStatus === "posted" && balanceMinor > 0 ? [
@@ -50,7 +53,7 @@ export function PurchaseInvoiceViewActions({
         const result = await duplicatePurchaseInvoiceAction(businessId, invoiceId);
         if (result?.error) throw new Error(result.error);
       }}
-      onVoid={documentStatus === "posted" ? {
+      onVoid={canVoid ? {
         label: "Void",
         description: "This retains the bill and creates a balanced reversing journal. Bills with payment allocations cannot be voided.",
         action: async () => {

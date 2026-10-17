@@ -15,6 +15,7 @@ import {
   parsePageSizeParam,
 } from "@/lib/params";
 import { listSupplierPaymentsPaginated } from "@/modules/supplier-payments/supplier-payment-service";
+import { SupplierPaymentRowActions } from "@/modules/supplier-payments/supplier-payment-row-actions";
 
 export const metadata = { title: "Supplier Payments" };
 
@@ -77,6 +78,7 @@ export default async function SupplierPaymentsPage({
                     <th className="text-right!">Amount</th>
                     <th className="text-right!">Base Bank</th>
                     <th>Status</th>
+                    <th className="w-16 text-right"><span className="sr-only">Actions</span></th>
                   </tr>
                 </thead>
                 <tbody>
@@ -108,6 +110,14 @@ export default async function SupplierPaymentsPage({
                       </td>
                       <td>
                         <StatusBadge status={payment.document_status} />
+                      </td>
+                      <td>
+                        <SupplierPaymentRowActions
+                          businessId={businessId}
+                          paymentId={payment.id}
+                          paymentNumber={payment.payment_number}
+                          supplierId={payment.supplier_id}
+                        />
                       </td>
                     </tr>
                   ))}

@@ -16,6 +16,15 @@ import type { MatchSourceType } from "./matching-types";
 import { completeReconciliation, startReconciliation } from "./reconciliation-service";
 import { reconciliationInputSchema } from "./reconciliation-input";
 import { importBankStatement } from "./statement-service";
+import {
+  bankRuleInputSchema,
+  createBankRule,
+  updateBankRule,
+  deleteBankRule,
+  toggleBankRuleActive,
+  applyBankRule,
+  batchApplyBankRules,
+} from "./bank-rule-service";
 
 export type BankingActionResult = { error?: string; fieldErrors?: Record<string, string[]> };
 function message(error: unknown, fallback: string) { return error instanceof Error ? error.message : fallback; }
@@ -125,3 +134,95 @@ export async function completeReconciliationAction(businessId: string, accountId
     return {};
   } catch (error) { return { error: message(error, "The reconciliation could not be completed.") }; }
 }
+
+export async function saveBankRuleAction(
+  businessId: string,
+  ruleId: string | null,
+  input: unknown,
+): Promise<BankingActionResult & { id?: string }> {
+  const { user } = await requireModule(businessId, "settings");
+  const parsed = bankRuleInputSchema.safeParse(input);
+  if (!parsed.success) {
+    return {
+      error: "Please check the bank rule form fields.",
+      fieldErrors: z.flattenError(parsed.error).fieldErrors as Record<string, string[]>,
+    };
+  }
+  try {
+    if (ruleId) {
+      updateBankRule(businessId, user.id, ruleId, parsed.data);
+      revalidatePath(`/b/${businessId}/settings/bank-rules`);
+      revalidatePath(`/b/${businessId}/banking`);
+      return { id: ruleId };
+    } else {
+      const id = createBankRule(businessId, user.id, parsed.data);
+      revalidatePath(`/b/${businessId}/settings/bank-rules`);
+      revalidatePath(`/b/${businessId}/banking`);
+      return { id };
+    }
+  } catch (error) {
+    return { error: message(error, "The bank rule could not be saved.") };
+  }
+}
+
+export async function deleteBankRuleAction(
+  businessId: string,
+  ruleId: string,
+): Promise<BankingActionResult> {
+  const { user } = await requireModule(businessId, "settings");
+  try {
+    deleteBankRule(businessId, user.id, ruleId);
+    revalidatePath(`/b/${businessId}/settings/bank-rules`);
+    revalidatePath(`/b/${businessId}/banking`);
+    return {};
+  } catch (error) {
+    return { error: message(error, "The bank rule could not be deleted.") };
+  }
+}
+
+export async function toggleBankRuleActiveAction(
+  businessId: string,
+  ruleId: string,
+  isActive: boolean,
+): Promise<BankingActionResult> {
+  const { user } = await requireModule(businessId, "settings");
+  try {
+    toggleBankRuleActive(businessId, user.id, ruleId, isActive);
+    revalidatePath(`/b/${businessId}/settings/bank-rules`);
+    revalidatePath(`/b/${businessId}/banking`);
+    return {};
+  } catch (error) {
+    return { error: message(error, "Could not update bank rule status.") };
+  }
+}
+
+export async function applyBankRuleAction(
+  businessId: string,
+  accountId: string,
+  ruleId: string,
+  statementLineId: string,
+): Promise<BankingActionResult & { transactionId?: string }> {
+  const { user } = await requireModule(businessId, "banking");
+  try {
+    const result = applyBankRule(businessId, user.id, ruleId, statementLineId);
+    revalidatePath(`/b/${businessId}/banking/accounts/${accountId}`);
+    return { transactionId: result.transactionId };
+  } catch (error) {
+    return { error: message(error, "The bank rule could not be applied.") };
+  }
+}
+
+export async function batchApplyBankRulesAction(
+  businessId: string,
+  accountId: string,
+): Promise<BankingActionResult & { appliedCount?: number }> {
+  const { user } = await requireModule(businessId, "banking");
+  try {
+    const result = batchApplyBankRules(businessId, user.id, accountId);
+    revalidatePath(`/b/${businessId}/banking/accounts/${accountId}`);
+    return { appliedCount: result.appliedCount };
+  } catch (error) {
+    return { error: message(error, "Failed to batch auto-categorize statement lines.") };
+  }
+}
+

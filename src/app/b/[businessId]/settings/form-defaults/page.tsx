@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { ChevronRight, FileText, ShoppingCart, ReceiptText, Truck, FileInput } from "lucide-react";
 import { requireUser } from "@/core/auth/session";
 import { getBusinessForUser } from "@/core/businesses/business-service";
+import { BackLink } from "@/components/back-link";
 
 const FORM_GROUPS = [
   {
@@ -41,13 +42,9 @@ export default async function FormDefaultsListPage({ params }: { params: Promise
 
   return (
     <div className="page-container max-w-4xl space-y-6">
+      <BackLink href={`/b/${businessId}/settings`}>Settings</BackLink>
       <div className="page-header">
         <div>
-          <div className="mb-2 flex items-center gap-2 text-sm text-muted-foreground">
-            <Link href={`/b/${businessId}/settings`} className="hover:text-foreground">Settings</Link>
-            <ChevronRight className="size-4" />
-            <span className="text-foreground">Form Defaults</span>
-          </div>
           <h1 className="page-title">Form Defaults</h1>
           <p className="page-description">Configure the exact fields, line toggles, payment terms, and notes that appear when creating new documents.</p>
         </div>

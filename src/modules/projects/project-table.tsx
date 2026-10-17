@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useMemo, useState } from "react";
-import { ChevronRight } from "lucide-react";
+import { ChevronRight, MoreHorizontal, Eye, FileEdit, ReceiptText, FileInput, BarChart3 } from "lucide-react";
 import { 
   useLegacyTable as useTable,
   getCoreRowModel as createCoreRowModel,
@@ -11,6 +11,7 @@ import {
 import { type SortingState } from "@tanstack/react-table";
 import { ListToolbar, SearchInput, ToolbarSelect, DateRangeFilter, ActiveFiltersRow, FilterChip } from "@/components/list-toolbar";
 import { Button } from "@/components/ui/button";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { useColumns } from "@/components/columns-dropdown";
 import { DataTable } from "@/components/ui/data-table";
 import { formatMoney } from "@/core/format";
@@ -63,7 +64,7 @@ export function ProjectTable({
   });
 
   const rows = useMemo(() => projects.filter((project) => {
-    const text = `${project.code} ${project.name} ${project.customerName ?? ""}`.toLowerCase();
+    const text = `${project.code} ${project.name} ${project.customerName ?? ""} ${project.coClientNames ?? ""}`.toLowerCase();
     return text.includes(query.trim().toLowerCase()) && (!status || project.status === status) && (!customerId || project.customerId === customerId) && (!fromDate || (project.startDate ?? "") >= fromDate) && (!toDate || (project.targetEndDate ?? "9999-12-31") <= toDate);
   }).map((project) => ({ ...project, businessId, currency })), [customerId, fromDate, projects, query, status, toDate, businessId, currency]);
   
@@ -82,7 +83,25 @@ export function ProjectTable({
       {
         accessorKey: "customerName",
         header: "Customer",
-        cell: ({ row }: any) => row.original.customerName ?? <span className="text-muted-foreground">—</span>,
+        cell: ({ row }: any) => {
+          const name = row.original.customerName;
+          const coCount = row.original.coClientCount || 0;
+          const coNames = row.original.coClientNames;
+          if (!name && coCount === 0) return <span className="text-muted-foreground">—</span>;
+          return (
+            <div className="flex flex-wrap items-center gap-1.5">
+              <span>{name ?? "Multiple Clients"}</span>
+              {coCount > 0 && (
+                <span
+                  title={coNames ? `Co-clients: ${coNames}` : `${coCount} co-clients`}
+                  className="inline-flex items-center rounded-full bg-surface-raised px-1.5 py-0.2 text-[11px] font-medium text-muted-foreground border border-border cursor-help"
+                >
+                  +{coCount}
+                </span>
+              )}
+            </div>
+          );
+        },
       },
       {
         accessorKey: "status",
@@ -122,15 +141,55 @@ export function ProjectTable({
       {
         id: "actions",
         header: () => <span className="sr-only">Actions</span>,
-        meta: { className: "w-12" },
+        meta: { className: "w-16 text-right" },
         enableSorting: false,
-        cell: ({ row }: any) => (
-          <Button asChild variant="ghost" size="icon" className="text-muted-foreground opacity-50 transition-opacity md:opacity-0 md:group-hover:opacity-100">
-            <Link href={`/b/${row.original.businessId}/projects/${row.original.id}`} aria-label={`Open ${row.original.code}`}>
-              <ChevronRight className="size-4" />
-            </Link>
-          </Button>
-        ),
+        cell: ({ row }: any) => {
+          const prj = row.original;
+          return (
+            <div className="flex items-center justify-end gap-1">
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="ghost" size="icon" className="size-7 text-muted-foreground hover:text-foreground" aria-label={`Actions for ${prj.code}`}>
+                    <MoreHorizontal className="size-4" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-52">
+                  <DropdownMenuItem asChild>
+                    <Link href={`/b/${prj.businessId}/projects/${prj.id}`}>
+                      <Eye className="size-4 text-muted-foreground" /> View Project
+                    </Link>
+                  </DropdownMenuItem>
+                  <DropdownMenuItem asChild>
+                    <Link href={`/b/${prj.businessId}/projects/${prj.id}/edit`}>
+                      <FileEdit className="size-4 text-muted-foreground" /> Edit Project
+                    </Link>
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem asChild>
+                    <Link href={`/b/${prj.businessId}/sales/invoices/new?projectId=${prj.id}`}>
+                      <ReceiptText className="size-4 text-muted-foreground" /> New Invoice
+                    </Link>
+                  </DropdownMenuItem>
+                  <DropdownMenuItem asChild>
+                    <Link href={`/b/${prj.businessId}/purchases/invoices/new?projectId=${prj.id}`}>
+                      <FileInput className="size-4 text-muted-foreground" /> New Bill
+                    </Link>
+                  </DropdownMenuItem>
+                  <DropdownMenuItem asChild>
+                    <Link href={`/b/${prj.businessId}/reports/project-profitability?projectId=${prj.id}`}>
+                      <BarChart3 className="size-4 text-muted-foreground" /> Profitability Report
+                    </Link>
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+              <Button asChild variant="ghost" size="icon" className="size-7 text-muted-foreground opacity-50 transition-opacity md:opacity-0 md:group-hover:opacity-100">
+                <Link href={`/b/${prj.businessId}/projects/${prj.id}`} aria-label={`Open ${prj.code}`}>
+                  <ChevronRight className="size-4" />
+                </Link>
+              </Button>
+            </div>
+          );
+        },
       },
     ],
     [],

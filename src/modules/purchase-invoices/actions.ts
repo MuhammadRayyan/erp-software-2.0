@@ -16,7 +16,13 @@ export async function savePurchaseInvoiceAction(businessId: string, invoiceId: s
   let id: string;
   try { id = savePurchaseInvoice(businessId, user.id, parsed.data, intent, invoiceId ?? undefined); }
   catch (error) { return { error: error instanceof Error ? error.message : "The purchase invoice could not be saved." }; }
-  redirect(`/b/${businessId}/purchases/invoices/${id}?notice=${intent === "post" ? "Purchase invoice posted" : "Draft saved"}`);
+  const notice =
+    intent === "post"
+      ? parsed.data.applyAvailablePrepayment
+        ? "Purchase invoice posted & prepayment applied"
+        : "Purchase invoice posted"
+      : "Draft saved";
+  redirect(`/b/${businessId}/purchases/invoices/${id}?notice=${encodeURIComponent(notice)}`);
 }
 
 export async function duplicatePurchaseInvoiceAction(businessId: string, invoiceId: string) { const { user } = await requireModule(businessId, "purchases"); try { const id = duplicatePurchaseInvoice(businessId, user.id, invoiceId); redirect(`/b/${businessId}/purchases/invoices/${id}?notice=Purchase invoice duplicated as draft`); } catch (error) { return { error: error instanceof Error ? error.message : "The purchase invoice could not be duplicated." }; } }

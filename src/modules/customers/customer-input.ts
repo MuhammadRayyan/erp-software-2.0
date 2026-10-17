@@ -5,13 +5,14 @@ import {
   legalRegistrationIdentifierSchema,
   electronicAddressSchema,
   electronicAddressSchemeSchema,
+  phoneSchema,
 } from "@/core/validation/party-schemas";
 
 export const customerInputSchema = z.object({
   defaultCurrencyCode: defaultCurrencyCodeSchema,
   name: z.string().trim().min(2, "Enter a customer name").max(100),
   email: z.union([z.email("Enter a valid email"), z.literal("")]).optional().default(""),
-  phone: z.union([z.literal(""), z.string().trim().regex(/^\+?[0-9]+$/, "Phone must contain only numbers and an optional '+' sign").max(40)]).optional().default(""),
+  phone: phoneSchema,
   taxReference: z.string().trim().max(50).optional().default(""),
   legalName: z.string().trim().max(160).optional().default(""),
   trn: trnSchema,

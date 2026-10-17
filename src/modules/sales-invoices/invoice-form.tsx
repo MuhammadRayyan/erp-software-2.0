@@ -3,12 +3,13 @@ import { useRouter } from "next/navigation";
 import { FormError } from "@/components/form-error";
 import { useState } from "react";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { LoaderCircle } from "lucide-react";
+import { Coins, LoaderCircle } from "lucide-react";
 import { useFieldArray, useForm, useWatch } from "react-hook-form";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
+import { formatDate, formatMoney } from "@/core/format";
 import { convertToBase, minorToCurrencyInput } from "@/modules/currency/conversion";
 import { DocumentCurrencyFields, type DocumentCurrencyOption, type DocumentRateOption } from "@/modules/currency/document-currency-fields";
 import { CustomFieldInputs, type CustomFieldInputDefinition } from "@/modules/custom-fields/custom-field-inputs";
@@ -26,6 +27,7 @@ type AccountOption = { id: string; name: string };
 type TaxCodeOption = { id: string; name: string; rateBasisPoints: number };
 type ProjectOption = { id: string; code: string; name: string; customerId: string | null };
 type ItemOption = { id: string; sku: string | null; name: string; salesPriceMinor: number | null; salesAccountId: string };
+export type CustomerCreditOption = { receiptId: string; receiptNumber: string; date: string; currencyCode: string; currencyMinorUnit: number; unallocatedAmountMinor: number };
 
 export function InvoiceForm({
   onDefaultSave,
@@ -41,6 +43,7 @@ export function InvoiceForm({
   currencies,
   rates,
   initial,
+  availableCustomerCredits,
   customFields = [],
   customFieldValues,
 }: {
@@ -57,6 +60,7 @@ export function InvoiceForm({
   currencies: DocumentCurrencyOption[];
   rates: DocumentRateOption[];
   initial: InvoiceInput;
+  availableCustomerCredits?: Record<string, CustomerCreditOption[]>;
   customFields?: CustomFieldInputDefinition[];
   customFieldValues?: Record<string, string>;
 }) {
@@ -90,10 +94,21 @@ export function InvoiceForm({
   const exchangeRateSource = useWatch({ control, name: "exchangeRateSource" }) || "";
   const invoiceDate = useWatch({ control, name: "invoiceDate" }) || "";
   const taxDate = useWatch({ control, name: "taxDate" }) || invoiceDate;
-  const availableProjects = projects.filter((project) => !project.customerId || project.customerId === customerId);
   const minorUnit = currencies.find((entry) => entry.code === currencyCode)?.minorUnit ?? 2;
+  const availableProjects = projects.filter((project) => {
+    if (!customerId) return true;
+    const cids = (project as any).customerIds as string[] | undefined;
+    if (cids && cids.length > 0) return cids.includes(customerId);
+    return !project.customerId || project.customerId === customerId;
+  });
   const baseMinorUnit = currencies.find((entry) => entry.code === currency)?.minorUnit ?? 2;
   const { lines, amountsIncludeTax, previews, subtotalMinor, taxMinor } = useDocumentTotals({ control, taxCodes, minorUnit });
+  const totalMinor = subtotalMinor + taxMinor;
+  const applyAvailableCredit = useWatch({ control, name: "applyAvailableCredit" });
+  const currentCustomerCredits = (availableCustomerCredits?.[customerId] || []).filter((c) => c.currencyCode === currencyCode);
+  const totalAvailableCreditMinor = currentCustomerCredits.reduce((s, c) => s + c.unallocatedAmountMinor, 0);
+  const creditAppliedMinor = (!invoiceId && applyAvailableCredit && totalAvailableCreditMinor > 0) ? Math.min(totalMinor, totalAvailableCreditMinor) : 0;
+
   let baseEquivalentMinor: number | null = null;
   if (currencyCode !== currency && exchangeRateToBase) {
     try { baseEquivalentMinor = convertToBase(subtotalMinor + taxMinor, minorUnit, baseMinorUnit, exchangeRateToBase); } catch { baseEquivalentMinor = null; }
@@ -141,6 +156,8 @@ export function InvoiceForm({
 
   return (
     <form className="space-y-5 max-w-none" noValidate>
+      <input type="hidden" {...register("salesOrderId")} />
+      <input type="hidden" {...register("quoteId")} />
       {serverError && <FormError message={serverError} />}
       <section className="form-section">
         <h2 className="text-base font-semibold">Invoice details</h2>
@@ -181,6 +198,36 @@ export function InvoiceForm({
             </SelectNative>
             {errors.customerId && <p className="field-error">{errors.customerId.message}</p>}
           </div>
+
+          {!invoiceId && totalAvailableCreditMinor > 0 && (
+            <div className="md:col-span-3 rounded-lg border border-emerald-500/30 bg-emerald-500/10 p-3.5 text-sm dark:bg-emerald-950/25">
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                <div className="flex items-start gap-2.5">
+                  <Coins className="size-5 shrink-0 text-emerald-600 dark:text-emerald-400 mt-0.5" />
+                  <div>
+                    <p className="font-semibold text-emerald-900 dark:text-emerald-200">
+                      Customer Advance Credit Available: {formatMoney(totalAvailableCreditMinor, currencyCode, minorUnit)}
+                    </p>
+                    <p className="mt-0.5 text-xs text-emerald-700 dark:text-emerald-300">
+                      {currentCustomerCredits.length === 1
+                        ? `Receipt ${currentCustomerCredits[0].receiptNumber} (${formatDate(currentCustomerCredits[0].date)}) has unallocated advance funds.`
+                        : `${currentCustomerCredits.length} receipts have unallocated advance funds. Credit will be applied automatically upon posting.`}
+                    </p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-3">
+                  <label className="flex items-center gap-2 cursor-pointer select-none font-medium text-emerald-900 dark:text-emerald-200">
+                    <input
+                      type="checkbox"
+                      className="size-4 rounded border-emerald-300 text-emerald-600 focus:ring-emerald-500"
+                      {...register("applyAvailableCredit")}
+                    />
+                    <span className="text-xs sm:text-sm">Apply credit upon posting</span>
+                  </label>
+                </div>
+              </div>
+            </div>
+          )}
           <div className="space-y-1.5"><Label htmlFor="invoiceDate">Invoice date</Label><Input id="invoiceDate" type="date" {...register("invoiceDate", { onChange: (event) => { if (documentStatus === "draft") { const customer = customers.find((c) => c.id === customerId); if (customer?.paymentTermsDays && event.target.value) { const d = new Date(event.target.value); if (!Number.isNaN(d.valueOf())) { d.setDate(d.getDate() + customer.paymentTermsDays); setValue("dueDate", d.toISOString().slice(0, 10)); } } } } })} aria-invalid={!!errors.invoiceDate} />{errors.invoiceDate && <p className="field-error">{errors.invoiceDate.message}</p>}</div>
           <div className="space-y-1.5"><Label htmlFor="taxDate">VAT tax date</Label><Input id="taxDate" type="date" {...register("taxDate")} aria-invalid={!!errors.taxDate} />{errors.taxDate && <p className="field-error">{errors.taxDate.message}</p>}</div>
           <div className="space-y-1.5"><Label htmlFor="dueDate">Due date</Label><Input id="dueDate" type="date" {...register("dueDate")} aria-invalid={!!errors.dueDate} />{errors.dueDate && <p className="field-error">{errors.dueDate.message}</p>}</div>
@@ -270,7 +317,8 @@ export function InvoiceForm({
         totals={{
           subtotalMinor,
           taxMinor,
-          totalMinor: subtotalMinor + taxMinor,
+          creditAppliedMinor,
+          totalMinor,
           currencyCode,
           minorUnit,
         }}

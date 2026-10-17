@@ -21,7 +21,7 @@ import { DocumentLineTable, useDocumentTotals } from "@/components/documents";
 type Option = { id: string; name: string; defaultCurrencyCode: string | null };
 type AccountOption = { id: string; name: string };
 type TaxOption = { id: string; name: string; rateBasisPoints: number };
-type ProjectOption = { id: string; code: string; name: string };
+type ProjectOption = { id: string; code: string; name: string; customerId?: string | null; customerIds?: string[] };
 type ItemOption = { id: string; sku: string | null; name: string; salesPriceMinor: number | null; salesAccountId: string };
 
 export function SalesQuoteForm({ businessId, quoteId, status = "draft", customers, salesAccounts, taxCodes, projects, items, currency, currencies, rates, initial }: { businessId: string; quoteId?: string; status?: SalesQuoteStatus; customers: Option[]; salesAccounts: AccountOption[]; taxCodes: TaxOption[]; projects: ProjectOption[]; items: ItemOption[]; currency: string; currencies: DocumentCurrencyOption[]; rates: DocumentRateOption[]; initial: SalesQuoteInput }) {
@@ -48,6 +48,13 @@ export function SalesQuoteForm({ businessId, quoteId, status = "draft", customer
   const quoteDate = useWatch({ control, name: "date" }) || "";
   const minorUnit = currencies.find((entry) => entry.code === currencyCode)?.minorUnit ?? 2;
   const { lines, amountsIncludeTax, previews, subtotalMinor, taxMinor } = useDocumentTotals({ control, taxCodes, minorUnit });
+  const customerId = useWatch({ control, name: "customerId" });
+  const availableProjects = projects.filter((project) => {
+    if (!customerId) return true;
+    const cids = (project as any).customerIds as string[] | undefined;
+    if (cids && cids.length > 0) return cids.includes(customerId);
+    return !project.customerId || project.customerId === customerId;
+  });
   function updateGlobalTax(newTaxId: string) {
     setGlobalTaxCodeId(newTaxId);
     lines.forEach((_, i) => form.setValue(`lines.${i}.taxCodeId`, newTaxId));
@@ -82,7 +89,7 @@ export function SalesQuoteForm({ businessId, quoteId, status = "draft", customer
       <div className="space-y-1.5"><Label htmlFor="customerId">Customer</Label><SelectNative id="customerId"  {...register("customerId", { onChange: (event) => { if (status === "draft") { const code = customers.find((customer) => customer.id === event.target.value)?.defaultCurrencyCode ?? currency; setValue("currencyCode", code); setValue("exchangeRateToBase", code === currency ? "1" : ""); setValue("exchangeRateDate", code === currency ? quoteDate : ""); setValue("exchangeRateSource", code === currency ? "Base" : ""); } } })} aria-invalid={!!errors.customerId}><option value="">Choose a customer…</option>{customers.map((customer) => <option key={customer.id} value={customer.id}>{customer.name}</option>)}</SelectNative>{errors.customerId && <p className="field-error">{errors.customerId.message}</p>}</div>
       <div className="space-y-1.5"><Label htmlFor="date">Quote date</Label><Input id="date" type="date" {...register("date")} aria-invalid={!!errors.date} />{errors.date && <p className="field-error">{errors.date.message}</p>}</div>
       <div className="space-y-1.5"><Label htmlFor="expectedDate">Expected date <span className="font-normal text-muted-foreground">(optional)</span></Label><Input id="expectedDate" type="date" {...register("expectedDate")} /></div>
-      <div className="space-y-1.5"><Label htmlFor="projectId">Project <span className="font-normal text-muted-foreground">(optional)</span></Label><SelectNative id="projectId"  {...register("projectId")}><option value="">No project</option>{projects.map((project) => <option key={project.id} value={project.id}>{project.code} — {project.name}</option>)}</SelectNative></div>
+      <div className="space-y-1.5"><Label htmlFor="projectId">Project <span className="font-normal text-muted-foreground">(optional)</span></Label><SelectNative id="projectId"  {...register("projectId")}><option value="">No project</option>{availableProjects.map((project) => <option key={project.id} value={project.id}>{project.code} — {project.name}</option>)}</SelectNative></div>
       <div className="space-y-1.5"><Label htmlFor="reference">Reference <span className="font-normal text-muted-foreground">(optional)</span></Label><Input id="reference" {...register("reference")} /></div>
       <div className="space-y-1.5 md:col-span-3 grid md:grid-cols-2 gap-5">
         <div className="space-y-1.5">
@@ -148,7 +155,7 @@ export function SalesQuoteForm({ businessId, quoteId, status = "draft", customer
         accountFieldName="salesAccountId"
         taxCodes={taxCodes}
         initialShowLineTaxCodes={false}
-        projects={projects}
+        projects={availableProjects}
         currencyCode={currencyCode}
         minorUnit={minorUnit}
         previews={previews}

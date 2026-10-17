@@ -2,17 +2,27 @@
 
 A compact, Manager.io-inspired multi-business accounting/ERP application for local and self-hosted use.
 
-**Current release: v2.5.1** — Hardened Core, Concurrency & Manager.io Feature Suite:
+**Current release: v2.6.0** — Advanced Accounting, Liquidity Treasury & Usability Suite:
+- **Find & Recode / Bulk Transaction Editor**: Search across Sales Invoices, Purchase Bills, Bank Entries, and Manual Journals to bulk-reclassify GL Accounts, Tax Codes, or Project Tags with atomic double-entry journal replacement.
+- **30/60/90-Day Cash Flow & Liquidity Forecast**: Real-time treasury engine projecting cash runway, liquidity trajectories, deficit days count, minimum cash trough alerts, and horizon aging buckets with CSV export.
+- **Inline Customer Credit & Supplier Prepayment Drawdown**: Proactive detection of unallocated retainer/prepayment pools during invoice and bill creation with 1-click FIFO auto-drawdown on post.
+- **Bank Rules & Auto-Categorization Engine**: Configurable rule engine matching statement lines by text, direction, or bank account to automatically categorize and post transactions with 1-click batch application.
+- **High-Density Settings Hub & Unified Sub-Settings Shell**: Compact 3-column layout (`grid-cols-3`, `p-3` cards) with category counters and standardized `SettingsShell` container widths.
+- **Customer & Supplier Statements with Date Filtering & Aging**: Date-range filtering with automatic "Balance Brought Forward" opening balance and 5-bucket aging analysis (Current, 1–30, 31–60, 61–90, 90+ days) with matching PDF exports.
+- **Multi-Customer Projects & Joint Ventures**: Native support for Joint Ventures with split %, Tenants, Sponsors, and Co-Clients under unified project P&L and segregated AR.
+- **Relational Linkage & Stepper Preservation**: Seamless document lifecycle transitions with zero pill breakage across quotes, orders, invoices, and debit notes.
+- **Double-Entry Void / Delete Symmetry**: Accurate financial adjustments eliminating phantom balances upon document cancellation.
+- **Interactive Module Flow Guide**: In-app lifecycle and money-flow guidance across all 11 modules.
+- **Party Phone Number Validation**: Standardized international E.164 and local phone verification.
 - **Global Financial Lock Date (Period Closing)**: Hard period closure enforcement preventing backdated postings or edits in closed periods.
 - **Universal Clickable Balance Drill-Down**: Interactive drill-down from Chart of Accounts, Trial Balance, Balance Sheet, and Profit & Loss directly into the General Ledger.
 - **Cash Basis vs. Accrual Basis Toggle in Profit & Loss**: Dynamic cash-allocation reporting engine recognizing revenue and expenses upon realized settlement vs. invoice accrual.
 - **Guided Opening Balances Engine**: Self-balancing onboarding engine with live debit/credit indicator and automated equity offset.
 - **Payment Terms Presets & Auto Due Dates**: Manager for Net 15, Net 30, EOM with dynamic invoice due-date calculation.
-- **Email Templates with Dynamic Variables**: Customizable templates supporting `{{customer_name}}`, `{{document_number}}`, `{{total_amount}}`, `{{balance_due}}`, `{{due_date}}`, `{{business_name}}`.
+- **Email Templates with Dynamic Variables**: Customizable templates supporting dynamic placeholders for all commercial document types.
 - **Units of Measure (UOM) Standard**: Standardized measurement units across inventory items, line items, and document forms.
 - **Multi-Select Batch Operations Bar**: Floating action dock for multi-row selection, batch CSV export, and batch print across commercial registers.
 - **Sticky Form Action Dock**: Always-visible form footer displaying document status, running subtotal, tax amount, and formatted totals.
-- **Centralized Settings Hub**: Fully categorized and searchable settings dashboard.
 See `docs/CHANGELOG.md` for the full history and `docs/CURRENT_STATE.md` for authoritative behavior.
 
 ## Working context for future phases

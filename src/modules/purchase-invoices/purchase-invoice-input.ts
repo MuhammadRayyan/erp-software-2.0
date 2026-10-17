@@ -32,6 +32,9 @@ export const purchaseInvoiceInputSchema = z.object({
   notes: z.string().trim().max(1_000).optional().default(""),
   terms: z.string().trim().max(10_000).optional().default(""),
   purchaseOrderId: z.union([z.literal(""), z.string().uuid()]).optional().default(""),
+  applyAvailablePrepayment: z.boolean().optional().default(false),
+  applyPrepaymentPaymentId: z.string().optional().default(""),
+  applyPrepaymentAmount: z.string().optional().default(""),
   lines: z.array(purchaseInvoiceLineSchema).min(1, "Add at least one line").max(100),
 });
 

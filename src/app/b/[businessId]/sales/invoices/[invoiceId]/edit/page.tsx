@@ -23,6 +23,9 @@ export default async function EditInvoicePage({ params }: { params: Promise<{ bu
   if (record.invoice.documentStatus === "void") {
     return <div className="page-container"><h1 className="page-title">Void invoice</h1><p className="page-description">Void invoices are retained for history and cannot be edited.</p><Button asChild className="mt-5"><Link href={`/b/${businessId}/sales/invoices/${invoiceId}`}>Return to invoice</Link></Button></div>;
   }
+  if (record.deliveryNotes.length > 0) {
+    return <div className="page-container"><h1 className="page-title">Locked invoice</h1><p className="page-description">A Sales Invoice cannot be edited after a Delivery Note has been created from it.</p><Button asChild className="mt-5"><Link href={`/b/${businessId}/sales/invoices/${invoiceId}`}>Return to invoice</Link></Button></div>;
+  }
   const customers = listCustomers(businessId, user.id);
   const salesAccounts = getSalesAccountOptions(businessId, user.id);
   const taxCodes = getActiveTaxCodes(businessId, user.id).filter((code) => code.vatCategory && ["sales", "both"].includes(code.direction));
@@ -63,7 +66,22 @@ export default async function EditInvoicePage({ params }: { params: Promise<{ bu
         supplyEmirate: record.invoice.supplyEmirate ?? "",
         dueDate: record.invoice.dueDate,
         reference: record.invoice.reference ?? "",
-        lines: record.lines.map((line) => ({ itemId: line.itemId ?? "", description: line.description, quantity: quantityMicrosToInput(line.quantityMicros), unitPrice: minorToCurrencyInput(line.unitPriceMinor, documentMinorUnit), salesAccountId: line.salesAccountId, taxCodeId: line.taxCodeId, projectId: line.projectId ?? "" })),
+        notes: record.invoice.notes ?? "",
+        terms: record.invoice.terms ?? "",
+        amountsIncludeTax: record.invoice.amountsIncludeTax,
+        salesOrderId: record.invoice.salesOrderId ?? "",
+        quoteId: (record.invoice as any).quoteId ?? "",
+        lines: record.lines.map((line: any) => ({
+          itemId: line.itemId ?? "",
+          description: line.description,
+          quantity: quantityMicrosToInput(line.quantityMicros),
+          unitPrice: minorToCurrencyInput(line.unitPriceMinor, documentMinorUnit),
+          discountType: line.discountType ?? "none",
+          discountValue: line.discountValue ?? "0",
+          salesAccountId: line.salesAccountId,
+          taxCodeId: line.taxCodeId,
+          projectId: line.projectId ?? "",
+        })),
       }}
     />
   </div>;

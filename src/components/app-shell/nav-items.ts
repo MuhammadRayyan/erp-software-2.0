@@ -18,6 +18,7 @@ import {
   Receipt,
   HandCoins,
   Activity,
+  SlidersHorizontal,
 } from "lucide-react";
 import type { ModuleKey } from "@/core/permissions/permissions";
 
@@ -76,6 +77,7 @@ export const primaryNav: { label?: string; items: NavItem[] }[] = [
     items: [
       { label: "Chart of Accounts", path: "/accounting/chart-of-accounts", icon: BookOpenText, module: "accounting" },
       { label: "Journal", path: "/accounting/journal", icon: Scale, module: "accounting" },
+      { label: "Find & Recode", path: "/accounting/find-and-recode", icon: SlidersHorizontal, module: "accounting" },
     ],
   },
   {

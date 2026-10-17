@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import Link from "next/link";
-import { ChevronRight } from "lucide-react";
+import { ChevronRight, MoreHorizontal, Eye, FileEdit, Download, FileText, PackagePlus } from "lucide-react";
 import { 
   useLegacyTable as useTable,
   getCoreRowModel as createCoreRowModel,
@@ -12,6 +12,7 @@ import { type SortingState } from "@tanstack/react-table";
 import { StatusBadge, statusLabel } from "@/components/status-badge";
 import { ListToolbar, SearchInput, ToolbarSelect, DateRangeFilter, ActiveFiltersRow, FilterChip } from "@/components/list-toolbar";
 import { Button } from "@/components/ui/button";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { useColumns } from "@/components/columns-dropdown";
 import { DataTable } from "@/components/ui/data-table";
 import { formatDate, formatMoney } from "@/core/format";
@@ -140,15 +141,63 @@ export function PurchaseOrderTable({
       {
         id: "actions",
         header: () => <span className="sr-only">Actions</span>,
-        meta: { className: "w-12" },
+        meta: { className: "w-16 text-right" },
         enableSorting: false,
-        cell: ({ row }: any) => (
-          <Button asChild variant="ghost" size="icon" className="text-muted-foreground opacity-50 transition-opacity md:opacity-0 md:group-hover:opacity-100">
-            <Link href={`/b/${row.original.businessId}/purchases/orders/${row.original.id}`} aria-label={`Open ${row.original.order_number}`}>
-              <ChevronRight className="size-4" />
-            </Link>
-          </Button>
-        ),
+        cell: ({ row }: any) => {
+          const order = row.original;
+          const canEdit = order.status !== "closed" && order.status !== "cancelled" && order.status !== "superseded";
+          const canBill = order.status === "issued";
+          return (
+            <div className="flex items-center justify-end gap-1">
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="ghost" size="icon" className="size-7 text-muted-foreground hover:text-foreground" aria-label={`Actions for ${order.order_number}`}>
+                    <MoreHorizontal className="size-4" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-52">
+                  <DropdownMenuItem asChild>
+                    <Link href={`/b/${order.businessId}/purchases/orders/${order.id}`}>
+                      <Eye className="size-4 text-muted-foreground" /> View Order
+                    </Link>
+                  </DropdownMenuItem>
+                  {canEdit && (
+                    <DropdownMenuItem asChild>
+                      <Link href={`/b/${order.businessId}/purchases/orders/${order.id}/edit`}>
+                        <FileEdit className="size-4 text-muted-foreground" /> Edit Order
+                      </Link>
+                    </DropdownMenuItem>
+                  )}
+                  <DropdownMenuItem asChild>
+                    <a href={`/api/businesses/${order.businessId}/documents/purchase-order/${order.id}/pdf`} target="_blank" rel="noreferrer">
+                      <Download className="size-4 text-muted-foreground" /> Download PDF
+                    </a>
+                  </DropdownMenuItem>
+                  {canBill && (
+                    <>
+                      <DropdownMenuSeparator />
+                      <DropdownMenuItem asChild>
+                        <Link href={`/b/${order.businessId}/purchases/invoices/new?orderId=${order.id}`}>
+                          <FileText className="size-4 text-muted-foreground" /> Bill Purchase Order
+                        </Link>
+                      </DropdownMenuItem>
+                      <DropdownMenuItem asChild>
+                        <Link href={`/b/${order.businessId}/purchases/goods-receipts/new?orderId=${order.id}`}>
+                          <PackagePlus className="size-4 text-muted-foreground" /> Receive Goods
+                        </Link>
+                      </DropdownMenuItem>
+                    </>
+                  )}
+                </DropdownMenuContent>
+              </DropdownMenu>
+              <Button asChild variant="ghost" size="icon" className="size-7 text-muted-foreground opacity-50 transition-opacity md:opacity-0 md:group-hover:opacity-100">
+                <Link href={`/b/${order.businessId}/purchases/orders/${order.id}`} aria-label={`Open ${order.order_number}`}>
+                  <ChevronRight className="size-4" />
+                </Link>
+              </Button>
+            </div>
+          );
+        },
       },
     ],
     [],
@@ -169,17 +218,16 @@ export function PurchaseOrderTable({
   const clearFilters = () => { setQuery(""); setStatus(""); setSupplierId(""); setProjectId(""); setFromDate(""); setToDate(""); };
   const hasActiveFilter = Boolean(supplierId || projectId || fromDate || toDate || status || query);
 
-  const totalPOValueStr = useMemo(
-    () =>
-      renderMultiCurrencyString(
-        rows.map((r) => ({
-          amount: r.total_minor,
-          currency: r.currency_code,
-          minorUnit: r.currency_minor_unit,
-        }))
-      ),
-    [rows]
-  );
+  const totalPOValueStr = useMemo(() => {
+    const activeRows = status === "cancelled" ? rows : rows.filter((r) => r.status !== "cancelled" && r.status !== "superseded");
+    return renderMultiCurrencyString(
+      activeRows.map((r) => ({
+        amount: r.total_minor,
+        currency: r.currency_code,
+        minorUnit: r.currency_minor_unit,
+      }))
+    );
+  }, [rows, status]);
   const activeCount = useMemo(
     () => rows.filter((r) => r.status === "issued" || r.status === "draft").length,
     [rows]

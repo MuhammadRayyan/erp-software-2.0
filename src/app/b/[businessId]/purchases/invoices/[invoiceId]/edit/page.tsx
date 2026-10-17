@@ -11,6 +11,8 @@ import { listActiveSuppliers } from "@/modules/suppliers/supplier-service";
 import { listInventoryItemOptions } from "@/modules/inventory/inventory-item-service";
 import { minorToCurrencyInput } from "@/modules/currency/conversion";
 import { getCurrencySettings } from "@/modules/currency/exchange-rate";
+import Link from "next/link";
+import { Button } from "@/components/ui/button";
 import { BackLink } from "@/components/back-link";
 
 export default async function EditPurchaseInvoicePage({ params }: { params: Promise<{ businessId: string; invoiceId: string }> }) {
@@ -18,6 +20,24 @@ export default async function EditPurchaseInvoicePage({ params }: { params: Prom
   const { user, access } = await requireModule(businessId, "purchases");
   const record = getPurchaseInvoice(businessId, user.id, invoiceId);
   if (!record || record.invoice.documentStatus === "void") notFound();
+  if (record.goodsReceipts && record.goodsReceipts.length > 0) {
+    return (
+      <div className="page-container">
+        <h1 className="page-title">Locked Bill</h1>
+        <p className="page-description">A Purchase Invoice cannot be edited after a Goods Receipt has been created from it.</p>
+        <Button asChild className="mt-5"><Link href={`/b/${businessId}/purchases/invoices/${invoiceId}`}>Return to bill</Link></Button>
+      </div>
+    );
+  }
+  if (record.invoice.documentStatus === "posted" && record.balanceMinor !== record.invoice.totalMinor) {
+    return (
+      <div className="page-container">
+        <h1 className="page-title">Locked Bill</h1>
+        <p className="page-description">A Purchase Invoice cannot be edited after payments have been allocated to it.</p>
+        <Button asChild className="mt-5"><Link href={`/b/${businessId}/purchases/invoices/${invoiceId}`}>Return to bill</Link></Button>
+      </div>
+    );
+  }
   const suppliers = listActiveSuppliers(businessId, user.id);
   const accounts = getExpenseAccountOptions(businessId, user.id);
   const taxes = getActiveTaxCodes(businessId, user.id).filter((code) => code.vatCategory && ["purchases", "both"].includes(code.direction));
@@ -26,5 +46,55 @@ export default async function EditPurchaseInvoicePage({ params }: { params: Prom
   const items = listInventoryItemOptions(businessId, user.id);
   const currencySettings = getCurrencySettings(businessId, user.id);
   const minorUnit = currencySettings.currencies.find((currency) => currency.code === record.invoice.currencyCode)?.minor_unit ?? 2;
-  return <div className="page-container"><BackLink href={`/b/${businessId}/purchases/invoices/${invoiceId}`}>{record.invoice.internalNumber}</BackLink><div className="mb-7"><h1 className="page-title">Edit Purchase Invoice</h1><p className="page-description">{record.invoice.documentStatus === "posted" ? "Financial changes rebuild the AP journal and VAT tax detail atomically." : "Update the draft, or post it when ready."}</p></div><PurchaseInvoiceForm businessId={businessId} invoiceId={invoiceId} documentStatus={record.invoice.documentStatus} suppliers={suppliers.map(({ id, name, defaultCurrencyCode }) => ({ id, name, defaultCurrencyCode }))} expenseAccounts={accounts.map(({ id, name }) => ({ id, name }))} taxCodes={taxes.map(({ id, name, rateBasisPoints, vatCategory }) => ({ id, name, rateBasisPoints, vatCategory: vatCategory! }))} orders={orders.map((order) => ({ id: order.id, orderNumber: order.order_number, supplierId: order.supplier_id }))} projects={projects} items={items.map(({ id, sku, name, purchasePriceMinor, inventoryAssetAccountId }) => ({ id, sku, name, purchasePriceMinor, inventoryAssetAccountId }))} currency={access.business.currency} currencies={currencySettings.currencies.filter((currency) => currency.is_active || currency.code === record.invoice.currencyCode).map((currency) => ({ code: currency.code, name: currency.name, minorUnit: currency.minor_unit }))} rates={currencySettings.rates.map((rate) => ({ id: rate.id, currencyCode: rate.currency_code, rateDate: rate.rate_date, rateToBase: rate.rate_to_base, source: rate.source, sourceReference: rate.source_reference }))} initial={{ currencyCode: record.invoice.currencyCode, exchangeRateToBase: record.invoice.exchangeRateToBase, exchangeRateDate: record.invoice.exchangeRateDate, exchangeRateSource: record.invoice.exchangeRateSource as "Base" | "Manual" | "CBUAE", supplierId: record.invoice.supplierId, projectId: record.invoice.projectId ?? "", supplierInvoiceNumber: record.invoice.supplierInvoiceNumber, invoiceDate: record.invoice.invoiceDate, taxDate: record.invoice.taxDate, dueDate: record.invoice.dueDate, reference: record.invoice.reference ?? "", purchaseOrderId: record.invoice.purchaseOrderId ?? "", lines: record.lines.map((line) => ({ itemId: line.itemId ?? "", description: line.description, quantity: quantityMicrosToInput(line.quantityMicros), unitPrice: minorToCurrencyInput(line.unitPriceMinor, minorUnit), expenseAccountId: line.expenseAccountId, taxCodeId: line.taxCodeId, projectId: line.projectId ?? "" })) }} /></div>;
+  return (
+    <div className="page-container">
+      <BackLink href={`/b/${businessId}/purchases/invoices/${invoiceId}`}>{record.invoice.internalNumber}</BackLink>
+      <div className="mb-7">
+        <h1 className="page-title">Edit Purchase Invoice</h1>
+        <p className="page-description">{record.invoice.documentStatus === "posted" ? "Financial changes rebuild the AP journal and VAT tax detail atomically." : "Update the draft, or post it when ready."}</p>
+      </div>
+      <PurchaseInvoiceForm
+        businessId={businessId}
+        invoiceId={invoiceId}
+        documentStatus={record.invoice.documentStatus}
+        suppliers={suppliers.map(({ id, name, defaultCurrencyCode }) => ({ id, name, defaultCurrencyCode }))}
+        expenseAccounts={accounts.map(({ id, name }) => ({ id, name }))}
+        taxCodes={taxes.map(({ id, name, rateBasisPoints, vatCategory }) => ({ id, name, rateBasisPoints, vatCategory: vatCategory! }))}
+        orders={orders.map((order) => ({ id: order.id, orderNumber: order.order_number, supplierId: order.supplier_id }))}
+        projects={projects}
+        items={items.map(({ id, sku, name, purchasePriceMinor, inventoryAssetAccountId }) => ({ id, sku, name, purchasePriceMinor, inventoryAssetAccountId }))}
+        currency={access.business.currency}
+        currencies={currencySettings.currencies.filter((currency) => currency.is_active || currency.code === record.invoice.currencyCode).map((currency) => ({ code: currency.code, name: currency.name, minorUnit: currency.minor_unit }))}
+        rates={currencySettings.rates.map((rate) => ({ id: rate.id, currencyCode: rate.currency_code, rateDate: rate.rate_date, rateToBase: rate.rate_to_base, source: rate.source, sourceReference: rate.source_reference }))}
+        initial={{
+          currencyCode: record.invoice.currencyCode,
+          exchangeRateToBase: record.invoice.exchangeRateToBase,
+          exchangeRateDate: record.invoice.exchangeRateDate,
+          exchangeRateSource: record.invoice.exchangeRateSource as "Base" | "Manual" | "CBUAE",
+          supplierId: record.invoice.supplierId,
+          projectId: record.invoice.projectId ?? "",
+          supplierInvoiceNumber: record.invoice.supplierInvoiceNumber,
+          invoiceDate: record.invoice.invoiceDate,
+          taxDate: record.invoice.taxDate,
+          dueDate: record.invoice.dueDate,
+          reference: record.invoice.reference ?? "",
+          notes: record.invoice.notes ?? "",
+          terms: record.invoice.terms ?? "",
+          amountsIncludeTax: record.invoice.amountsIncludeTax,
+          purchaseOrderId: record.invoice.purchaseOrderId ?? "",
+          lines: record.lines.map((line: any) => ({
+            itemId: line.itemId ?? "",
+            description: line.description,
+            quantity: quantityMicrosToInput(line.quantityMicros),
+            unitPrice: minorToCurrencyInput(line.unitPriceMinor, minorUnit),
+            discountType: line.discountType ?? "none",
+            discountValue: line.discountValue ?? "0",
+            expenseAccountId: line.expenseAccountId,
+            taxCodeId: line.taxCodeId,
+            projectId: line.projectId ?? "",
+          })),
+        }}
+      />
+    </div>
+  );
 }

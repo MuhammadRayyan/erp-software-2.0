@@ -3,8 +3,8 @@
 import { redirect } from "next/navigation";
 import { z } from "zod";
 import { requireModule } from "@/core/permissions/require-module";
-import { receiptInputSchema } from "./receipt-input";
-import { createReceipt, voidReceipt } from "./receipt-service";
+import { receiptInputSchema, applyReceiptCreditInputSchema } from "./receipt-input";
+import { createReceipt, voidReceipt, applyReceiptCredit } from "./receipt-service";
 import { revalidatePath } from "next/cache";
 
 export type ReceiptActionResult = { error?: string; fieldErrors?: Record<string, string[]> };
@@ -27,7 +27,36 @@ export async function createReceiptAction(
   } catch (error) {
     return { error: error instanceof Error ? error.message : "The receipt could not be posted." };
   }
-  redirect(`/b/${businessId}/sales/invoices/${result.invoiceId}?notice=Receipt posted`);
+  revalidatePath(`/b/${businessId}/sales/receipts`);
+  revalidatePath(`/b/${businessId}/sales/invoices`);
+  if (result.allocations && result.allocations.length === 1 && result.allocations[0]?.invoiceId && result.unallocatedMinor === 0) {
+    redirect(`/b/${businessId}/sales/invoices/${result.allocations[0].invoiceId}?notice=Receipt posted`);
+  } else {
+    redirect(`/b/${businessId}/sales/receipts/${result.id}?notice=Receipt posted`);
+  }
+}
+
+export async function applyReceiptCreditAction(
+  businessId: string,
+  input: unknown,
+) {
+  const { user } = await requireModule(businessId, "sales");
+  const parsed = applyReceiptCreditInputSchema.safeParse(input);
+  if (!parsed.success) {
+    return {
+      error: "Check the credit allocation fields.",
+      fieldErrors: z.flattenError(parsed.error).fieldErrors,
+    };
+  }
+  try {
+    applyReceiptCredit(businessId, user.id, parsed.data);
+    revalidatePath(`/b/${businessId}/sales/invoices/${parsed.data.invoiceId}`);
+    revalidatePath(`/b/${businessId}/sales/receipts/${parsed.data.receiptId}`);
+    revalidatePath(`/b/${businessId}/sales/invoices`);
+    return { ok: true };
+  } catch (error) {
+    return { error: error instanceof Error ? error.message : "The credit could not be applied." };
+  }
 }
 
 export async function voidReceiptAction(businessId: string, receiptId: string) {

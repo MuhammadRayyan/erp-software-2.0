@@ -40,6 +40,19 @@ function toIsoDate(date: Date): string {
   return `${year}-${month}-${day}`;
 }
 
+function startOfLastMonth(date: Date): Date {
+  return new Date(date.getFullYear(), date.getMonth() - 1, 1);
+}
+
+function endOfLastMonth(date: Date): Date {
+  return new Date(date.getFullYear(), date.getMonth(), 0);
+}
+
+function startOfQuarter(date: Date): Date {
+  const currentQuarter = Math.floor(date.getMonth() / 3);
+  return new Date(date.getFullYear(), currentQuarter * 3, 1);
+}
+
 /** Default preset list — applied across all paginated lists that use the filter. */
 export const DEFAULT_DATE_PRESETS: DatePreset[] = [
   {
@@ -69,6 +82,42 @@ export const DEFAULT_DATE_PRESETS: DatePreset[] = [
   {
     id: "this-year",
     label: "This year",
+    range: () => {
+      const now = new Date();
+      return { from: toIsoDate(startOfYear(now)), to: toIsoDate(now) };
+    },
+  },
+];
+
+/** Statement date presets — designed for statements of account and aging reports. */
+export const STATEMENT_DATE_PRESETS: DatePreset[] = [
+  {
+    id: "this-month",
+    label: "This Month",
+    range: () => {
+      const now = new Date();
+      return { from: toIsoDate(startOfMonth(now)), to: toIsoDate(now) };
+    },
+  },
+  {
+    id: "last-month",
+    label: "Last Month",
+    range: () => {
+      const now = new Date();
+      return { from: toIsoDate(startOfLastMonth(now)), to: toIsoDate(endOfLastMonth(now)) };
+    },
+  },
+  {
+    id: "this-quarter",
+    label: "This Quarter",
+    range: () => {
+      const now = new Date();
+      return { from: toIsoDate(startOfQuarter(now)), to: toIsoDate(now) };
+    },
+  },
+  {
+    id: "this-year",
+    label: "This Year",
     range: () => {
       const now = new Date();
       return { from: toIsoDate(startOfYear(now)), to: toIsoDate(now) };

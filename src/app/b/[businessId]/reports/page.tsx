@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { ArrowDownToLine, ArrowRight, ArrowUpFromLine, BookOpenText, ContactRound, FileInput, FolderKanban, Landmark, ListChecks, PackageSearch, Percent, Scale, ScrollText, Truck, UsersRound } from "lucide-react";
+import { ArrowDownToLine, ArrowRight, ArrowUpFromLine, BookOpenText, ContactRound, FileInput, FolderKanban, Landmark, ListChecks, PackageSearch, Percent, Scale, ScrollText, TrendingUp, Truck, UsersRound } from "lucide-react";
 import { requireModule } from "@/core/permissions/require-module";
 
 const groups = [
@@ -8,6 +8,7 @@ const groups = [
     reports: [
       { title: "Profit & Loss", description: "Income, Cost of Sales, and Expenses for a given period.", path: "/reports/profit-loss", icon: ScrollText },
       { title: "Balance Sheet", description: "Assets, Liabilities, and Equity as of a specific date.", path: "/reports/balance-sheet", icon: Landmark },
+      { title: "Cash Flow & Liquidity Forecast", description: "30, 60, and 90-day cash projection modeled on liquid reserves, receivables, and payables commitments.", path: "/reports/cash-flow-forecast", icon: TrendingUp },
     ],
   },
   {

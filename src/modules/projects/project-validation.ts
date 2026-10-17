@@ -31,13 +31,19 @@ export function validateProjectReferences(
   if (rows.length !== ids.length) throw new Error("Selected project could not be found.");
   for (const project of rows) {
     if (!project.is_active || project.status === "cancelled") throw new Error("Project is cancelled.");
-    if (
-      input.customerFacing &&
-      project.customer_id &&
-      input.customerId &&
-      project.customer_id !== input.customerId
-    ) {
-      throw new Error("Selected project belongs to a different customer.");
+    if (input.customerFacing && input.customerId) {
+      const hasCustomerConstraint = Boolean(project.customer_id) || Boolean(
+        sqlite.prepare("SELECT 1 FROM project_customers WHERE project_id = ? LIMIT 1").get(project.id)
+      );
+      if (hasCustomerConstraint) {
+        if (project.customer_id === input.customerId) continue;
+        const isAssociated = sqlite.prepare(
+          "SELECT 1 FROM project_customers WHERE project_id = ? AND customer_id = ? LIMIT 1"
+        ).get(project.id, input.customerId);
+        if (!isAssociated) {
+          throw new Error("Selected project belongs to a different customer.");
+        }
+      }
     }
   }
 }

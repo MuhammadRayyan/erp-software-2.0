@@ -12,12 +12,15 @@ export function journalSourceLabel(sourceType: string) {
     supplier_payment_void: "Supplier Payment Reversal",
     delivery_note: "Delivery Note",
     delivery_note_void: "Delivery Note Void",
+    debit_note: "Debit Note",
+    debit_note_void: "Debit Note Void",
     stock_adjustment: "Stock Adjustment",
     stock_adjustment_void: "Stock Adjustment Void",
     bank_transaction: "Bank Transaction",
     bank_transaction_void: "Bank Transaction Void",
     bank_transfer: "Bank Transfer",
     bank_transfer_void: "Bank Transfer Void",
+    opening_balance: "Opening Balance",
   };
   return labels[sourceType] ?? sourceType.replaceAll("_", " ");
 }

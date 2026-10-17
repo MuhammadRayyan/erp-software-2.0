@@ -10,6 +10,7 @@ import { requireModule } from "@/core/permissions/require-module";
 import { buildDateSearchParams, DATE_PATTERN } from "@/lib/params";
 import { listGoodsReceipts } from "@/modules/inventory/goods-receipt-service";
 import { formatQuantityMicros } from "@/modules/inventory/inventory-valuation";
+import { GoodsReceiptRowActions } from "@/modules/inventory/goods-receipt-row-actions";
 
 export const metadata = { title: "Goods Receipts" };
 
@@ -69,6 +70,7 @@ export default async function GoodsReceiptsPage({
                   <th className="text-right!">Quantity</th>
                   <th className="text-right!">Value</th>
                   <th>Status</th>
+                  <th className="w-16 text-right"><span className="sr-only">Actions</span></th>
                 </tr>
               </thead>
               <tbody>
@@ -93,6 +95,14 @@ export default async function GoodsReceiptsPage({
                     </td>
                     <td>
                       <StatusBadge status={String(row.document_status)} />
+                    </td>
+                    <td>
+                      <GoodsReceiptRowActions
+                        businessId={businessId}
+                        receiptId={String(row.id)}
+                        receiptNumber={String(row.receipt_number)}
+                        documentStatus={String(row.document_status)}
+                      />
                     </td>
                   </tr>
                 ))}

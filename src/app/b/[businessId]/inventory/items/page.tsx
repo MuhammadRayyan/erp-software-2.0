@@ -9,6 +9,7 @@ import { requireModule } from "@/core/permissions/require-module";
 import { formatMoney } from "@/core/format";
 import { listInventoryItems } from "@/modules/inventory/inventory-item-service";
 import { formatQuantityMicros, formatUnitCostMicros } from "@/modules/inventory/inventory-valuation";
+import { InventoryItemRowActions } from "@/modules/inventory/inventory-item-row-actions";
 
 export const metadata = {
   title: "Inventory Items",
@@ -68,6 +69,7 @@ export default async function InventoryItemsPage({
                   <th className="text-right!">To Receive</th>
                   <th className="text-right!">To Deliver</th>
                   <th>Status</th>
+                  <th className="w-16 text-right"><span className="sr-only">Actions</span></th>
                 </tr>
               </thead>
               <tbody>
@@ -93,6 +95,13 @@ export default async function InventoryItemsPage({
                     <td className="money text-right">{formatQuantityMicros(Number(row.to_deliver_micros))}</td>
                     <td>
                       <StatusBadge status={row.is_active ? "active" : "inactive"} />
+                    </td>
+                    <td>
+                      <InventoryItemRowActions
+                        businessId={businessId}
+                        itemId={String(row.id)}
+                        itemName={String(row.name)}
+                      />
                     </td>
                   </tr>
                 ))}

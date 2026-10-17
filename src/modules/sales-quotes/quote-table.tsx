@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import Link from "next/link";
-import { ChevronRight } from "lucide-react";
+import { ChevronRight, MoreHorizontal, Eye, FileEdit, Download, ShoppingCart, FileText } from "lucide-react";
 import { 
   useLegacyTable as useTable,
   getCoreRowModel as createCoreRowModel,
@@ -12,6 +12,7 @@ import { type SortingState, type RowSelectionState } from "@tanstack/react-table
 import { StatusBadge, statusLabel } from "@/components/status-badge";
 import { ListToolbar, SearchInput, ToolbarSelect, ActiveFiltersRow, FilterChip } from "@/components/list-toolbar";
 import { Button } from "@/components/ui/button";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { useColumns } from "@/components/columns-dropdown";
 import { DataTable } from "@/components/ui/data-table";
 import { formatDate, formatMoney } from "@/core/format";
@@ -193,15 +194,63 @@ export function SalesQuoteTable({
       {
         id: "actions",
         header: () => <span className="sr-only">Actions</span>,
-        meta: { className: "w-12" },
+        meta: { className: "w-16 text-right" },
         enableSorting: false,
-        cell: ({ row }: any) => (
-          <Button asChild variant="ghost" size="icon" className="text-muted-foreground opacity-50 transition-opacity md:opacity-0 md:group-hover:opacity-100">
-            <Link href={`/b/${row.original.businessId}/sales/quotes/${row.original.id}`} aria-label={`Open ${row.original.quote_number}`}>
-              <ChevronRight className="size-4" />
-            </Link>
-          </Button>
-        ),
+        cell: ({ row }: any) => {
+          const quote = row.original;
+          const canEdit = quote.documentStatus !== "accepted" && quote.documentStatus !== "rejected" && quote.documentStatus !== "cancelled" && quote.documentStatus !== "superseded";
+          const canConvert = quote.documentStatus === "sent" || quote.documentStatus === "accepted" || quote.documentStatus === "draft";
+          return (
+            <div className="flex items-center justify-end gap-1">
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="ghost" size="icon" className="size-7 text-muted-foreground hover:text-foreground" aria-label={`Actions for ${quote.quote_number}`}>
+                    <MoreHorizontal className="size-4" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-52">
+                  <DropdownMenuItem asChild>
+                    <Link href={`/b/${quote.businessId}/sales/quotes/${quote.id}`}>
+                      <Eye className="size-4 text-muted-foreground" /> View Quote
+                    </Link>
+                  </DropdownMenuItem>
+                  {canEdit && (
+                    <DropdownMenuItem asChild>
+                      <Link href={`/b/${quote.businessId}/sales/quotes/${quote.id}/edit`}>
+                        <FileEdit className="size-4 text-muted-foreground" /> Edit Quote
+                      </Link>
+                    </DropdownMenuItem>
+                  )}
+                  <DropdownMenuItem asChild>
+                    <a href={`/api/businesses/${quote.businessId}/documents/sales-quote/${quote.id}/pdf`} target="_blank" rel="noreferrer">
+                      <Download className="size-4 text-muted-foreground" /> Download PDF
+                    </a>
+                  </DropdownMenuItem>
+                  {canConvert && (
+                    <>
+                      <DropdownMenuSeparator />
+                      <DropdownMenuItem asChild>
+                        <Link href={`/b/${quote.businessId}/sales/orders/new?quoteId=${quote.id}`}>
+                          <ShoppingCart className="size-4 text-muted-foreground" /> Convert to Order
+                        </Link>
+                      </DropdownMenuItem>
+                      <DropdownMenuItem asChild>
+                        <Link href={`/b/${quote.businessId}/sales/invoices/new?quoteId=${quote.id}`}>
+                          <FileText className="size-4 text-muted-foreground" /> Convert to Invoice
+                        </Link>
+                      </DropdownMenuItem>
+                    </>
+                  )}
+                </DropdownMenuContent>
+              </DropdownMenu>
+              <Button asChild variant="ghost" size="icon" className="size-7 text-muted-foreground opacity-50 transition-opacity md:opacity-0 md:group-hover:opacity-100">
+                <Link href={`/b/${quote.businessId}/sales/quotes/${quote.id}`} aria-label={`Open ${quote.quote_number}`}>
+                  <ChevronRight className="size-4" />
+                </Link>
+              </Button>
+            </div>
+          );
+        },
       },
     ],
     [],
@@ -230,17 +279,18 @@ export function SalesQuoteTable({
   };
   const hasActiveFilter = Boolean(customerId || projectId || status || query);
 
-  const totalQuoteValueStr = useMemo(
-    () =>
-      renderMultiCurrencyString(
-        rows.map((r) => ({
-          amount: r.total_minor,
-          currency: r.currency_code,
-          minorUnit: r.currency_minor_unit,
-        }))
-      ),
-    [rows]
-  );
+  const totalQuoteValueStr = useMemo(() => {
+    const activeRows = (status === "cancelled" || status === "rejected")
+      ? rows
+      : rows.filter((r) => r.documentStatus !== "cancelled" && r.documentStatus !== "superseded" && r.documentStatus !== "rejected");
+    return renderMultiCurrencyString(
+      activeRows.map((r) => ({
+        amount: r.total_minor,
+        currency: r.currency_code,
+        minorUnit: r.currency_minor_unit,
+      }))
+    );
+  }, [rows, status]);
   const acceptedCount = useMemo(
     () => rows.filter((r) => r.documentStatus === "accepted").length,
     [rows]

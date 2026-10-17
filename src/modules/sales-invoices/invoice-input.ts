@@ -33,6 +33,10 @@ export const invoiceInputSchema = z.object({
   notes: z.string().trim().max(1_000).optional().default(""),
   terms: z.string().trim().max(10_000).optional().default(""),
   salesOrderId: z.union([z.literal(""), z.string().uuid()]).optional().default(""),
+  quoteId: z.union([z.literal(""), z.string().uuid()]).optional().default(""),
+  applyAvailableCredit: z.boolean().optional().default(false),
+  applyCreditReceiptId: z.string().optional().default(""),
+  applyCreditAmount: z.string().optional().default(""),
   lines: z.array(invoiceLineSchema).min(1, "Add at least one line").max(100),
 });
 

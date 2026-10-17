@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import Link from "next/link";
-import { ChevronRight } from "lucide-react";
+import { ChevronRight, MoreHorizontal, Eye, FileEdit, Download } from "lucide-react";
 import { 
   useLegacyTable as useTable,
   getCoreRowModel as createCoreRowModel,
@@ -12,6 +12,7 @@ import { type SortingState } from "@tanstack/react-table";
 import { StatusBadge } from "@/components/status-badge";
 import { ListToolbar, SearchInput, ToolbarSelect, ActiveFiltersRow, FilterChip } from "@/components/list-toolbar";
 import { Button } from "@/components/ui/button";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { useColumns } from "@/components/columns-dropdown";
 import { DataTable } from "@/components/ui/data-table";
 import { formatDate, formatMoney } from "@/core/format";
@@ -133,18 +134,50 @@ export function DebitNoteTable({
       {
         id: "actions",
         header: () => <span className="sr-only">Actions</span>,
-        meta: { className: "w-12" },
+        meta: { className: "w-16 text-right" },
         enableSorting: false,
-        cell: ({ row }: any) => (
-          <Button asChild variant="ghost" size="icon" className="text-muted-foreground opacity-50 transition-opacity md:opacity-0 md:group-hover:opacity-100">
-            <Link
-              href={`/b/${row.original.businessId}/purchases/debit-notes/${row.original.id}`}
-              aria-label={`Open ${row.original.debit_note_number}`}
-            >
-              <ChevronRight className="size-4" />
-            </Link>
-          </Button>
-        ),
+        cell: ({ row }: any) => {
+          const dn = row.original;
+          const canEdit = dn.document_status === "draft";
+          return (
+            <div className="flex items-center justify-end gap-1">
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="ghost" size="icon" className="size-7 text-muted-foreground hover:text-foreground" aria-label={`Actions for ${dn.debit_note_number}`}>
+                    <MoreHorizontal className="size-4" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-48">
+                  <DropdownMenuItem asChild>
+                    <Link href={`/b/${dn.businessId}/purchases/debit-notes/${dn.id}`}>
+                      <Eye className="size-4 text-muted-foreground" /> View Details
+                    </Link>
+                  </DropdownMenuItem>
+                  {canEdit && (
+                    <DropdownMenuItem asChild>
+                      <Link href={`/b/${dn.businessId}/purchases/debit-notes/${dn.id}/edit`}>
+                        <FileEdit className="size-4 text-muted-foreground" /> Edit Debit Note
+                      </Link>
+                    </DropdownMenuItem>
+                  )}
+                  <DropdownMenuItem asChild>
+                    <a href={`/api/businesses/${dn.businessId}/documents/debit-note/${dn.id}/pdf`} target="_blank" rel="noreferrer">
+                      <Download className="size-4 text-muted-foreground" /> Download PDF
+                    </a>
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+              <Button asChild variant="ghost" size="icon" className="size-7 text-muted-foreground opacity-50 transition-opacity md:opacity-0 md:group-hover:opacity-100">
+                <Link
+                  href={`/b/${dn.businessId}/purchases/debit-notes/${dn.id}`}
+                  aria-label={`Open ${dn.debit_note_number}`}
+                >
+                  <ChevronRight className="size-4" />
+                </Link>
+              </Button>
+            </div>
+          );
+        },
       },
     ],
     [],

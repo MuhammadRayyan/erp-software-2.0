@@ -22,3 +22,33 @@ export function ProjectStatusBadge({ status }: { status: ProjectStatus }) {
 }
 
 export function projectStatusLabel(status: ProjectStatus) { return labels[status]; }
+
+import type { ProjectCustomerRole } from "./project-input";
+
+export const customerRoleLabels: Record<ProjectCustomerRole, string> = {
+  primary_client: "Primary Client",
+  co_client: "Co-Client",
+  joint_venture: "Joint Venture Partner",
+  tenant: "Tenant / Fit-Out",
+  bill_to: "Bill-To Party",
+  sponsor: "Project Sponsor",
+  consultant: "Consultant / Rep",
+};
+
+export const customerRoleTones: Record<ProjectCustomerRole, "neutral" | "info" | "warning" | "success" | "danger"> = {
+  primary_client: "info",
+  co_client: "neutral",
+  joint_venture: "warning",
+  tenant: "neutral",
+  bill_to: "info",
+  sponsor: "success",
+  consultant: "neutral",
+};
+
+export function ProjectCustomerRoleBadge({ role }: { role: ProjectCustomerRole }) {
+  return <Badge tone={customerRoleTones[role] ?? "neutral"}>{customerRoleLabels[role] ?? role}</Badge>;
+}
+
+export function projectCustomerRoleLabel(role: ProjectCustomerRole) {
+  return customerRoleLabels[role] ?? role;
+}

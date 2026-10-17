@@ -22,6 +22,7 @@ export function postBankTransaction(
     description: string;
   },
   lines: PostingLine[],
+  replace = false,
 ) {
   const taxRows = sqlite.prepare(`
     SELECT id, sales_tax_account_id, purchase_tax_account_id, is_recoverable
@@ -91,5 +92,6 @@ export function postBankTransaction(
     date: transaction.date,
     description: `Bank Transaction ${transaction.transactionNumber}`,
     lines: journalLines,
+    replace,
   });
 }

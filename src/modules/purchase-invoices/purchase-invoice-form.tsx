@@ -3,12 +3,13 @@ import { useRouter } from "next/navigation";
 import { FormError } from "@/components/form-error";
 import { useState } from "react";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { LoaderCircle } from "lucide-react";
+import { Coins, LoaderCircle } from "lucide-react";
 import { useFieldArray, useForm, useWatch } from "react-hook-form";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
+import { formatDate, formatMoney } from "@/core/format";
 import { minorToCurrencyInput } from "@/modules/currency/conversion";
 import { savePurchaseInvoiceAction } from "./actions";
 import {
@@ -42,6 +43,13 @@ type ItemOption = {
   purchasePriceMinor: number | null;
   inventoryAssetAccountId: string;
 };
+export type SupplierPrepaymentOption = {
+  paymentId: string;
+  paymentNumber: string;
+  date: string;
+  currencyCode: string;
+  unallocatedAmountMinor: number;
+};
 
 export function PurchaseInvoiceForm({
   businessId,
@@ -57,6 +65,7 @@ export function PurchaseInvoiceForm({
   currencies,
   rates,
   initial,
+  availableSupplierPrepayments,
 }: {
   businessId: string;
   invoiceId?: string;
@@ -71,6 +80,7 @@ export function PurchaseInvoiceForm({
   currencies: DocumentCurrencyOption[];
   rates: DocumentRateOption[];
   initial: PurchaseInvoiceInput;
+  availableSupplierPrepayments?: Record<string, SupplierPrepaymentOption[]>;
 }) {
   const router = useRouter();
   const [serverError, setServerError] = useState("");
@@ -122,6 +132,19 @@ export function PurchaseInvoiceForm({
     taxCodes,
     minorUnit,
   });
+  const billTotalMinor = totals.subtotalMinor + totals.taxMinor;
+  const applyAvailablePrepayment = useWatch({ control, name: "applyAvailablePrepayment" });
+  const currentPrepayments: SupplierPrepaymentOption[] = (availableSupplierPrepayments?.[supplierId] || []).filter(
+    (p: SupplierPrepaymentOption) => p.currencyCode === currencyCode
+  );
+  const totalAvailablePrepaymentMinor = currentPrepayments.reduce(
+    (s: number, p: SupplierPrepaymentOption) => s + p.unallocatedAmountMinor,
+    0
+  );
+  const prepaymentAppliedMinor =
+    !invoiceId && applyAvailablePrepayment && totalAvailablePrepaymentMinor > 0
+      ? Math.min(billTotalMinor, totalAvailablePrepaymentMinor)
+      : 0;
       
   function updateGlobalTax(newTaxId: string) {
     setGlobalTaxCodeId(newTaxId);
@@ -163,6 +186,7 @@ export function PurchaseInvoiceForm({
     : `/b/${businessId}/purchases/invoices`;
   return (
     <form className="space-y-5 max-w-none" noValidate>
+      <input type="hidden" {...register("purchaseOrderId")} />
       {serverError && <FormError message={serverError} />}
       <section className="form-section">
         <h2 className="text-base font-semibold">Bill details</h2>
@@ -212,6 +236,36 @@ export function PurchaseInvoiceForm({
               <p className="field-error">{errors.supplierId.message}</p>
             )}
           </div>
+
+          {!invoiceId && totalAvailablePrepaymentMinor > 0 && (
+            <div className="md:col-span-3 rounded-lg border border-emerald-500/30 bg-emerald-500/10 p-3.5 text-sm dark:bg-emerald-950/25">
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                <div className="flex items-start gap-2.5">
+                  <Coins className="size-5 shrink-0 text-emerald-600 dark:text-emerald-400 mt-0.5" />
+                  <div>
+                    <p className="font-semibold text-emerald-900 dark:text-emerald-200">
+                      Supplier Prepayment Balance Available: {formatMoney(totalAvailablePrepaymentMinor, currencyCode, minorUnit)}
+                    </p>
+                    <p className="mt-0.5 text-xs text-emerald-700 dark:text-emerald-300">
+                      {currentPrepayments.length === 1
+                        ? `Payment ${currentPrepayments[0].paymentNumber} (${formatDate(currentPrepayments[0].date)}) has unallocated advance funds.`
+                        : `${currentPrepayments.length} payments have unallocated advance funds. Prepayment will be applied automatically upon posting.`}
+                    </p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-3">
+                  <label className="flex items-center gap-2 cursor-pointer select-none font-medium text-emerald-900 dark:text-emerald-200">
+                    <input
+                      type="checkbox"
+                      className="size-4 rounded border-emerald-300 text-emerald-600 focus:ring-emerald-500"
+                      {...register("applyAvailablePrepayment")}
+                    />
+                    <span className="text-xs sm:text-sm">Apply prepayment upon posting</span>
+                  </label>
+                </div>
+              </div>
+            </div>
+          )}
           <div className="space-y-1.5">
             <Label htmlFor="supplierInvoiceNumber">Supplier invoice #</Label>
             <Input
@@ -409,6 +463,7 @@ export function PurchaseInvoiceForm({
         totals={{
           subtotalMinor: totals.subtotalMinor,
           taxMinor: totals.taxMinor,
+          creditAppliedMinor: prepaymentAppliedMinor,
           totalMinor: totals.subtotalMinor + totals.taxMinor,
           currencyCode,
           minorUnit,

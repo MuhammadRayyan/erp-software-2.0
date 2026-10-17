@@ -10,6 +10,7 @@ import { formatDate, formatMoney } from "@/core/format";
 import { requireModule } from "@/core/permissions/require-module";
 import { buildDateSearchParams, DATE_PATTERN, parsePageParam, parsePageSizeParam } from "@/lib/params";
 import { listReceiptsPaginated } from "@/modules/receipts/receipt-service";
+import { ReceiptRowActions } from "@/modules/receipts/receipt-row-actions";
 
 export const metadata = { title: "Receipts" };
 
@@ -64,6 +65,7 @@ export default async function ReceiptsPage({
                     <th className="text-right!">Amount</th>
                     <th className="text-right!">Base Bank</th>
                     <th>Status</th>
+                    <th className="w-16 text-right"><span className="sr-only">Actions</span></th>
                   </tr>
                 </thead>
                 <tbody>
@@ -88,6 +90,14 @@ export default async function ReceiptsPage({
                         <Badge tone={receipt.document_status === "posted" ? "info" : "danger"}>
                           {receipt.document_status === "posted" ? "Posted" : "Reversed"}
                         </Badge>
+                      </td>
+                      <td>
+                        <ReceiptRowActions
+                          businessId={businessId}
+                          receiptId={receipt.id}
+                          receiptNumber={receipt.receipt_number}
+                          customerId={receipt.customer_id}
+                        />
                       </td>
                     </tr>
                   ))}

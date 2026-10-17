@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { phoneSchema } from "@/core/validation/party-schemas";
 
 export const businessProfileInputSchema = z.object({
   legalName: z.string().trim().max(150).optional().default(""),
@@ -6,7 +7,7 @@ export const businessProfileInputSchema = z.object({
   companyRegistrationNumber: z.string().trim().max(100).optional().default(""),
   taxId: z.string().trim().max(50).optional().default(""),
   email: z.string().trim().max(150).optional().default(""),
-  phone: z.string().trim().max(50).optional().default(""),
+  phone: phoneSchema,
   website: z.string().trim().max(200).optional().default(""),
   addressLine1: z.string().trim().max(255).optional().default(""),
   addressLine2: z.string().trim().max(255).optional().default(""),

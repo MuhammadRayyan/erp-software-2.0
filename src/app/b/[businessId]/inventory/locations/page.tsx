@@ -9,6 +9,7 @@ import { requireModule } from "@/core/permissions/require-module";
 import { formatMoney } from "@/core/format";
 import { listInventoryLocations } from "@/modules/inventory/inventory-location-service";
 import { formatQuantityMicros } from "@/modules/inventory/inventory-valuation";
+import { InventoryLocationRowActions } from "@/modules/inventory/inventory-location-row-actions";
 
 export const metadata = {
   title: "Inventory Locations",
@@ -43,6 +44,7 @@ export default async function InventoryLocationsPage({ params }: { params: Promi
                   <th className="text-right!">Total Quantity</th>
                   <th className="text-right!">Value</th>
                   <th>Status</th>
+                  <th className="w-16 text-right"><span className="sr-only">Actions</span></th>
                 </tr>
               </thead>
               <tbody>
@@ -63,6 +65,13 @@ export default async function InventoryLocationsPage({ params }: { params: Promi
                     <td className="money text-right">{formatMoney(Number(row.value_minor), access.business.currency)}</td>
                     <td>
                       <StatusBadge status={row.is_active ? "active" : "inactive"} />
+                    </td>
+                    <td>
+                      <InventoryLocationRowActions
+                        businessId={businessId}
+                        locationId={row.id}
+                        locationName={row.name}
+                      />
                     </td>
                   </tr>
                 ))}

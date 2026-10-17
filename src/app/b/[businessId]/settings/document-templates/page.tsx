@@ -23,7 +23,12 @@ export default async function DocumentTemplatesPage({
   const settings = getTemplateSettings(businessId, user.id, documentType);
   
   return (
-    <SettingsShell businessId={businessId} title="Document Templates" description="Customize the appearance of your document PDFs.">
+    <SettingsShell
+      businessId={businessId}
+      title="Document Templates"
+      description="Customize the appearance of your document PDFs."
+      maxWidth="max-w-7xl"
+    >
       <TemplateSelector businessId={businessId} currentType={documentType} />
       <TemplateEditor key={documentType} businessId={businessId} documentType={documentType} initialSettings={settings} />
     </SettingsShell>

@@ -15,6 +15,7 @@ import { getSalesOrder } from "@/modules/sales-orders/sales-order-service";
 import { InvoiceForm } from "@/modules/sales-invoices/invoice-form";
 import { listInventoryItemOptions } from "@/modules/inventory/inventory-item-service";
 import { getCurrencySettings } from "@/modules/currency/exchange-rate";
+import { getAllCustomersUnallocatedCredit } from "@/modules/receipts/receipt-service";
 import { BackLink } from "@/components/back-link";
 
 export default async function NewInvoicePage({
@@ -49,6 +50,7 @@ export default async function NewInvoicePage({
     }),
   );
   const currencySettings = getCurrencySettings(businessId, user.id);
+  const availableCustomerCredits = getAllCustomersUnallocatedCredit(businessId, user.id);
 
   const selectedProject =
     (sourceOrder?.order.projectId ? projects.find((p) => p.id === sourceOrder.order.projectId) : null) ??
@@ -177,8 +179,14 @@ export default async function NewInvoicePage({
             amountsIncludeTax: Boolean(
               sourceOrder?.order.amountsIncludeTax ?? sourceQuote?.quote.amountsIncludeTax
             ),
+            applyAvailableCredit: Boolean(
+              selectedCustomerId && (availableCustomerCredits[selectedCustomerId]?.length ?? 0) > 0
+            ),
+            applyCreditReceiptId: "",
+            applyCreditAmount: "",
             lines,
           }}
+          availableCustomerCredits={availableCustomerCredits}
         />
       ) : (
         <div className="max-w-xl rounded-lg border border-border bg-surface-raised p-6">

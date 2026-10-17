@@ -19,8 +19,20 @@ export default async function EditQuotePage({ params }: { params: Promise<{ busi
   const { user, access } = await requireModule(businessId, "sales");
   const record = getSalesQuote(businessId, user.id, quoteId);
   if (!record) notFound();
-  if (record.quote.documentStatus === "cancelled") {
-    return <div className="page-container"><h1 className="page-title">Cancelled quote</h1><p className="page-description">Cancelled quotes are retained for history and cannot be edited.</p><Button asChild className="mt-5"><Link href={`/b/${businessId}/sales/quotes/${quoteId}`}>Return to quote</Link></Button></div>;
+  if (record.quote.documentStatus === "cancelled" || record.quote.documentStatus === "superseded" || record.quote.documentStatus === "rejected") {
+    return (
+      <div className="page-container">
+        <h1 className="page-title">{record.quote.documentStatus === "superseded" ? "Superseded quote" : record.quote.documentStatus === "rejected" ? "Rejected quote" : "Cancelled quote"}</h1>
+        <p className="page-description">
+          {record.quote.documentStatus === "superseded"
+            ? "This quote has been superseded by a newer revision and cannot be edited directly."
+            : record.quote.documentStatus === "rejected"
+            ? "This quote was rejected and cannot be modified."
+            : "Cancelled quotes are retained for history and cannot be edited."}
+        </p>
+        <Button asChild className="mt-5"><Link href={`/b/${businessId}/sales/quotes/${quoteId}`}>Return to quote</Link></Button>
+      </div>
+    );
   }
   const customers = listCustomers(businessId, user.id);
   const salesAccounts = getSalesAccountOptions(businessId, user.id);

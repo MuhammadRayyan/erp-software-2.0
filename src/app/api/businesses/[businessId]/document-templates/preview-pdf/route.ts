@@ -109,6 +109,7 @@ export async function GET(
         "Content-Type": "application/pdf",
         "Content-Disposition": `inline; filename="preview-${documentType}.pdf"`,
         "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0",
+        "X-Frame-Options": "SAMEORIGIN",
       },
     });
   } catch (error) {
@@ -141,6 +142,7 @@ export async function POST(
         "Content-Type": "application/pdf",
         "Content-Disposition": `inline; filename="preview-${documentType}.pdf"`,
         "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0",
+        "X-Frame-Options": "SAMEORIGIN",
       },
     });
   } catch (error) {

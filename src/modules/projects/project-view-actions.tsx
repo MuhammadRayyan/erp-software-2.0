@@ -11,14 +11,24 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSepara
 import { deleteProjectAction } from "./actions";
 import { FormError } from "@/components/form-error";
 
-export function ProjectViewActions({ businessId, projectId, customerId }: { businessId: string; projectId: string; customerId: string | null }) {
+export function ProjectViewActions({
+  businessId,
+  projectId,
+  customerId,
+  customers = [],
+}: {
+  businessId: string;
+  projectId: string;
+  customerId: string | null;
+  customers?: Array<{ customerId: string; customerName: string; isPrimary?: boolean; role?: string }>;
+}) {
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState("");
   const router = useRouter();
   const query = new URLSearchParams({ projectId });
   if (customerId) query.set("customerId", customerId);
-  const invoiceHref = `/b/${businessId}/sales/invoices/new?${query}`;
+  const defaultInvoiceHref = `/b/${businessId}/sales/invoices/new?${query}`;
   const poHref = `/b/${businessId}/purchases/orders/new?projectId=${encodeURIComponent(projectId)}`;
   const piHref = `/b/${businessId}/purchases/invoices/new?projectId=${encodeURIComponent(projectId)}`;
   async function remove() {
@@ -32,7 +42,26 @@ export function ProjectViewActions({ businessId, projectId, customerId }: { busi
   return <>
     <div className="flex flex-wrap justify-end gap-2">
       <Button asChild variant="secondary"><Link href={`/b/${businessId}/projects/${projectId}/edit`}><Pencil className="size-4" /> Edit</Link></Button>
-      <Button asChild><Link href={invoiceHref}><Plus className="size-4" /> New Invoice</Link></Button>
+      {customers.length > 1 ? (
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button><Plus className="size-4 mr-1" /> New Invoice</Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end">
+            <div className="px-2 py-1.5 text-xs font-semibold text-muted-foreground">Select Client to Invoice:</div>
+            {customers.map((c) => (
+              <DropdownMenuItem key={c.customerId} asChild>
+                <Link href={`/b/${businessId}/sales/invoices/new?projectId=${projectId}&customerId=${c.customerId}`}>
+                  <span className="font-medium">{c.customerName}</span>
+                  {c.isPrimary && <span className="ml-1.5 text-xs text-muted-foreground">(Primary)</span>}
+                </Link>
+              </DropdownMenuItem>
+            ))}
+          </DropdownMenuContent>
+        </DropdownMenu>
+      ) : (
+        <Button asChild><Link href={defaultInvoiceHref}><Plus className="size-4" /> New Invoice</Link></Button>
+      )}
       <Button asChild variant="secondary" className="hidden md:inline-flex"><Link href={poHref}><ShoppingCart className="size-4" /> New Purchase Order</Link></Button>
       <DropdownMenu><DropdownMenuTrigger asChild><Button variant="secondary"><MoreHorizontal className="size-4" /> More</Button></DropdownMenuTrigger><DropdownMenuContent align="end"><DropdownMenuItem asChild className="md:hidden"><Link href={poHref}>New Purchase Order</Link></DropdownMenuItem><DropdownMenuItem asChild><Link href={piHref}>New Purchase Invoice</Link></DropdownMenuItem><DropdownMenuSeparator /><DropdownMenuItem className="text-danger" onSelect={() => setConfirmDelete(true)}>Delete unused project</DropdownMenuItem></DropdownMenuContent></DropdownMenu>
     </div>

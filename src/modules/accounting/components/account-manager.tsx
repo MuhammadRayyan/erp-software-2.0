@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { MoreHorizontal, Pencil, Plus, Trash2 } from "lucide-react";
+import { BookOpenText, MoreHorizontal, Pencil, Plus, Trash2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
@@ -134,6 +134,11 @@ export function AccountManager({
                             <DropdownMenuTrigger asChild><Button variant="ghost" size="icon" aria-label={`Actions for ${account.name}`}><MoreHorizontal className="size-4" /></Button></DropdownMenuTrigger>
                             <DropdownMenuContent align="end">
                               <DropdownMenuItem onSelect={() => openEditor(account)}><Pencil className="size-4" /> Edit</DropdownMenuItem>
+                              <DropdownMenuItem asChild>
+                                <Link href={`/b/${businessId}/reports/general-ledger?accountId=${account.id}`}>
+                                  <BookOpenText className="size-4" /> General Ledger
+                                </Link>
+                              </DropdownMenuItem>
                               <DropdownMenuSeparator />
                               <DropdownMenuItem disabled={account.isSystem} title={account.isSystem ? "System accounts cannot be deleted" : undefined} className="text-danger focus:text-danger" onSelect={() => { setServerError(""); setDeleting(account); }}><Trash2 className="size-4" /> Delete</DropdownMenuItem>
                             </DropdownMenuContent>

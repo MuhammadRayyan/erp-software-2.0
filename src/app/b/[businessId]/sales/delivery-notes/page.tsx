@@ -11,6 +11,7 @@ import { formatDate, formatMoney } from "@/core/format";
 import { buildDateSearchParams, DATE_PATTERN } from "@/lib/params";
 import { listDeliveryNotes } from "@/modules/inventory/delivery-note-service";
 import { formatQuantityMicros } from "@/modules/inventory/inventory-valuation";
+import { DeliveryNoteRowActions } from "@/modules/inventory/delivery-note-row-actions";
 
 export const metadata = { title: "Delivery Notes" };
 
@@ -61,6 +62,7 @@ export default async function DeliveryNotesPage({
                   <th className="text-right!">Quantity</th>
                   <th className="text-right!">COGS</th>
                   <th>Status</th>
+                  <th className="w-16 text-right"><span className="sr-only">Actions</span></th>
                 </tr>
               </thead>
               <tbody>
@@ -77,6 +79,14 @@ export default async function DeliveryNotesPage({
                     <td className="money text-right">{formatQuantityMicros(Number(row.quantity_micros))}</td>
                     <td className="money text-right">{formatMoney(Number(row.value_minor), access.business.currency)}</td>
                     <td><StatusBadge status={String(row.document_status)} /></td>
+                    <td>
+                      <DeliveryNoteRowActions
+                        businessId={businessId}
+                        deliveryId={String(row.id)}
+                        deliveryNumber={String(row.delivery_number)}
+                        documentStatus={String(row.document_status)}
+                      />
+                    </td>
                   </tr>
                 ))}
               </tbody>

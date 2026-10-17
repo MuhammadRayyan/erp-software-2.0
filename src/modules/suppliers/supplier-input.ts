@@ -5,6 +5,7 @@ import {
   legalRegistrationIdentifierSchema,
   electronicAddressSchema,
   electronicAddressSchemeSchema,
+  phoneSchema,
 } from "@/core/validation/party-schemas";
 
 const optionalEmail = z.union([z.literal(""), z.email("Enter a valid email address")]);
@@ -13,7 +14,7 @@ export const supplierInputSchema = z.object({
   defaultCurrencyCode: defaultCurrencyCodeSchema,
   name: z.string().trim().min(2, "Enter a supplier name").max(160),
   email: optionalEmail.optional().default(""),
-  phone: z.string().trim().max(50).optional().default(""),
+  phone: phoneSchema,
   taxReference: z.string().trim().max(100).optional().default(""),
   address: z.string().trim().max(500).optional().default(""),
   legalName: z.string().trim().max(200).optional().default(""),

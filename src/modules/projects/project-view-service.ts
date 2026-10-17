@@ -1,6 +1,7 @@
 import { getBusinessDb } from "@/core/db/business";
 import type { ProjectStatus } from "./project-input";
 import { convertToBase } from "@/modules/currency/conversion";
+import { listProjectCustomers } from "./project-service";
 
 export type ProjectDocumentRow = {
   id: string;
@@ -184,7 +185,10 @@ export function getProjectOperationalView(businessId: string, userId: string, pr
     ...projectNotes.map((row) => ({ id: `note-${row.id}`, at: row.created_at, label: "Project note added", amountMinor: null, href: null })),
   ].sort((a, b) => b.at.localeCompare(a.at)).slice(0, 30);
 
+  const projectCustomers = listProjectCustomers(businessId, userId, projectId);
+
   return {
+    projectCustomers,
     salesInvoices: invoices,
     creditNotes: notes,
     purchaseOrders: orders,
@@ -218,7 +222,10 @@ export function getProjectProfitability(
   if (filters.dateTo && /^\d{4}-\d{2}-\d{2}$/.test(filters.dateTo)) { conditions.push("je.date <= ?"); values.push(filters.dateTo); }
   const outerConditions: string[] = [];
   if (filters.status && ["draft", "active", "on_hold", "completed", "cancelled"].includes(filters.status)) { outerConditions.push("p.status = ?"); values.push(filters.status); }
-  if (filters.customerId) { outerConditions.push("p.customer_id = ?"); values.push(filters.customerId); }
+  if (filters.customerId) {
+    outerConditions.push("(p.customer_id = ? OR EXISTS (SELECT 1 FROM project_customers pc WHERE pc.project_id = p.id AND pc.customer_id = ?))");
+    values.push(filters.customerId, filters.customerId);
+  }
   return sqlite.prepare(`
     WITH actuals AS (
       SELECT jl.project_id,

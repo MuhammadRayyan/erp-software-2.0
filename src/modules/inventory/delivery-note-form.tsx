@@ -64,9 +64,12 @@ export function DeliveryNoteForm({
   } = form;
   const { fields, append, remove } = useFieldArray({ control, name: "lines" });
   const customerId = useWatch({ control, name: "customerId" });
-  const availableProjects = projects.filter(
-    (project) => !project.customerId || project.customerId === customerId,
-  );
+  const availableProjects = projects.filter((project) => {
+    if (!customerId) return true;
+    const cids = (project as any).customerIds as string[] | undefined;
+    if (cids && cids.length > 0) return cids.includes(customerId);
+    return !project.customerId || project.customerId === customerId;
+  });
 
   async function save(values: DeliveryNoteInput, intent: "draft" | "post") {
     setServerError("");

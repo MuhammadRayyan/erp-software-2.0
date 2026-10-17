@@ -124,3 +124,30 @@ export async function saveOpeningBalancesAction(
     return { error: error instanceof Error ? error.message : "Opening balances could not be saved." };
   }
 }
+
+export async function recodeLinesAction(
+  businessId: string,
+  payload: {
+    lines: Array<{
+      lineId: string;
+      sourceType: "sales_invoice" | "purchase_invoice" | "bank_transaction" | "manual_journal";
+      sourceId: string;
+    }>;
+    action:
+      | { type: "account"; targetAccountId: string }
+      | { type: "project"; targetProjectId: string | null }
+      | { type: "taxCode"; targetTaxCodeId: string };
+  },
+): Promise<{ success?: boolean; message?: string; error?: string }> {
+  const { user } = await requireModule(businessId, "accounting");
+  try {
+    const { recodeSelectedLines } = await import("./services/find-and-recode-service");
+    const result = recodeSelectedLines(businessId, user.id, payload);
+    revalidatePath(`/b/${businessId}/accounting/find-and-recode`);
+    revalidatePath(`/b/${businessId}/accounting/journal`);
+    revalidatePath(`/b/${businessId}/reports`);
+    return { success: true, message: result.message };
+  } catch (error) {
+    return { error: error instanceof Error ? error.message : "Lines could not be recoded." };
+  }
+}

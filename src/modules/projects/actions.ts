@@ -5,9 +5,9 @@ import { redirect } from "next/navigation";
 import { z } from "zod";
 import { requireModule } from "@/core/permissions/require-module";
 import { deleteProjectAttachment, uploadProjectAttachment } from "./project-attachment-service";
-import { projectInputSchema, projectNoteInputSchema } from "./project-input";
+import { projectCustomerInputSchema, projectInputSchema, projectNoteInputSchema } from "./project-input";
 import { createProjectNote, deleteProjectNote } from "./project-note-service";
-import { createProject, deleteProject, updateProject } from "./project-service";
+import { addProjectCustomer, createProject, deleteProject, removeProjectCustomer, updateProject } from "./project-service";
 
 export type ProjectActionResult = { error?: string; fieldErrors?: Record<string, string[]> };
 
@@ -87,4 +87,28 @@ export async function deleteProjectAttachmentAction(businessId: string, projectI
   } catch (error) {
     return { error: error instanceof Error ? error.message : "The attachment could not be deleted." };
   }
+}
+
+export async function addProjectCustomerAction(businessId: string, projectId: string, input: unknown): Promise<ProjectActionResult> {
+  const { user } = await requireModule(businessId, "projects");
+  const parsed = projectCustomerInputSchema.safeParse(input);
+  if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Check customer fields." };
+  try {
+    addProjectCustomer(businessId, user.id, projectId, parsed.data);
+  } catch (error) {
+    return { error: error instanceof Error ? error.message : "The client could not be added to the project." };
+  }
+  revalidatePath(`/b/${businessId}/projects/${projectId}`);
+  return {};
+}
+
+export async function removeProjectCustomerAction(businessId: string, projectId: string, customerId: string) {
+  const { user } = await requireModule(businessId, "projects");
+  try {
+    removeProjectCustomer(businessId, user.id, projectId, customerId);
+  } catch (error) {
+    return { error: error instanceof Error ? error.message : "The client could not be removed." };
+  }
+  revalidatePath(`/b/${businessId}/projects/${projectId}`);
+  return {};
 }

@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import Link from "next/link";
-import { ChevronRight } from "lucide-react";
+import { ChevronRight, MoreHorizontal, Eye, FileEdit, Download, CircleDollarSign, BookOpenText } from "lucide-react";
 import { 
   useLegacyTable as useTable,
   getCoreRowModel as createCoreRowModel,
@@ -12,6 +12,7 @@ import { type SortingState, type RowSelectionState } from "@tanstack/react-table
 import { StatusBadge, statusLabel } from "@/components/status-badge";
 import { ListToolbar, SearchInput, ToolbarSelect, StatusFilterSelect, ActiveFiltersRow, FilterChip } from "@/components/list-toolbar";
 import { Button } from "@/components/ui/button";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { useColumns } from "@/components/columns-dropdown";
 import { DataTable } from "@/components/ui/data-table";
 import { formatDate, formatMoney } from "@/core/format";
@@ -214,15 +215,65 @@ export function PurchaseInvoiceTable({
       {
         id: "actions",
         header: () => <span className="sr-only">Actions</span>,
-        meta: { className: "w-12" },
+        meta: { className: "w-16 text-right" },
         enableSorting: false,
-        cell: ({ row }: any) => (
-          <Button asChild variant="ghost" size="icon" className="text-muted-foreground opacity-50 transition-opacity md:opacity-0 md:group-hover:opacity-100">
-            <Link href={`/b/${row.original.businessId}/purchases/invoices/${row.original.id}`} aria-label={`Open ${row.original.internal_number}`}>
-              <ChevronRight className="size-4" />
-            </Link>
-          </Button>
-        ),
+        cell: ({ row }: any) => {
+          const bill = row.original;
+          const canEdit = bill.document_status !== "void";
+          const canPay = bill.document_status === "posted" && bill.balanceMinor > 0;
+          return (
+            <div className="flex items-center justify-end gap-1">
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="ghost" size="icon" className="size-7 text-muted-foreground hover:text-foreground" aria-label={`Actions for ${bill.internal_number}`}>
+                    <MoreHorizontal className="size-4" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-48">
+                  <DropdownMenuItem asChild>
+                    <Link href={`/b/${bill.businessId}/purchases/invoices/${bill.id}`}>
+                      <Eye className="size-4 text-muted-foreground" /> View Bill
+                    </Link>
+                  </DropdownMenuItem>
+                  {canEdit && (
+                    <DropdownMenuItem asChild>
+                      <Link href={`/b/${bill.businessId}/purchases/invoices/${bill.id}/edit`}>
+                        <FileEdit className="size-4 text-muted-foreground" /> Edit Bill
+                      </Link>
+                    </DropdownMenuItem>
+                  )}
+                  <DropdownMenuItem asChild>
+                    <a href={`/api/businesses/${bill.businessId}/documents/purchase-invoice/${bill.id}/pdf`} target="_blank" rel="noreferrer">
+                      <Download className="size-4 text-muted-foreground" /> Download PDF
+                    </a>
+                  </DropdownMenuItem>
+                  {canPay && (
+                    <>
+                      <DropdownMenuSeparator />
+                      <DropdownMenuItem asChild>
+                        <Link href={`/b/${bill.businessId}/purchases/payments/new?invoiceId=${bill.id}`}>
+                          <CircleDollarSign className="size-4 text-muted-foreground" /> Record Payment
+                        </Link>
+                      </DropdownMenuItem>
+                    </>
+                  )}
+                  {bill.document_status === "posted" && (
+                    <DropdownMenuItem asChild>
+                      <Link href={`/b/${bill.businessId}/purchases/debit-notes/new?invoiceId=${bill.id}`}>
+                        <BookOpenText className="size-4 text-muted-foreground" /> Debit Note
+                      </Link>
+                    </DropdownMenuItem>
+                  )}
+                </DropdownMenuContent>
+              </DropdownMenu>
+              <Button asChild variant="ghost" size="icon" className="size-7 text-muted-foreground opacity-50 transition-opacity md:opacity-0 md:group-hover:opacity-100">
+                <Link href={`/b/${bill.businessId}/purchases/invoices/${bill.id}`} aria-label={`Open ${bill.internal_number}`}>
+                  <ChevronRight className="size-4" />
+                </Link>
+              </Button>
+            </div>
+          );
+        },
       },
     ],
     [],
@@ -253,17 +304,16 @@ export function PurchaseInvoiceTable({
   };
   const hasActiveFilter = Boolean(supplierId || projectId || status || query);
 
-  const totalBilledStr = useMemo(
-    () =>
-      renderMultiCurrencyString(
-        rows.map((r) => ({
-          amount: r.total_minor,
-          currency: r.currency_code,
-          minorUnit: r.currency_minor_unit,
-        }))
-      ),
-    [rows]
-  );
+  const totalBilledStr = useMemo(() => {
+    const activeRows = status === "document:void" ? rows : rows.filter((r) => r.document_status !== "void");
+    return renderMultiCurrencyString(
+      activeRows.map((r) => ({
+        amount: r.total_minor,
+        currency: r.currency_code,
+        minorUnit: r.currency_minor_unit,
+      }))
+    );
+  }, [rows, status]);
   const totalBalanceStr = useMemo(() => {
     const postedRows = rows.filter((r) => r.document_status === "posted");
     return renderMultiCurrencyString(

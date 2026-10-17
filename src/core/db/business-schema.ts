@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { check, index, integer, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core";
+import { check, index, integer, real, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core";
 import { accountSubtypes, accountTypes } from "./account-types";
 
 export { accountSubtypes, accountTypes };
@@ -313,6 +313,34 @@ export const projects = sqliteTable(
   ],
 );
 
+export const projectCustomers = sqliteTable(
+  "project_customers",
+  {
+    id: text("id").primaryKey(),
+    projectId: text("project_id")
+      .notNull()
+      .references(() => projects.id, { onDelete: "cascade" }),
+    customerId: text("customer_id")
+      .notNull()
+      .references(() => customers.id, { onDelete: "restrict" }),
+    role: text("role", {
+      enum: ["primary_client", "co_client", "joint_venture", "tenant", "bill_to", "sponsor", "consultant"],
+    })
+      .notNull()
+      .default("co_client"),
+    billingPercentage: real("billing_percentage"),
+    isPrimary: integer("is_primary", { mode: "boolean" }).notNull().default(false),
+    notes: text("notes"),
+    createdAt: text("created_at").notNull(),
+    updatedAt: text("updated_at").notNull(),
+  },
+  (table) => [
+    uniqueIndex("project_customer_unique_idx").on(table.projectId, table.customerId),
+    index("project_customers_project_idx").on(table.projectId),
+    index("project_customers_customer_idx").on(table.customerId),
+  ],
+);
+
 export const projectNotes = sqliteTable(
   "project_notes",
   {
@@ -427,7 +455,9 @@ export const salesInvoices = sqliteTable(
     voidedAt: text("voided_at"),
   
     amountsIncludeTax: integer("amounts_include_tax", { mode: "boolean" }).notNull().default(false),
-    salesOrderId: text("sales_order_id"),},
+    salesOrderId: text("sales_order_id"),
+    quoteId: text("quote_id"),
+  },
   (table) => [
     uniqueIndex("sales_invoice_number_idx").on(table.invoiceNumber),
     index("sales_invoice_customer_idx").on(table.customerId),
@@ -1997,6 +2027,30 @@ export const purchaseQuoteLines = sqliteTable(
   },
   (table) => [
     index("purchase_quote_lines_quote_idx").on(table.quoteId),
+  ],
+);
+
+export const bankRules = sqliteTable(
+  "bank_rules",
+  {
+    id: text("id").primaryKey(),
+    name: text("name").notNull(),
+    ruleOrder: integer("rule_order").notNull().default(0),
+    direction: text("direction", { enum: ["money_in", "money_out", "both"] }).notNull().default("both"),
+    matchField: text("match_field", { enum: ["description", "reference", "any"] }).notNull().default("any"),
+    matchType: text("match_type", { enum: ["contains", "exact", "starts_with"] }).notNull().default("contains"),
+    matchText: text("match_text").notNull(),
+    bankAccountId: text("bank_account_id").references(() => bankAccounts.id, { onDelete: "cascade" }),
+    targetAccountId: text("target_account_id").notNull().references(() => accounts.id),
+    targetTaxCodeId: text("target_tax_code_id").references(() => taxCodes.id),
+    autoDescription: text("auto_description"),
+    isActive: integer("is_active", { mode: "boolean" }).notNull().default(true),
+    createdAt: text("created_at").notNull(),
+    updatedAt: text("updated_at").notNull(),
+  },
+  (table) => [
+    index("bank_rules_order_idx").on(table.isActive, table.ruleOrder),
+    index("bank_rules_account_idx").on(table.bankAccountId),
   ],
 );
 

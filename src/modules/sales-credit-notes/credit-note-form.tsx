@@ -94,9 +94,12 @@ export function CreditNoteForm({
   );
   const eligibleProjects = useMemo(
     () =>
-      projects.filter(
-        (project) => !project.customerId || project.customerId === customerId,
-      ),
+      projects.filter((project) => {
+        if (!customerId) return true;
+        const cids = (project as any).customerIds as string[] | undefined;
+        if (cids && cids.length > 0) return cids.includes(customerId);
+        return !project.customerId || project.customerId === customerId;
+      }),
     [customerId, projects],
   );
   const selected = invoices.find((invoice) => invoice.id === invoiceId);

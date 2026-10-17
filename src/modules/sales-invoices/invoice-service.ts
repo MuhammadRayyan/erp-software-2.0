@@ -15,10 +15,12 @@ import { replaceTaxEntries, reverseTaxEntries } from "@/modules/tax/tax-entry-se
 import { assertVatDateUnlocked, assertVatSourceUnlocked } from "@/modules/tax/tax-lock-service";
 import { saveCustomFieldValuesInTransaction } from "@/modules/custom-fields/custom-field-service";
 import { invoiceInputSchema, type InvoiceInput } from "./invoice-input";
-import { convertDocumentLinesToBase, minorToCurrencyInput } from "@/modules/currency/conversion";
+import { convertDocumentLinesToBase, minorToCurrencyInput, parseCurrencyAmountToMinor } from "@/modules/currency/conversion";
 import { getCurrency } from "@/modules/currency/currency";
 import { resolveRateSnapshot } from "@/modules/currency/validation";
 import { calculateLines, totalsForLines, type StoredLine } from "@/modules/accounting/services/document-line-calculator";
+import { getCustomerUnallocatedCredit, receiptConfig } from "@/modules/receipts/receipt-service";
+import { applySettlementCredit } from "@/modules/settlement/settlement-service";
 
 export type DocumentStatus = "draft" | "posted" | "void";
 export type PaymentStatus = "unpaid" | "partially_paid" | "paid" | "overdue";
@@ -456,7 +458,9 @@ export function getInvoice(businessId: string, userId: string, invoiceId: string
     linkedOrder: header.invoice.salesOrderId
       ? (context.sqlite.prepare("SELECT id, order_number, document_status, sales_quote_id FROM sales_orders WHERE id = ?").get(header.invoice.salesOrderId) as { id: string; order_number: string; document_status: string; sales_quote_id: string | null } | undefined)
       : undefined,
-    linkedQuote: header.invoice.salesOrderId
+    linkedQuote: header.invoice.quoteId
+      ? (context.sqlite.prepare("SELECT id, quote_number, document_status FROM sales_quotes WHERE id = ?").get(header.invoice.quoteId) as { id: string; quote_number: string; document_status: string } | undefined)
+      : header.invoice.salesOrderId
       ? (context.sqlite.prepare("SELECT sq.id, sq.quote_number, sq.document_status FROM sales_quotes sq INNER JOIN sales_orders so ON so.sales_quote_id = sq.id WHERE so.id = ?").get(header.invoice.salesOrderId) as { id: string; quote_number: string; document_status: string } | undefined)
       : undefined,
   };
@@ -500,9 +504,9 @@ export function createInvoice(
           project_id, document_status, subtotal_minor, tax_minor, total_minor,
           currency_code, exchange_rate_to_base, exchange_rate_date, exchange_rate_source,
           base_subtotal_minor, base_tax_minor, base_total_minor, notes, terms,
-          sales_order_id, amounts_include_tax,
+          sales_order_id, quote_id, amounts_include_tax,
           created_by, created_at, updated_at, posted_at, voided_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'draft', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL)
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'draft', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL)
       `)
       .run(
         id,
@@ -527,6 +531,7 @@ export function createInvoice(
         data.notes || null,
         data.terms || null,
         data.salesOrderId || null,
+        data.quoteId || null,
         data.amountsIncludeTax ? 1 : 0,
         userId,
         now,
@@ -559,6 +564,47 @@ export function createInvoice(
       context.sqlite
         .prepare("UPDATE sales_invoices SET document_status = 'posted', posted_at = ? WHERE id = ?")
         .run(now, id);
+
+      if (data.applyAvailableCredit) {
+        const availableCredits = getCustomerUnallocatedCredit(businessId, userId, data.customerId)
+          .filter((c) => c.currencyCode === rate.currencyCode && c.unallocatedAmountMinor > 0);
+
+        if (availableCredits.length > 0) {
+          let remainingInvoiceMinor = totals.totalMinor;
+
+          if (data.applyCreditReceiptId) {
+            const target = availableCredits.find((c) => c.receiptId === data.applyCreditReceiptId);
+            if (target) {
+              const maxApplicable = Math.min(remainingInvoiceMinor, target.unallocatedAmountMinor);
+              const customAmountMinor = data.applyCreditAmount
+                ? parseCurrencyAmountToMinor(data.applyCreditAmount, rate.currencyMinorUnit)
+                : maxApplicable;
+              const allocMinor = Math.min(customAmountMinor, maxApplicable);
+              if (allocMinor > 0) {
+                applySettlementCredit(context.sqlite, receiptConfig, {
+                  paymentId: target.receiptId,
+                  documentId: id,
+                  amount: allocMinor,
+                });
+              }
+            }
+          } else {
+            // Auto-allocate FIFO across candidate credits
+            for (const credit of availableCredits) {
+              if (remainingInvoiceMinor <= 0) break;
+              const allocMinor = Math.min(remainingInvoiceMinor, credit.unallocatedAmountMinor);
+              if (allocMinor > 0) {
+                applySettlementCredit(context.sqlite, receiptConfig, {
+                  paymentId: credit.receiptId,
+                  documentId: id,
+                  amount: allocMinor,
+                });
+                remainingInvoiceMinor -= allocMinor;
+              }
+            }
+          }
+        }
+      }
     }
   }).immediate();
   return id;
@@ -615,6 +661,8 @@ export function updateInvoice(
       assertVatSourceUnlocked(context.sqlite, "sales_invoice", invoiceId, current.taxDate);
     }
     if (shouldPost) assertVatDateUnlocked(context.sqlite, taxDate, lines.map((line) => line.taxCodeId));
+    const effectiveSalesOrderId = data.salesOrderId || current.salesOrderId || null;
+    const effectiveQuoteId = data.quoteId || current.quoteId || null;
     context.sqlite
       .prepare(`
         UPDATE sales_invoices
@@ -622,7 +670,7 @@ export function updateInvoice(
             subtotal_minor = ?, tax_minor = ?, total_minor = ?,
             currency_code = ?, exchange_rate_to_base = ?, exchange_rate_date = ?, exchange_rate_source = ?,
             base_subtotal_minor = ?, base_tax_minor = ?, base_total_minor = ?,
-            notes = ?, terms = ?, sales_order_id = ?, amounts_include_tax = ?, updated_at = ?
+            notes = ?, terms = ?, sales_order_id = ?, quote_id = ?, amounts_include_tax = ?, updated_at = ?
         WHERE id = ?
       `)
       .run(
@@ -645,7 +693,8 @@ export function updateInvoice(
         base.baseTotalMinor,
         data.notes || null,
         data.terms || null,
-        data.salesOrderId || null,
+        effectiveSalesOrderId,
+        effectiveQuoteId,
         data.amountsIncludeTax ? 1 : 0,
         now,
         invoiceId,

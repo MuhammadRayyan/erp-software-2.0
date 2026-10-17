@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import Link from "next/link";
-import { Filter, ChevronRight } from "lucide-react";
+import { Filter, ChevronRight, MoreHorizontal, Eye, FileEdit, FileText, FilePlus2, BookOpenText } from "lucide-react";
 import { 
   useLegacyTable as useTable,
   getCoreRowModel as createCoreRowModel,
@@ -12,6 +12,7 @@ import { type SortingState } from "@tanstack/react-table";
 import { Badge } from "@/components/ui/badge";
 import { ListToolbar, SearchInput, ActiveFiltersRow, FilterChip } from "@/components/list-toolbar";
 import { Button } from "@/components/ui/button";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { useColumns } from "@/components/columns-dropdown";
 import { DataTable } from "@/components/ui/data-table";
 import { formatCustomFieldValue, type CustomFieldColumn } from "@/modules/custom-fields/custom-field-display";
@@ -114,15 +115,55 @@ export function CustomerTable({ businessId, customers, customFields = [], custom
         {
           id: "actions",
           header: () => <span className="sr-only">Actions</span>,
-          meta: { className: "w-12" },
+          meta: { className: "w-16 text-right" },
           enableSorting: false,
-          cell: ({ row }: any) => (
-            <Button asChild variant="ghost" size="icon" className="text-muted-foreground opacity-50 transition-opacity md:opacity-0 md:group-hover:opacity-100">
-              <Link href={`/b/${row.original.businessId}/customers/${row.original.id}`} aria-label={`Open ${row.original.name}`}>
-                <ChevronRight className="size-4" />
-              </Link>
-            </Button>
-          ),
+          cell: ({ row }: any) => {
+            const cust = row.original;
+            return (
+              <div className="flex items-center justify-end gap-1">
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button variant="ghost" size="icon" className="size-7 text-muted-foreground hover:text-foreground" aria-label={`Actions for ${cust.name}`}>
+                      <MoreHorizontal className="size-4" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end" className="w-48">
+                    <DropdownMenuItem asChild>
+                      <Link href={`/b/${cust.businessId}/customers/${cust.id}`}>
+                        <Eye className="size-4 text-muted-foreground" /> View Profile
+                      </Link>
+                    </DropdownMenuItem>
+                    <DropdownMenuItem asChild>
+                      <Link href={`/b/${cust.businessId}/customers/${cust.id}/edit`}>
+                        <FileEdit className="size-4 text-muted-foreground" /> Edit Customer
+                      </Link>
+                    </DropdownMenuItem>
+                    <DropdownMenuItem asChild>
+                      <Link href={`/b/${cust.businessId}/customers/${cust.id}/statement`}>
+                        <BookOpenText className="size-4 text-muted-foreground" /> Statement
+                      </Link>
+                    </DropdownMenuItem>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem asChild>
+                      <Link href={`/b/${cust.businessId}/sales/invoices/new?customerId=${cust.id}`}>
+                        <FileText className="size-4 text-muted-foreground" /> New Invoice
+                      </Link>
+                    </DropdownMenuItem>
+                    <DropdownMenuItem asChild>
+                      <Link href={`/b/${cust.businessId}/sales/quotes/new?customerId=${cust.id}`}>
+                        <FilePlus2 className="size-4 text-muted-foreground" /> New Quote
+                      </Link>
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+                <Button asChild variant="ghost" size="icon" className="size-7 text-muted-foreground opacity-50 transition-opacity md:opacity-0 md:group-hover:opacity-100">
+                  <Link href={`/b/${cust.businessId}/customers/${cust.id}`} aria-label={`Open ${cust.name}`}>
+                    <ChevronRight className="size-4" />
+                  </Link>
+                </Button>
+              </div>
+            );
+          },
         },
       ];
     },

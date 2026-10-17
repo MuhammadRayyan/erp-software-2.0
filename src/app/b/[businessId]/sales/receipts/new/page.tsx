@@ -13,7 +13,15 @@ export default async function NewReceiptPage({
   searchParams,
 }: {
   params: Promise<{ businessId: string }>;
-  searchParams: Promise<{ invoiceId?: string; customerId?: string }>;
+  searchParams: Promise<{
+    invoiceId?: string;
+    customerId?: string;
+    bankAccountId?: string;
+    amount?: string;
+    date?: string;
+    reference?: string;
+    description?: string;
+  }>;
 }) {
   const { businessId } = await params;
   const query = await searchParams;
@@ -37,7 +45,7 @@ export default async function NewReceiptPage({
       </Link>
       <div className="mb-7">
         <h1 className="page-title">Record Receipt</h1>
-        <p className="page-description">Allocate a customer payment to one posted invoice.</p>
+        <p className="page-description">Allocate customer payments across multiple open invoices, or record an unallocated advance retainer deposit.</p>
       </div>
       <ReceiptForm
         businessId={businessId}
@@ -49,6 +57,9 @@ export default async function NewReceiptPage({
           id: invoice.id,
           invoiceNumber: invoice.invoiceNumber,
           customerId: invoice.customerId,
+          invoiceDate: invoice.invoiceDate,
+          dueDate: invoice.dueDate,
+          totalMinor: invoice.totalMinor,
           balanceMinor: invoice.balanceMinor,
           currencyCode: invoice.currencyCode,
           minorUnit: currencyMinorUnits.get(invoice.currencyCode) ?? 2,
@@ -57,15 +68,17 @@ export default async function NewReceiptPage({
         initial={{
           customerId,
           invoiceId,
-          date: today,
-          bankAccountId: bankAccounts[0]?.id ?? "",
-          amount: selected ? minorToCurrencyInput(selected.balanceMinor, currencyMinorUnits.get(selected.currencyCode) ?? 2) : "",
+          date: query.date || today,
+          bankAccountId: query.bankAccountId || (bankAccounts[0]?.id ?? ""),
+          amount: selected
+            ? minorToCurrencyInput(selected.balanceMinor, currencyMinorUnits.get(selected.currencyCode) ?? 2)
+            : query.amount || "",
           currencyCode: selected?.currencyCode ?? access.business.currency,
           exchangeRateToBase: selected?.currencyCode && selected.currencyCode !== access.business.currency ? "" : "1",
-          exchangeRateDate: selected?.currencyCode && selected.currencyCode !== access.business.currency ? "" : today,
+          exchangeRateDate: selected?.currencyCode && selected.currencyCode !== access.business.currency ? "" : (query.date || today),
           exchangeRateSource: selected?.currencyCode && selected.currencyCode !== access.business.currency ? "" : "Base",
-          reference: "",
-          description: "",
+          reference: query.reference || "",
+          description: query.description || "",
         }}
       />
     </div>

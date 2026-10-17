@@ -14,7 +14,7 @@ export default async function SettingsPage({ params }: { params: Promise<{ busin
   const tax = getTaxSettings(businessId, user.id);
 
   return (
-    <div className="page-container max-w-5xl space-y-6">
+    <div className="page-container max-w-6xl space-y-6">
       <div className="page-header">
         <div>
           <h1 className="page-title">Settings</h1>

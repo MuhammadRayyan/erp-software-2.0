@@ -1,5 +1,4 @@
-import Link from "next/link";
-import { ArrowLeft } from "lucide-react";
+import { BackLink } from "@/components/back-link";
 import React from "react";
 
 export function SettingsShell({
@@ -7,24 +6,28 @@ export function SettingsShell({
   title,
   description,
   children,
+  maxWidth = "max-w-4xl",
+  actions,
 }: {
   businessId: string;
-  title: string;
-  description: string;
+  title: React.ReactNode;
+  description?: React.ReactNode;
   children: React.ReactNode;
+  maxWidth?: string;
+  actions?: React.ReactNode;
 }) {
   return (
-    <div className="page-container max-w-3xl">
-      <Link href={`/b/${businessId}/settings`} className="mb-5 inline-flex items-center gap-1.5 text-[13px] text-muted-foreground hover:text-foreground">
-        <ArrowLeft className="size-4" /> Settings
-      </Link>
-      <div className="page-header">
+    <div className={`page-container ${maxWidth} space-y-6`}>
+      <BackLink href={`/b/${businessId}/settings`}>Settings</BackLink>
+      <div className="page-header flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div>
           <h1 className="page-title">{title}</h1>
-          <p className="page-description">{description}</p>
+          {description && <p className="page-description">{description}</p>}
         </div>
+        {actions && <div className="flex items-center gap-2">{actions}</div>}
       </div>
       {children}
     </div>
   );
 }
+

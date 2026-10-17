@@ -18,6 +18,8 @@ export function InvoiceViewActions({
   invoiceNumber,
   documentStatus,
   balanceMinor,
+  totalMinor,
+  hasDeliveryNotes,
   journalEntryId,
   inventoryEnabled,
   hasDeliverableItems,
@@ -28,6 +30,8 @@ export function InvoiceViewActions({
   invoiceNumber: string;
   documentStatus: DocumentStatus;
   balanceMinor: number;
+  totalMinor?: number;
+  hasDeliveryNotes?: boolean;
   journalEntryId: string | null;
   inventoryEnabled: boolean;
   hasDeliverableItems: boolean;
@@ -36,13 +40,15 @@ export function InvoiceViewActions({
   const router = useRouter();
   const [emailOpen, setEmailOpen] = useState(false);
   const canReceive = documentStatus === "posted" && balanceMinor > 0;
+  const canEdit = documentStatus !== "void" && !hasDeliveryNotes;
+  const canVoid = documentStatus === "posted" && (totalMinor === undefined || balanceMinor === totalMinor);
 
   return (
     <>
       <DocumentViewActions
         documentNumber={invoiceNumber}
         documentType="Invoice"
-        editHref={documentStatus !== "void" ? `/b/${businessId}/sales/invoices/${invoiceId}/edit` : undefined}
+        editHref={canEdit ? `/b/${businessId}/sales/invoices/${invoiceId}/edit` : undefined}
         pdfHref={`/api/businesses/${businessId}/documents/sales-invoice/${invoiceId}/pdf`}
         onEmail={() => { setEmailOpen(true); }}
         copyToActions={documentStatus === "posted" ? [
@@ -70,7 +76,7 @@ export function InvoiceViewActions({
           const result = await duplicateInvoiceAction(businessId, invoiceId);
           if (result?.error) throw new Error(result.error);
         }}
-        onVoid={documentStatus === "posted" ? {
+        onVoid={canVoid ? {
           label: "Void",
           description: "This retains the invoice and creates a balanced reversing journal entry. An invoice with receipt allocations cannot be voided.",
           action: async () => {

@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import Link from "next/link";
-import { ChevronRight } from "lucide-react";
+import { ChevronRight, MoreHorizontal, Eye, FileEdit, Download, FileText, PackageCheck } from "lucide-react";
 import { 
   useLegacyTable as useTable,
   getCoreRowModel as createCoreRowModel,
@@ -12,6 +12,7 @@ import { type SortingState } from "@tanstack/react-table";
 import { StatusBadge, statusLabel } from "@/components/status-badge";
 import { ListToolbar, SearchInput, ToolbarSelect, ActiveFiltersRow, FilterChip } from "@/components/list-toolbar";
 import { Button } from "@/components/ui/button";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { useColumns } from "@/components/columns-dropdown";
 import { DataTable } from "@/components/ui/data-table";
 import { formatDate, formatMoney } from "@/core/format";
@@ -152,15 +153,63 @@ export function SalesOrderTable({
       {
         id: "actions",
         header: () => <span className="sr-only">Actions</span>,
-        meta: { className: "w-12" },
+        meta: { className: "w-16 text-right" },
         enableSorting: false,
-        cell: ({ row }: any) => (
-          <Button asChild variant="ghost" size="icon" className="text-muted-foreground opacity-50 transition-opacity md:opacity-0 md:group-hover:opacity-100">
-            <Link href={`/b/${row.original.businessId}/sales/orders/${row.original.id}`} aria-label={`Open ${row.original.order_number}`}>
-              <ChevronRight className="size-4" />
-            </Link>
-          </Button>
-        ),
+        cell: ({ row }: any) => {
+          const order = row.original;
+          const canEdit = order.documentStatus !== "completed" && order.documentStatus !== "cancelled" && order.documentStatus !== "superseded";
+          const canInvoice = order.documentStatus === "active" || order.documentStatus === "draft";
+          return (
+            <div className="flex items-center justify-end gap-1">
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="ghost" size="icon" className="size-7 text-muted-foreground hover:text-foreground" aria-label={`Actions for ${order.order_number}`}>
+                    <MoreHorizontal className="size-4" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-52">
+                  <DropdownMenuItem asChild>
+                    <Link href={`/b/${order.businessId}/sales/orders/${order.id}`}>
+                      <Eye className="size-4 text-muted-foreground" /> View Order
+                    </Link>
+                  </DropdownMenuItem>
+                  {canEdit && (
+                    <DropdownMenuItem asChild>
+                      <Link href={`/b/${order.businessId}/sales/orders/${order.id}/edit`}>
+                        <FileEdit className="size-4 text-muted-foreground" /> Edit Order
+                      </Link>
+                    </DropdownMenuItem>
+                  )}
+                  <DropdownMenuItem asChild>
+                    <a href={`/api/businesses/${order.businessId}/documents/sales-order/${order.id}/pdf`} target="_blank" rel="noreferrer">
+                      <Download className="size-4 text-muted-foreground" /> Download PDF
+                    </a>
+                  </DropdownMenuItem>
+                  {canInvoice && (
+                    <>
+                      <DropdownMenuSeparator />
+                      <DropdownMenuItem asChild>
+                        <Link href={`/b/${order.businessId}/sales/invoices/new?orderId=${order.id}`}>
+                          <FileText className="size-4 text-muted-foreground" /> Create Invoice
+                        </Link>
+                      </DropdownMenuItem>
+                      <DropdownMenuItem asChild>
+                        <Link href={`/b/${order.businessId}/sales/delivery-notes/new?orderId=${order.id}`}>
+                          <PackageCheck className="size-4 text-muted-foreground" /> Create Delivery Note
+                        </Link>
+                      </DropdownMenuItem>
+                    </>
+                  )}
+                </DropdownMenuContent>
+              </DropdownMenu>
+              <Button asChild variant="ghost" size="icon" className="size-7 text-muted-foreground opacity-50 transition-opacity md:opacity-0 md:group-hover:opacity-100">
+                <Link href={`/b/${order.businessId}/sales/orders/${order.id}`} aria-label={`Open ${order.order_number}`}>
+                  <ChevronRight className="size-4" />
+                </Link>
+              </Button>
+            </div>
+          );
+        },
       },
     ],
     [],
@@ -186,17 +235,16 @@ export function SalesOrderTable({
   };
   const hasActiveFilter = Boolean(customerId || projectId || status || query);
 
-  const totalOrderValueStr = useMemo(
-    () =>
-      renderMultiCurrencyString(
-        rows.map((r) => ({
-          amount: r.total_minor,
-          currency: r.currency_code,
-          minorUnit: r.currency_minor_unit,
-        }))
-      ),
-    [rows]
-  );
+  const totalOrderValueStr = useMemo(() => {
+    const activeRows = status === "cancelled" ? rows : rows.filter((r) => r.documentStatus !== "cancelled" && r.documentStatus !== "superseded");
+    return renderMultiCurrencyString(
+      activeRows.map((r) => ({
+        amount: r.total_minor,
+        currency: r.currency_code,
+        minorUnit: r.currency_minor_unit,
+      }))
+    );
+  }, [rows, status]);
   const activeCount = useMemo(
     () => rows.filter((r) => r.documentStatus === "active" || r.documentStatus === "draft").length,
     [rows]

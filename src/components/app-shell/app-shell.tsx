@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { CircleHelp, ContactRound, FileInput, FolderKanban, Menu, ReceiptText, Search, Truck, UserRound } from "lucide-react";
+import { Banknote, CircleHelp, ContactRound, FileInput, FolderKanban, HandCoins, Menu, Receipt, ReceiptText, Search, ShoppingCart, Truck, UserRound } from "lucide-react";
 import { BrandMark } from "@/components/brand-mark";
 import { CommandPalette, type CommandItem } from "@/components/command-palette";
 import { Button } from "@/components/ui/button";
@@ -21,6 +21,7 @@ import { ThemeMenu } from "@/core/theme/theme-menu";
 import { BusinessSwitcher } from "./business-switcher";
 import { primaryNav, settingsNav, systemHealthNav } from "./nav-items";
 import { SidebarNav } from "./sidebar-nav";
+import { ModuleFlowGuide } from "@/components/module-flow-guide";
 
 type ShellProps = {
   children: React.ReactNode;
@@ -56,14 +57,22 @@ function buildCommands(businessId: string, modules: ModuleKey[], push: (path: st
   if (modules.includes("sales")) {
     actions.push(
       { label: "New Invoice", hint: "Create", icon: ReceiptText, keywords: "new create add sales invoice", onSelect: go("/sales/invoices/new") },
+      { label: "Record Receipt", hint: "Create", icon: Receipt, keywords: "new create add record customer receipt payment collection", onSelect: go("/sales/receipts/new") },
+      { label: "New Sales Quote", hint: "Create", icon: ReceiptText, keywords: "new create add quote quotation sales", onSelect: go("/sales/quotes/new") },
+      { label: "New Sales Order", hint: "Create", icon: ShoppingCart, keywords: "new create add sales order", onSelect: go("/sales/orders/new") },
       { label: "New Customer", hint: "Create", icon: ContactRound, keywords: "new create add customer sales", onSelect: go("/customers/new") },
     );
   }
   if (modules.includes("purchases")) {
     actions.push(
-      { label: "New Supplier", hint: "Create", icon: Truck, keywords: "new create add supplier vendor purchases", onSelect: go("/suppliers/new") },
       { label: "New Purchase Invoice", hint: "Create", icon: FileInput, keywords: "new create add purchase invoice bill purchases", onSelect: go("/purchases/invoices/new") },
+      { label: "Record Supplier Payment", hint: "Create", icon: HandCoins, keywords: "new create add record supplier vendor payment disbursement", onSelect: go("/purchases/payments/new") },
+      { label: "New Purchase Order", hint: "Create", icon: ShoppingCart, keywords: "new create add purchase order", onSelect: go("/purchases/orders/new") },
+      { label: "New Supplier", hint: "Create", icon: Truck, keywords: "new create add supplier vendor purchases", onSelect: go("/suppliers/new") },
     );
+  }
+  if (modules.includes("banking")) {
+    actions.push({ label: "New Bank Account", hint: "Create", icon: Banknote, keywords: "new create add bank account cash", onSelect: go("/banking/accounts/new") });
   }
   if (modules.includes("projects")) {
     actions.push({ label: "New Project", hint: "Create", icon: FolderKanban, keywords: "new create add project", onSelect: go("/projects/new") });
@@ -120,6 +129,7 @@ export function AppShell({ children, business, businesses, modules, user }: Shel
             <Search className="size-3.5" /> Search or jump to… <kbd className="ml-auto text-[11px]">Ctrl K</kbd>
           </button>
           <Button variant="ghost" size="icon" className="lg:hidden" aria-label="Search or jump to (Ctrl K)" onClick={() => setPaletteOpen(true)}><Search className="size-[18px]" /></Button>
+          <ModuleFlowGuide />
           <Button variant="ghost" size="icon" aria-label="Help" title="Help" onClick={() => setHelpOpen(true)}><CircleHelp className="size-[18px]" /></Button>
           <DropdownMenu>
             <DropdownMenuTrigger asChild>

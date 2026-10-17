@@ -2540,6 +2540,61 @@ export const businessMigrations = [
         `);
       },
     },
+    {
+      version: 29,
+      name: "project_customers_multi_client",
+      up: (sqlite) => {
+        sqlite.exec(`
+          CREATE TABLE IF NOT EXISTS project_customers (
+            id TEXT PRIMARY KEY NOT NULL,
+            project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+            customer_id TEXT NOT NULL REFERENCES customers(id) ON DELETE RESTRICT,
+            role TEXT NOT NULL DEFAULT 'co_client' CHECK (role IN ('primary_client', 'co_client', 'joint_venture', 'tenant', 'bill_to', 'sponsor', 'consultant')),
+            billing_percentage REAL,
+            is_primary INTEGER NOT NULL DEFAULT 0,
+            notes TEXT,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL
+          );
+          CREATE UNIQUE INDEX IF NOT EXISTS project_customer_unique_idx ON project_customers(project_id, customer_id);
+          CREATE INDEX IF NOT EXISTS project_customers_project_idx ON project_customers(project_id);
+          CREATE INDEX IF NOT EXISTS project_customers_customer_idx ON project_customers(customer_id);
+        `);
+        const now = new Date().toISOString();
+        sqlite.prepare(`
+          INSERT OR IGNORE INTO project_customers (id, project_id, customer_id, role, is_primary, created_at, updated_at)
+          SELECT lower(hex(randomblob(16))), id, customer_id, 'primary_client', 1, ?, ?
+          FROM projects
+          WHERE customer_id IS NOT NULL
+        `).run(now, now);
+      },
+    },
+    {
+      version: 30,
+      name: "bank_rules",
+      up: (sqlite) => {
+        sqlite.exec(`
+          CREATE TABLE IF NOT EXISTS "bank_rules" (
+            "id" TEXT PRIMARY KEY NOT NULL,
+            "name" TEXT NOT NULL,
+            "rule_order" INTEGER NOT NULL DEFAULT 0,
+            "direction" TEXT NOT NULL DEFAULT 'both' CHECK (direction IN ('money_in', 'money_out', 'both')),
+            "match_field" TEXT NOT NULL DEFAULT 'any' CHECK (match_field IN ('description', 'reference', 'any')),
+            "match_type" TEXT NOT NULL DEFAULT 'contains' CHECK (match_type IN ('contains', 'exact', 'starts_with')),
+            "match_text" TEXT NOT NULL,
+            "bank_account_id" TEXT REFERENCES bank_accounts(id) ON DELETE CASCADE,
+            "target_account_id" TEXT NOT NULL REFERENCES accounts(id),
+            "target_tax_code_id" TEXT REFERENCES tax_codes(id),
+            "auto_description" TEXT,
+            "is_active" INTEGER NOT NULL DEFAULT 1,
+            "created_at" TEXT NOT NULL,
+            "updated_at" TEXT NOT NULL
+          );
+          CREATE INDEX IF NOT EXISTS bank_rules_order_idx ON bank_rules(is_active, rule_order);
+          CREATE INDEX IF NOT EXISTS bank_rules_account_idx ON bank_rules(bank_account_id);
+        `);
+      },
+    },
   ] satisfies readonly SqliteMigration[];
 
 

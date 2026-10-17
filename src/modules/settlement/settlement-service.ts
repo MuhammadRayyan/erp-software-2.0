@@ -1,9 +1,10 @@
 import { randomUUID } from "node:crypto";
 import { allocateNumber } from "@/modules/accounting/services/numbering-service";
 import { reverseTransaction } from "@/modules/accounting/services/posting-service";
-import { parseCurrencyAmountToMinor } from "@/modules/currency/conversion";
+import { parseCurrencyAmountToMinor, convertToBase } from "@/modules/currency/conversion";
 import { calculateSettlementAllocation } from "@/modules/currency/settlement";
 import { resolveRateSnapshot } from "@/modules/currency/validation";
+import { getBaseCurrency } from "@/modules/currency/currency";
 
 export type SettlementConfig = {
   partyType: "customer" | "supplier";
@@ -39,24 +40,32 @@ export function createSettlement(
 
     const partyId = data.customerId || data.supplierId;
 
-    const party = sqlite.prepare(`SELECT id FROM ${config.partyTable} WHERE id = ?`).get(partyId);
+    const party = sqlite.prepare(`SELECT * FROM ${config.partyTable} WHERE id = ?`).get(partyId) as any;
     if (!party) throw new Error("Invalid party ID.");
 
-    const invoiceId = data.invoiceId || data.purchaseInvoiceId;
-    const invoice = sqlite.prepare(`
-      SELECT id, currency_code
-      FROM ${config.documentTable}
-      WHERE id = ? AND ${config.partyIdColumn} = ? AND document_status = 'posted'
-    `).get(invoiceId, partyId) as any;
-    if (!invoice) throw new Error("Invoice not found or not posted.");
+    // Support both multi-allocation array and single invoiceId
+    const rawAllocations: Array<{ invoiceId: string; amount: string }> =
+      Array.isArray(data.allocations) && data.allocations.length > 0
+        ? data.allocations
+        : (data.invoiceId || data.purchaseInvoiceId)
+        ? [{ invoiceId: data.invoiceId || data.purchaseInvoiceId, amount: data.amount }]
+        : [];
 
-    if (data.currencyCode && data.currencyCode.toUpperCase() !== invoice.currency_code) {
-      const typeLabel = config.partyType === "customer" ? "Receipt" : "Payment";
-      throw new Error(`This ${data.currencyCode.toUpperCase()} ${typeLabel} can only allocate ${data.currencyCode.toUpperCase()} invoices.`);
+    const baseCur = getBaseCurrency(sqlite);
+
+    // Determine settlement currency
+    let currencyCode = data.currencyCode ? String(data.currencyCode).toUpperCase() : "";
+    if (!currencyCode && rawAllocations.length > 0) {
+      const firstDoc = sqlite.prepare(
+        `SELECT currency_code FROM ${config.documentTable} WHERE id = ?`
+      ).get(rawAllocations[0].invoiceId) as { currency_code: string } | undefined;
+      currencyCode = firstDoc ? firstDoc.currency_code : baseCur.code;
+    } else if (!currencyCode) {
+      currencyCode = party.default_currency_code || baseCur.code;
     }
 
     const rate = resolveRateSnapshot(sqlite, {
-      currencyCode: invoice.currency_code,
+      currencyCode,
       exchangeRateToBase: data.exchangeRateToBase,
       exchangeRateDate: data.exchangeRateDate,
       exchangeRateSource: data.exchangeRateSource,
@@ -64,34 +73,102 @@ export function createSettlement(
       enforceVatPolicy: false,
     });
 
-    const amountMinor = parseCurrencyAmountToMinor(data.amount, rate.currencyMinorUnit);
-    if (amountMinor <= 0) {
+    const totalAmountMinor = parseCurrencyAmountToMinor(data.amount, rate.currencyMinorUnit);
+    if (totalAmountMinor <= 0) {
       throw new Error("Settlement amount must be greater than zero.");
     }
 
-    const open = getOpenState(sqlite, config, invoice.id);
-    if (!open || open.foreign_open_minor <= 0) {
+    let sumAllocatedForeign = 0;
+    let sumBaseCarryingReleased = 0;
+    let sumSettlementBase = 0;
+    let sumRealizedFx = 0;
+
+    const allocationsToInsert: Array<{
+      documentId: string;
+      amountMinor: number;
+      foreignAmountAllocated: number;
+      baseCarryingAmountReleased: number;
+      settlementBaseAmount: number;
+      realizedFxAmount: number;
+    }> = [];
+
+    for (const alloc of rawAllocations) {
+      const docId = alloc.invoiceId;
+      const invoice = sqlite.prepare(`
+        SELECT id, currency_code, ${config.documentNumberColumn} AS doc_number
+        FROM ${config.documentTable}
+        WHERE id = ? AND ${config.partyIdColumn} = ? AND document_status = 'posted'
+      `).get(docId, partyId) as any;
+      if (!invoice) throw new Error("Invoice not found or not posted.");
+
+      if (invoice.currency_code !== rate.currencyCode) {
+        const typeLabel = config.partyType === "customer" ? "Receipt" : "Payment";
+        throw new Error(`This ${rate.currencyCode} ${typeLabel} can only allocate ${rate.currencyCode} invoices.`);
+      }
+
+      const open = getOpenState(sqlite, config, invoice.id);
+      if (!open || open.foreign_open_minor <= 0) {
+        throw new Error(
+          config.partyType === "customer"
+            ? `Invoice ${invoice.doc_number} is already fully settled.`
+            : `Payable ${invoice.doc_number} is already fully settled.`
+        );
+      }
+
+      const allocAmountMinor = parseCurrencyAmountToMinor(alloc.amount, rate.currencyMinorUnit);
+      if (allocAmountMinor <= 0) {
+        throw new Error("Allocation amount must be greater than zero.");
+      }
+
+      if (allocAmountMinor > open.foreign_open_minor) {
+        throw new Error(
+          config.partyType === "customer"
+            ? `Receipt allocation cannot exceed the invoice balance.`
+            : `Payment amount exceeds the selected payable.`
+        );
+      }
+
+      const allocationCalc = calculateSettlementAllocation({
+        foreignAmountAllocated: allocAmountMinor,
+        foreignOpenBefore: open.foreign_open_minor,
+        baseCarryingBefore: open.base_carrying_minor,
+        rate,
+      });
+
+      sumAllocatedForeign += allocAmountMinor;
+      sumBaseCarryingReleased += allocationCalc.baseCarryingAmountReleased;
+      sumSettlementBase += allocationCalc.settlementBaseAmount;
+      sumRealizedFx += allocationCalc.realizedFxAmount;
+
+      allocationsToInsert.push({
+        documentId: invoice.id,
+        amountMinor: allocAmountMinor,
+        foreignAmountAllocated: allocationCalc.foreignAmountAllocated,
+        baseCarryingAmountReleased: allocationCalc.baseCarryingAmountReleased,
+        settlementBaseAmount: allocationCalc.settlementBaseAmount,
+        realizedFxAmount: allocationCalc.realizedFxAmount,
+      });
+    }
+
+    if (sumAllocatedForeign > totalAmountMinor) {
       throw new Error(
         config.partyType === "customer"
-          ? "Invoice is already fully settled."
-          : "Payable is already fully settled."
+          ? "Total allocated to invoices exceeds the receipt amount."
+          : "Total allocated to payables exceeds the payment amount."
       );
     }
 
-    if (amountMinor > open.foreign_open_minor) {
-      if (config.partyType === "customer") {
-        throw new Error("Receipt amount cannot exceed the invoice balance.");
-      } else {
-        throw new Error("Payment amount exceeds the selected payable.");
-      }
+    const unallocatedForeign = totalAmountMinor - sumAllocatedForeign;
+    if (unallocatedForeign > 0) {
+      const unallocatedBase = convertToBase(
+        unallocatedForeign,
+        rate.currencyMinorUnit,
+        baseCur.minor_unit,
+        rate.exchangeRateToBase,
+      );
+      sumSettlementBase += unallocatedBase;
+      sumBaseCarryingReleased += unallocatedBase;
     }
-
-    const allocation = calculateSettlementAllocation({
-      foreignAmountAllocated: amountMinor,
-      foreignOpenBefore: open.foreign_open_minor,
-      baseCarryingBefore: open.base_carrying_minor,
-      rate,
-    });
 
     const paymentNumber = allocateNumber(sqlite, config.partyType === "customer" ? "receipt" : "supplierPayment");
 
@@ -104,19 +181,23 @@ export function createSettlement(
         posted_at, voided_at
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'posted', ?, ?, ?, NULL)
     `).run(
-      id, paymentNumber, partyId, data.date, data.bankAccountId, amountMinor,
+      id, paymentNumber, partyId, data.date, data.bankAccountId, totalAmountMinor,
       rate.currencyCode, rate.exchangeRateToBase, rate.exchangeRateDate, rate.exchangeRateSource,
-      allocation.settlementBaseAmount, allocation.baseCarryingAmountReleased, allocation.realizedFxAmount,
+      sumSettlementBase, sumBaseCarryingReleased, sumRealizedFx,
       data.reference || null, data.description || null, userId, now, now
     );
 
-    sqlite.prepare(`
-      INSERT INTO ${config.allocationTable} (
-        id, ${config.allocationPaymentIdColumn}, ${config.documentIdColumn}, amount_minor, foreign_amount_allocated,
-        base_carrying_amount_released, settlement_base_amount, realized_fx_amount
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-    `).run(randomUUID(), id, invoice.id, amountMinor, allocation.foreignAmountAllocated,
-      allocation.baseCarryingAmountReleased, allocation.settlementBaseAmount, allocation.realizedFxAmount);
+    for (const item of allocationsToInsert) {
+      sqlite.prepare(`
+        INSERT INTO ${config.allocationTable} (
+          id, ${config.allocationPaymentIdColumn}, ${config.documentIdColumn}, amount_minor, foreign_amount_allocated,
+          base_carrying_amount_released, settlement_base_amount, realized_fx_amount
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      `).run(
+        randomUUID(), id, item.documentId, item.amountMinor, item.foreignAmountAllocated,
+        item.baseCarryingAmountReleased, item.settlementBaseAmount, item.realizedFxAmount
+      );
+    }
 
     config.postSettlement(sqlite, {
       id,
@@ -124,12 +205,107 @@ export function createSettlement(
       [config.partyIdColumn]: partyId,
       date: data.date,
       bankAccountId: data.bankAccountId,
-      baseAmountMinor: allocation.settlementBaseAmount,
-      releasedCarryingAmountMinor: allocation.baseCarryingAmountReleased,
-      realizedFxAmountMinor: allocation.realizedFxAmount,
+      baseAmountMinor: sumSettlementBase,
+      releasedCarryingAmountMinor: sumBaseCarryingReleased,
+      realizedFxAmountMinor: sumRealizedFx,
     });
 
-    return { id, invoiceId, partyId };
+    const firstInvoiceId = allocationsToInsert[0]?.documentId || data.invoiceId || data.purchaseInvoiceId;
+    return { id, invoiceId: firstInvoiceId, partyId, unallocatedMinor: unallocatedForeign };
+  };
+
+  if (sqlite.inTransaction) {
+    return execute();
+  }
+  return sqlite.transaction(execute)();
+}
+
+export function applySettlementCredit(
+  sqlite: any,
+  config: SettlementConfig,
+  data: {
+    paymentId: string;
+    documentId: string;
+    amount: string | number;
+  },
+) {
+  const execute = () => {
+    const payment = sqlite.prepare(`
+      SELECT id, ${config.paymentNumberColumn} AS payment_number, ${config.partyIdColumn} AS party_id,
+        amount_minor, currency_code, exchange_rate_to_base, exchange_rate_date, exchange_rate_source,
+        document_status, date
+      FROM ${config.paymentTable}
+      WHERE id = ?
+    `).get(data.paymentId) as any;
+    if (!payment) throw new Error("Payment record not found.");
+    if (payment.document_status !== "posted") throw new Error("Only posted payments can be allocated.");
+
+    // Calculate current allocated total for this payment
+    const currentAllocated = sqlite.prepare(`
+      SELECT COALESCE(SUM(foreign_amount_allocated), 0) AS total_allocated
+      FROM ${config.allocationTable}
+      WHERE ${config.allocationPaymentIdColumn} = ?
+    `).get(data.paymentId) as { total_allocated: number };
+
+    const availableCredit = payment.amount_minor - currentAllocated.total_allocated;
+    if (availableCredit <= 0) throw new Error("No unallocated credit available on this payment.");
+
+    const rate = resolveRateSnapshot(sqlite, {
+      currencyCode: payment.currency_code,
+      exchangeRateToBase: payment.exchange_rate_to_base,
+      exchangeRateDate: payment.exchange_rate_date,
+      exchangeRateSource: payment.exchange_rate_source,
+      relevantDate: payment.date,
+      enforceVatPolicy: false,
+    });
+
+    const allocAmountMinor =
+      typeof data.amount === "number"
+        ? Math.round(data.amount)
+        : parseCurrencyAmountToMinor(data.amount, rate.currencyMinorUnit);
+    if (allocAmountMinor <= 0) throw new Error("Allocation amount must be greater than zero.");
+    if (allocAmountMinor > availableCredit) {
+      throw new Error("Allocation amount exceeds available unallocated credit.");
+    }
+
+    const invoice = sqlite.prepare(`
+      SELECT id, currency_code, ${config.documentNumberColumn} AS doc_number
+      FROM ${config.documentTable}
+      WHERE id = ? AND ${config.partyIdColumn} = ? AND document_status = 'posted'
+    `).get(data.documentId, payment.party_id) as any;
+    if (!invoice) throw new Error("Invoice not found or not posted.");
+
+    if (invoice.currency_code !== payment.currency_code) {
+      throw new Error(`Cannot allocate ${payment.currency_code} credit to a ${invoice.currency_code} invoice.`);
+    }
+
+    const open = getOpenState(sqlite, config, invoice.id);
+    if (!open || open.foreign_open_minor <= 0) {
+      throw new Error(`Invoice ${invoice.doc_number} is already fully settled.`);
+    }
+    if (allocAmountMinor > open.foreign_open_minor) {
+      throw new Error(`Allocation amount exceeds invoice ${invoice.doc_number} balance.`);
+    }
+
+    const allocationCalc = calculateSettlementAllocation({
+      foreignAmountAllocated: allocAmountMinor,
+      foreignOpenBefore: open.foreign_open_minor,
+      baseCarryingBefore: open.base_carrying_minor,
+      rate,
+    });
+
+    const allocId = randomUUID();
+    sqlite.prepare(`
+      INSERT INTO ${config.allocationTable} (
+        id, ${config.allocationPaymentIdColumn}, ${config.documentIdColumn}, amount_minor, foreign_amount_allocated,
+        base_carrying_amount_released, settlement_base_amount, realized_fx_amount
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(
+      allocId, payment.id, invoice.id, allocAmountMinor, allocationCalc.foreignAmountAllocated,
+      allocationCalc.baseCarryingAmountReleased, allocationCalc.settlementBaseAmount, allocationCalc.realizedFxAmount
+    );
+
+    return { ok: true, allocationId: allocId, allocatedMinor: allocAmountMinor };
   };
 
   if (sqlite.inTransaction) {

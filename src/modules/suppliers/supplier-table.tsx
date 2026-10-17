@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import Link from "next/link";
-import { Filter, ChevronRight } from "lucide-react";
+import { Filter, ChevronRight, MoreHorizontal, Eye, FileEdit, FileText, ShoppingCart, BookOpenText } from "lucide-react";
 import { 
   useLegacyTable as useTable,
   getCoreRowModel as createCoreRowModel,
@@ -14,6 +14,7 @@ import { type ColumnVisibility } from "@/components/use-column-visibility";
 import { useColumns } from "@/components/columns-dropdown";
 import { ListToolbar, SearchInput, ActiveFiltersRow, FilterChip } from "@/components/list-toolbar";
 import { Button } from "@/components/ui/button";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { DataTable } from "@/components/ui/data-table";
 import { formatCustomFieldValue, type CustomFieldColumn } from "@/modules/custom-fields/custom-field-display";
 import { formatMoney } from "@/core/format";
@@ -138,15 +139,55 @@ export function SupplierTable({
       {
         id: "actions",
         header: () => <span className="sr-only">Actions</span>,
-        meta: { className: "w-12" },
+        meta: { className: "w-16 text-right" },
         enableSorting: false,
-        cell: ({ row }: any) => (
-          <Button asChild variant="ghost" size="icon" className="text-muted-foreground opacity-50 transition-opacity md:opacity-0 md:group-hover:opacity-100">
-            <Link href={`/b/${businessId}/suppliers/${row.original.id}`} aria-label={`Open ${row.original.name}`}>
-              <ChevronRight className="size-4" />
-            </Link>
-          </Button>
-        ),
+        cell: ({ row }: any) => {
+          const sup = row.original;
+          return (
+            <div className="flex items-center justify-end gap-1">
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="ghost" size="icon" className="size-7 text-muted-foreground hover:text-foreground" aria-label={`Actions for ${sup.name}`}>
+                    <MoreHorizontal className="size-4" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-48">
+                  <DropdownMenuItem asChild>
+                    <Link href={`/b/${businessId}/suppliers/${sup.id}`}>
+                      <Eye className="size-4 text-muted-foreground" /> View Profile
+                    </Link>
+                  </DropdownMenuItem>
+                  <DropdownMenuItem asChild>
+                    <Link href={`/b/${businessId}/suppliers/${sup.id}/edit`}>
+                      <FileEdit className="size-4 text-muted-foreground" /> Edit Supplier
+                    </Link>
+                  </DropdownMenuItem>
+                  <DropdownMenuItem asChild>
+                    <Link href={`/b/${businessId}/suppliers/${sup.id}/statement`}>
+                      <BookOpenText className="size-4 text-muted-foreground" /> Statement
+                    </Link>
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem asChild>
+                    <Link href={`/b/${businessId}/purchases/invoices/new?supplierId=${sup.id}`}>
+                      <FileText className="size-4 text-muted-foreground" /> New Bill
+                    </Link>
+                  </DropdownMenuItem>
+                  <DropdownMenuItem asChild>
+                    <Link href={`/b/${businessId}/purchases/orders/new?supplierId=${sup.id}`}>
+                      <ShoppingCart className="size-4 text-muted-foreground" /> New Order
+                    </Link>
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+              <Button asChild variant="ghost" size="icon" className="size-7 text-muted-foreground opacity-50 transition-opacity md:opacity-0 md:group-hover:opacity-100">
+                <Link href={`/b/${businessId}/suppliers/${sup.id}`} aria-label={`Open ${sup.name}`}>
+                  <ChevronRight className="size-4" />
+                </Link>
+              </Button>
+            </div>
+          );
+        },
       },
     ],
     [businessId, currency, customFields, customValues],

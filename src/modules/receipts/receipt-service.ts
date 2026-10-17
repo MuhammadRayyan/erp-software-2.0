@@ -1,9 +1,14 @@
-import { createSettlement, voidSettlement, type SettlementConfig } from "@/modules/settlement/settlement-service";
+import { createSettlement, voidSettlement, applySettlementCredit, type SettlementConfig } from "@/modules/settlement/settlement-service";
 import { getBusinessDb } from "@/core/db/business";
 import { postReceipt } from "@/modules/accounting/services/receipt-posting-service";
-import { receiptInputSchema, type ReceiptInput } from "./receipt-input";
+import {
+  receiptInputSchema,
+  applyReceiptCreditInputSchema,
+  type ReceiptInput,
+  type ApplyReceiptCreditInput,
+} from "./receipt-input";
 
-const receiptConfig: SettlementConfig = {
+export const receiptConfig: SettlementConfig = {
   partyType: "customer",
   partyTable: "customers",
   partyIdColumn: "customer_id",
@@ -191,17 +196,46 @@ export function listReceipts(businessId: string, userId: string, filters?: Recei
   `).all(...values) as ReceiptListRow[];
 }
 
+export type ReceiptDetailRecord = {
+  id: string;
+  receipt_number: string;
+  customer_id: string;
+  customer_name: string;
+  customer_email: string | null;
+  date: string;
+  bank_account_id: string;
+  bank_account_code: string | null;
+  bank_account_name: string;
+  amount_minor: number;
+  currency_code: string;
+  exchange_rate_to_base: string;
+  exchange_rate_date: string;
+  exchange_rate_source: string;
+  base_amount_minor: number;
+  released_carrying_amount_minor: number;
+  realized_fx_amount_minor: number;
+  reference: string | null;
+  description: string | null;
+  document_status: "posted" | "void";
+  created_by: string;
+  created_at: string;
+  posted_at: string;
+  voided_at: string | null;
+  total_allocated_minor: number;
+  unallocated_amount_minor: number;
+};
+
 export function getReceipt(businessId: string, userId: string, receiptId: string) {
   const { sqlite } = getBusinessDb(businessId, userId);
-  const receipt = sqlite.prepare(`
+  const rawReceipt = sqlite.prepare(`
     SELECT r.*, c.name AS customer_name, c.email AS customer_email,
       a.name AS bank_account_name
     FROM receipts r
     INNER JOIN customers c ON c.id = r.customer_id
     INNER JOIN accounts a ON a.id = r.bank_account_id
     WHERE r.id = ?
-  `).get(receiptId) as Record<string, unknown> | undefined;
-  if (!receipt) return null;
+  `).get(receiptId) as any;
+  if (!rawReceipt) return null;
   const allocations = sqlite.prepare(`
     SELECT ra.id, ra.amount_minor, ra.base_carrying_amount_released,
       i.id AS invoice_id, i.invoice_number
@@ -227,6 +261,17 @@ export function getReceipt(businessId: string, userId: string, receiptId: string
     source_type: "receipt" | "receipt_void";
     date: string;
   }[];
+
+  const totalAllocatedMinor = allocations.reduce((sum, a) => sum + a.amount_minor, 0);
+  const unallocatedAmountMinor = Math.max(0, Number(rawReceipt.amount_minor) - totalAllocatedMinor);
+
+  const receipt: ReceiptDetailRecord = {
+    ...rawReceipt,
+    bank_account_code: rawReceipt.bank_account_code ?? null,
+    total_allocated_minor: totalAllocatedMinor,
+    unallocated_amount_minor: unallocatedAmountMinor,
+  };
+
   return { receipt, allocations, journals };
 }
 
@@ -235,6 +280,140 @@ export function voidReceipt(businessId: string, userId: string, receiptId: strin
   context.sqlite.transaction(() => {
     voidSettlement(context.sqlite, receiptConfig, receiptId);
   }).immediate();
+}
+
+export type CustomerUnallocatedCredit = {
+  receiptId: string;
+  receiptNumber: string;
+  date: string;
+  currencyCode: string;
+  currencyMinorUnit: number;
+  totalAmountMinor: number;
+  allocatedAmountMinor: number;
+  unallocatedAmountMinor: number;
+  reference: string | null;
+  description: string | null;
+};
+
+export function getCustomerUnallocatedCredit(
+  businessId: string,
+  userId: string,
+  customerId: string,
+): CustomerUnallocatedCredit[] {
+  const { sqlite } = getBusinessDb(businessId, userId);
+  const rows = sqlite.prepare(`
+    SELECT r.id, r.receipt_number, r.date, r.amount_minor, r.currency_code,
+      c.minor_unit AS currency_minor_unit, r.reference, r.description,
+      COALESCE((
+        SELECT SUM(ra.foreign_amount_allocated)
+        FROM receipt_allocations ra
+        WHERE ra.receipt_id = r.id
+      ), 0) AS allocated_minor
+    FROM receipts r
+    INNER JOIN currencies c ON c.code = r.currency_code
+    WHERE r.customer_id = ? AND r.document_status = 'posted'
+    ORDER BY r.date ASC, r.created_at ASC
+  `).all(customerId) as Array<{
+    id: string;
+    receipt_number: string;
+    date: string;
+    amount_minor: number;
+    currency_code: string;
+    currency_minor_unit: number;
+    reference: string | null;
+    description: string | null;
+    allocated_minor: number;
+  }>;
+
+  return rows
+    .filter((r) => r.amount_minor > r.allocated_minor)
+    .map((r) => ({
+      receiptId: r.id,
+      receiptNumber: r.receipt_number,
+      date: r.date,
+      currencyCode: r.currency_code,
+      currencyMinorUnit: r.currency_minor_unit,
+      totalAmountMinor: r.amount_minor,
+      allocatedAmountMinor: r.allocated_minor,
+      unallocatedAmountMinor: r.amount_minor - r.allocated_minor,
+      reference: r.reference,
+      description: r.description,
+    }));
+}
+
+export function getAllCustomersUnallocatedCredit(
+  businessId: string,
+  userId: string,
+): Record<string, CustomerUnallocatedCredit[]> {
+  const { sqlite } = getBusinessDb(businessId, userId);
+  const rows = sqlite.prepare(`
+    SELECT r.id, r.customer_id, r.receipt_number, r.date, r.amount_minor, r.currency_code,
+      c.minor_unit AS currency_minor_unit, r.reference, r.description,
+      COALESCE((
+        SELECT SUM(ra.foreign_amount_allocated)
+        FROM receipt_allocations ra
+        WHERE ra.receipt_id = r.id
+      ), 0) AS allocated_minor
+    FROM receipts r
+    INNER JOIN currencies c ON c.code = r.currency_code
+    WHERE r.document_status = 'posted'
+    ORDER BY r.date ASC, r.created_at ASC
+  `).all() as Array<{
+    id: string;
+    customer_id: string;
+    receipt_number: string;
+    date: string;
+    amount_minor: number;
+    currency_code: string;
+    currency_minor_unit: number;
+    reference: string | null;
+    description: string | null;
+    allocated_minor: number;
+  }>;
+
+  const result: Record<string, CustomerUnallocatedCredit[]> = {};
+  for (const r of rows) {
+    if (r.amount_minor > r.allocated_minor) {
+      if (!result[r.customer_id]) {
+        result[r.customer_id] = [];
+      }
+      result[r.customer_id].push({
+        receiptId: r.id,
+        receiptNumber: r.receipt_number,
+        date: r.date,
+        currencyCode: r.currency_code,
+        currencyMinorUnit: r.currency_minor_unit,
+        totalAmountMinor: r.amount_minor,
+        allocatedAmountMinor: r.allocated_minor,
+        unallocatedAmountMinor: r.amount_minor - r.allocated_minor,
+        reference: r.reference,
+        description: r.description,
+      });
+    }
+  }
+  return result;
+}
+
+export function applyReceiptCredit(
+  businessId: string,
+  userId: string,
+  input: ApplyReceiptCreditInput,
+) {
+  const data = applyReceiptCreditInputSchema.parse(input);
+  const context = getBusinessDb(businessId, userId);
+  let result!: ReturnType<typeof applySettlementCredit>;
+  context.sqlite.transaction(() => {
+    result = applySettlementCredit(
+      context.sqlite,
+      receiptConfig,
+      {
+        paymentId: data.receiptId,
+        documentId: data.invoiceId,
+        amount: data.amount,
+      },
+    );
+  }).immediate();
+  return result;
 }
 
 export function listReceiptsForCustomer(
@@ -246,14 +425,28 @@ export function listReceiptsForCustomer(
   return sqlite.prepare(`
     SELECT r.id, r.receipt_number, r.date, r.amount_minor, r.currency_code,
       cur.minor_unit AS currency_minor_unit, r.reference,
-      i.id AS invoice_id, i.invoice_number
+      COALESCE((
+        SELECT GROUP_CONCAT(i.invoice_number, ', ')
+        FROM receipt_allocations ra
+        INNER JOIN sales_invoices i ON i.id = ra.sales_invoice_id
+        WHERE ra.receipt_id = r.id
+      ), 'Unallocated Advance') AS invoice_number,
+      (
+        SELECT ra.sales_invoice_id
+        FROM receipt_allocations ra
+        WHERE ra.receipt_id = r.id
+        LIMIT 1
+      ) AS invoice_id,
+      COALESCE((
+        SELECT SUM(ra.foreign_amount_allocated)
+        FROM receipt_allocations ra
+        WHERE ra.receipt_id = r.id
+      ), 0) AS allocated_amount_minor
     FROM receipts r
-    INNER JOIN receipt_allocations ra ON ra.receipt_id = r.id
-    INNER JOIN sales_invoices i ON i.id = ra.sales_invoice_id
     INNER JOIN currencies cur ON cur.code = r.currency_code
     WHERE r.customer_id = ? AND r.document_status = 'posted'
     ORDER BY r.date DESC, r.created_at DESC
-  `).all(customerId) as {
+  `).all(customerId) as Array<{
     id: string;
     receipt_number: string;
     date: string;
@@ -261,7 +454,8 @@ export function listReceiptsForCustomer(
     currency_code: string;
     currency_minor_unit: number;
     reference: string | null;
-    invoice_id: string;
+    invoice_id: string | null;
     invoice_number: string;
-  }[];
+    allocated_amount_minor: number;
+  }>;
 }

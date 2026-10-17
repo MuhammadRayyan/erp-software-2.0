@@ -136,12 +136,13 @@ export function saveSalesOrder(businessId: string, userId: string, input: SalesO
   context.sqlite.transaction(() => {
     if (orderId) {
       const current = context.db.select().from(salesOrders).where(eq(salesOrders.id, orderId)).get();
-      if (!current) throw new Error("Purchase order not found.");
-      if (current.documentStatus === "completed" || current.documentStatus === "cancelled") throw new Error("Closed or cancelled purchase orders cannot be edited.");
+      if (!current) throw new Error("Sales order not found.");
+      if (current.documentStatus === "completed" || current.documentStatus === "cancelled") throw new Error("Closed or cancelled sales orders cannot be edited.");
       
       const nextStatus = current.documentStatus === "active" || intent === "issue" ? "active" : "draft";
+      const effectiveSalesQuoteId = data.salesQuoteId || current.salesQuoteId || null;
       context.sqlite.prepare(`UPDATE sales_orders SET customer_id = ?, project_id = ?, sales_quote_id = ?, order_date = ?, delivery_date = ?, reference = ?, document_status = ?, amounts_include_tax = ?, subtotal_minor = ?, tax_minor = ?, total_minor = ?, currency_code = ?, exchange_rate_to_base = ?, exchange_rate_date = ?, exchange_rate_source = ?, base_subtotal_minor = ?, base_tax_minor = ?, base_total_minor = ?, notes = ?, terms = ?, updated_at = ? WHERE id = ?`)
-        .run(data.customerId, data.projectId || null, data.salesQuoteId || null, data.date, data.expectedDate || "", data.reference || null, nextStatus, data.amountsIncludeTax ? 1 : 0, amounts.subtotalMinor, amounts.taxMinor, amounts.totalMinor, rate.currencyCode, rate.exchangeRateToBase, rate.exchangeRateDate, rate.exchangeRateSource, base.baseSubtotalMinor, base.baseTaxMinor, base.baseTotalMinor, data.notes || null, data.terms || null, now, orderId);
+        .run(data.customerId, data.projectId || null, effectiveSalesQuoteId, data.date, data.expectedDate || "", data.reference || null, nextStatus, data.amountsIncludeTax ? 1 : 0, amounts.subtotalMinor, amounts.taxMinor, amounts.totalMinor, rate.currencyCode, rate.exchangeRateToBase, rate.exchangeRateDate, rate.exchangeRateSource, base.baseSubtotalMinor, base.baseTaxMinor, base.baseTotalMinor, data.notes || null, data.terms || null, now, orderId);
       context.sqlite.prepare("DELETE FROM sales_order_lines WHERE order_id = ?").run(orderId);
     } else {
       const orderNumber = allocateNumber(context.sqlite, "salesOrder");

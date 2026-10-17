@@ -10,6 +10,8 @@ import { getPurchaseInvoice } from "@/modules/purchase-invoices/purchase-invoice
 import { PurchaseInvoiceViewActions } from "@/modules/purchase-invoices/purchase-invoice-view-actions";
 import { DocumentFlowStepper, type FlowStep } from "@/components/documents/document-flow-stepper";
 import { BackLink } from "@/components/back-link";
+import { getSupplierUnallocatedCredit } from "@/modules/supplier-payments/supplier-payment-service";
+import { ApplyPrepaymentModal } from "@/modules/purchase-invoices/apply-prepayment-modal";
 
 export default async function PurchaseInvoiceViewPage({
   params,
@@ -29,6 +31,12 @@ export default async function PurchaseInvoiceViewPage({
     new Map(lines.flatMap((line) => (line.project ? [[line.project.id, line.project] as const] : []))).values()
   );
   const showLineProjects = linkedProjects.length > 1;
+
+  const availablePrepayments = invoice.documentStatus === "posted" && record.balanceMinor > 0
+    ? getSupplierUnallocatedCredit(businessId, user.id, supplier.id).filter(
+        (p) => p.currencyCode === currency && p.unallocatedAmountMinor > 0
+      )
+    : [];
 
   const flowSteps: FlowStep[] = [
     {
@@ -91,13 +99,22 @@ export default async function PurchaseInvoiceViewPage({
             Supplier invoice: {invoice.supplierInvoiceNumber} · Invoice date: {formatDate(invoice.invoiceDate)} · Due: {formatDate(invoice.dueDate)}
           </p>
           <div className="mt-3 flex flex-wrap items-baseline gap-x-5 gap-y-1">
-            <span className="money text-xl font-semibold">{formatMoney(invoice.totalMinor, currency)}</span>
-            {invoice.documentStatus === "posted" ? (
-              <span className="money text-sm text-muted-foreground">
-                Balance <strong className="font-semibold text-foreground">{formatMoney(record.balanceMinor, currency)}</strong>
-              </span>
+            {invoice.documentStatus === "void" ? (
+              <>
+                <span className="money text-xl font-semibold line-through text-muted-foreground">{formatMoney(invoice.totalMinor, currency)}</span>
+                <span className="text-sm font-semibold text-danger">Voided · 0.00 Balance (GL Reversal Posted)</span>
+              </>
             ) : (
-              <span className="text-sm text-muted-foreground">No ledger impact</span>
+              <>
+                <span className="money text-xl font-semibold">{formatMoney(invoice.totalMinor, currency)}</span>
+                {invoice.documentStatus === "posted" ? (
+                  <span className="money text-sm text-muted-foreground">
+                    Balance <strong className="font-semibold text-foreground">{formatMoney(record.balanceMinor, currency)}</strong>
+                  </span>
+                ) : (
+                  <span className="text-sm text-muted-foreground">No ledger impact</span>
+                )}
+              </>
             )}
           </div>
         </div>
@@ -107,13 +124,27 @@ export default async function PurchaseInvoiceViewPage({
           internalNumber={invoice.internalNumber}
           documentStatus={invoice.documentStatus}
           balanceMinor={record.balanceMinor}
+          totalMinor={invoice.totalMinor}
           journalEntryId={record.journal?.id ?? null}
           inventoryEnabled={access.modules.includes("inventory")}
           hasInventoryLines={lines.some((line) => Boolean(line.itemId))}
+          hasGoodsReceipts={record.goodsReceipts.length > 0}
         />
       </div>
 
       <DocumentFlowStepper steps={flowSteps} />
+
+      {availablePrepayments.length > 0 && (
+        <ApplyPrepaymentModal
+          businessId={businessId}
+          invoiceId={invoiceId}
+          invoiceNumber={invoice.internalNumber}
+          balanceMinor={record.balanceMinor}
+          currencyCode={currency}
+          minorUnit={2}
+          availablePrepayments={availablePrepayments}
+        />
+      )}
 
       {currency !== access.business.currency && (
         <section aria-label="Currency snapshot" className="mb-5 rounded-lg border border-border bg-surface-raised p-4">
@@ -205,12 +236,20 @@ export default async function PurchaseInvoiceViewPage({
           </div>
           <div className="flex justify-between border-t border-border pt-2 text-base font-semibold">
             <dt>Total</dt>
-            <dd className="money">{formatMoney(invoice.totalMinor, currency)}</dd>
+            <dd className={`money ${invoice.documentStatus === "void" ? "line-through text-muted-foreground" : ""}`}>
+              {formatMoney(invoice.totalMinor, currency)}
+            </dd>
           </div>
           {invoice.documentStatus === "posted" && (
             <div className="flex justify-between border-t border-border pt-2">
               <dt className="text-muted-foreground">Balance due</dt>
               <dd className="money font-semibold">{formatMoney(record.balanceMinor, currency)}</dd>
+            </div>
+          )}
+          {invoice.documentStatus === "void" && (
+            <div className="flex justify-between border-t border-border pt-2 text-sm font-semibold text-danger">
+              <dt>Voided Balance</dt>
+              <dd className="money">0.00 {currency}</dd>
             </div>
           )}
         </dl>

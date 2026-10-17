@@ -1820,3 +1820,375 @@ Work Log:
 
 Stage Summary:
 - Complete system audit remediations applied, verified, and passing 100% with zero regressions. All identified architectural, concurrency, security, and accounting edge cases resolved.
+
+---
+Task ID: Flow-Hardening-And-Linkage-Preservation
+Agent: Antigravity Pair Programmer
+Task: System Flow Hardening, Relational Linkage Preservation, Void/Delete Symmetry, Mobile Validation & Testing Guides
+
+Work Log:
+- Phone Number Validation Across All Entities (`party-schemas.ts`):
+  - Created standardized `phoneSchema` supporting international E.164 formats (`+971 50 123 4567`, `+1 555 123 4567`) and national formats (`050-123-4567`, `04 321 4321`) while rejecting gibberish, letters, and excessive lengths.
+  - Applied to `customerInputSchema`, `supplierInputSchema`, and `businessProfileInputSchema`.
+- Sales & Purchase Lifecycle Relational Linkage Preservation:
+  - Fixed status pill and stepper breakage when editing intermediate documents.
+  - Sales Orders, Invoices, Purchase Orders, and Purchase Invoices preserve parent foreign keys (`salesQuoteId`, `salesOrderId`, `purchaseQuoteId`, `purchaseOrderId`) when edited.
+- Double-Entry & Void/Delete Symmetry:
+  - Deleting or voiding an invoice, debit note, or credit note completely removes or reverses associated journal lines, Accounts Receivable / Accounts Payable carrying values, and VAT liability without leaving orphaned balances.
+- Lifecycle Stage Guards & Edit Restrictions:
+  - Sales Orders cannot be edited once completed or cancelled.
+  - Sales Invoices cannot be modified after delivery notes or credit notes are issued.
+  - Purchase Invoices cannot be modified after debit notes or goods receipts are issued.
+- Interactive Module Flow Guide (`src/components/module-flow-guide.tsx`):
+  - Created non-intrusive interactive `<ModuleFlowGuide />` info trigger embedded across all 11 modules.
+  - Provides a complete testing drawer showing expected lifecycle stages, required inputs, status transitions, downstream document options, and ledger money-flow effects.
+- Table Totals Bar Aggregations (`src/components/table-totals-bar.tsx`):
+  - Added live multi-currency totals dock across commercial registers displaying row counts, subtotal, tax amount, and gross totals.
+- Automated Test Suite (`tests/flow-verification-and-hardening.test.ts`):
+  - Created 6-stage end-to-end integration test suite verifying phone validation, linkage preservation, lifecycle stage guards, double-entry void symmetry, and multi-currency reporting.
+
+Stage Summary:
+- All system flows, document lifecycles, and accounting symmetries verified and hardened. Stepper pills stay intact across all edits, and interactive testing guides provide complete visibility.
+
+---
+Task ID: Multi-Customer-Projects-Architecture
+Agent: Antigravity Pair Programmer
+Task: Multi-Customer Projects, Joint Ventures, Tenant Billing, Split Percentages & Enterprise Collaboration
+
+Work Log:
+- Industry Standard Architecture & Use Cases:
+  - Analyzed Procore, NetSuite SuiteProjects, SAP S/4HANA, Dynamics 365 Project Operations, and Odoo.
+  - Established native support for Joint Ventures (with split %), Commercial Fit-Outs/Tenants, Parent/Subsidiary Bill-To entities, and Co-Clients.
+- Database Schema & Migration 29 (`project_customers_multi_client`):
+  - Added `project_customers` junction table to `business-schema.ts` with columns: `id`, `project_id`, `customer_id`, `role`, `billing_percentage`, `is_primary`, `notes`, `created_at`, `updated_at`, and unique index on `(project_id, customer_id)`.
+  - Added Migration 29 in `business-migrations.ts` automatically backfilling existing single-customer projects into `project_customers` as `primary_client` (`is_primary = 1`).
+- Stakeholder Roles & Schema Validation (`project-input.ts`):
+  - Added `projectCustomerRoles` enum (`primary_client`, `co_client`, `joint_venture`, `tenant`, `bill_to`, `sponsor`, `consultant`) and `projectCustomerInputSchema`.
+- Commercial Reference Validation & Multi-Client Billing (`project-validation.ts`):
+  - Updated `validateProjectReferences` to allow billing any customer associated with the project, while strictly rejecting unassociated third parties.
+- Financial Ledger Segregation vs Unified Project P&L (`project-service.ts`, `project-view-service.ts`):
+  - Implemented `listProjectCustomers` calculating `invoicedMinor`, `collectedMinor`, and `outstandingMinor` per client.
+  - Project operational view and profitability reports aggregate unified revenue, costs, and margins across all project stakeholders.
+  - Added relational deletion guards to `removeProjectCustomer` preventing removal of stakeholders with active billed transactions under the project.
+- UI & UX Enhancements Across Projects Module:
+  - Created `src/modules/projects/project-stakeholders.tsx`: Interactive card with table of stakeholders, role badges, split %, invoiced/collected/outstanding metrics, quick invoice shortcuts, and "Add Client / Stakeholder" modal.
+  - Project Detail Page: Added "Clients & Stakeholders" tab (`#stakeholders`), header badge for multi-client projects, and links to co-clients.
+  - Project Action Menu: "New Invoice" provides a smart dropdown menu to select which associated client to bill when multiple exist.
+  - Project Table: Customer column displays Primary Client + `+X co-clients` pill with full tooltip.
+  - Customer Profile Page: Customer's linked projects table displays the customer's specific role badge in that project.
+  - Document form project filters (`invoice-form.tsx`, `quote-form.tsx`, `sales-order-form.tsx`, `credit-note-form.tsx`, `delivery-note-form.tsx`): Updated `availableProjects` to check `customerIds.includes(customerId)`.
+- Automated Test Suite (`tests/multi-customer-projects.test.ts`):
+  - Comprehensive 8-stage test suite covering JV partner creation, split %, multi-customer invoice issuance on the same project, unrelated customer rejection, receipt allocation, co-client project filtering, deletion guards, and General Ledger equilibrium. All 9 assertions pass.
+
+Stage Summary:
+- Enterprise Multi-Customer Projects fully implemented, passing all 131 automated tests with zero TypeScript or ESLint errors.
+
+---
+Task ID: Multi-Invoice-Receipts-And-Advance-Credit-Pool
+Agent: Antigravity Pair Programmer
+Task: Multi-Invoice Lump-Sum Receipts, Advance Retainer Credit Pool, FIFO Allocation & 1-Click Application
+
+Work Log:
+- Multi-Invoice Lump-Sum Settlement Engine (`src/modules/settlement/settlement-service.ts`):
+  - Refactored `createSettlement` to accept an `allocations: { invoiceId: string; amount: string }[]` array, allocating funds across multiple invoices in a single atomic transaction.
+  - Added support for unallocated surplus deposits: when `totalReceived > totalAllocated`, the surplus amount is held as unallocated advance credit in the customer's Accounts Receivable subledger.
+  - Implemented `applySettlementCredit`: allows subsequent invoices to absorb unallocated customer credit from advance receipts without requiring a new bank deposit.
+  - Atomic Reversal & Void Symmetry: voiding a multi-invoice receipt cleanly and atomically restores open balances across all allocated invoices and voids any advance credits.
+- Receipt Services & Schemas (`src/modules/receipts/receipt-input.ts`, `src/modules/receipts/receipt-service.ts`):
+  - Added `receiptAllocationInputSchema` and `applyReceiptCreditInputSchema`.
+  - Normalized `createReceipt` input for full backward compatibility (handling both legacy single `invoiceId` and new `allocations` array).
+  - Implemented `getCustomerUnallocatedCredit` discovering all available advance deposits on a customer's account.
+  - Updated `getReceipt` query to calculate `total_allocated_minor` and `unallocated_amount_minor`, and `listReceiptsForCustomer` to display unallocated advance deposits.
+- Interactive Receipt Allocation UI (`src/modules/receipts/receipt-form.tsx`, `new/page.tsx`):
+  - Built interactive open invoices table displaying Invoice #, Issue Date, Due Date (with overdue badges), Invoice Total, Open Balance, and Allocation Amount input.
+  - Implemented 1-click **"Auto-Allocate FIFO (Oldest First)"** distributing received amounts chronologically.
+  - Implemented 1-click **"Pay All Open Invoices"** setting allocations to 100% and auto-filling the total payment.
+  - Added live Financial Summary Card displaying Total Received, Total Allocated, and Advance Deposit Surplus / Credit Pool indicator.
+  - Dedicated Pure Advance Retainer Deposit empty-state card for customers without open invoices.
+- 1-Click Advance Credit Application (`src/modules/sales-invoices/apply-credit-modal.tsx`, `invoices/[invoiceId]/page.tsx`):
+  - Added customer advance credit banner on unpaid sales invoice pages showing available credit balance.
+  - Created interactive modal (`ApplyCreditModal`) enabling 1-click application of customer advance deposits directly to unpaid invoice balances.
+- Comprehensive Automated Test Suite (`tests/multi-invoice-receipts.test.ts`, `package.json`):
+  - 6-stage end-to-end integration test suite verifying:
+    1. 3 open invoices settled in full via 1 multi-invoice lump-sum receipt (100k AED settling 30k, 40k, 30k).
+    2. Partial invoice settlement with advance deposit surplus (40k AED paying 25k invoice + 15k credit).
+    3. Pure customer advance retainer deposit with zero invoices (50k AED advance).
+    4. 1-click application of available advance credit to subsequent invoices.
+    5. Reversal / voiding of multi-invoice receipts atomically restoring all open balances.
+    6. General ledger balance sheet equilibrium across all stages (DR == CR).
+  - Full suite verification: 137/137 tests passing across all 21 test suites.
+  - TypeScript: 0 errors (`tsc --noEmit`).
+  - ESLint: 0 errors, 0 warnings (`eslint .`).
+  - Production build: 100% successful compilation across all 110+ routes.
+
+Stage Summary:
+- Enterprise Multi-Invoice Lump-Sum Receipts and Customer Advance Credit Pool fully implemented, verified, and operational.
+
+---
+Task ID: Supplier-Payments-Multi-Allocation-And-Vendor-Prepayment-Pool
+Agent: Antigravity Pair Programmer
+Task: Supplier Payments Multi-Invoice Lump-Sum Allocations, Vendor Prepayment Pool, FIFO Allocation & 1-Click Application
+
+Work Log:
+- Multi-Invoice Lump-Sum Supplier Settlement Engine (`src/modules/settlement/settlement-service.ts`):
+  - Refactored `createSettlement` for supplier payments (`partyType === "supplier"`) to accept multi-bill `allocations: { purchaseInvoiceId: string; amount: string }[]`.
+  - Added support for unallocated vendor prepayments / deposit surplus: when `totalPaid > totalAllocated`, the surplus amount is retained as unallocated advance credit in the vendor's Accounts Payable subledger (`accounts_payable` credit balance).
+  - Implemented `applySettlementCredit` for supplier payments: allows subsequent purchase bills to absorb unallocated vendor prepayments via 1 click without creating duplicate cash-out transactions.
+  - Double-Entry Reversal & Void Symmetry: voiding a multi-invoice supplier payment cleanly and atomically restores open balances across all allocated purchase invoices and reverses vendor prepayments.
+  - Maintained exact string error compatibility with legacy suites (`Payment amount exceeds the selected payable`).
+- Supplier Payment Services & Schemas (`src/modules/supplier-payments/supplier-payment-input.ts`, `src/modules/supplier-payments/supplier-payment-service.ts`):
+  - Added `supplierPaymentAllocationInputSchema` and `applySupplierPaymentCreditInputSchema`.
+  - Maintained 100% backward compatibility for single-invoice payment callers (`purchaseInvoiceId` / `invoiceId`).
+  - Added `getSupplierUnallocatedCredit` discovering all unallocated prepayments and surplus credits on account for any vendor.
+  - Upgraded `getSupplierPayment` and `listSupplierPayments` (handling pure prepayments with `COALESCE(pi.invoice_number, 'Unallocated Prepayment')`).
+- Interactive UI/UX Across Supplier Payments & Purchase Invoices:
+  - **Multi-Bill Allocation Register (`supplier-payment-form.tsx`)**: Upgraded single-bill selector to an interactive table showing Bill #, Supplier Reference, Bill Date, Due Date (with overdue badges), Bill Total, Open Balance, and Allocation Amount.
+  - **1-Click Auto-Allocate FIFO (Oldest First)**: Automatically distributes supplier payment funds chronologically starting from the oldest open bill.
+  - **1-Click Pay All Open Bills**: Populates 100% allocation across all open bills and sets payment amount to match.
+  - **Live Financial Summary Cards**: Real-time display of Total Paid, Total Allocated to Bills, and Unallocated Vendor Prepayment Surplus.
+  - **Pure Vendor Prepayment Card**: Dedicated prompt for recording advance deposits to suppliers prior to receiving bills.
+  - **Purchase Invoice 1-Click Prepayment Banner & Modal (`apply-prepayment-modal.tsx`, `invoices/[invoiceId]/page.tsx`)**: Prominently alerts users when viewing an unpaid bill if the vendor holds unallocated prepayments, enabling 1-click drawdown.
+  - **Supplier Payment View Page (`payments/[paymentId]/page.tsx`)**: Added unallocated prepayment notice and multi-bill allocation breakdown table.
+- Comprehensive Automated Test Suite (`tests/multi-invoice-supplier-payments.test.ts`, `package.json`):
+  - 6-stage end-to-end integration test suite verifying:
+    1. 3 open bills settled in full via 1 lump-sum supplier payment (90k AED settling 25k, 35k, 30k).
+    2. Partial bill settlement with unallocated vendor prepayment surplus (50k AED paying 30k bill + 20k credit).
+    3. Pure vendor prepayment deposit with zero open bills (45k AED advance).
+    4. 1-click application of available vendor prepayment to subsequent purchase bills.
+    5. Reversal / voiding of multi-bill supplier payments atomically restoring open balances.
+    6. General ledger balance sheet equilibrium across all stages (DR == CR).
+  - Added test suite to `package.json` test script.
+  - Full suite verification: 143/143 tests passing across all 22 test suites.
+  - TypeScript: 0 errors (`tsc --noEmit`).
+  - ESLint: 0 errors, 0 warnings (`eslint .`).
+  - Production build: 100% successful compilation across all 110+ routes in 6.1s.
+
+Stage Summary:
+- Enterprise Supplier Payment Multi-Invoice Allocations and Vendor Prepayment Pool fully implemented, verified, and operational with 100% test pass rate.
+
+---
+Task ID: PDF-Preview-Fix-Supplier-Statements-Bank-Reconciliation-Actions
+Agent: Antigravity Pair Programmer
+Task: PDF Preview Localhost Bugfix, Full Supplier Statement Subroute & PDF Export, Customer Statement Parity & Bank Statement Reconciliation 1-Click Settlement Shortcuts
+
+Work Log:
+- Template Studio Live PDF Preview ("localhost failed to connect" fix):
+  - In Chromium browsers, pointing an `<iframe>` directly to `/api/businesses/.../preview-pdf` triggers security/framing restrictions ("localhost failed to connect" or blocked extension frame).
+  - Upgraded `src/modules/document-templates/template-editor.tsx` to stream PDF bytes as a client-side `blob:` with `URL.createObjectURL(blob)`, providing instant same-origin rendering inside `<object data={blobUrl} type="application/pdf">` with iframe fallback.
+  - Added compilation-time loading spinner overlay ("Compiling PDF preview...") and dedicated error boundary with "Retry" and "Open in New Tab" actions.
+  - Added `X-Frame-Options: SAMEORIGIN` header to preview PDF GET and POST responses in `src/app/api/businesses/[businessId]/document-templates/preview-pdf/route.ts`.
+- Full Supplier Statements & Customer Statement Accounting Parity:
+  - Created dedicated supplier statement subroute `src/app/b/[businessId]/suppliers/[supplierId]/statement/page.tsx` with date, source type, reference, description, debit, credit, and running payable balance.
+  - Created PDF export route `src/app/api/businesses/[businessId]/suppliers/[supplierId]/statement/pdf/route.ts` using `@react-pdf/renderer`.
+  - Generalized `ClassicStatementDocument` in `src/modules/document-templates/react-pdf/statement-template.tsx` to support both customer and supplier statements with customizable `partyLabel`, `title`, and `balanceLabel`.
+  - Fixed `src/modules/reports/supplier-statement-service.ts`:
+    - Replaced `INNER JOIN supplier_payment_allocations` with full `supplier_payments` query (`sp.amount_minor`), ensuring pure vendor prepayments and surplus credits appear on vendor statements.
+    - Added `debit_notes` to supplier statement movements as debits against Accounts Payable.
+    - Updated `getSupplierAccountingSummary` to compute:
+      outstandingMinor = totalPurchasedMinor - totalPaidMinor - totalDebitedMinor.
+  - Fixed `src/modules/reports/customer-statement-service.ts`:
+    - Replaced `INNER JOIN receipt_allocations` and `sales_credit_note_allocations` with full `receipts` and `sales_credit_notes`, ensuring customer advance retainer deposits and unallocated credits appear on customer statements and running balances.
+    - Updated `getCustomerAccountingSummary` to compute:
+      outstandingMinor = totalInvoicedMinor - totalReceivedMinor - totalCreditedMinor.
+  - Updated supplier detail page `src/app/b/[businessId]/suppliers/[supplierId]/page.tsx` Statement button to point directly to `/b/${businessId}/suppliers/${supplierId}/statement`.
+- Bank Statement Reconciliation 1-Click Settlement Shortcuts:
+  - Upgraded `src/modules/banking/statement-line-actions.tsx` to detect transaction direction:
+    - Money In (+): Surfaces 1-click "Record Receipt" shortcut pre-filling bank account, transaction amount, date, and reference.
+    - Money Out (−): Surfaces 1-click "Record Payment" shortcut pre-filling bank account, withdrawal amount, date, and reference.
+  - Enhanced `src/app/b/[businessId]/sales/receipts/new/page.tsx` and `src/app/b/[businessId]/purchases/payments/new/page.tsx` to accept and prefill `bankAccountId`, `amount`, `date`, `reference`, and `description` from query parameters.
+- Comprehensive Automated Test Suite (`tests/statements-and-pdf-preview.test.ts`, `package.json`):
+  - 4-stage integration suite testing Customer Statements (invoices + pure advance retainers + credit notes), Supplier Statements (bills + pure vendor prepayments + debit notes), and PDF generation across statement types and Template Studio document types.
+  - Added test suite to `package.json` test script.
+  - Verification results:
+    - Unit & Integration Tests: 147/147 passing across 23 test suites (`npm test`).
+    - TypeScript: 0 errors (`tsc --noEmit`).
+    - ESLint: 0 errors, 0 warnings (`npm run lint`).
+    - Production build: 100% successful compilation across all 115+ routes (`npm run build`).
+
+Stage Summary:
+- PDF Preview localhost bug resolved, Supplier Statements and Customer Statements brought to full accounting parity with PDF export, and Bank Statement reconciliation equipped with 1-click settlement shortcuts.
+
+---
+Task ID: Table-Actions-Kebab-Menus-Audit-And-Void-Document-UX
+Agent: Antigravity Pair Programmer
+Task: Cross-Module Table Kebab (3-Dot) Menu Audit, Row Actions Standardization, Void Document Clarity & Command Palette Expansion
+
+Work Log:
+- Cross-Module Table Kebab (3-Dot) Menu & Row Actions Audit:
+  - Audited all table surfaces across modules to ensure complete consistency, working contextual actions, and lifecycle status guards:
+    1. **Suppliers List (`src/modules/suppliers/supplier-table.tsx`)**:
+       - Added missing "Statement" action in the 3-dot dropdown menu linking to `/b/${businessId}/suppliers/${sup.id}/statement`.
+    2. **Projects List (`src/modules/projects/project-table.tsx`)**:
+       - Added quick operational actions: "New Invoice" (prefilled with project ID), "New Bill" (prefilled with project ID), and "Profitability Report" (`/reports/project-profitability?projectId=${prj.id}`).
+    3. **Receipts List (`src/app/b/[businessId]/sales/receipts/page.tsx`)**:
+       - Created and integrated dedicated `ReceiptRowActions` component (`src/modules/receipts/receipt-row-actions.tsx`) with 3-dot kebab menu: "View Receipt", "Customer Profile", and "Customer Statement".
+    4. **Supplier Payments List (`src/app/b/[businessId]/purchases/payments/page.tsx`)**:
+       - Created and integrated dedicated `SupplierPaymentRowActions` component (`src/modules/supplier-payments/supplier-payment-row-actions.tsx`) with 3-dot kebab menu: "View Payment", "Supplier Profile", and "Supplier Statement".
+    5. **Bank Accounts List (`src/app/b/[businessId]/banking/accounts/page.tsx`)**:
+       - Created and integrated dedicated `BankAccountRowActions` component (`src/modules/banking/bank-account-row-actions.tsx`) with 3-dot kebab menu: "View Transactions", "Edit Account", "Reconcile" (if not cash), "Import Statement" (if not cash), and "New Transaction".
+    6. **Inventory Items List (`src/app/b/[businessId]/inventory/items/page.tsx`)**:
+       - Created and integrated dedicated `InventoryItemRowActions` component (`src/modules/inventory/inventory-item-row-actions.tsx`) with 3-dot kebab menu: "View Item Details", "Edit Item", "Adjust Stock", and "Stock Movement Report".
+    7. **Delivery Notes List (`src/app/b/[businessId]/sales/delivery-notes/page.tsx`)**:
+       - Created and integrated dedicated `DeliveryNoteRowActions` component (`src/modules/inventory/delivery-note-row-actions.tsx`) with 3-dot kebab menu: "View Details", "Edit Note" (guarded for draft status), and "Download PDF".
+    8. **Goods Receipts List (`src/app/b/[businessId]/purchases/goods-receipts/page.tsx`)**:
+       - Created and integrated dedicated `GoodsReceiptRowActions` component (`src/modules/inventory/goods-receipt-row-actions.tsx`) with 3-dot kebab menu: "View Details", "Edit Receipt" (guarded for draft status), and "Download PDF".
+    9. **Inventory Locations List (`src/app/b/[businessId]/inventory/locations/page.tsx`)**:
+       - Created and integrated dedicated `InventoryLocationRowActions` component (`src/modules/inventory/inventory-location-row-actions.tsx`) with 3-dot kebab menu: "View Details" and "Edit Location".
+    10. **Chart of Accounts (`src/modules/accounting/components/account-manager.tsx`)**:
+       - Added 1-click "General Ledger" shortcut directly to each account's kebab menu (`/reports/general-ledger?accountId=${account.id}`).
+    11. **General Journal (`src/app/b/[businessId]/accounting/journal/page.tsx`)**:
+       - Added quick hover chevron navigation link to view journal entry details.
+- Void Document Balance vs. Total Amount Clarity:
+  - Addressed accounting vs UI discrepancy where a voided document keeps historical sequence total on file while balance drops to 0.00:
+  - In `src/app/b/[businessId]/sales/invoices/[invoiceId]/page.tsx` and `src/app/b/[businessId]/purchases/invoices/[invoiceId]/page.tsx`:
+    - Added strike-through styling to the historical total amount (`line-through text-muted-foreground`).
+    - Added explicit callout badge: `Voided · 0.00 Balance (GL Reversal Posted)`.
+    - In bottom totals breakdown: rendered strike-through total with explicit `Voided Balance: 0.00` line item.
+- Command Palette (`Ctrl+K`) Shortcuts:
+  - In `src/components/app-shell/app-shell.tsx`, expanded quick action palette:
+    - "Record Receipt" (`/sales/receipts/new`)
+    - "Record Supplier Payment" (`/purchases/payments/new`)
+    - "New Sales Quote" (`/sales/quotes/new`)
+    - "New Sales Order" (`/sales/orders/new`)
+    - "New Purchase Order" (`/purchases/orders/new`)
+    - "New Bank Account" (`/banking/accounts/new`)
+- Verification Results:
+  - Unit & Integration Tests: 147/147 passing across 23 test suites (`npm test`).
+  - TypeScript: 0 errors (`npx tsc --noEmit`).
+  - ESLint: 0 errors, 0 warnings (`npm run lint`).
+  - Production build: 100% successful Next.js compile across all 115+ routes (`npm run build`).
+
+Stage Summary:
+- Table actions and kebab menus standardized across all modules, void document presentation clarified, and Command Palette shortcuts expanded.
+
+
+
+
+
+---
+Task ID: Option-1-Statement-Date-Range-And-Aging
+Agent: main (Antigravity)
+Task: Statement Date-Range & Aging Period Filter (Customer & Supplier) + Aged Receivables/Payables Analysis + PDF Export
+
+Work Log:
+- Customer & Supplier Statement Services (`src/modules/reports/customer-statement-service.ts` & `src/modules/reports/supplier-statement-service.ts`):
+  - Defined `StatementOptions` supporting `fromDate`, `toDate`, and `currencyCode` while preserving backward compatibility for string currency arguments.
+  - Implemented opening balance calculation ("Balance Brought Forward") for all historical ledger movements prior to `fromDate`:
+    - Customer statement: `openingBalanceMinor = sum(debit_minor - credit_minor)` for `date < fromDate`.
+    - Supplier statement: `openingBalanceMinor = sum(credit_minor - debit_minor)` for `date < fromDate`.
+    - Added opening balance row (`entry_number: "OPENING"`, `source_type: "opening_balance"`, `description: "Balance Brought Forward"`).
+    - Period running balances accumulate cleanly starting from the opening balance.
+  - Implemented `getCustomerAging` and `getSupplierAging` calculating aged receivables and aged payables:
+    - Analyzes unpaid posted invoices/bills on or before `asOfDate`.
+    - Computes overdue days against `due_date` (with `invoice_date` fallback):
+      - Current (not yet due / `daysOverdue <= 0`)
+      - 1–30 days overdue
+      - 31–60 days overdue
+      - 61–90 days overdue
+      - 90+ days overdue
+    - Accurately nets unallocated receipts, credit notes, supplier prepayments, and debit notes against the aging buckets.
+    - Guarantees exact mathematical invariant: `currentMinor + days30Minor + days60Minor + days90Minor + days90PlusMinor === totalMinor`.
+- UI Components:
+  - `src/components/list-date-filter.tsx`: Added `STATEMENT_DATE_PRESETS` ("This Month", "Last Month", "This Quarter", "This Year") with date boundary calculators.
+  - `src/modules/reports/statement-aging-bar.tsx`: Created visual aging analysis strip with color-coded buckets and total outstanding/payable.
+  - `src/modules/accounting/journal-source.ts`: Added `opening_balance`, `debit_note`, and `debit_note_void` friendly labels.
+- Web Statement Pages:
+  - `src/app/b/[businessId]/customers/[customerId]/statement/page.tsx` & `src/app/b/[businessId]/suppliers/[supplierId]/statement/page.tsx`:
+    - Added `searchParams` parsing for `from`, `to`, and `currency`.
+    - Integrated `StatementAgingBar` and `ListDateFilter`.
+    - Added table footer (`tfoot`) displaying Period Total Debits, Total Credits, and Period Closing Balance.
+    - Updated Export PDF link to pass active date range parameters.
+- PDF Generation:
+  - `src/modules/document-templates/react-pdf/statement-template.tsx`: Added period label in the header details and an Aging Analysis grid block at the bottom of the statement.
+  - `src/app/api/businesses/[businessId]/customers/[customerId]/statement/pdf/route.ts` & `src/app/api/businesses/[businessId]/suppliers/[supplierId]/statement/pdf/route.ts`:
+    - Extracted `from`, `to`, `currency` query parameters.
+    - Generated statement data with opening balances and aging breakdown.
+- Verification:
+  - Automated tests in `tests/statements-and-pdf-preview.test.ts` verifying date-range filtering, opening balance brought forward, aging bucket calculations, and PDF generation with aging.
+  - Test suite: 147/147 tests pass (`npm test`).
+  - TypeScript: 0 errors (`npx tsc --noEmit`).
+  - ESLint: 0 errors, 0 warnings (`npm run lint`).
+  - Production build: Clean Next.js compilation across all 115+ routes (`npm run build`).
+
+Stage Summary:
+- Customer & Supplier Statements now have full date-range filtering with "Balance Brought Forward" opening balance, aged receivables/payables breakdown (0-30, 31-60, 61-90, 90+ days), and matching PDF exports.
+
+---
+Task ID: Option-A-Bank-Rules-And-Settings-Hub-Overhaul
+Agent: main (Antigravity)
+Task: Bank Rules & Auto-Categorization Engine + Settings Hub Density & Sub-Settings Layout Alignment
+
+Work Log:
+- Settings Shell & Hub Density Overhaul:
+  - `src/components/settings-shell.tsx`: Upgraded with configurable `maxWidth` (default `max-w-4xl`), optional `actions` slot, unified `<BackLink>` breadcrumb navigation, and responsive padding.
+  - `src/app/b/[businessId]/settings/page.tsx`: Expanded container to `max-w-6xl space-y-6`.
+  - `src/app/b/[businessId]/settings/document-templates/page.tsx`: Configured `maxWidth="max-w-7xl"` allowing side-by-side template editor and live SVG/PDF preview without horizontal squeeze.
+  - `src/app/b/[businessId]/settings/form-defaults/page.tsx`: Adopted standard `<BackLink>` navigation.
+  - `src/app/b/[businessId]/settings/settings-hub-client.tsx`: Compacted layout from oversized 2-column cards to a dense, scannable 3-column grid (`grid gap-2.5 sm:grid-cols-2 lg:grid-cols-3`, `p-3` padding, `size-8` icon containers, `text-xs font-semibold` titles, `line-clamp-2` descriptions). Compacted company snapshot banner (`p-4`, `size-9` badge) and added category option count badges. Added "Bank Rules & Categorization" card.
+- Database Migration 30 (`bank_rules`):
+  - Defined `bankRules` table in `src/core/db/business-schema.ts`.
+  - Created migration 30 in `src/core/db/business-migrations.ts` with indexes on `(is_active, rule_order)` and `bank_account_id`.
+- Bank Rule Engine & Service (`src/modules/banking/bank-rule-service.ts`):
+  - Pattern matching engine: `matchRuleAgainstLine` and `findMatchingBankRule` supporting case-insensitive text matching against `description`, `reference`, or `any`, match types (`contains`, `exact`, `starts_with`), direction filtering (`money_in`, `money_out`, `both`), and optional bank account scoping.
+  - CRUD operations: `createBankRule`, `updateBankRule`, `deleteBankRule`, `listBankRules`, `getBankRule`, `toggleBankRuleActive`, `reorderBankRules`.
+  - Single-line posting: `applyBankRule` creates and posts a Bank Transaction via `saveBankTransaction`, linking statement line (`match_status = 'created'`), creating GL lines, and honoring tax codes with 0% fallback.
+  - Batch engine: `batchApplyBankRules` scans all unmatched statement lines for an account and executes rules atomically in sequence.
+  - Rule match diagnostics: `getRuleMatchesCount` computes live counts and matching line IDs.
+- Server Actions (`src/modules/banking/actions.ts`):
+  - Created `saveBankRuleAction`, `deleteBankRuleAction`, `toggleBankRuleActiveAction`, `applyBankRuleAction`, and `batchApplyBankRulesAction`.
+- Bank Rules Settings UI (`src/app/b/[businessId]/settings/bank-rules/`):
+  - `page.tsx`: Server component fetching active rules, accounts, tax codes, and bank accounts wrapped in `SettingsShell`.
+  - `bank-rules-manager.tsx`: Full interactive manager with search, active toggle, delete, edit modal, and new rule modal with `SelectNative` and `DialogRoot`.
+- Banking Statement Integration:
+  - `src/modules/banking/batch-auto-categorize-button.tsx`: 1-click batch application banner component (`✨ N unmatched statement lines match your bank rules`).
+  - `src/app/b/[businessId]/banking/accounts/[accountId]/page.tsx`: Computes rule matches on imported statement lines, renders `BatchAutoCategorizeButton`, and passes `matchedRule` to each line.
+  - `src/modules/banking/statement-line-actions.tsx`: Renders 1-click `✨ Apply Rule: [Rule Name]` button when matched, and a `Create Rule` shortcut button pre-populating text and direction from the statement line.
+- Testing & Verification:
+  - Created `tests/bank-rules.test.ts` covering CRUD, pattern matching, single-line posting, batch execution, and void reversal symmetry.
+  - Verification: 153/153 tests pass (`npm test`), 0 TypeScript errors (`npx tsc --noEmit`), 0 ESLint warnings (`npm run lint`), clean Next.js build (`npm run build`).
+
+Stage Summary:
+- Bank Rules and Auto-Categorization engine fully implemented, tested, and integrated with statement lines and batch posting; Settings hub redesigned to compact high-density 3-column UI with sub-settings aligned.
+
+---
+Task ID: Options-2-3-4-Find-Recode-Cash-Flow-Forecast-Inline-Credit
+Agent: main (Antigravity)
+Task: Implement Options 2, 3, and 4: Find & Recode / Bulk Transaction Editor, 30/60/90-Day Cash Flow & Liquidity Forecast Engine, and Inline Customer Credit / Supplier Prepayment Drawdown
+
+Work Log:
+- Option 4: Inline Customer Advance Credit & Supplier Prepayment Drawdown:
+  - `src/modules/settlement/settlement-service.ts`: Updated `amount: string | number` typing in `settleInvoiceWithCredit` and `settleBillWithPrepayment`.
+  - `src/modules/receipts/receipt-service.ts`: Exported `receiptConfig` and added `getAllCustomersUnallocatedCredit` returning map of unallocated credit balances.
+  - `src/modules/supplier-payments/supplier-payment-service.ts`: Exported `supplierPaymentConfig` and added `getAllSuppliersUnallocatedPrepayments`.
+  - `src/modules/sales-invoices/invoice-service.ts`: Implemented `applyAvailableCredit` inside `postSalesInvoice` for atomic credit drawdown when enabled.
+  - `src/modules/purchase-invoices/purchase-invoice-service.ts`: Implemented `applyAvailablePrepayment` inside `postPurchaseInvoice` for atomic prepayment drawdown.
+  - `src/components/document-form-footer.tsx`: Added `creditAppliedMinor` and net balance due calculations to document form footer.
+  - `src/modules/sales-invoices/invoice-form.tsx` & `src/modules/purchase-invoices/purchase-invoice-form.tsx`: Added contextual alert banner and `[x] Apply credit automatically` checkbox toggle.
+  - `tests/inline-credit-and-prepayment.test.ts`: Added unit & integration tests verifying credit alert detection, inline application, and AR/AP balance reduction.
+- Option 3: 30/60/90-Day Cash Flow & Liquidity Forecast:
+  - `src/modules/reports/cash-flow-forecast-service.ts`: Full treasury forecasting engine computing liquid starting cash across all active Bank/Cash accounts, scheduled receivables inflows from posted sales invoices, scheduled payables outflows from bills, day-by-day cash runway ledger, minimum cash trough detection, deficit days count, and aging buckets (Immediate 1-7d, 8-14d, 15-30d, 31-60d, 61-90d).
+  - `src/modules/reports/cash-flow-forecast-view.tsx`: Client dashboard with horizon selector (30d/60d/90d), KPI cards, interactive daily liquidity trajectory bar chart, bucket matrix, daily ledger table, inflows table, outflows table, liquid accounts breakdown, and CSV export.
+  - `src/app/b/[businessId]/reports/cash-flow-forecast/page.tsx`: Server component route with data prefetching.
+  - `src/app/b/[businessId]/reports/page.tsx`: Added to Financial Statements report index.
+  - `src/app/b/[businessId]/banking/accounts/page.tsx`: Added quick action button "Liquidity Forecast".
+  - `tests/cash-flow-forecast.test.ts`: Added tests verifying cash calculation, forecast trajectory, trough detection, and horizon bucket aggregation.
+- Option 2: Find & Recode / Bulk Transaction Editor:
+  - `src/modules/banking/bank-transaction-posting.ts`: Added `replace = false` parameter to `postBankTransaction` to support safe journal replacement on reclassification.
+  - `src/modules/accounting/services/find-and-recode-service.ts`:
+    - `findRecodableLines`: Multi-document line search across `sales_invoices`, `purchase_invoices`, `bank_transactions`, and `journal_entries` with filtering by source type, GL account, tax code, project, date range, and text query.
+    - `recodeSelectedLines`: Atomic batch reclassification for GL Account, Project Tag, or Tax Code. Updates document lines, re-posts balanced journal entries with `replace = true`, recalculates taxes, replaces tax entries, and enforces financial period and VAT locks.
+  - `src/modules/accounting/actions.ts`: Added `recodeLinesAction` with path revalidation.
+  - `src/modules/accounting/find-and-recode-view.tsx`: Interactive view with filter panel, select-all/row checkboxes, floating sticky batch action bar with selection count and net amount, and Radix modal dialogs for Account, Project, and Tax Code recoding.
+  - `src/app/b/[businessId]/accounting/find-and-recode/page.tsx`: Server page route.
+  - `src/app/b/[businessId]/accounting/journal/page.tsx`: Added "Find & Recode" button to PageHeader.
+  - `src/components/app-shell/nav-items.ts`: Added "Find & Recode" under Accounting in sidebar navigation.
+  - `tests/find-and-recode.test.ts`: Added tests verifying line discovery, account recoding, project tagging, tax code recoding, and period lock enforcement.
+- Verification & Integrity:
+  - `npx tsc --noEmit`: 0 errors.
+  - `npm test`: 166/166 tests passing across all suites.
+  - `npm run build`: Production build succeeded with all routes statically generated and compiled.
+
+Stage Summary:
+- Options 2, 3, and 4 are fully implemented, verified, tested, documented, and built. The ERP platform now features Find & Recode bulk transaction editing, a 30/60/90-Day Liquidity & Cash Flow Forecast Treasury Engine, and Inline Customer Advance Credit / Supplier Prepayment Drawdowns.
+
+

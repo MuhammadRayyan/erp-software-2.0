@@ -1,10 +1,10 @@
-import { createSettlement, voidSettlement, type SettlementConfig } from "@/modules/settlement/settlement-service";
+import { createSettlement, voidSettlement, applySettlementCredit, type SettlementConfig } from "@/modules/settlement/settlement-service";
 import { getBusinessDb } from "@/core/db/business";
 import { postSupplierPayment } from "@/modules/accounting/services/supplier-payment-posting-service";
-import { supplierPaymentInputSchema, type SupplierPaymentInput } from "./supplier-payment-input";
+import { supplierPaymentInputSchema, type SupplierPaymentInput, type ApplySupplierPaymentCreditInput } from "./supplier-payment-input";
 
 
-const paymentConfig: SettlementConfig = {
+export const supplierPaymentConfig: SettlementConfig = {
   partyType: "supplier",
   partyTable: "suppliers",
   partyIdColumn: "supplier_id",
@@ -30,13 +30,27 @@ const paymentConfig: SettlementConfig = {
   postSettlement: postSupplierPayment,
 };
 
+const paymentConfig = supplierPaymentConfig;
 
 export function createSupplierPayment(businessId: string, userId: string, input: SupplierPaymentInput) {
   const data = supplierPaymentInputSchema.parse(input);
   const context = getBusinessDb(businessId, userId);
+
+  const effectiveInvoiceId = data.purchaseInvoiceId || data.invoiceId;
+  const allocations = data.allocations && data.allocations.length > 0
+    ? data.allocations
+    : effectiveInvoiceId
+    ? [{ invoiceId: effectiveInvoiceId, amount: data.amount }]
+    : [];
+
+  const settlementInput = {
+    ...data,
+    allocations,
+  };
+
   let result!: ReturnType<typeof createSettlement>;
   context.sqlite.transaction(() => {
-    result = createSettlement(context.sqlite, paymentConfig, data, userId);
+    result = createSettlement(context.sqlite, paymentConfig, settlementInput, userId);
   }).immediate();
   return result;
 }
@@ -180,6 +194,34 @@ export function listAllSupplierPayments(businessId: string, userId: string, filt
   `).all(...values) as SupplierPaymentListRow[];
 }
 
+export type SupplierPaymentDetailRecord = {
+  id: string;
+  payment_number: string;
+  supplier_id: string;
+  supplier_name: string;
+  supplier_email: string | null;
+  date: string;
+  bank_account_id: string;
+  bank_account_name: string;
+  amount_minor: number;
+  currency_code: string;
+  exchange_rate_to_base: string;
+  exchange_rate_date: string;
+  exchange_rate_source: string;
+  base_amount_minor: number;
+  released_carrying_amount_minor: number;
+  realized_fx_amount_minor: number;
+  reference: string | null;
+  description: string | null;
+  document_status: "posted" | "void";
+  created_by: string;
+  created_at: string;
+  posted_at: string;
+  voided_at: string | null;
+  total_allocated_minor: number;
+  unallocated_amount_minor: number;
+};
+
 export function getSupplierPayment(
   businessId: string,
   userId: string,
@@ -193,7 +235,7 @@ export function getSupplierPayment(
     INNER JOIN suppliers s ON s.id = sp.supplier_id
     INNER JOIN accounts a ON a.id = sp.bank_account_id
     WHERE sp.id = ?
-  `).get(paymentId) as Record<string, unknown> | undefined;
+  `).get(paymentId) as any;
   if (!payment) return null;
   const allocations = sqlite.prepare(`
     SELECT spa.id, spa.amount_minor, spa.base_carrying_amount_released,
@@ -220,7 +262,17 @@ export function getSupplierPayment(
     source_type: "supplier_payment" | "supplier_payment_void";
     date: string;
   }[];
-  return { payment, allocations, journals };
+
+  const totalAllocatedMinor = allocations.reduce((sum, a) => sum + a.amount_minor, 0);
+  const unallocatedAmountMinor = Math.max(0, Number(payment.amount_minor) - totalAllocatedMinor);
+
+  const detailRecord: SupplierPaymentDetailRecord = {
+    ...payment,
+    total_allocated_minor: totalAllocatedMinor,
+    unallocated_amount_minor: unallocatedAmountMinor,
+  };
+
+  return { payment: detailRecord, allocations, journals };
 }
 
 export function voidSupplierPayment(businessId: string, userId: string, paymentId: string) {
@@ -228,6 +280,128 @@ export function voidSupplierPayment(businessId: string, userId: string, paymentI
   context.sqlite.transaction(() => {
     voidSettlement(context.sqlite, paymentConfig, paymentId);
   }).immediate();
+}
+
+export type SupplierUnallocatedPrepayment = {
+  paymentId: string;
+  paymentNumber: string;
+  date: string;
+  currencyCode: string;
+  unallocatedAmountMinor: number;
+};
+
+export function getSupplierUnallocatedCredit(
+  businessId: string,
+  userId: string,
+  supplierId: string,
+): SupplierUnallocatedPrepayment[] {
+  const { sqlite } = getBusinessDb(businessId, userId);
+  const rows = sqlite.prepare(`
+    SELECT
+      sp.id AS payment_id,
+      sp.payment_number,
+      sp.date,
+      sp.currency_code,
+      sp.amount_minor,
+      COALESCE((
+        SELECT SUM(spa.foreign_amount_allocated)
+        FROM supplier_payment_allocations spa
+        WHERE spa.payment_id = sp.id
+      ), 0) AS total_allocated_minor
+    FROM supplier_payments sp
+    WHERE sp.supplier_id = ? AND sp.document_status = 'posted'
+    ORDER BY sp.date ASC, sp.created_at ASC
+  `).all(supplierId) as Array<{
+    payment_id: string;
+    payment_number: string;
+    date: string;
+    currency_code: string;
+    amount_minor: number;
+    total_allocated_minor: number;
+  }>;
+
+  return rows
+    .map((r) => ({
+      paymentId: r.payment_id,
+      paymentNumber: r.payment_number,
+      date: r.date,
+      currencyCode: r.currency_code,
+      unallocatedAmountMinor: Math.max(0, r.amount_minor - r.total_allocated_minor),
+    }))
+    .filter((r) => r.unallocatedAmountMinor > 0);
+}
+
+export const getSupplierUnallocatedPrepayments = getSupplierUnallocatedCredit;
+
+export function getAllSuppliersUnallocatedPrepayments(
+  businessId: string,
+  userId: string,
+): Record<string, SupplierUnallocatedPrepayment[]> {
+  const { sqlite } = getBusinessDb(businessId, userId);
+  const rows = sqlite.prepare(`
+    SELECT
+      sp.id AS payment_id,
+      sp.supplier_id,
+      sp.payment_number,
+      sp.date,
+      sp.currency_code,
+      sp.amount_minor,
+      COALESCE((
+        SELECT SUM(spa.foreign_amount_allocated)
+        FROM supplier_payment_allocations spa
+        WHERE spa.payment_id = sp.id
+      ), 0) AS total_allocated_minor
+    FROM supplier_payments sp
+    WHERE sp.document_status = 'posted'
+    ORDER BY sp.date ASC, sp.created_at ASC
+  `).all() as Array<{
+    payment_id: string;
+    supplier_id: string;
+    payment_number: string;
+    date: string;
+    currency_code: string;
+    amount_minor: number;
+    total_allocated_minor: number;
+  }>;
+
+  const result: Record<string, SupplierUnallocatedPrepayment[]> = {};
+  for (const r of rows) {
+    const unallocated = Math.max(0, r.amount_minor - r.total_allocated_minor);
+    if (unallocated > 0) {
+      if (!result[r.supplier_id]) {
+        result[r.supplier_id] = [];
+      }
+      result[r.supplier_id].push({
+        paymentId: r.payment_id,
+        paymentNumber: r.payment_number,
+        date: r.date,
+        currencyCode: r.currency_code,
+        unallocatedAmountMinor: unallocated,
+      });
+    }
+  }
+  return result;
+}
+
+export function applySupplierPaymentCredit(
+  businessId: string,
+  userId: string,
+  data: ApplySupplierPaymentCreditInput,
+) {
+  const context = getBusinessDb(businessId, userId);
+  let result!: ReturnType<typeof applySettlementCredit>;
+  context.sqlite.transaction(() => {
+    result = applySettlementCredit(
+      context.sqlite,
+      paymentConfig,
+      {
+        paymentId: data.paymentId,
+        documentId: data.invoiceId,
+        amount: data.amount,
+      },
+    );
+  }).immediate();
+  return result;
 }
 
 export function listSupplierPayments(
@@ -238,14 +412,28 @@ export function listSupplierPayments(
   return getBusinessDb(businessId, userId).sqlite.prepare(`
     SELECT sp.id, sp.payment_number, sp.date, sp.amount_minor, sp.currency_code,
       cur.minor_unit AS currency_minor_unit, sp.reference,
-      pi.id AS invoice_id, pi.internal_number
+      COALESCE((
+        SELECT group_concat(pi.internal_number, ', ')
+        FROM supplier_payment_allocations spa
+        INNER JOIN purchase_invoices pi ON pi.id = spa.purchase_invoice_id
+        WHERE spa.payment_id = sp.id
+      ), 'Unallocated Prepayment') AS internal_number,
+      (
+        SELECT spa.purchase_invoice_id
+        FROM supplier_payment_allocations spa
+        WHERE spa.payment_id = sp.id
+        LIMIT 1
+      ) AS invoice_id,
+      COALESCE((
+        SELECT SUM(spa.foreign_amount_allocated)
+        FROM supplier_payment_allocations spa
+        WHERE spa.payment_id = sp.id
+      ), 0) AS allocated_amount_minor
     FROM supplier_payments sp
-    INNER JOIN supplier_payment_allocations spa ON spa.payment_id = sp.id
-    INNER JOIN purchase_invoices pi ON pi.id = spa.purchase_invoice_id
     INNER JOIN currencies cur ON cur.code = sp.currency_code
     WHERE sp.supplier_id = ? AND sp.document_status = 'posted'
     ORDER BY sp.date DESC, sp.created_at DESC
-  `).all(supplierId) as {
+  `).all(supplierId) as Array<{
     id: string;
     payment_number: string;
     date: string;
@@ -253,7 +441,8 @@ export function listSupplierPayments(
     currency_code: string;
     currency_minor_unit: number;
     reference: string | null;
-    invoice_id: string;
+    invoice_id: string | null;
     internal_number: string;
-  }[];
+    allocated_amount_minor: number;
+  }>;
 }

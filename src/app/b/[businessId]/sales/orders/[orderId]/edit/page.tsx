@@ -19,8 +19,20 @@ export default async function EditOrderPage({ params }: { params: Promise<{ busi
   const { user, access } = await requireModule(businessId, "sales");
   const record = getSalesOrder(businessId, user.id, orderId);
   if (!record) notFound();
-  if (record.order.documentStatus === "cancelled") {
-    return <div className="page-container"><h1 className="page-title">Cancelled order</h1><p className="page-description">Cancelled orders are retained for history and cannot be edited.</p><Button asChild className="mt-5"><Link href={`/b/${businessId}/sales/orders/${orderId}`}>Return to order</Link></Button></div>;
+  if (["completed", "cancelled", "superseded"].includes(record.order.documentStatus)) {
+    return (
+      <div className="page-container">
+        <h1 className="page-title">{record.order.documentStatus === "completed" ? "Completed order" : record.order.documentStatus === "superseded" ? "Superseded order" : "Cancelled order"}</h1>
+        <p className="page-description">
+          {record.order.documentStatus === "completed"
+            ? "Completed orders are fulfilled and cannot be edited directly. Create a new revision if changes are required."
+            : record.order.documentStatus === "superseded"
+            ? "This order has been superseded by a newer revision and cannot be edited."
+            : "Cancelled orders are retained for history and cannot be edited."}
+        </p>
+        <Button asChild className="mt-5"><Link href={`/b/${businessId}/sales/orders/${orderId}`}>Return to order</Link></Button>
+      </div>
+    );
   }
   const customers = listCustomers(businessId, user.id);
   const salesAccounts = getSalesAccountOptions(businessId, user.id);
@@ -32,7 +44,7 @@ export default async function EditOrderPage({ params }: { params: Promise<{ busi
 
   return <div className="page-container">
     <BackLink href={`/b/${businessId}/sales/orders/${orderId}`}>{record.order.orderNumber}</BackLink>
-    <div className="mb-7"><h1 className="page-title">Edit Sales Order</h1><p className="page-description">{record.order.documentStatus === "completed" ? "Changes will be saved as a new revision." : "Update the draft, or issue it when ready."}</p></div>
+    <div className="mb-7"><h1 className="page-title">Edit Sales Order</h1><p className="page-description">Update the draft or active order details.</p></div>
     <SalesOrderForm
       businessId={businessId}
       orderId={orderId}
@@ -52,10 +64,24 @@ export default async function EditOrderPage({ params }: { params: Promise<{ busi
         exchangeRateSource: record.order.exchangeRateSource as "Base" | "Manual" | "CBUAE",
         customerId: record.order.customerId,
         projectId: record.order.projectId ?? "",
+        salesQuoteId: record.order.salesQuoteId ?? "",
         date: record.order.orderDate,
         expectedDate: record.order.deliveryDate ?? "",
         reference: record.order.reference ?? "",
-        lines: record.lines.map((line) => ({ itemId: line.itemId ?? "", description: line.description, quantity: quantityMicrosToInput(line.quantityMicros), unitPrice: minorToCurrencyInput(line.unitPriceMinor, documentMinorUnit), salesAccountId: line.salesAccountId, taxCodeId: line.taxCodeId, projectId: line.projectId ?? "" })),
+        notes: record.order.notes ?? "",
+        terms: record.order.terms ?? "",
+        amountsIncludeTax: record.order.amountsIncludeTax,
+        lines: record.lines.map((line: any) => ({
+          itemId: line.itemId ?? "",
+          description: line.description,
+          quantity: quantityMicrosToInput(line.quantityMicros),
+          unitPrice: minorToCurrencyInput(line.unitPriceMinor, documentMinorUnit),
+          discountType: line.discountType ?? "none",
+          discountValue: line.discountValue ?? "0",
+          salesAccountId: line.salesAccountId,
+          taxCodeId: line.taxCodeId,
+          projectId: line.projectId ?? "",
+        })),
       }}
     />
   </div>;

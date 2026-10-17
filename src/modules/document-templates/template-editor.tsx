@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
   LoaderCircle,
   Eye,
@@ -63,10 +63,52 @@ export function TemplateEditor({
   const [saving, setSaving] = useState(false);
   const [refreshKey, setRefreshKey] = useState<number>(0);
   const [previewLoading, setPreviewLoading] = useState(false);
+  const [blobUrl, setBlobUrl] = useState<string | null>(null);
+  const [pdfError, setPdfError] = useState<string | null>(null);
 
   const typeLabel = TYPE_LABELS[documentType] || "Document";
 
   const previewUrl = `/api/businesses/${businessId}/document-templates/preview-pdf?type=${documentType}${refreshKey ? `&_t=${refreshKey}` : ""}`;
+
+  useEffect(() => {
+    let active = true;
+    let currentObjectUrl: string | null = null;
+
+    async function loadPdfBlob() {
+      setPreviewLoading(true);
+      setPdfError(null);
+      try {
+        const response = await fetch(previewUrl, { credentials: "same-origin" });
+        if (!response.ok) {
+          throw new Error(`Server returned HTTP ${response.status} (${response.statusText})`);
+        }
+        const blob = await response.blob();
+        if (!active) return;
+        currentObjectUrl = URL.createObjectURL(blob);
+        setBlobUrl((prev) => {
+          if (prev) URL.revokeObjectURL(prev);
+          return currentObjectUrl;
+        });
+      } catch (err: unknown) {
+        if (!active) return;
+        console.error("PDF Preview fetch error:", err);
+        setPdfError(err instanceof Error ? err.message : "Failed to load PDF preview");
+      } finally {
+        if (active) {
+          setPreviewLoading(false);
+        }
+      }
+    }
+
+    loadPdfBlob();
+
+    return () => {
+      active = false;
+      if (currentObjectUrl) {
+        URL.revokeObjectURL(currentObjectUrl);
+      }
+    };
+  }, [previewUrl]);
 
   const handleImageUpload = (key: keyof TemplateSettings) => (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -754,13 +796,61 @@ export function TemplateEditor({
             </div>
 
             {/* Embedded Native PDF Viewer */}
-            <div className="relative min-h-[680px] w-full bg-neutral-100 dark:bg-neutral-900">
-              <iframe
-                key={refreshKey}
-                src={previewUrl}
-                className="h-[680px] w-full border-0"
-                title={`${typeLabel} Live PDF Preview`}
-              />
+            <div className="relative min-h-[680px] w-full bg-neutral-100 dark:bg-neutral-900 flex flex-col items-center justify-center">
+              {previewLoading && (
+                <div className="absolute inset-0 z-10 flex flex-col items-center justify-center bg-surface/85 backdrop-blur-xs">
+                  <LoaderCircle className="size-8 animate-spin text-primary" />
+                  <p className="mt-3 text-sm font-medium text-foreground">Compiling PDF preview...</p>
+                  <p className="text-xs text-muted-foreground">Applying template layout & typography</p>
+                </div>
+              )}
+
+              {pdfError ? (
+                <div className="flex flex-col items-center justify-center p-8 text-center">
+                  <div className="rounded-full bg-danger/10 p-3 text-danger mb-3">
+                    <FileText className="size-6" />
+                  </div>
+                  <h4 className="text-sm font-semibold text-foreground">Preview Rendering Notice</h4>
+                  <p className="mt-1 max-w-sm text-xs text-muted-foreground">
+                    {pdfError}. You can open the PDF directly in a new tab or retry rendering.
+                  </p>
+                  <div className="mt-4 flex gap-2">
+                    <Button variant="secondary" size="sm" onClick={() => setRefreshKey(Date.now())}>
+                      <RotateCcw className="size-3.5 mr-1" /> Retry
+                    </Button>
+                    <Button asChild size="sm">
+                      <a href={previewUrl} target="_blank" rel="noreferrer">
+                        <ExternalLink className="size-3.5 mr-1" /> Open in New Tab
+                      </a>
+                    </Button>
+                  </div>
+                </div>
+              ) : blobUrl ? (
+                <object
+                  data={blobUrl}
+                  type="application/pdf"
+                  className="h-[680px] w-full"
+                  title={`${typeLabel} Live PDF Preview`}
+                >
+                  <iframe
+                    src={blobUrl}
+                    className="h-[680px] w-full border-0"
+                    title={`${typeLabel} Live PDF Preview`}
+                  >
+                    <div className="p-8 text-center">
+                      <p className="text-sm text-muted-foreground">PDF preview not supported directly in this frame.</p>
+                      <a
+                        href={blobUrl}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="mt-2 text-primary hover:underline text-xs inline-block"
+                      >
+                        Click here to open PDF
+                      </a>
+                    </div>
+                  </iframe>
+                </object>
+              ) : null}
             </div>
           </div>
         </div>

@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import Link from "next/link";
-import { ChevronRight } from "lucide-react";
+import { ChevronRight, MoreHorizontal, Eye, FileEdit, Download, CircleDollarSign } from "lucide-react";
 import { 
   useLegacyTable as useTable,
   getCoreRowModel as createCoreRowModel,
@@ -13,6 +13,7 @@ import { useColumns } from "@/components/columns-dropdown";
 import { ListToolbar, SearchInput, ToolbarSelect, DateRangeFilter, StatusFilterSelect, ActiveFiltersRow, FilterChip } from "@/components/list-toolbar";
 import { Button } from "@/components/ui/button";
 import { DataTable } from "@/components/ui/data-table";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { formatDate, formatMoney } from "@/core/format";
 import { formatCustomFieldValue, type CustomFieldColumn } from "@/modules/custom-fields/custom-field-display";
 import { DocumentStatusBadge, PaymentStatusBadge } from "./invoice-status";
@@ -204,15 +205,58 @@ export function InvoiceTable({
     cols.push({
       id: "actions",
       header: () => <span className="sr-only">Actions</span>,
-      meta: { className: "w-12" },
+      meta: { className: "w-16 text-right" },
       enableSorting: false,
-      cell: ({ row }: any) => (
-        <Button asChild variant="ghost" size="icon" className="text-muted-foreground opacity-50 transition-opacity md:opacity-0 md:group-hover:opacity-100">
-          <Link href={`/b/${row.original.businessId}/sales/invoices/${row.original.id}`} aria-label={`Open ${row.original.invoiceNumber}`}>
-            <ChevronRight className="size-4" />
-          </Link>
-        </Button>
-      ),
+      cell: ({ row }: any) => {
+        const inv = row.original;
+        const canEdit = inv.documentStatus !== "void";
+        const canReceive = inv.documentStatus === "posted" && inv.balanceMinor > 0;
+        return (
+          <div className="flex items-center justify-end gap-1">
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="ghost" size="icon" className="size-7 text-muted-foreground hover:text-foreground" aria-label={`Actions for ${inv.invoiceNumber}`}>
+                  <MoreHorizontal className="size-4" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-48">
+                <DropdownMenuItem asChild>
+                  <Link href={`/b/${inv.businessId}/sales/invoices/${inv.id}`}>
+                    <Eye className="size-4 text-muted-foreground" /> View Details
+                  </Link>
+                </DropdownMenuItem>
+                {canEdit && (
+                  <DropdownMenuItem asChild>
+                    <Link href={`/b/${inv.businessId}/sales/invoices/${inv.id}/edit`}>
+                      <FileEdit className="size-4 text-muted-foreground" /> Edit Invoice
+                    </Link>
+                  </DropdownMenuItem>
+                )}
+                <DropdownMenuItem asChild>
+                  <a href={`/api/businesses/${inv.businessId}/documents/sales-invoice/${inv.id}/pdf`} target="_blank" rel="noreferrer">
+                    <Download className="size-4 text-muted-foreground" /> Download PDF
+                  </a>
+                </DropdownMenuItem>
+                {canReceive && (
+                  <>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem asChild>
+                      <Link href={`/b/${inv.businessId}/sales/receipts/new?invoiceId=${inv.id}`}>
+                        <CircleDollarSign className="size-4 text-muted-foreground" /> Record Receipt
+                      </Link>
+                    </DropdownMenuItem>
+                  </>
+                )}
+              </DropdownMenuContent>
+            </DropdownMenu>
+            <Button asChild variant="ghost" size="icon" className="size-7 text-muted-foreground opacity-50 transition-opacity md:opacity-0 md:group-hover:opacity-100">
+              <Link href={`/b/${inv.businessId}/sales/invoices/${inv.id}`} aria-label={`Open ${inv.invoiceNumber}`}>
+                <ChevronRight className="size-4" />
+              </Link>
+            </Button>
+          </div>
+        );
+      },
     });
 
     return cols;
@@ -236,17 +280,16 @@ export function InvoiceTable({
   const clearFilters = () => { setQuery(""); setStatusFilter(""); setCustomerFilter(""); setProjectFilter(""); setFromDate(""); setToDate(""); };
   const hasActiveFilter = Boolean(customerFilter || projectFilter || fromDate || toDate || statusFilter || query);
 
-  const totalInvoicedStr = useMemo(
-    () =>
-      renderMultiCurrencyString(
-        rows.map((r) => ({
-          amount: r.totalMinor,
-          currency: r.currencyCode,
-          minorUnit: r.currencyMinorUnit,
-        }))
-      ),
-    [rows]
-  );
+  const totalInvoicedStr = useMemo(() => {
+    const activeRows = statusFilter === "document:void" ? rows : rows.filter((r) => r.documentStatus !== "void");
+    return renderMultiCurrencyString(
+      activeRows.map((r) => ({
+        amount: r.totalMinor,
+        currency: r.currencyCode,
+        minorUnit: r.currencyMinorUnit,
+      }))
+    );
+  }, [rows, statusFilter]);
   const totalBalanceStr = useMemo(() => {
     const postedRows = rows.filter((r) => r.documentStatus === "posted");
     return renderMultiCurrencyString(
