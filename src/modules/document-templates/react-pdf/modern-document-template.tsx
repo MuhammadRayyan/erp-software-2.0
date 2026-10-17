@@ -148,7 +148,7 @@ export function ModernDocumentTemplate({ data, settings, variant }: { data: Docu
             <Text style={[styles.invoiceTitle, { color: primaryColor }]}>{variant.title}</Text>
             <Text style={{ fontSize: 11, fontWeight: "heavy", marginTop: 4 }}>{data.invoiceNumber}</Text>
             <Text style={{ fontSize: fontScale.subtext, color: colors.muted, marginTop: 2 }}>Date: {data.invoiceDate}</Text>
-            {variant.showDueDate && data.dueDate && (
+            {variant.showDueDate && data.dueDate && data.dueDate !== "-" && (
               <Text style={{ fontSize: fontScale.subtext, color: colors.muted, marginTop: 1 }}>{data.dueDate}</Text>
             )}
           </View>

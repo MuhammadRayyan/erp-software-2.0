@@ -142,22 +142,24 @@ export function DocumentPaperSheet({
           </div>
 
           {/* Document Title & Meta Box */}
-          <div className="text-left sm:text-right shrink-0">
+          <div className="text-left sm:text-right shrink-0 max-w-xs sm:max-w-sm">
             <h2
-              className="text-2xl font-black uppercase tracking-wider"
+              className="text-2xl font-black uppercase tracking-wider break-words"
               style={{ color: primaryColor }}
             >
               {variant.title}
             </h2>
-            <p className="mt-1 font-mono text-base font-bold text-slate-900">{data.invoiceNumber}</p>
+            <p className="mt-1 font-mono text-base font-bold text-slate-900 break-words">{data.invoiceNumber}</p>
             <div className="mt-2 space-y-0.5 text-xs text-slate-600">
               <p>
                 <span className="text-slate-400">Date: </span>
                 <span className="font-medium text-slate-800">{data.invoiceDate}</span>
               </p>
-              {variant.showDueDate && data.dueDate && (
-                <p>
-                  <span className="text-slate-400">{data.dueDate.startsWith("Due:") ? "" : "Due: "}</span>
+              {variant.showDueDate && data.dueDate && data.dueDate !== "-" && (
+                <p className="break-words">
+                  <span className="text-slate-400">
+                    {/^(due|expected|delivery|expiry|invoice|account|location|paid from):/i.test(data.dueDate) ? "" : "Due: "}
+                  </span>
                   <span className="font-medium text-slate-800">{data.dueDate}</span>
                 </p>
               )}
@@ -282,7 +284,7 @@ export function DocumentPaperSheet({
               <span className="font-mono text-base">{data.total}</span>
             </div>
             {data.foreignDetail && (
-              <p className="pt-2 text-[10px] text-slate-400 text-right leading-tight">
+              <p className="pt-2 text-[10px] text-slate-500 font-medium text-right leading-tight border-t border-slate-100">
                 {data.foreignDetail}
               </p>
             )}

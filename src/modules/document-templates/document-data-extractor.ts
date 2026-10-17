@@ -99,7 +99,8 @@ export function buildDocumentTemplateData(
   let docNotes: string | undefined = undefined;
   let docTerms: string | undefined = undefined;
   let dateLabel = "";
-  let dueLabel = "";
+  let dueLabel: string | undefined = undefined;
+  let foreignDetail: string | undefined = undefined;
   let status: string | undefined = undefined;
   let subtotalMinor = 0;
   let taxMinor = 0;
@@ -137,7 +138,7 @@ export function buildDocumentTemplateData(
     dateLabel = formatDate(record.invoice.invoiceDate);
     dueLabel = `Due: ${formatDate(record.invoice.dueDate)}`;
     if (currency !== baseCurrency) {
-      dueLabel += ` - Rate 1 ${currency} = ${record.invoice.exchangeRateToBase} ${baseCurrency} (${record.invoice.exchangeRateSource}, ${record.invoice.exchangeRateDate}) - Base ${formatMoney(record.invoice.baseTotalMinor, baseCurrency)} - ${baseCurrency} VAT ${formatMoney(record.invoice.baseTaxMinor, baseCurrency)}`;
+      foreignDetail = `Rate: 1 ${currency} = ${record.invoice.exchangeRateToBase} ${baseCurrency} (${record.invoice.exchangeRateSource}, ${record.invoice.exchangeRateDate}) • Base Total: ${formatMoney(record.invoice.baseTotalMinor, baseCurrency)} • Base VAT: ${formatMoney(record.invoice.baseTaxMinor, baseCurrency)}`;
     }
     subtotalMinor = record.invoice.subtotalMinor;
     taxMinor = record.invoice.taxMinor;
@@ -173,9 +174,9 @@ export function buildDocumentTemplateData(
     docNotes = (record.invoice as any).notes || undefined;
     docTerms = (record.invoice as any).terms || undefined;
     dateLabel = formatDate(record.invoice.invoiceDate);
-    dueLabel = `Due: ${formatDate(record.invoice.dueDate)} (Ref: ${record.invoice.supplierInvoiceNumber || "-"})`;
+    dueLabel = `Due: ${formatDate(record.invoice.dueDate)}${record.invoice.supplierInvoiceNumber ? ` (Ref: ${record.invoice.supplierInvoiceNumber})` : ""}`;
     if (currency !== baseCurrency) {
-      dueLabel += ` - Rate 1 ${currency} = ${record.invoice.exchangeRateToBase} ${baseCurrency} (${record.invoice.exchangeRateSource}, ${record.invoice.exchangeRateDate}) - Base ${formatMoney(record.invoice.baseTotalMinor, baseCurrency)} - ${baseCurrency} VAT ${formatMoney(record.invoice.baseTaxMinor, baseCurrency)}`;
+      foreignDetail = `Rate: 1 ${currency} = ${record.invoice.exchangeRateToBase} ${baseCurrency} (${record.invoice.exchangeRateSource}, ${record.invoice.exchangeRateDate}) • Base Total: ${formatMoney(record.invoice.baseTotalMinor, baseCurrency)} • Base VAT: ${formatMoney(record.invoice.baseTaxMinor, baseCurrency)}`;
     }
     subtotalMinor = record.invoice.subtotalMinor;
     taxMinor = record.invoice.taxMinor;
@@ -214,9 +215,9 @@ export function buildDocumentTemplateData(
       ? `Expected Date: ${formatDate((record.order as any).expectedDate)}`
       : (record.order as any).deliveryDate
       ? `Delivery Date: ${formatDate((record.order as any).deliveryDate)}`
-      : "-";
+      : undefined;
     if (currency !== baseCurrency) {
-      dueLabel += ` - Rate 1 ${currency} = ${record.order.exchangeRateToBase} ${baseCurrency} - Base ${formatMoney(record.order.baseTotalMinor, baseCurrency)}`;
+      foreignDetail = `Rate: 1 ${currency} = ${record.order.exchangeRateToBase} ${baseCurrency} • Base Total: ${formatMoney(record.order.baseTotalMinor, baseCurrency)}`;
     }
     subtotalMinor = record.order.subtotalMinor;
     taxMinor = record.order.taxMinor;
@@ -257,7 +258,7 @@ export function buildDocumentTemplateData(
     dateLabel = formatDate(record.note.date);
     dueLabel = `Invoice: ${record.invoice.invoiceNumber}`;
     if (currency !== baseCurrency) {
-      dueLabel += ` - Original rate 1 ${currency} = ${record.note.exchangeRateToBase} ${baseCurrency} (${record.note.exchangeRateSource}, ${record.note.exchangeRateDate}) - Base carrying reduction ${formatMoney(record.note.baseTotalMinor, baseCurrency)} - ${baseCurrency} VAT ${formatMoney(record.note.baseTaxMinor, baseCurrency)}`;
+      foreignDetail = `Original Rate: 1 ${currency} = ${record.note.exchangeRateToBase} ${baseCurrency} (${record.note.exchangeRateSource}, ${record.note.exchangeRateDate}) • Base Carrying Reduction: ${formatMoney(record.note.baseTotalMinor, baseCurrency)} • Base VAT: ${formatMoney(record.note.baseTaxMinor, baseCurrency)}`;
     }
     subtotalMinor = record.note.subtotalMinor;
     taxMinor = record.note.taxMinor;
@@ -292,7 +293,7 @@ export function buildDocumentTemplateData(
     docNotes = (record.note as any).notes || undefined;
     docTerms = (record.note as any).terms || undefined;
     dateLabel = formatDate(record.note.debitNoteDate);
-    dueLabel = "-";
+    dueLabel = undefined;
     subtotalMinor = record.note.subtotalMinor;
     taxMinor = record.note.taxMinor;
     totalMinor = record.note.totalMinor;
@@ -329,9 +330,9 @@ export function buildDocumentTemplateData(
     docNotes = (record.quote as any).notes || undefined;
     docTerms = (record.quote as any).terms || undefined;
     dateLabel = formatDate(record.quote.quoteDate);
-    dueLabel = record.quote.expiryDate ? `Expiry Date: ${formatDate(record.quote.expiryDate)}` : "-";
+    dueLabel = record.quote.expiryDate ? `Expiry Date: ${formatDate(record.quote.expiryDate)}` : undefined;
     if (currency !== baseCurrency) {
-      dueLabel += ` - Rate 1 ${currency} = ${record.quote.exchangeRateToBase} ${baseCurrency} - Base ${formatMoney(record.quote.baseTotalMinor, baseCurrency)}`;
+      foreignDetail = `Rate: 1 ${currency} = ${record.quote.exchangeRateToBase} ${baseCurrency} • Base Total: ${formatMoney(record.quote.baseTotalMinor, baseCurrency)}`;
     }
     subtotalMinor = record.quote.subtotalMinor;
     taxMinor = record.quote.taxMinor;
@@ -371,9 +372,9 @@ export function buildDocumentTemplateData(
     docNotes = (record.order as any).notes || undefined;
     docTerms = (record.order as any).terms || undefined;
     dateLabel = formatDate(record.order.orderDate);
-    dueLabel = record.order.deliveryDate ? `Delivery Date: ${formatDate(record.order.deliveryDate)}` : "-";
+    dueLabel = record.order.deliveryDate ? `Delivery Date: ${formatDate(record.order.deliveryDate)}` : undefined;
     if (currency !== baseCurrency) {
-      dueLabel += ` - Rate 1 ${currency} = ${record.order.exchangeRateToBase} ${baseCurrency} - Base ${formatMoney(record.order.baseTotalMinor, baseCurrency)}`;
+      foreignDetail = `Rate: 1 ${currency} = ${record.order.exchangeRateToBase} ${baseCurrency} • Base Total: ${formatMoney(record.order.baseTotalMinor, baseCurrency)}`;
     }
     subtotalMinor = record.order.subtotalMinor;
     taxMinor = record.order.taxMinor;
@@ -409,9 +410,9 @@ export function buildDocumentTemplateData(
     docNotes = (record.quote as any).notes || undefined;
     docTerms = (record.quote as any).terms || undefined;
     dateLabel = formatDate(record.quote.quoteDate);
-    dueLabel = record.quote.expiryDate ? `Expiry Date: ${formatDate(record.quote.expiryDate)}` : "-";
+    dueLabel = record.quote.expiryDate ? `Expiry Date: ${formatDate(record.quote.expiryDate)}` : undefined;
     if (currency !== baseCurrency) {
-      dueLabel += ` - Rate 1 ${currency} = ${record.quote.exchangeRateToBase} ${baseCurrency} - Base ${formatMoney(record.quote.baseTotalMinor, baseCurrency)}`;
+      foreignDetail = `Rate: 1 ${currency} = ${record.quote.exchangeRateToBase} ${baseCurrency} • Base Total: ${formatMoney(record.quote.baseTotalMinor, baseCurrency)}`;
     }
     subtotalMinor = record.quote.subtotalMinor;
     taxMinor = record.quote.taxMinor;
@@ -480,7 +481,13 @@ export function buildDocumentTemplateData(
     partyLabel = "RECEIVED FROM";
     partyName = String(record.receipt.customer_name);
     dateLabel = formatDate(String(record.receipt.date));
-    dueLabel = record.receipt.bank_account_name ? `Account: ${String(record.receipt.bank_account_name)}` : "-";
+    dueLabel = record.receipt.bank_account_name ? `Account: ${String(record.receipt.bank_account_name)}` : undefined;
+    if (currency !== baseCurrency) {
+      foreignDetail = `Rate: 1 ${currency} = ${record.receipt.exchange_rate_to_base} ${baseCurrency} (${record.receipt.exchange_rate_source}, ${record.receipt.exchange_rate_date}) • Base Total: ${formatMoney(record.receipt.base_amount_minor, baseCurrency)}`;
+      if (Number(record.receipt.realized_fx_amount_minor) !== 0) {
+        foreignDetail += ` • Realized FX: ${formatMoney(record.receipt.realized_fx_amount_minor, baseCurrency)}`;
+      }
+    }
     docNotes = record.receipt.description ? String(record.receipt.description) : undefined;
     subtotalMinor = Number(record.receipt.amount_minor);
     taxMinor = 0;
@@ -525,7 +532,13 @@ export function buildDocumentTemplateData(
     partyLabel = "PAID TO";
     partyName = String(record.payment.supplier_name);
     dateLabel = formatDate(String(record.payment.date));
-    dueLabel = record.payment.bank_account_name ? `Paid From: ${String(record.payment.bank_account_name)}` : "-";
+    dueLabel = record.payment.bank_account_name ? `Paid From: ${String(record.payment.bank_account_name)}` : undefined;
+    if (currency !== baseCurrency) {
+      foreignDetail = `Rate: 1 ${currency} = ${record.payment.exchange_rate_to_base} ${baseCurrency} (${record.payment.exchange_rate_source}, ${record.payment.exchange_rate_date}) • Base Total: ${formatMoney(record.payment.base_amount_minor, baseCurrency)}`;
+      if (Number(record.payment.realized_fx_amount_minor) !== 0) {
+        foreignDetail += ` • Realized FX: ${formatMoney(record.payment.realized_fx_amount_minor, baseCurrency)}`;
+      }
+    }
     docNotes = record.payment.description ? String(record.payment.description) : undefined;
     subtotalMinor = Number(record.payment.amount_minor);
     taxMinor = 0;
@@ -618,6 +631,7 @@ export function buildDocumentTemplateData(
     total: formatMoney(totalMinor, currency),
     notes: docNotes,
     terms: docTerms,
+    foreignDetail,
     customFields: customFields.length ? customFields : undefined,
     status,
   };
