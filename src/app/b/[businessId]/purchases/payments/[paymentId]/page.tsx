@@ -7,6 +7,8 @@ import { getSupplierPayment } from "@/modules/supplier-payments/supplier-payment
 import { SupplierPaymentViewActions } from "@/modules/supplier-payments/supplier-payment-view-actions";
 import { getSourceBankingStatus } from "@/modules/banking/banking-report-service";
 import { BackLink } from "@/components/back-link";
+import { getDocumentViewData } from "@/modules/document-templates/document-data-extractor";
+import { DocumentViewLayout } from "@/modules/document-templates/components/document-view-layout";
 
 export default async function SupplierPaymentViewPage({
   params,
@@ -21,6 +23,15 @@ export default async function SupplierPaymentViewPage({
   const payment = record.payment;
   const status = String(payment.document_status) as "posted" | "void";
   const number = String(payment.payment_number);
+
+  const viewBundle = getDocumentViewData(
+    businessId,
+    user.id,
+    access.business.name,
+    access.business.currency,
+    "purchase-payment",
+    paymentId
+  );
 
   return (
     <div className="page-container">
@@ -45,7 +56,14 @@ export default async function SupplierPaymentViewPage({
         <SupplierPaymentViewActions businessId={businessId} paymentId={paymentId} paymentNumber={number} status={status} />
       </div>
 
-      <article className="rounded-lg border border-border bg-surface-raised p-5 sm:p-7">
+      <DocumentViewLayout
+        data={viewBundle.data}
+        settings={viewBundle.settings}
+        variant={viewBundle.variant}
+        pdfUrl={viewBundle.pdfUrl}
+        documentNumber={number}
+      >
+        <article className="rounded-lg border border-border bg-surface-raised p-5 sm:p-7">
         <dl className="grid gap-4 border-b border-border pb-6 text-sm sm:grid-cols-2 lg:grid-cols-4">
           <div>
             <dt className="text-xs text-muted-foreground">Supplier</dt>
@@ -161,6 +179,7 @@ export default async function SupplierPaymentViewPage({
           </div>
         </section>
       </article>
+      </DocumentViewLayout>
     </div>
   );
 }

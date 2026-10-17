@@ -8,6 +8,8 @@ import { StatusBadge } from "@/components/status-badge";
 import { DebitNoteViewActions } from "@/modules/debit-notes/debit-note-view-actions";
 import { buildDocumentEmailContext, buildDocumentEmailDefaults } from "@/modules/email/email-defaults";
 import { BackLink } from "@/components/back-link";
+import { getDocumentViewData } from "@/modules/document-templates/document-data-extractor";
+import { DocumentViewLayout } from "@/modules/document-templates/components/document-view-layout";
 
 export default async function DebitNoteViewPage({
   params,
@@ -23,6 +25,15 @@ export default async function DebitNoteViewPage({
   if (!record) notFound();
   const { note, lines } = record;
   const currency = note.currencyCode;
+
+  const viewBundle = getDocumentViewData(
+    businessId,
+    user.id,
+    access.business.name,
+    access.business.currency,
+    "debit-note",
+    debitNoteId
+  );
 
   const emailContext = buildDocumentEmailContext(
     access.business.name,
@@ -70,88 +81,96 @@ export default async function DebitNoteViewPage({
         />
       </div>
 
-      {currency !== access.business.currency && (
-        <section aria-label="Currency snapshot" className="mb-5 rounded-lg border border-border bg-surface-raised p-4">
-          <dl className="grid gap-4 text-sm sm:grid-cols-2 lg:grid-cols-4">
-            <div>
-              <dt className="text-xs text-muted-foreground">Stored rate</dt>
-              <dd className="money mt-1">1 {currency} = {note.exchangeRateToBase} {access.business.currency}</dd>
-            </div>
-            <div>
-              <dt className="text-xs text-muted-foreground">Rate date</dt>
-              <dd className="mt-1">{formatDate(note.exchangeRateDate)}</dd>
-            </div>
-            <div>
-              <dt className="text-xs text-muted-foreground">Rate source</dt>
-              <dd className="mt-1">{note.exchangeRateSource}</dd>
-            </div>
-            <div>
-              <dt className="text-xs text-muted-foreground">Base equivalent</dt>
-              <dd className="money mt-1 font-semibold">{formatMoney(note.totalMinor, access.business.currency)}</dd>
-            </div>
-          </dl>
-        </section>
-      )}
+      <DocumentViewLayout
+        data={viewBundle.data}
+        settings={viewBundle.settings}
+        variant={viewBundle.variant}
+        pdfUrl={viewBundle.pdfUrl}
+        documentNumber={note.debitNoteNumber}
+      >
+        {currency !== access.business.currency && (
+          <section aria-label="Currency snapshot" className="mb-5 rounded-lg border border-border bg-surface-raised p-4">
+            <dl className="grid gap-4 text-sm sm:grid-cols-2 lg:grid-cols-4">
+              <div>
+                <dt className="text-xs text-muted-foreground">Stored rate</dt>
+                <dd className="money mt-1">1 {currency} = {note.exchangeRateToBase} {access.business.currency}</dd>
+              </div>
+              <div>
+                <dt className="text-xs text-muted-foreground">Rate date</dt>
+                <dd className="mt-1">{formatDate(note.exchangeRateDate)}</dd>
+              </div>
+              <div>
+                <dt className="text-xs text-muted-foreground">Rate source</dt>
+                <dd className="mt-1">{note.exchangeRateSource}</dd>
+              </div>
+              <div>
+                <dt className="text-xs text-muted-foreground">Base equivalent</dt>
+                <dd className="money mt-1 font-semibold">{formatMoney(note.totalMinor, access.business.currency)}</dd>
+              </div>
+            </dl>
+          </section>
+        )}
 
-      <article className="rounded-xl border border-border bg-surface-raised shadow-sm p-5 sm:p-7 dark:shadow-none">
-        <div className="grid gap-6 border-b border-border pb-6 sm:grid-cols-2 -mx-5 -mt-5 bg-surface-muted/30 p-5 sm:-mx-7 sm:-mt-7 sm:p-7 rounded-t-xl">
-          <div>
-            <p className="text-xs font-semibold tracking-[0.08em] text-muted-foreground uppercase">Supplier</p>
-            <p className="mt-2 font-semibold">{note.supplierName}</p>
+        <article className="rounded-xl border border-border bg-surface-raised shadow-sm p-5 sm:p-7 dark:shadow-none">
+          <div className="grid gap-6 border-b border-border pb-6 sm:grid-cols-2 -mx-5 -mt-5 bg-surface-muted/30 p-5 sm:-mx-7 sm:-mt-7 sm:p-7 rounded-t-xl">
+            <div>
+              <p className="text-xs font-semibold tracking-[0.08em] text-muted-foreground uppercase">Supplier</p>
+              <p className="mt-2 font-semibold">{note.supplierName}</p>
+            </div>
+            <dl className="grid grid-cols-2 gap-x-5 gap-y-3 text-sm sm:justify-self-end">
+              <dt className="text-muted-foreground">Debit note date</dt>
+              <dd className="text-right">{formatDate(note.debitNoteDate)}</dd>
+              <dt className="text-muted-foreground">VAT tax date</dt>
+              <dd className="text-right">{formatDate(note.taxDate)}</dd>
+              <dt className="text-muted-foreground">Reference</dt>
+              <dd className="text-right">{note.reference || "-"}</dd>
+            </dl>
           </div>
-          <dl className="grid grid-cols-2 gap-x-5 gap-y-3 text-sm sm:justify-self-end">
-            <dt className="text-muted-foreground">Debit note date</dt>
-            <dd className="text-right">{formatDate(note.debitNoteDate)}</dd>
-            <dt className="text-muted-foreground">VAT tax date</dt>
-            <dd className="text-right">{formatDate(note.taxDate)}</dd>
-            <dt className="text-muted-foreground">Reference</dt>
-            <dd className="text-right">{note.reference || "-"}</dd>
-          </dl>
-        </div>
-        <div className="mt-6 overflow-x-auto">
-          <table className="data-table min-w-[700px]">
-            <thead>
-              <tr>
-                <th>Description</th>
-                <th className="text-right!">Qty</th>
-                <th className="text-right!">Rate</th>
-                <th>VAT</th>
-                <th className="text-right!">Amount</th>
-              </tr>
-            </thead>
-            <tbody>
-              {lines.map((line) => (
-                <tr key={line.id}>
-                  <td>
-                    <span className="font-medium">{line.description}</span>
-                    <span className="mt-0.5 block text-xs text-muted-foreground">
-                      {line.expenseAccountCode} {line.expenseAccountName}
-                    </span>
-                  </td>
-                  <td className="money text-right">{quantityMicrosToInput(line.quantityMicros)}</td>
-                  <td className="money text-right">{formatMoney(line.unitPriceMinor, currency)}</td>
-                  <td>{line.taxCodeName ? `${line.taxCodeName} (${rateBasisPointsToPercent(line.taxCodeRate)}%)` : "-"}</td>
-                  <td className="money text-right">{formatMoney(line.grossAmountMinor, currency)}</td>
+          <div className="mt-6 overflow-x-auto">
+            <table className="data-table min-w-[700px]">
+              <thead>
+                <tr>
+                  <th>Description</th>
+                  <th className="text-right!">Qty</th>
+                  <th className="text-right!">Rate</th>
+                  <th>VAT</th>
+                  <th className="text-right!">Amount</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-        <dl className="mt-6 ml-auto w-full max-w-xs space-y-2 text-sm">
-          <div className="flex justify-between">
-            <dt className="text-muted-foreground">Subtotal</dt>
-            <dd className="money">{formatMoney(note.subtotalMinor, currency)}</dd>
+              </thead>
+              <tbody>
+                {lines.map((line) => (
+                  <tr key={line.id}>
+                    <td>
+                      <span className="font-medium">{line.description}</span>
+                      <span className="mt-0.5 block text-xs text-muted-foreground">
+                        {line.expenseAccountCode} {line.expenseAccountName}
+                      </span>
+                    </td>
+                    <td className="money text-right">{quantityMicrosToInput(line.quantityMicros)}</td>
+                    <td className="money text-right">{formatMoney(line.unitPriceMinor, currency)}</td>
+                    <td>{line.taxCodeName ? `${line.taxCodeName} (${rateBasisPointsToPercent(line.taxCodeRate)}%)` : "-"}</td>
+                    <td className="money text-right">{formatMoney(line.grossAmountMinor, currency)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
-          <div className="flex justify-between">
-            <dt className="text-muted-foreground">VAT</dt>
-            <dd className="money">{formatMoney(note.taxMinor, currency)}</dd>
-          </div>
-          <div className="flex justify-between border-t border-border pt-2 text-base font-semibold">
-            <dt>Total</dt>
-            <dd className="money">{formatMoney(note.totalMinor, currency)}</dd>
-          </div>
-        </dl>
-      </article>
+          <dl className="mt-6 ml-auto w-full max-w-xs space-y-2 text-sm">
+            <div className="flex justify-between">
+              <dt className="text-muted-foreground">Subtotal</dt>
+              <dd className="money">{formatMoney(note.subtotalMinor, currency)}</dd>
+            </div>
+            <div className="flex justify-between">
+              <dt className="text-muted-foreground">VAT</dt>
+              <dd className="money">{formatMoney(note.taxMinor, currency)}</dd>
+            </div>
+            <div className="flex justify-between border-t border-border pt-2 text-base font-semibold">
+              <dt>Total</dt>
+              <dd className="money">{formatMoney(note.totalMinor, currency)}</dd>
+            </div>
+          </dl>
+        </article>
+      </DocumentViewLayout>
     </div>
   );
 }

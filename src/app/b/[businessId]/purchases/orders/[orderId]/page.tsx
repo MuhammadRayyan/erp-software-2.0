@@ -12,6 +12,8 @@ import { PurchaseOrderViewActions } from "@/modules/purchase-orders/purchase-ord
 import { OrderRevisionSwitcher } from "@/modules/purchase-orders/order-revision-switcher";
 import { DocumentFlowStepper, type FlowStep } from "@/components/documents/document-flow-stepper";
 import { Breadcrumbs } from "@/components/breadcrumbs";
+import { getDocumentViewData } from "@/modules/document-templates/document-data-extractor";
+import { DocumentViewLayout } from "@/modules/document-templates/components/document-view-layout";
 
 export default async function PurchaseOrderViewPage({
   params,
@@ -32,6 +34,15 @@ export default async function PurchaseOrderViewPage({
     new Map(lines.flatMap((line) => (line.project ? [[line.project.id, line.project] as const] : []))).values()
   );
   const showLineProjects = linkedProjects.length > 1;
+
+  const viewBundle = getDocumentViewData(
+    businessId,
+    user.id,
+    access.business.name,
+    access.business.currency,
+    "purchase-order",
+    orderId
+  );
 
   const allReceived = lines.every((l) => !l.itemId || l.remainingMicros === 0);
   const partiallyReceived = lines.some((l) => l.receivedMicros > 0);
@@ -131,7 +142,14 @@ export default async function PurchaseOrderViewPage({
         />
       </div>
 
-      <DocumentFlowStepper steps={flowSteps} />
+      <DocumentViewLayout
+        data={viewBundle.data}
+        settings={viewBundle.settings}
+        variant={viewBundle.variant}
+        pdfUrl={viewBundle.pdfUrl}
+        documentNumber={order.orderNumber}
+      >
+        <DocumentFlowStepper steps={flowSteps} />
 
       {currency !== access.business.currency && (
         <section aria-label="Currency snapshot" className="mb-5 rounded-lg border border-border bg-surface-raised p-4">
@@ -278,6 +296,7 @@ export default async function PurchaseOrderViewPage({
           )}
         </section>
       </article>
+      </DocumentViewLayout>
     </div>
   );
 }

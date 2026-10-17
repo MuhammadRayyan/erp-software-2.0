@@ -12,13 +12,12 @@ export function SupplierPaymentViewActions({
 }) {
   const router = useRouter();
 
-  if (status !== "posted") return null;
-
   return (
     <DocumentViewActions
       documentNumber={paymentNumber}
       documentType="Payment"
-      onVoid={{
+      pdfHref={`/api/businesses/${businessId}/documents/purchase-payment/${paymentId}/pdf`}
+      onVoid={status === "posted" ? {
         label: "Reverse Payment",
         description: "Are you sure you want to reverse this payment? The allocation and accounting effect will be undone.",
         action: async () => {
@@ -27,7 +26,7 @@ export function SupplierPaymentViewActions({
           toast.success("Payment reversed. The allocation and accounting effect are no longer active.");
           router.refresh();
         }
-      }}
+      } : undefined}
     />
   );
 }

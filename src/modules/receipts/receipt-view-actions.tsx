@@ -12,13 +12,12 @@ export function ReceiptViewActions({
 }) {
   const router = useRouter();
 
-  if (status !== "posted") return null;
-
   return (
     <DocumentViewActions
       documentNumber={receiptNumber}
       documentType="Receipt"
-      onVoid={{
+      pdfHref={`/api/businesses/${businessId}/documents/sales-receipt/${receiptId}/pdf`}
+      onVoid={status === "posted" ? {
         label: "Reverse Receipt",
         description: "Are you sure you want to reverse this receipt? The allocation and accounting effect will be undone.",
         action: async () => {
@@ -27,7 +26,7 @@ export function ReceiptViewActions({
           toast.success("Receipt reversed. The allocation and accounting effect are no longer active.");
           router.refresh();
         }
-      }}
+      } : undefined}
     />
   );
 }

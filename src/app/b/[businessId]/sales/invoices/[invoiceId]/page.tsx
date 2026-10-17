@@ -17,6 +17,8 @@ import { DocumentFlowStepper, type FlowStep } from "@/components/documents/docum
 import { Breadcrumbs } from "@/components/breadcrumbs";
 import { getCustomerUnallocatedCredit } from "@/modules/receipts/receipt-service";
 import { ApplyCreditModal } from "@/modules/sales-invoices/apply-credit-modal";
+import { getDocumentViewData } from "@/modules/document-templates/document-data-extractor";
+import { DocumentViewLayout } from "@/modules/document-templates/components/document-view-layout";
 
 export default async function InvoiceViewPage({ params, searchParams }: { params: Promise<{ businessId: string; invoiceId: string }>; searchParams: Promise<{ notice?: string }> }) {
   const { businessId, invoiceId } = await params;
@@ -32,6 +34,15 @@ export default async function InvoiceViewPage({ params, searchParams }: { params
   const customFieldValues = customFieldDefinitions.length
     ? getCustomFieldValuesForEntities(businessId, user.id, "sales_invoice", [invoiceId]).get(invoiceId) ?? {}
     : {};
+
+  const viewBundle = getDocumentViewData(
+    businessId,
+    user.id,
+    access.business.name,
+    access.business.currency,
+    "sales-invoice",
+    invoiceId
+  );
 
   const availableCredits = invoice.documentStatus === "posted" && record.balanceMinor > 0
     ? getCustomerUnallocatedCredit(businessId, user.id, customer.id).filter(
@@ -145,7 +156,14 @@ export default async function InvoiceViewPage({ params, searchParams }: { params
         </div>
         <InvoiceViewActions businessId={businessId} invoiceId={invoice.id} invoiceNumber={invoice.invoiceNumber} documentStatus={invoice.documentStatus} balanceMinor={record.balanceMinor} totalMinor={invoice.totalMinor} hasDeliveryNotes={record.deliveryNotes.length > 0} journalEntryId={record.journal?.id ?? null} inventoryEnabled={access.modules.includes("inventory")} hasDeliverableItems={lines.some((line) => Boolean(line.itemId) && line.remainingToDeliverMicros > 0)} emailDefaults={emailDefaults} />
       </div>
-      <DocumentFlowStepper steps={flowSteps} />
+      <DocumentViewLayout
+        data={viewBundle.data}
+        settings={viewBundle.settings}
+        variant={viewBundle.variant}
+        pdfUrl={viewBundle.pdfUrl}
+        documentNumber={invoice.invoiceNumber}
+      >
+        <DocumentFlowStepper steps={flowSteps} />
       {availableCredits.length > 0 && (
         <ApplyCreditModal
           businessId={businessId}
@@ -213,6 +231,7 @@ export default async function InvoiceViewPage({ params, searchParams }: { params
         <section className="mt-8 border-t border-border pt-5"><h2 className="text-sm font-semibold">Delivery Notes</h2>{record.deliveryNotes.length ? <div className="mt-3 overflow-x-auto rounded-md border border-border"><table className="data-table min-w-[520px]"><thead><tr><th>Delivery</th><th>Date</th><th>Status</th></tr></thead><tbody>{record.deliveryNotes.map((delivery) => <tr key={delivery.id}><td><Link href={`/b/${businessId}/sales/delivery-notes/${delivery.id}`} className="tabular font-medium text-primary hover:underline">{delivery.delivery_number}</Link></td><td>{formatDate(delivery.date)}</td><td className="capitalize">{delivery.document_status}</td></tr>)}</tbody></table></div> : <p className="mt-2 text-sm text-muted-foreground">No delivery notes linked yet.</p>}</section>
         <section className="mt-8 border-t border-border pt-5"><h2 className="text-sm font-semibold">Receipts</h2>{record.receipts.length ? <div className="mt-3 overflow-x-auto rounded-md border border-border"><table className="data-table min-w-[560px]"><thead><tr><th>Receipt</th><th>Date</th><th>Reference</th><th className="text-right!">Allocated</th></tr></thead><tbody>{record.receipts.map((receipt) => <tr key={receipt.id}><td><Link href={`/b/${businessId}/sales/receipts/${receipt.id}`} className="tabular font-medium text-primary hover:underline">{receipt.receiptNumber}</Link></td><td>{formatDate(receipt.date)}</td><td className="text-muted-foreground">{receipt.reference || "—"}</td><td className="money text-right">{formatMoney(receipt.allocatedMinor, currency)}</td></tr>)}</tbody></table></div> : <p className="mt-2 text-sm text-muted-foreground">{invoice.documentStatus === "posted" ? "No receipts recorded." : "Receipts become available after posting."}</p>}</section>
       </article>
+      </DocumentViewLayout>
     </div>
   );
 }

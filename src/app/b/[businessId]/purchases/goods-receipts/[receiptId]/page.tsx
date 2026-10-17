@@ -1,3 +1,160 @@
-import Link from "next/link"; import { } from "lucide-react"; import { notFound } from "next/navigation"; import { NoticeToast } from "@/components/notice-toast"; import { StatusBadge } from "@/components/status-badge"; import { requireModule } from "@/core/permissions/require-module"; import { formatDate, formatMoney } from "@/core/format"; import type { InventoryDocumentStatus } from "@/modules/inventory/inventory-document"; import { getGoodsReceipt } from "@/modules/inventory/goods-receipt-service"; import { GoodsReceiptViewActions } from "@/modules/inventory/goods-receipt-view-actions"; import { formatQuantityMicros } from "@/modules/inventory/inventory-valuation";
+import Link from "next/link";
+import { notFound } from "next/navigation";
+import { NoticeToast } from "@/components/notice-toast";
+import { StatusBadge } from "@/components/status-badge";
+import { requireModule } from "@/core/permissions/require-module";
+import { formatDate, formatMoney } from "@/core/format";
+import type { InventoryDocumentStatus } from "@/modules/inventory/inventory-document";
+import { getGoodsReceipt } from "@/modules/inventory/goods-receipt-service";
+import { GoodsReceiptViewActions } from "@/modules/inventory/goods-receipt-view-actions";
+import { formatQuantityMicros } from "@/modules/inventory/inventory-valuation";
 import { BackLink } from "@/components/back-link";
-export default async function GoodsReceiptViewPage({ params, searchParams }: { params: Promise<{ businessId: string; receiptId: string }>; searchParams: Promise<{ notice?: string }> }) { const { businessId, receiptId } = await params; const { notice } = await searchParams; const { user, access } = await requireModule(businessId, "inventory"); const record = getGoodsReceipt(businessId, user.id, receiptId); if (!record) notFound(); const r = record.receipt; const status = String(r.document_status) as InventoryDocumentStatus; const total = record.lines.reduce((sum, line) => sum + Number(line.value_minor), 0); return <div className="page-container"><NoticeToast message={notice} /><BackLink href={`/b/${businessId}/purchases/goods-receipts`}>Goods Receipts</BackLink><div className="mb-6 flex flex-col justify-between gap-4 lg:flex-row lg:items-start"><div><div className="flex items-center gap-2"><h1 className="page-title tabular">{String(r.receipt_number)}</h1><StatusBadge status={status} /></div><p className="mt-2 font-medium">{String(r.supplier_name)}</p><p className="mt-1 text-sm text-muted-foreground">{formatDate(String(r.date))} · {String(r.location_code)} {String(r.location_name)}</p><p className="money mt-3 text-xl font-semibold">{formatMoney(total, access.business.currency)}</p></div><GoodsReceiptViewActions businessId={businessId} receiptId={receiptId} number={String(r.receipt_number)} status={status} /></div><article className="rounded-lg border border-border bg-surface-raised p-5 sm:p-7"><dl className="grid gap-3 border-b border-border pb-5 text-sm sm:grid-cols-4"><div><dt className="text-xs text-muted-foreground">Purchase Order</dt><dd className="mt-1">{r.purchase_order_id ? <Link href={`/b/${businessId}/purchases/orders/${String(r.purchase_order_id)}`} className="font-medium text-primary hover:underline">{String(r.order_number)}</Link> : "—"}</dd></div><div><dt className="text-xs text-muted-foreground">Purchase Invoice</dt><dd className="mt-1">{r.purchase_invoice_id ? <Link href={`/b/${businessId}/purchases/invoices/${String(r.purchase_invoice_id)}`} className="font-medium text-primary hover:underline">{String(r.internal_number)}</Link> : "—"}</dd></div><div><dt className="text-xs text-muted-foreground">Reference</dt><dd className="mt-1">{String(r.reference ?? "—")}</dd></div><div><dt className="text-xs text-muted-foreground">Accounting</dt><dd className="mt-1">No journal entry</dd></div></dl><div className="mt-6 overflow-x-auto"><table className="data-table min-w-[760px]"><thead><tr><th>Item</th><th>Description</th><th className="text-right!">Quantity</th><th className="text-right!">Unit Cost</th><th className="text-right!">Value</th></tr></thead><tbody>{record.lines.map((line) => <tr key={String(line.id)}><td><Link href={`/b/${businessId}/inventory/items/${String(line.item_id)}`} className="font-medium text-primary hover:underline">{String(line.sku ?? line.item_name)}</Link></td><td>{String(line.description)}</td><td className="money text-right">{formatQuantityMicros(Number(line.quantity_micros))} {String(line.unit_name)}</td><td className="money text-right">{formatMoney(Number(line.unit_cost_minor), access.business.currency)}</td><td className="money text-right">{formatMoney(Number(line.value_minor), access.business.currency)}</td></tr>)}</tbody></table></div>{r.notes && <p className="mt-6 border-t border-border pt-5 text-sm text-muted-foreground">{String(r.notes)}</p>}</article></div>; }
+import { getDocumentViewData } from "@/modules/document-templates/document-data-extractor";
+import { DocumentViewLayout } from "@/modules/document-templates/components/document-view-layout";
+
+export default async function GoodsReceiptViewPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ businessId: string; receiptId: string }>;
+  searchParams: Promise<{ notice?: string }>;
+}) {
+  const { businessId, receiptId } = await params;
+  const { notice } = await searchParams;
+  const { user, access } = await requireModule(businessId, "inventory");
+  const record = getGoodsReceipt(businessId, user.id, receiptId);
+  if (!record) notFound();
+  const r = record.receipt;
+  const status = String(r.document_status) as InventoryDocumentStatus;
+  const total = record.lines.reduce((sum, line) => sum + Number(line.value_minor), 0);
+
+  const viewBundle = getDocumentViewData(
+    businessId,
+    user.id,
+    access.business.name,
+    access.business.currency,
+    "goods-receipt",
+    receiptId
+  );
+
+  return (
+    <div className="page-container">
+      <NoticeToast message={notice} />
+      <BackLink href={`/b/${businessId}/purchases/goods-receipts`}>Goods Receipts</BackLink>
+      <div className="mb-6 flex flex-col justify-between gap-4 lg:flex-row lg:items-start">
+        <div>
+          <div className="flex items-center gap-2">
+            <h1 className="page-title tabular">{String(r.receipt_number)}</h1>
+            <StatusBadge status={status} />
+          </div>
+          <p className="mt-2 font-medium">{String(r.supplier_name)}</p>
+          <p className="mt-1 text-sm text-muted-foreground">
+            {formatDate(String(r.date))} · {String(r.location_code)} {String(r.location_name)}
+          </p>
+          <p className="money mt-3 text-xl font-semibold">
+            {formatMoney(total, access.business.currency)}
+          </p>
+        </div>
+        <GoodsReceiptViewActions
+          businessId={businessId}
+          receiptId={receiptId}
+          number={String(r.receipt_number)}
+          status={status}
+        />
+      </div>
+
+      <DocumentViewLayout
+        data={viewBundle.data}
+        settings={viewBundle.settings}
+        variant={viewBundle.variant}
+        pdfUrl={viewBundle.pdfUrl}
+        documentNumber={String(r.receipt_number)}
+      >
+        <article className="rounded-lg border border-border bg-surface-raised p-5 sm:p-7">
+          <dl className="grid gap-3 border-b border-border pb-5 text-sm sm:grid-cols-4">
+            <div>
+              <dt className="text-xs text-muted-foreground">Purchase Order</dt>
+              <dd className="mt-1">
+                {r.purchase_order_id ? (
+                  <Link
+                    href={`/b/${businessId}/purchases/orders/${String(r.purchase_order_id)}`}
+                    className="font-medium text-primary hover:underline"
+                  >
+                    {String(r.order_number)}
+                  </Link>
+                ) : (
+                  "—"
+                )}
+              </dd>
+            </div>
+            <div>
+              <dt className="text-xs text-muted-foreground">Purchase Invoice</dt>
+              <dd className="mt-1">
+                {r.purchase_invoice_id ? (
+                  <Link
+                    href={`/b/${businessId}/purchases/invoices/${String(r.purchase_invoice_id)}`}
+                    className="font-medium text-primary hover:underline"
+                  >
+                    {String(r.internal_number)}
+                  </Link>
+                ) : (
+                  "—"
+                )}
+              </dd>
+            </div>
+            <div>
+              <dt className="text-xs text-muted-foreground">Reference</dt>
+              <dd className="mt-1">{String(r.reference ?? "—")}</dd>
+            </div>
+            <div>
+              <dt className="text-xs text-muted-foreground">Accounting</dt>
+              <dd className="mt-1">No journal entry</dd>
+            </div>
+          </dl>
+          <div className="mt-6 overflow-x-auto">
+            <table className="data-table min-w-[760px]">
+              <thead>
+                <tr>
+                  <th>Item</th>
+                  <th>Description</th>
+                  <th className="text-right!">Quantity</th>
+                  <th className="text-right!">Unit Cost</th>
+                  <th className="text-right!">Value</th>
+                </tr>
+              </thead>
+              <tbody>
+                {record.lines.map((line) => (
+                  <tr key={String(line.id)}>
+                    <td>
+                      <Link
+                        href={`/b/${businessId}/inventory/items/${String(line.item_id)}`}
+                        className="font-medium text-primary hover:underline"
+                      >
+                        {String(line.sku ?? line.item_name)}
+                      </Link>
+                    </td>
+                    <td>{String(line.description)}</td>
+                    <td className="money text-right">
+                      {formatQuantityMicros(Number(line.quantity_micros))} {String(line.unit_name)}
+                    </td>
+                    <td className="money text-right">
+                      {formatMoney(Number(line.unit_cost_minor), access.business.currency)}
+                    </td>
+                    <td className="money text-right">
+                      {formatMoney(Number(line.value_minor), access.business.currency)}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          {r.notes && (
+            <p className="mt-6 border-t border-border pt-5 text-sm text-muted-foreground">
+              {String(r.notes)}
+            </p>
+          )}
+        </article>
+      </DocumentViewLayout>
+    </div>
+  );
+}

@@ -1,7 +1,7 @@
 "use client";
 import { useState } from "react";
 import Link from "next/link";
-import { Ban, ChevronDown, Copy, Download, FileEdit, FileText, LoaderCircle, Mail, MoreHorizontal, Trash2 } from "lucide-react";
+import { Ban, ChevronDown, Copy, Download, FileEdit, FileText, LoaderCircle, Mail, MoreHorizontal, Printer, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { DialogContent, DialogDescription, DialogRoot, DialogTitle } from "@/components/ui/dialog";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
@@ -137,9 +137,18 @@ export function DocumentViewActions({
           </Button>
         )}
 
+        <Button
+          type="button"
+          variant="secondary"
+          className="hidden md:inline-flex"
+          onClick={() => window.print()}
+        >
+          <Printer className="size-4" /> Print
+        </Button>
+
         {pdfHref && (
           <Button asChild variant="secondary" className="hidden md:inline-flex">
-            <a href={pdfHref} target="_blank" rel="noreferrer"><Download className="size-4" /> Print / PDF</a>
+            <a href={pdfHref} target="_blank" rel="noreferrer"><Download className="size-4" /> PDF</a>
           </Button>
         )}
 
@@ -150,6 +159,9 @@ export function DocumentViewActions({
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="w-52">
+            <DropdownMenuItem className="md:hidden" onSelect={() => window.print()}>
+              <Printer className="size-4" /> Print
+            </DropdownMenuItem>
             {onEmail && (
               <DropdownMenuItem className="md:hidden" onSelect={(e) => { e.preventDefault(); onEmail(); }}>
                 <Mail className="size-4" /> Email
@@ -163,7 +175,9 @@ export function DocumentViewActions({
 
             {pdfHref && (
               <DropdownMenuItem asChild className="md:hidden">
-                <a href={pdfHref} target="_blank"><Download className="size-4" /> Print / PDF</a>
+                <a href={pdfHref} target="_blank" rel="noreferrer">
+                  <Download className="size-4" /> Download PDF
+                </a>
               </DropdownMenuItem>
             )}
 

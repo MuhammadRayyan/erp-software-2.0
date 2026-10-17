@@ -12,6 +12,8 @@ import { DocumentFlowStepper, type FlowStep } from "@/components/documents/docum
 import { Breadcrumbs } from "@/components/breadcrumbs";
 import { getSupplierUnallocatedCredit } from "@/modules/supplier-payments/supplier-payment-service";
 import { ApplyPrepaymentModal } from "@/modules/purchase-invoices/apply-prepayment-modal";
+import { getDocumentViewData } from "@/modules/document-templates/document-data-extractor";
+import { DocumentViewLayout } from "@/modules/document-templates/components/document-view-layout";
 
 export default async function PurchaseInvoiceViewPage({
   params,
@@ -31,6 +33,15 @@ export default async function PurchaseInvoiceViewPage({
     new Map(lines.flatMap((line) => (line.project ? [[line.project.id, line.project] as const] : []))).values()
   );
   const showLineProjects = linkedProjects.length > 1;
+
+  const viewBundle = getDocumentViewData(
+    businessId,
+    user.id,
+    access.business.name,
+    access.business.currency,
+    "purchase-invoice",
+    invoiceId
+  );
 
   const availablePrepayments = invoice.documentStatus === "posted" && record.balanceMinor > 0
     ? getSupplierUnallocatedCredit(businessId, user.id, supplier.id).filter(
@@ -138,7 +149,14 @@ export default async function PurchaseInvoiceViewPage({
         />
       </div>
 
-      <DocumentFlowStepper steps={flowSteps} />
+      <DocumentViewLayout
+        data={viewBundle.data}
+        settings={viewBundle.settings}
+        variant={viewBundle.variant}
+        pdfUrl={viewBundle.pdfUrl}
+        documentNumber={invoice.internalNumber}
+      >
+        <DocumentFlowStepper steps={flowSteps} />
 
       {availablePrepayments.length > 0 && (
         <ApplyPrepaymentModal
@@ -325,6 +343,7 @@ export default async function PurchaseInvoiceViewPage({
           )}
         </section>
       </article>
+      </DocumentViewLayout>
     </div>
   );
 }
