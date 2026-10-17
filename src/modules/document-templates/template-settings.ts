@@ -2,6 +2,18 @@ import { z } from "zod";
 
 export const templateSettingsSchema = z.object({
   templateType: z.enum(["modern", "classic", "minimal", "custom-html"]).default("modern"),
+
+  // Letterhead & Paper Layout
+  letterheadMode: z.enum(["digital", "preprinted", "background"]).default("digital"),
+  letterheadBackgroundUrl: z.string().nullable().optional().default(null),
+  marginTop: z.number().min(0).max(300).default(40),
+  marginBottom: z.number().min(0).max(300).default(40),
+  marginLeft: z.number().min(0).max(150).default(40),
+  marginRight: z.number().min(0).max(150).default(40),
+  hideDigitalHeader: z.boolean().default(false),
+  hideDigitalFooter: z.boolean().default(false),
+
+  // Branding & Assets
   logoUrl: z.string().nullable().optional(),
   logoPosition: z.enum(["left", "center", "right"]).default("left"),
   logoSize: z.enum(["small", "medium", "large"]).default("medium"),
@@ -13,6 +25,19 @@ export const templateSettingsSchema = z.object({
   fontSize: z.enum(["small", "normal", "large"]).default("normal"),
   headerText: z.string().max(250).optional().default(""),
   footerText: z.string().max(250).optional().default("Thank you for your business"),
+
+  // Custom Labels & Wording (Zero-code Localization)
+  customDocumentTitle: z.string().max(80).optional().default(""),
+  customPartyLabel: z.string().max(60).optional().default(""),
+  customDescriptionLabel: z.string().max(60).optional().default(""),
+  customQuantityLabel: z.string().max(40).optional().default(""),
+  customUnitPriceLabel: z.string().max(40).optional().default(""),
+  customDiscountLabel: z.string().max(40).optional().default(""),
+  customAmountLabel: z.string().max(40).optional().default(""),
+  customTaxLabel: z.string().max(40).optional().default(""),
+  customTotalLabel: z.string().max(60).optional().default(""),
+
+  // Visibility Toggles
   showCompanyAddress: z.boolean().default(true),
   showCompanyTrn: z.boolean().default(true),
   showProjectColumn: z.boolean().default(false),
@@ -23,11 +48,25 @@ export const templateSettingsSchema = z.object({
   showNotes: z.boolean().default(true),
   showCustomFields: z.boolean().default(true),
   showPageNumbers: z.boolean().default(true),
+
+  // Payment, Bank & Remittance Box
   showPaymentInstructions: z.boolean().default(false),
   paymentInstructions: z.string().max(1000).optional().default(""),
+  bankName: z.string().max(100).optional().default(""),
+  bankAccountName: z.string().max(100).optional().default(""),
+  bankAccountNumber: z.string().max(50).optional().default(""),
+  bankIban: z.string().max(50).optional().default(""),
+  bankSwiftBic: z.string().max(30).optional().default(""),
+
+  // Signatures & Stamps (Single & Dual)
   showSignatureBlock: z.boolean().default(false),
+  signatureLayout: z.enum(["single", "dual"]).default("single"),
   signatureLabel: z.string().max(100).optional().default("Authorized Signatory"),
   signatureImageUrl: z.string().nullable().optional(),
+  secondarySignatureLabel: z.string().max(100).optional().default("Prepared By"),
+  secondarySignatureImageUrl: z.string().nullable().optional(),
+
+  // Watermark & Custom HTML
   watermarkText: z.string().max(30).optional().default(""),
   customHtml: z.string().max(50000).optional().default(""),
 });
@@ -36,6 +75,14 @@ export type TemplateSettings = z.infer<typeof templateSettingsSchema>;
 
 export const defaultSettings: TemplateSettings = {
   templateType: "modern",
+  letterheadMode: "digital",
+  letterheadBackgroundUrl: null,
+  marginTop: 40,
+  marginBottom: 40,
+  marginLeft: 40,
+  marginRight: 40,
+  hideDigitalHeader: false,
+  hideDigitalFooter: false,
   logoUrl: null,
   logoPosition: "left",
   logoSize: "medium",
@@ -47,6 +94,15 @@ export const defaultSettings: TemplateSettings = {
   fontSize: "normal",
   headerText: "",
   footerText: "Thank you for your business",
+  customDocumentTitle: "",
+  customPartyLabel: "",
+  customDescriptionLabel: "",
+  customQuantityLabel: "",
+  customUnitPriceLabel: "",
+  customDiscountLabel: "",
+  customAmountLabel: "",
+  customTaxLabel: "",
+  customTotalLabel: "",
   showCompanyAddress: true,
   showCompanyTrn: true,
   showProjectColumn: false,
@@ -59,9 +115,17 @@ export const defaultSettings: TemplateSettings = {
   showPageNumbers: true,
   showPaymentInstructions: false,
   paymentInstructions: "",
+  bankName: "",
+  bankAccountName: "",
+  bankAccountNumber: "",
+  bankIban: "",
+  bankSwiftBic: "",
   showSignatureBlock: false,
+  signatureLayout: "single",
   signatureLabel: "Authorized Signatory",
   signatureImageUrl: null,
+  secondarySignatureLabel: "Prepared By",
+  secondarySignatureImageUrl: null,
   watermarkText: "",
   customHtml: "",
 };

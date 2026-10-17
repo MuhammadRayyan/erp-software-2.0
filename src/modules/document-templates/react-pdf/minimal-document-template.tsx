@@ -23,9 +23,41 @@ export function MinimalDocumentTemplate({ data, settings, variant }: { data: Doc
   const hasTax = variant.showTax && settings.showTaxColumn !== false && data.lines.some((l) => l.tax);
   const hasProject = settings.showProjectColumn && data.lines.some((l) => l.project);
 
+  const shouldHideHeader = settings.letterheadMode === "preprinted" || settings.hideDigitalHeader;
+  const shouldHideFooter = settings.letterheadMode === "preprinted" || settings.hideDigitalFooter;
+
+  const pagePadding = {
+    paddingTop: settings.marginTop ?? 44,
+    paddingBottom: settings.marginBottom ?? 44,
+    paddingLeft: settings.marginLeft ?? 44,
+    paddingRight: settings.marginRight ?? 44,
+  };
+
+  const descLabel = settings.customDescriptionLabel || "Description";
+  const qtyLabel = settings.customQuantityLabel || "Qty";
+  const rateLabel = settings.customUnitPriceLabel || "Rate";
+  const discLabel = settings.customDiscountLabel || "Disc";
+  const taxLabel = settings.customTaxLabel || "VAT";
+  const amountLabel = settings.customAmountLabel || "Total";
+
   return (
     <Document>
-      <Page size="A4" style={[localStyles.page, { fontFamily: settings.fontName, fontSize: fontScale.body }]}>
+      <Page size="A4" style={[localStyles.page, pagePadding, { fontFamily: settings.fontName, fontSize: fontScale.body }]}>
+        {/* Optional Full-Page Background Letterhead Overlay */}
+        {settings.letterheadMode === "background" && settings.letterheadBackgroundUrl && (
+          <Image
+            src={settings.letterheadBackgroundUrl}
+            style={{
+              position: "absolute",
+              top: 0,
+              left: 0,
+              width: "100%",
+              height: "100%",
+            }}
+            fixed
+          />
+        )}
+
         {/* Optional Watermark */}
         {watermark && (
           <View style={{ position: "absolute", top: 280, left: 40, right: 40, opacity: 0.06, transform: "rotate(-32deg)", alignItems: "center" }}>
@@ -36,31 +68,35 @@ export function MinimalDocumentTemplate({ data, settings, variant }: { data: Doc
         )}
 
         {/* Optional Header Banner Image */}
-        {settings.headerImageUrl && (
+        {!shouldHideHeader && settings.headerImageUrl && (
           <Image src={settings.headerImageUrl} style={{ width: "100%", height: "auto", marginBottom: 16 }} />
         )}
 
         {/* Header Section */}
         <View style={localStyles.header}>
           <View style={{ flex: 1 }}>
-            {activeLogo && (
-              <View style={{ marginBottom: 8, alignItems: settings.logoPosition === "center" ? "center" : settings.logoPosition === "right" ? "flex-end" : "flex-start" }}>
-                <Image src={activeLogo} style={{ width: logoDims.width, height: logoDims.height, objectFit: "contain" }} />
-              </View>
-            )}
-            <Text style={{ fontSize: 13, fontWeight: "heavy", color: primaryColor, letterSpacing: 0.5 }}>{data.companyName}</Text>
-            {settings.showCompanyAddress !== false && data.companyAddress && (
-              <Text style={{ fontSize: fontScale.subtext, color: "#71717a", maxWidth: 260, marginTop: 2 }}>{data.companyAddress}</Text>
-            )}
-            {settings.showCompanyTrn !== false && data.sellerTrn && (
-              <Text style={{ fontSize: fontScale.subtext, color: "#71717a", marginTop: 1 }}>TRN: {data.sellerTrn}</Text>
-            )}
-            {data.companyEmail && (
-              <Text style={{ fontSize: fontScale.subtext, color: "#71717a" }}>{data.companyEmail}</Text>
-            )}
-            {settings.headerText && (
-              <Text style={{ fontSize: fontScale.subtext, color: "#71717a", marginTop: 2 }}>{settings.headerText}</Text>
-            )}
+            {!shouldHideHeader ? (
+              <>
+                {activeLogo && (
+                  <View style={{ marginBottom: 8, alignItems: settings.logoPosition === "center" ? "center" : settings.logoPosition === "right" ? "flex-end" : "flex-start" }}>
+                    <Image src={activeLogo} style={{ width: logoDims.width, height: logoDims.height, objectFit: "contain" }} />
+                  </View>
+                )}
+                <Text style={{ fontSize: 13, fontWeight: "heavy", color: primaryColor, letterSpacing: 0.5 }}>{data.companyName}</Text>
+                {settings.showCompanyAddress !== false && data.companyAddress && (
+                  <Text style={{ fontSize: fontScale.subtext, color: "#71717a", maxWidth: 260, marginTop: 2 }}>{data.companyAddress}</Text>
+                )}
+                {settings.showCompanyTrn !== false && data.sellerTrn && (
+                  <Text style={{ fontSize: fontScale.subtext, color: "#71717a", marginTop: 1 }}>TRN: {data.sellerTrn}</Text>
+                )}
+                {data.companyEmail && (
+                  <Text style={{ fontSize: fontScale.subtext, color: "#71717a" }}>{data.companyEmail}</Text>
+                )}
+                {settings.headerText && (
+                  <Text style={{ fontSize: fontScale.subtext, color: "#71717a", marginTop: 2 }}>{settings.headerText}</Text>
+                )}
+              </>
+            ) : null}
           </View>
 
           <View style={{ alignItems: "flex-end", minWidth: 150 }}>
@@ -93,13 +129,13 @@ export function MinimalDocumentTemplate({ data, settings, variant }: { data: Doc
         {/* Minimal Table */}
         <View style={localStyles.table}>
           <View style={localStyles.tableHeaderRow}>
-            <Text style={[localStyles.tableCell, { flex: 4, fontWeight: "heavy", textTransform: "uppercase", fontSize: 7.5, color: "#71717a", letterSpacing: 0.5 }]}>Description</Text>
+            <Text style={[localStyles.tableCell, { flex: 4, fontWeight: "heavy", textTransform: "uppercase", fontSize: 7.5, color: "#71717a", letterSpacing: 0.5 }]}>{descLabel}</Text>
             {hasProject && <Text style={[localStyles.tableCell, { flex: 1.5, fontWeight: "heavy", textTransform: "uppercase", fontSize: 7.5, color: "#71717a", letterSpacing: 0.5 }]}>Project</Text>}
-            <Text style={[localStyles.tableCell, { flex: 1, textAlign: "right", fontWeight: "heavy", textTransform: "uppercase", fontSize: 7.5, color: "#71717a", letterSpacing: 0.5 }]}>Qty</Text>
-            <Text style={[localStyles.tableCell, { flex: 1.4, textAlign: "right", fontWeight: "heavy", textTransform: "uppercase", fontSize: 7.5, color: "#71717a", letterSpacing: 0.5 }]}>Rate</Text>
-            {hasDiscount && <Text style={[localStyles.tableCell, { flex: 1.2, textAlign: "right", fontWeight: "heavy", textTransform: "uppercase", fontSize: 7.5, color: "#71717a", letterSpacing: 0.5 }]}>Disc</Text>}
-            {hasTax && <Text style={[localStyles.tableCell, { flex: 1.2, textAlign: "right", fontWeight: "heavy", textTransform: "uppercase", fontSize: 7.5, color: "#71717a", letterSpacing: 0.5 }]}>VAT</Text>}
-            <Text style={[localStyles.tableCell, { flex: 1.5, textAlign: "right", fontWeight: "heavy", textTransform: "uppercase", fontSize: 7.5, color: "#71717a", letterSpacing: 0.5 }]}>Total</Text>
+            <Text style={[localStyles.tableCell, { flex: 1, textAlign: "right", fontWeight: "heavy", textTransform: "uppercase", fontSize: 7.5, color: "#71717a", letterSpacing: 0.5 }]}>{qtyLabel}</Text>
+            <Text style={[localStyles.tableCell, { flex: 1.4, textAlign: "right", fontWeight: "heavy", textTransform: "uppercase", fontSize: 7.5, color: "#71717a", letterSpacing: 0.5 }]}>{rateLabel}</Text>
+            {hasDiscount && <Text style={[localStyles.tableCell, { flex: 1.2, textAlign: "right", fontWeight: "heavy", textTransform: "uppercase", fontSize: 7.5, color: "#71717a", letterSpacing: 0.5 }]}>{discLabel}</Text>}
+            {hasTax && <Text style={[localStyles.tableCell, { flex: 1.2, textAlign: "right", fontWeight: "heavy", textTransform: "uppercase", fontSize: 7.5, color: "#71717a", letterSpacing: 0.5 }]}>{taxLabel}</Text>}
+            <Text style={[localStyles.tableCell, { flex: 1.5, textAlign: "right", fontWeight: "heavy", textTransform: "uppercase", fontSize: 7.5, color: "#71717a", letterSpacing: 0.5 }]}>{amountLabel}</Text>
           </View>
 
           {data.lines.map((line, i) => (
@@ -138,11 +174,47 @@ export function MinimalDocumentTemplate({ data, settings, variant }: { data: Doc
           )}
         </View>
 
-        {/* Payment Instructions */}
-        {settings.showPaymentInstructions && settings.paymentInstructions && (
+        {/* Structured Payment & Bank Remittance Box */}
+        {settings.showPaymentInstructions && (
           <View style={{ marginTop: 14, padding: 8, borderLeftWidth: 2, borderLeftColor: primaryColor, backgroundColor: "#fafafa" }} wrap={false}>
-            <Text style={[localStyles.sectionTitle, { color: primaryColor, marginBottom: 2 }]}>Payment Details</Text>
-            <Text style={{ fontSize: fontScale.subtext, color: "#3f3f46" }}>{settings.paymentInstructions}</Text>
+            <Text style={[localStyles.sectionTitle, { color: primaryColor, marginBottom: 3 }]}>Payment & Bank Details</Text>
+            {(settings.bankName || settings.bankIban || settings.bankAccountNumber) && (
+              <View style={{ marginBottom: 4 }}>
+                {settings.bankName && (
+                  <View style={{ flexDirection: "row", marginBottom: 1.5 }}>
+                    <Text style={{ width: 85, fontSize: fontScale.subtext, color: "#71717a" }}>Bank Name:</Text>
+                    <Text style={{ fontSize: fontScale.subtext, fontWeight: "heavy", color: "#18181b" }}>{settings.bankName}</Text>
+                  </View>
+                )}
+                {settings.bankAccountName && (
+                  <View style={{ flexDirection: "row", marginBottom: 1.5 }}>
+                    <Text style={{ width: 85, fontSize: fontScale.subtext, color: "#71717a" }}>Account Name:</Text>
+                    <Text style={{ fontSize: fontScale.subtext, color: "#18181b" }}>{settings.bankAccountName}</Text>
+                  </View>
+                )}
+                {settings.bankAccountNumber && (
+                  <View style={{ flexDirection: "row", marginBottom: 1.5 }}>
+                    <Text style={{ width: 85, fontSize: fontScale.subtext, color: "#71717a" }}>Account No:</Text>
+                    <Text style={{ fontSize: fontScale.subtext, color: "#18181b" }}>{settings.bankAccountNumber}</Text>
+                  </View>
+                )}
+                {settings.bankIban && (
+                  <View style={{ flexDirection: "row", marginBottom: 1.5 }}>
+                    <Text style={{ width: 85, fontSize: fontScale.subtext, color: "#71717a" }}>IBAN:</Text>
+                    <Text style={{ fontSize: fontScale.subtext, fontWeight: "heavy", color: "#18181b" }}>{settings.bankIban}</Text>
+                  </View>
+                )}
+                {settings.bankSwiftBic && (
+                  <View style={{ flexDirection: "row", marginBottom: 1.5 }}>
+                    <Text style={{ width: 85, fontSize: fontScale.subtext, color: "#71717a" }}>SWIFT / BIC:</Text>
+                    <Text style={{ fontSize: fontScale.subtext, color: "#18181b" }}>{settings.bankSwiftBic}</Text>
+                  </View>
+                )}
+              </View>
+            )}
+            {settings.paymentInstructions && (
+              <Text style={{ fontSize: fontScale.subtext, color: "#3f3f46" }}>{settings.paymentInstructions}</Text>
+            )}
           </View>
         )}
 
@@ -174,9 +246,20 @@ export function MinimalDocumentTemplate({ data, settings, variant }: { data: Doc
           </View>
         )}
 
-        {/* Signature */}
+        {/* Single or Dual Signature Block */}
         {settings.showSignatureBlock && (
-          <View style={{ marginTop: 20, flexDirection: "row", justifyContent: "flex-end" }} wrap={false}>
+          <View style={{ marginTop: 20, flexDirection: "row", justifyContent: settings.signatureLayout === "dual" ? "space-between" : "flex-end" }} wrap={false}>
+            {settings.signatureLayout === "dual" && (
+              <View style={{ alignItems: "center", minWidth: 150 }}>
+                {settings.secondarySignatureImageUrl && (
+                  <Image src={settings.secondarySignatureImageUrl} style={{ width: 120, height: 38, objectFit: "contain", marginBottom: 4 }} />
+                )}
+                <View style={{ width: 150, borderBottomWidth: 0.5, borderBottomColor: "#71717a", marginBottom: 4, height: settings.secondarySignatureImageUrl ? 0 : 28 }} />
+                <Text style={{ fontSize: fontScale.subtext, color: "#71717a" }}>
+                  {settings.secondarySignatureLabel || "Prepared By"}
+                </Text>
+              </View>
+            )}
             <View style={{ alignItems: "center", minWidth: 150 }}>
               {settings.signatureImageUrl && (
                 <Image src={settings.signatureImageUrl} style={{ width: 120, height: 38, objectFit: "contain", marginBottom: 4 }} />
@@ -190,12 +273,12 @@ export function MinimalDocumentTemplate({ data, settings, variant }: { data: Doc
         )}
 
         {/* Optional Footer Banner Image */}
-        {settings.footerImageUrl && (
+        {!shouldHideFooter && settings.footerImageUrl && (
           <Image src={settings.footerImageUrl} style={{ width: "100%", height: "auto", marginTop: 16 }} />
         )}
 
         {/* Footer Text */}
-        {settings.footerText && (
+        {!shouldHideFooter && settings.footerText && (
           <Text style={localStyles.footer}>{settings.footerText}</Text>
         )}
 

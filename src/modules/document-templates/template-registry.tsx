@@ -7,7 +7,7 @@ import { ClassicStatementDocument, type StatementTemplateData } from "./react-pd
 
 import { renderHtmlTemplate } from "./html-templates/render";
 import { getTemplateSettings } from "./template-service";
-import type { TemplateSettings } from "./template-settings";
+import { defaultSettings, templateSettingsSchema, type TemplateSettings } from "./template-settings";
 
 export async function renderInvoicePdf(
   businessId: string,
@@ -23,9 +23,10 @@ export async function renderDocumentPdf(
   userId: string,
   documentType: string,
   data: DocumentTemplateData & { invoiceTitle?: string; customerLabel?: string },
-  overrideSettings?: TemplateSettings,
+  overrideSettings?: Partial<TemplateSettings> | TemplateSettings,
 ): Promise<Buffer> {
-  const settings = overrideSettings || getTemplateSettings(businessId, userId, documentType);
+  const base = overrideSettings ? { ...defaultSettings, ...overrideSettings } : getTemplateSettings(businessId, userId, documentType);
+  const settings = templateSettingsSchema.parse(base);
 
   if (settings.templateType === "custom-html" && settings.customHtml) {
     return renderHtmlTemplate(settings.customHtml, data, settings);
@@ -36,11 +37,11 @@ export async function renderDocumentPdf(
   const showBuyerTrn = ["sales-invoice", "sales-quote", "sales-order", "sales-credit-note"].includes(documentType);
   
   const variant: DocumentTemplateVariant = {
-    title: data.invoiceTitle || "DOCUMENT",
-    partyLabel: data.customerLabel || "PARTY",
+    title: settings.customDocumentTitle || data.invoiceTitle || "DOCUMENT",
+    partyLabel: settings.customPartyLabel || data.customerLabel || "PARTY",
     showDueDate,
     showBuyerTrn,
-    totalLabel: "Total",
+    totalLabel: settings.customTotalLabel || "Total",
     showTax
   };
 
