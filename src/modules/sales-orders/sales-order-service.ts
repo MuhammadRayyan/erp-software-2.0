@@ -159,8 +159,8 @@ export function saveSalesOrder(businessId: string, userId: string, input: SalesO
 export function closeSalesOrder(businessId: string, userId: string, orderId: string) {
   const context = getBusinessDb(businessId, userId);
   const order = context.db.select().from(salesOrders).where(eq(salesOrders.id, orderId)).get();
-  if (!order) throw new Error("Purchase order not found.");
-  if (order.documentStatus !== "active") throw new Error("Only an issued purchase order can be closed.");
+  if (!order) throw new Error("Sales order not found.");
+  if (order.documentStatus !== "active") throw new Error("Only an active sales order can be closed.");
   const now = new Date().toISOString();
   context.db.update(salesOrders).set({ documentStatus: "completed", updatedAt: now }).where(eq(salesOrders.id, orderId)).run();
 }
@@ -168,9 +168,9 @@ export function closeSalesOrder(businessId: string, userId: string, orderId: str
 export function cancelSalesOrder(businessId: string, userId: string, orderId: string) {
   const context = getBusinessDb(businessId, userId);
   const order = context.db.select().from(salesOrders).where(eq(salesOrders.id, orderId)).get();
-  if (!order) throw new Error("Purchase order not found.");
-  if (order.documentStatus === "cancelled") throw new Error("Purchase order has already been cancelled.");
-  if (order.documentStatus === "completed") throw new Error("A closed purchase order cannot be cancelled.");
+  if (!order) throw new Error("Sales order not found.");
+  if (order.documentStatus === "cancelled") throw new Error("Sales order has already been cancelled.");
+  if (order.documentStatus === "completed") throw new Error("A completed sales order cannot be cancelled.");
   const now = new Date().toISOString();
   context.db.update(salesOrders).set({ documentStatus: "cancelled", updatedAt: now }).where(eq(salesOrders.id, orderId)).run();
 }

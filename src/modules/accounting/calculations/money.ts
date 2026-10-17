@@ -34,10 +34,19 @@ export function parseSignedMoneyToMinor(value: string, label = "Amount") {
   return negative ? -minor : minor;
 }
 
-export function minorToInput(minor: number) {
+export function minorToInput(minor: number, minorUnit = 2) {
+  if (!Number.isInteger(minorUnit) || minorUnit < 0 || minorUnit > 6) {
+    throw new Error("Currency minor unit must be between 0 and 6.");
+  }
   const sign = minor < 0 ? "-" : "";
   const absolute = Math.abs(minor);
-  return `${sign}${Math.floor(absolute / 100)}.${String(absolute % 100).padStart(2, "0")}`;
+  if (minorUnit === 0) {
+    return `${sign}${absolute}`;
+  }
+  const scale = 10 ** minorUnit;
+  const whole = Math.floor(absolute / scale);
+  const fraction = String(absolute % scale).padStart(minorUnit, "0");
+  return `${sign}${whole}.${fraction}`;
 }
 
 export function parseQuantityToMicros(value: string) {

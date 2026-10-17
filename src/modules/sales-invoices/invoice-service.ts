@@ -787,6 +787,9 @@ export function voidInvoice(businessId: string, userId: string, invoiceId: strin
   if (allocatedForInvoice(context.sqlite, invoiceId) > 0) {
     throw new Error("Cannot void an invoice that has receipt allocations.");
   }
+  if (context.sqlite.prepare("SELECT 1 FROM delivery_notes WHERE sales_invoice_id = ? AND document_status != 'void' LIMIT 1").get(invoiceId)) {
+    throw new Error("Cannot void an invoice that has active delivery notes. Void the delivery notes first.");
+  }
   const now = new Date().toISOString();
   context.sqlite.transaction(() => {
     assertVatSourceUnlocked(context.sqlite, "sales_invoice", invoiceId, invoice.taxDate);

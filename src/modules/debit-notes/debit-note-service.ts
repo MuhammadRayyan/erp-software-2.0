@@ -123,7 +123,6 @@ export function saveDebitNote(businessId: string, userId: string, data: DebitNot
   const totals = totalsForLines(lines);
   const amounts = totals;
   const base = convertDocumentLinesToBase(lines, rate);
-  const baseCarryingAmountReleased = Math.round(amounts.totalMinor * parseFloat(rate.exchangeRateToBase));
 
   function effectiveProjectId(lineProjectId: string | null, headerProjectId: string | null) {
     if (lineProjectId) return lineProjectId;
@@ -179,7 +178,7 @@ export function saveDebitNote(businessId: string, userId: string, data: DebitNot
       
       context.sqlite.prepare(`UPDATE debit_notes SET supplier_id = ?, project_id = ?, purchase_invoice_id = ?, amounts_include_tax = ?, debit_note_date = ?, tax_date = ?, reference = ?, document_status = ?, subtotal_minor = ?, tax_minor = ?, total_minor = ?, currency_code = ?, exchange_rate_to_base = ?, exchange_rate_date = ?, exchange_rate_source = ?, base_subtotal_minor = ?, base_tax_minor = ?, base_total_minor = ?, updated_at = ? WHERE id = ?`).run(data.supplierId, data.projectId || null, // fix string | undefined
  (data.purchaseInvoiceId || null) as string | null, data.amountsIncludeTax ? 1 : 0, data.date, taxDate, (data.reference ?? null) as string | null, // fix ref
- status, amounts.subtotalMinor, amounts.taxMinor, amounts.totalMinor, rate.currencyCode, rate.exchangeRateToBase, rate.exchangeRateDate, rate.exchangeRateSource, base.baseSubtotalMinor, base.baseTaxMinor, baseCarryingAmountReleased, now, noteId);
+ status, amounts.subtotalMinor, amounts.taxMinor, amounts.totalMinor, rate.currencyCode, rate.exchangeRateToBase, rate.exchangeRateDate, rate.exchangeRateSource, base.baseSubtotalMinor, base.baseTaxMinor, base.baseTotalMinor, now, noteId);
       context.sqlite.prepare("DELETE FROM debit_note_lines WHERE debit_note_id = ?").run(noteId);
     } else {
       number = allocateNumber(context.sqlite, "debitNote");
@@ -195,7 +194,7 @@ export function saveDebitNote(businessId: string, userId: string, data: DebitNot
         )
       `).run(id, number, data.supplierId, data.projectId || null, // fix string | undefined
  (data.purchaseInvoiceId || null) as string | null, data.amountsIncludeTax ? 1 : 0, data.date, taxDate, (data.reference ?? null) as string | null, // fix ref
- status, amounts.subtotalMinor, amounts.taxMinor, amounts.totalMinor, rate.currencyCode, rate.exchangeRateToBase, rate.exchangeRateDate, rate.exchangeRateSource, base.baseSubtotalMinor, base.baseTaxMinor, baseCarryingAmountReleased, userId, now, now);
+ status, amounts.subtotalMinor, amounts.taxMinor, amounts.totalMinor, rate.currencyCode, rate.exchangeRateToBase, rate.exchangeRateDate, rate.exchangeRateSource, base.baseSubtotalMinor, base.baseTaxMinor, base.baseTotalMinor, userId, now, now);
     }
     
     insertLines(context.db, id, lines);

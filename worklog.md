@@ -2191,4 +2191,37 @@ Work Log:
 Stage Summary:
 - Options 2, 3, and 4 are fully implemented, verified, tested, documented, and built. The ERP platform now features Find & Recode bulk transaction editing, a 30/60/90-Day Liquidity & Cash Flow Forecast Treasury Engine, and Inline Customer Advance Credit / Supplier Prepayment Drawdowns.
 
+---
+Task ID: DEEP-AUDIT-HARDENING
+Agent: main (Antigravity)
+Task: Comprehensive in-depth manual audit, core commercial flow verification, accounting math verification, security verification, and lifecycle hardening
+
+Work Log:
+- Performed an exhaustive manual audit across 6 primary ERP subsystems:
+  1. Sales Commercial Flow: Quotation → Revisions → Sales Order → Sales Invoice → Delivery Note → Payment/Receipt (FIFO & Advance Pool) → Credit Note.
+  2. Purchase Commercial Flow: Purchase Quote → Revisions → Purchase Order → Goods Receipt → Purchase Bill → Supplier Payment (Prepayment Pool) → Debit Note.
+  3. Accounting & Math Integrity: Double-entry equilibrium, integer minor units (`_minor`), UAE VAT 5% splitting, discount calculations, multi-currency carrying amounts and realized FX release.
+  4. Security & Permissions: Edge proxy (`src/proxy.ts`), `requireApiAuth` on all API routes, `requireModule` on server actions, parameterized SQL queries, and multi-tenant database isolation.
+  5. Database Schema & Storage: Migrations 0–30, foreign keys, cascades, indexes, and connection pool busy timeouts.
+  6. UI/UX Consistency: Form validation schemas, optimistic UI prevention, real-time totals calculation, and error guards.
+- Code Fixes Applied:
+  - `src/modules/sales-orders/sales-order-service.ts`: Corrected copy-paste error messages in `closeSalesOrder` and `cancelSalesOrder` from "purchase order" to "sales order".
+  - `src/modules/sales-invoices/invoice-service.ts`: Hardened `voidInvoice` to actively check for and reject voiding if active (non-void) delivery notes exist, preventing orphan COGS entries.
+  - `src/modules/purchase-invoices/purchase-invoice-service.ts`:
+    - Updated `paidForPurchaseInvoice` to include linked posted debit notes alongside payment allocations.
+    - Hardened `voidPurchaseInvoice` to block voiding if active goods receipts or debit notes exist.
+  - `src/modules/debit-notes/debit-note-service.ts`: Replaced unscaled float-based `Math.round(amounts.totalMinor * parseFloat(rate.exchangeRateToBase))` with canonical `base.baseTotalMinor` computed via `convertDocumentLinesToBase`.
+  - `src/modules/accounting/calculations/money.ts`: Enhanced `minorToInput(minor: number, minorUnit = 2)` to dynamically format amounts for arbitrary minor units (0 to 6 decimals, defaulting to 2).
+- Verification & Test Suite:
+  - Created `tests/deep-audit-verification.test.ts` covering all 9 audit stages (Core math, discounts, carrying release, concurrency locks, multi-tenant isolation, sales pipeline, sales order lifecycle, purchase pipeline, and money utilities).
+  - Integrated into `package.json` `npm test` script.
+  - `npm test`: 176/176 tests passing across all 27 suites with 0 failures.
+  - `npm run typecheck`: TypeScript passes with 0 errors.
+  - `npm run lint`: ESLint passes with 0 errors and 0 warnings.
+  - `npm run build`: Production Next.js build succeeds with 100% static and dynamic routes compiled.
+
+Stage Summary:
+- Deep audit, core commercial flow verification, accounting math verification, and lifecycle hardening complete with all regression suites green.
+
+
 

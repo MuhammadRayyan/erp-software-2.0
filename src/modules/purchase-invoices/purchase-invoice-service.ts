@@ -31,11 +31,14 @@ function deriveStatus(documentStatus: PurchaseInvoiceStatus, totalMinor: number,
 
 export function paidForPurchaseInvoice(sqlite: ReturnType<typeof getBusinessDb>["sqlite"], invoiceId: string) {
   const row = sqlite.prepare(`
-    SELECT COALESCE(SUM(spa.amount_minor), 0) AS paid_minor
-    FROM supplier_payment_allocations spa
-    INNER JOIN supplier_payments sp ON sp.id = spa.payment_id AND sp.document_status = 'posted'
-    WHERE spa.purchase_invoice_id = ?
-  `).get(invoiceId) as { paid_minor: number };
+    SELECT
+      COALESCE((SELECT SUM(spa.amount_minor) FROM supplier_payment_allocations spa
+        INNER JOIN supplier_payments sp ON sp.id = spa.payment_id AND sp.document_status = 'posted'
+        WHERE spa.purchase_invoice_id = ?), 0)
+      + COALESCE((SELECT SUM(dn.total_minor) FROM debit_notes dn
+        WHERE dn.purchase_invoice_id = ? AND dn.document_status = 'posted'), 0)
+      AS paid_minor
+  `).get(invoiceId, invoiceId) as { paid_minor: number };
   return row.paid_minor;
 }
 
@@ -476,6 +479,12 @@ export function voidPurchaseInvoice(businessId: string, userId: string, invoiceI
   if (!invoice) throw new Error("Purchase invoice not found.");
   if (invoice.documentStatus !== "posted") throw new Error("Only posted purchase invoices can be voided.");
   if (paidForPurchaseInvoice(context.sqlite, invoiceId) > 0) throw new Error("Cannot void a purchase invoice that has payment allocations.");
+  if (context.sqlite.prepare("SELECT 1 FROM goods_receipts WHERE purchase_invoice_id = ? AND document_status != 'void' LIMIT 1").get(invoiceId)) {
+    throw new Error("Cannot void a purchase invoice that has active goods receipts. Void the goods receipts first.");
+  }
+  if (context.sqlite.prepare("SELECT 1 FROM debit_notes WHERE purchase_invoice_id = ? AND document_status != 'void' LIMIT 1").get(invoiceId)) {
+    throw new Error("Cannot void a purchase invoice that has active debit notes. Void the debit notes first.");
+  }
   const now = new Date().toISOString();
   context.sqlite.transaction(() => {
     assertVatSourceUnlocked(context.sqlite, "purchase_invoice", invoiceId, invoice.taxDate);

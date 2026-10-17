@@ -5,6 +5,31 @@ All notable changes since the original `erp-software-2.0-antigravity-edits` uplo
 Full per-task detail (file lists, verification transcripts, QA walkthroughs) lives in `worklog.md` at the repository root.
 
 
+## Core Commercial Flow Verification, Deep Accounting Audit & Hardening (improvements-settings-v1)
+
+- **Comprehensive End-to-End Deep Audit Verification Suite (`tests/deep-audit-verification.test.ts`)**:
+  - Implemented exhaustive 9-stage verification test covering core mathematical invariants, multi-tenant isolation, concurrency numbering sequences, commercial pipelines (Quotes → Revisions → Orders → Delivery/Goods Receipts → Invoices → Payments/Receipts), double-entry balance equilibrium ($\sum \text{Debits} \equiv \sum \text{Credits}$), and lifecycle guards.
+  - Successfully added to root `npm test` script; all 176 automated regression tests passing with 0 failures.
+
+- **Sales Order Lifecycle Guard & Error Message Accuracy**:
+  - Corrected copy-paste error messages in `sales-order-service.ts` where `closeSalesOrder` and `cancelSalesOrder` erroneously referenced "Purchase order".
+  - Strictly enforce proper lifecycle transitions: only active sales orders can be closed, and completed orders cannot be cancelled.
+
+- **Sales Invoice Voiding Delivery Note Guard**:
+  - Hardened `voidInvoice` in `invoice-service.ts` to actively query and block voiding if any active (non-void) delivery notes exist.
+  - Guarantees inventory COGS and stock movement integrity by preventing orphaned delivery notes.
+
+- **Purchase Invoice Lifecycle Hardening & Accurate Settled Math**:
+  - Updated `paidForPurchaseInvoice` in `purchase-invoice-service.ts` to include linked posted debit notes alongside supplier payment allocations, ensuring invoice balance properly reflects debit adjustments.
+  - Hardened `voidPurchaseInvoice` to reject voiding if active goods receipts or debit notes are attached to the bill.
+
+- **Debit Note Multi-Currency & Minor Unit Precision**:
+  - Replaced manual unscaled calculation `Math.round(amounts.totalMinor * parseFloat(...))` in `debit-note-service.ts` with `base.baseTotalMinor` evaluated through `convertDocumentLinesToBase`.
+  - Ensures accurate multi-currency carrying amounts and eliminates rounding discrepancies across currencies with different minor units (e.g. 0-decimal JPY vs 3-decimal BHD).
+
+- **Multi-Currency Dynamic Minor Unit Input Formatting**:
+  - Updated `minorToInput` in `money.ts` to accept configurable `minorUnit` (0 to 6, default 2) for precision formatting across all world currencies.
+
 ## Find & Recode, Liquidity & Cash Flow Forecast Engine, and Inline Customer Credit / Supplier Prepayment Drawdown (improvements-settings-v1)
 
 - **Option 4: Inline Customer Advance Credit & Supplier Prepayment Drawdown**:
