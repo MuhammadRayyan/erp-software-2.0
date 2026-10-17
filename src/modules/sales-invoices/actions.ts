@@ -11,7 +11,11 @@ import {
   duplicateInvoice,
   updateInvoice,
   voidInvoice,
+  batchPostInvoices,
+  batchVoidInvoices,
+  batchDeleteInvoices,
   type InvoiceSaveIntent,
+  type BatchActionResult,
 } from "./invoice-service";
 
 export type InvoiceActionResult = { error?: string; fieldErrors?: Record<string, string[]> };
@@ -99,4 +103,25 @@ export async function voidInvoiceAction(businessId: string, invoiceId: string) {
   } catch (error) {
     return { error: error instanceof Error ? error.message : "The invoice could not be voided." };
   }
+}
+
+export async function batchPostInvoicesAction(businessId: string, invoiceIds: string[]): Promise<BatchActionResult> {
+  const { user } = await requireModule(businessId, "sales");
+  const result = batchPostInvoices(businessId, user.id, invoiceIds);
+  revalidatePath(`/b/${businessId}/sales/invoices`);
+  return result;
+}
+
+export async function batchVoidInvoicesAction(businessId: string, invoiceIds: string[]): Promise<BatchActionResult> {
+  const { user } = await requireModule(businessId, "sales");
+  const result = batchVoidInvoices(businessId, user.id, invoiceIds);
+  revalidatePath(`/b/${businessId}/sales/invoices`);
+  return result;
+}
+
+export async function batchDeleteInvoicesAction(businessId: string, invoiceIds: string[]): Promise<BatchActionResult> {
+  const { user } = await requireModule(businessId, "sales");
+  const result = batchDeleteInvoices(businessId, user.id, invoiceIds);
+  revalidatePath(`/b/${businessId}/sales/invoices`);
+  return result;
 }

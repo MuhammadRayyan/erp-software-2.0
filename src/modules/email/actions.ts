@@ -174,3 +174,108 @@ export async function resetEmailTemplateAction(businessId: string, templateType:
   }
 }
 
+export type BatchEmailResult = {
+  sentCount: number;
+  skippedCount: number;
+  failedCount: number;
+  errors: { id: string; number?: string; error: string }[];
+};
+
+export async function batchSendDocumentEmailsAction(
+  businessId: string,
+  documentType: "sales-invoice",
+  documentIds: string[],
+  options?: {
+    customNote?: string;
+    attachPdf?: boolean;
+  }
+): Promise<BatchEmailResult> {
+  const { getInvoice } = await import("@/modules/sales-invoices/invoice-service");
+  const { buildDocumentEmailContext, buildDocumentEmailDefaults } = await import("./email-defaults");
+
+  const req = new Request("http://localhost/api/dummy", { method: "POST" });
+  const { session, access, error: authError } = await requireApiAuth(req, {
+    businessId,
+    module: "sales",
+  });
+  if (authError || !session || !access) {
+    throw new Error("Unauthorized");
+  }
+
+  const result: BatchEmailResult = { sentCount: 0, skippedCount: 0, failedCount: 0, errors: [] };
+  const attachPdf = options?.attachPdf ?? true;
+
+  for (const documentId of documentIds) {
+    try {
+      const record = getInvoice(businessId, session.user.id, documentId);
+      if (!record) {
+        result.failedCount++;
+        result.errors.push({ id: documentId, error: "Invoice not found" });
+        continue;
+      }
+
+      const email = record.customer.email?.trim();
+      if (!email) {
+        result.skippedCount++;
+        result.errors.push({ id: documentId, number: record.invoice.invoiceNumber, error: "Customer has no email address" });
+        continue;
+      }
+
+      const context = buildDocumentEmailContext(
+        access.business.name,
+        "Invoice",
+        {
+          currencyCode: record.invoice.currencyCode,
+          documentNumber: record.invoice.invoiceNumber,
+          documentDate: record.invoice.invoiceDate,
+          dueDate: record.invoice.dueDate,
+          partyName: record.customer.name,
+          totalMinor: record.invoice.totalMinor,
+          documentStatus: record.invoice.documentStatus,
+          balanceMinor: record.balanceMinor,
+        },
+        email
+      );
+
+      const defaults = buildDocumentEmailDefaults(context, email);
+      const subject = defaults.subject;
+      const bodyHtml = options?.customNote
+        ? `${defaults.bodyHtml}<p style="margin-top: 16px; padding: 12px; background: #f4f4f5; border-radius: 6px;"><em>${options.customNote}</em></p>`
+        : defaults.bodyHtml;
+
+      const res = await sendDocumentEmailAction(
+        businessId,
+        documentType,
+        documentId,
+        record.invoice.invoiceNumber,
+        {
+          to: email,
+          subject,
+          bodyHtml,
+          bodyText: defaults.bodyText,
+          attachPdf,
+        }
+      );
+
+      if (res.ok && res.status === "sent") {
+        result.sentCount++;
+      } else {
+        result.failedCount++;
+        result.errors.push({
+          id: documentId,
+          number: record.invoice.invoiceNumber,
+          error: res.ok ? (res.errorMessage || "Send failed") : res.error,
+        });
+      }
+    } catch (err) {
+      result.failedCount++;
+      result.errors.push({
+        id: documentId,
+        error: err instanceof Error ? err.message : "Failed to send email",
+      });
+    }
+  }
+
+  return result;
+}
+

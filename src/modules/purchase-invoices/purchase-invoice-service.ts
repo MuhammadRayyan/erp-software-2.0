@@ -493,3 +493,124 @@ export function voidPurchaseInvoice(businessId: string, userId: string, invoiceI
     context.sqlite.prepare("UPDATE purchase_invoices SET document_status = 'void', voided_at = ?, updated_at = ? WHERE id = ?").run(now, now, invoiceId);
   }).immediate();
 }
+
+export function postPurchaseInvoiceDoc(businessId: string, userId: string, invoiceId: string) {
+  const record = getPurchaseInvoice(businessId, userId, invoiceId);
+  if (!record) throw new Error("Purchase invoice not found.");
+  if (record.invoice.documentStatus === "posted") return;
+  if (record.invoice.documentStatus === "void") throw new Error("A void purchase invoice cannot be posted.");
+
+  const context = getBusinessDb(businessId, userId);
+  const minorUnit = getCurrency(context.sqlite, record.invoice.currencyCode).minor_unit;
+  savePurchaseInvoice(
+    businessId,
+    userId,
+    {
+      supplierId: record.invoice.supplierId,
+      projectId: record.invoice.projectId ?? "",
+      currencyCode: record.invoice.currencyCode,
+      exchangeRateToBase: record.invoice.exchangeRateToBase,
+      exchangeRateDate: record.invoice.exchangeRateDate,
+      exchangeRateSource: record.invoice.exchangeRateSource as any,
+      supplierInvoiceNumber: record.invoice.supplierInvoiceNumber,
+      invoiceDate: record.invoice.invoiceDate,
+      taxDate: record.invoice.taxDate,
+      dueDate: record.invoice.dueDate,
+      reference: record.invoice.reference ?? "",
+      notes: record.invoice.notes ?? "",
+      terms: record.invoice.terms ?? "",
+      purchaseOrderId: record.invoice.purchaseOrderId ?? "",
+      lines: record.lines.map((line) => ({
+        itemId: line.itemId ?? "",
+        description: line.description,
+        quantity: quantityMicrosToInput(line.quantityMicros),
+        unitPrice: minorToCurrencyInput(line.unitPriceMinor, minorUnit),
+        discountType: (line.discountType ?? "none") as any,
+        discountValue: line.discountValue ?? "0",
+        expenseAccountId: line.expenseAccountId,
+        taxCodeId: line.taxCodeId,
+        projectId: line.projectId ?? "",
+      })),
+    },
+    "post",
+    invoiceId,
+  );
+}
+
+export type BatchPurchaseActionResult = {
+  successCount: number;
+  failedCount: number;
+  errors: { id: string; number?: string; error: string }[];
+};
+
+export function batchPostPurchaseInvoices(businessId: string, userId: string, invoiceIds: string[]): BatchPurchaseActionResult {
+  const result: BatchPurchaseActionResult = { successCount: 0, failedCount: 0, errors: [] };
+  for (const id of invoiceIds) {
+    try {
+      const record = getPurchaseInvoice(businessId, userId, id);
+      if (!record) {
+        result.failedCount++;
+        result.errors.push({ id, error: "Bill not found" });
+        continue;
+      }
+      if (record.invoice.documentStatus === "posted") {
+        result.successCount++;
+        continue;
+      }
+      if (record.invoice.documentStatus === "void") {
+        result.failedCount++;
+        result.errors.push({ id, number: record.invoice.internalNumber, error: "Cannot post a void bill" });
+        continue;
+      }
+      postPurchaseInvoiceDoc(businessId, userId, id);
+      result.successCount++;
+    } catch (err) {
+      result.failedCount++;
+      result.errors.push({ id, error: err instanceof Error ? err.message : "Posting failed" });
+    }
+  }
+  return result;
+}
+
+export function batchVoidPurchaseInvoices(businessId: string, userId: string, invoiceIds: string[]): BatchPurchaseActionResult {
+  const result: BatchPurchaseActionResult = { successCount: 0, failedCount: 0, errors: [] };
+  for (const id of invoiceIds) {
+    try {
+      const record = getPurchaseInvoice(businessId, userId, id);
+      if (!record) {
+        result.failedCount++;
+        result.errors.push({ id, error: "Bill not found" });
+        continue;
+      }
+      if (record.invoice.documentStatus === "void") {
+        result.successCount++;
+        continue;
+      }
+      if (record.invoice.documentStatus === "draft") {
+        deletePurchaseInvoice(businessId, userId, id);
+        result.successCount++;
+        continue;
+      }
+      voidPurchaseInvoice(businessId, userId, id);
+      result.successCount++;
+    } catch (err) {
+      result.failedCount++;
+      result.errors.push({ id, number: (getPurchaseInvoice(businessId, userId, id)?.invoice.internalNumber) || id, error: err instanceof Error ? err.message : "Void failed" });
+    }
+  }
+  return result;
+}
+
+export function batchDeletePurchaseInvoices(businessId: string, userId: string, invoiceIds: string[]): BatchPurchaseActionResult {
+  const result: BatchPurchaseActionResult = { successCount: 0, failedCount: 0, errors: [] };
+  for (const id of invoiceIds) {
+    try {
+      deletePurchaseInvoice(businessId, userId, id);
+      result.successCount++;
+    } catch (err) {
+      result.failedCount++;
+      result.errors.push({ id, error: err instanceof Error ? err.message : "Delete failed" });
+    }
+  }
+  return result;
+}

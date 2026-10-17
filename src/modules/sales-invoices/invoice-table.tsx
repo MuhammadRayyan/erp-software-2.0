@@ -1,8 +1,9 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, useTransition } from "react";
 import Link from "next/link";
-import { ChevronRight, MoreHorizontal, Eye, FileEdit, Download, CircleDollarSign } from "lucide-react";
+import { toast } from "sonner";
+import { ChevronRight, MoreHorizontal, Eye, FileEdit, Download, CircleDollarSign, CheckCircle2, FileArchive, Mail, Ban } from "lucide-react";
 import { 
   useLegacyTable as useTable,
   getCoreRowModel as createCoreRowModel,
@@ -23,12 +24,16 @@ import { DensityToggle } from "@/components/density-toggle";
 import { useTableDensity } from "@/components/use-table-density";
 import { TableTotalsBar, renderMultiCurrencyString } from "@/components/table-totals-bar";
 import { BatchActionBar } from "@/components/batch-action-bar";
+import { batchPostInvoicesAction, batchVoidInvoicesAction, batchDeleteInvoicesAction } from "./actions";
+import { BatchEmailModal } from "./batch-email-modal";
+import { BatchConfirmModal } from "@/components/documents/batch-confirm-modal";
 
 export type InvoiceRow = {
   id: string;
   invoiceNumber: string;
   customerId: string;
   customerName: string;
+  customerEmail?: string | null;
   invoiceDate: string;
   dueDate: string;
   totalMinor: number;
@@ -74,6 +79,12 @@ export function InvoiceTable({
   const [toDate, setToDate] = useState("");
   const [sorting, setSorting] = useState<SortingState>([]);
   const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
+  const [isPending, startTransition] = useTransition();
+  const [emailModalOpen, setEmailModalOpen] = useState(false);
+  const [confirmModal, setConfirmModal] = useState<{
+    type: "void" | "post" | "delete";
+    open: boolean;
+  } | null>(null);
 
   const customerOptions = useMemo(
     () => Array.from(new Map(invoices.map((invoice) => [invoice.customerId, invoice.customerName])).entries()).sort((a, b) => a[1].localeCompare(b[1])),
@@ -383,35 +394,212 @@ export function InvoiceTable({
       />
     )}
 
-    <BatchActionBar
-      selectedCount={Object.keys(rowSelection).filter((k) => rowSelection[k]).length}
-      totalCount={rows.length}
-      onClearSelection={() => setRowSelection({})}
-      onSelectAll={() => table.toggleAllRowsSelected(true)}
-      onExportSelected={() => {
-        const selected = table.getSelectedRowModel().rows.map((r: any) => r.original);
-        const headers = ["Invoice Number", "Customer", "Date", "Due Date", "Currency", "Total", "Balance", "Document Status", "Payment Status"];
-        const lines = selected.map((r: any) => [
-          `"${r.invoiceNumber}"`,
-          `"${(r.customerName || "").replace(/"/g, '""')}"`,
-          r.invoiceDate,
-          r.dueDate,
-          r.currencyCode,
-          (r.totalMinor / 100).toFixed(2),
-          (r.balanceMinor / 100).toFixed(2),
-          r.documentStatus,
-          r.paymentStatus || "",
-        ]);
-        const csvContent = [headers.join(","), ...lines.map((l: any) => l.join(","))].join("\n");
-        const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement("a");
-        a.href = url;
-        a.download = `sales-invoices-selected-${new Date().toISOString().slice(0, 10)}.csv`;
-        a.click();
-        URL.revokeObjectURL(url);
-      }}
-      onPrintSelected={() => window.print()}
-    />
+    {(() => {
+      const selectedInvoices: InvoiceRow[] = table.getSelectedRowModel().rows.map((r: any) => r.original);
+      const selectedDrafts = selectedInvoices.filter((i) => i.documentStatus === "draft");
+      const selectedCount = selectedInvoices.length;
+
+      const handleBatchPost = () => {
+        startTransition(async () => {
+          try {
+            const draftIds = selectedDrafts.map((i) => i.id);
+            const res = await batchPostInvoicesAction(businessId, draftIds);
+            if (res.successCount > 0) {
+              toast.success(`Posted ${res.successCount} draft ${res.successCount === 1 ? "invoice" : "invoices"} to the General Ledger.`);
+              setRowSelection({});
+            }
+            if (res.failedCount > 0) {
+              toast.error(`Failed to post ${res.failedCount} invoices.`);
+            }
+          } catch (err) {
+            toast.error(err instanceof Error ? err.message : "Batch post failed.");
+          }
+        });
+      };
+
+      const handleDownloadZip = async () => {
+        try {
+          toast.info("Generating batch PDF archive...");
+          const res = await fetch(`/api/businesses/${businessId}/documents/sales-invoice/batch-pdf`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ documentIds: selectedInvoices.map((i) => i.id) }),
+          });
+          if (!res.ok) throw new Error("Batch download failed");
+          const blob = await res.blob();
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement("a");
+          a.href = url;
+          a.download = `sales-invoices-batch-${new Date().toISOString().slice(0, 10)}.zip`;
+          a.click();
+          URL.revokeObjectURL(url);
+          toast.success("Download started!");
+        } catch {
+          toast.error("Failed to generate batch PDF archive.");
+        }
+      };
+
+      const handleBatchVoid = () => {
+        startTransition(async () => {
+          try {
+            const res = await batchVoidInvoicesAction(businessId, selectedInvoices.map((i) => i.id));
+            if (res.successCount > 0) {
+              toast.success(`Successfully voided ${res.successCount} ${res.successCount === 1 ? "invoice" : "invoices"}.`);
+              setRowSelection({});
+              setConfirmModal(null);
+            }
+            if (res.failedCount > 0) {
+              toast.error(`Could not void ${res.failedCount} invoices (they may have existing payment allocations).`);
+            }
+          } catch (err) {
+            toast.error(err instanceof Error ? err.message : "Batch void failed.");
+          }
+        });
+      };
+
+      const handleBatchDelete = () => {
+        startTransition(async () => {
+          try {
+            const draftIds = selectedDrafts.map((i) => i.id);
+            const res = await batchDeleteInvoicesAction(businessId, draftIds);
+            if (res.successCount > 0) {
+              toast.success(`Deleted ${res.successCount} draft invoices.`);
+              setRowSelection({});
+              setConfirmModal(null);
+            }
+          } catch (err) {
+            toast.error(err instanceof Error ? err.message : "Batch delete failed.");
+          }
+        });
+      };
+
+      return (
+        <>
+          <BatchActionBar
+            selectedCount={selectedCount}
+            totalCount={rows.length}
+            onClearSelection={() => setRowSelection({})}
+            onSelectAll={() => table.toggleAllRowsSelected(true)}
+            onExportSelected={() => {
+              const headers = ["Invoice Number", "Customer", "Date", "Due Date", "Currency", "Total", "Balance", "Document Status", "Payment Status"];
+              const lines = selectedInvoices.map((r: any) => [
+                `"${r.invoiceNumber}"`,
+                `"${(r.customerName || "").replace(/"/g, '""')}"`,
+                r.invoiceDate,
+                r.dueDate,
+                r.currencyCode,
+                (r.totalMinor / 100).toFixed(2),
+                (r.balanceMinor / 100).toFixed(2),
+                r.documentStatus,
+                r.paymentStatus || "",
+              ]);
+              const csvContent = [headers.join(","), ...lines.map((l: any) => l.join(","))].join("\n");
+              const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+              const url = URL.createObjectURL(blob);
+              const a = document.createElement("a");
+              a.href = url;
+              a.download = `sales-invoices-selected-${new Date().toISOString().slice(0, 10)}.csv`;
+              a.click();
+              URL.revokeObjectURL(url);
+            }}
+            onPrintSelected={() => window.print()}
+            onDeleteSelected={selectedDrafts.length > 0 && selectedDrafts.length === selectedCount ? () => setConfirmModal({ type: "delete", open: true }) : undefined}
+            deleteLabel={`Delete Drafts (${selectedDrafts.length})`}
+            isDeleting={isPending}
+          >
+            {selectedDrafts.length > 0 && (
+              <Button
+                type="button"
+                variant="secondary"
+                size="sm"
+                onClick={handleBatchPost}
+                disabled={isPending}
+                className="h-8 gap-1.5 text-xs text-primary font-medium hover:bg-primary/10"
+              >
+                <CheckCircle2 className="size-3.5" /> Post Drafts ({selectedDrafts.length})
+              </Button>
+            )}
+
+            <Button
+              type="button"
+              variant="secondary"
+              size="sm"
+              onClick={() => setEmailModalOpen(true)}
+              disabled={isPending}
+              className="h-8 gap-1.5 text-xs"
+            >
+              <Mail className="size-3.5" /> Email Invoices
+            </Button>
+
+            <Button
+              type="button"
+              variant="secondary"
+              size="sm"
+              onClick={handleDownloadZip}
+              disabled={isPending}
+              className="h-8 gap-1.5 text-xs"
+            >
+              <FileArchive className="size-3.5" /> Download ZIP
+            </Button>
+
+            <Button
+              type="button"
+              variant="secondary"
+              size="sm"
+              onClick={() => setConfirmModal({ type: "void", open: true })}
+              disabled={isPending}
+              className="h-8 gap-1.5 text-xs text-danger hover:text-danger hover:bg-danger/10"
+            >
+              <Ban className="size-3.5" /> Void Selected
+            </Button>
+          </BatchActionBar>
+
+          <BatchEmailModal
+            open={emailModalOpen}
+            onOpenChange={setEmailModalOpen}
+            businessId={businessId}
+            invoices={selectedInvoices.map((inv) => ({
+              id: inv.id,
+              invoiceNumber: inv.invoiceNumber,
+              customerName: inv.customerName,
+              customerEmail: inv.customerEmail,
+              totalMinor: inv.totalMinor,
+              currencyCode: inv.currencyCode,
+            }))}
+            onSuccess={() => setRowSelection({})}
+          />
+
+          {confirmModal && confirmModal.type === "void" && (
+            <BatchConfirmModal
+              open={confirmModal.open}
+              onOpenChange={(open) => setConfirmModal(open ? confirmModal : null)}
+              title="Void Selected Invoices"
+              description="Are you sure you want to void the selected invoices? Any posted invoices will have their General Ledger entries and tax records reversed atomically. Invoices with payment allocations cannot be voided."
+              confirmLabel="Void Invoices"
+              confirmTone="danger"
+              itemCount={selectedCount}
+              itemLabel="invoices"
+              onConfirm={handleBatchVoid}
+              isPending={isPending}
+            />
+          )}
+
+          {confirmModal && confirmModal.type === "delete" && (
+            <BatchConfirmModal
+              open={confirmModal.open}
+              onOpenChange={(open) => setConfirmModal(open ? confirmModal : null)}
+              title="Delete Draft Invoices"
+              description="Are you sure you want to permanently delete the selected draft invoices? This action cannot be undone."
+              confirmLabel="Delete Drafts"
+              confirmTone="danger"
+              itemCount={selectedDrafts.length}
+              itemLabel="draft invoices"
+              onConfirm={handleBatchDelete}
+              isPending={isPending}
+            />
+          )}
+        </>
+      );
+    })()}
   </>;
 }

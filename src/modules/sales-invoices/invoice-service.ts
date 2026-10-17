@@ -264,7 +264,7 @@ function listInvoiceRows(
   const pagination = `${limitClause} ${offsetClause}`.trim();
   const rows = sqlite
     .prepare(`
-      SELECT i.id, i.invoice_number, i.customer_id, c.name AS customer_name,
+      SELECT i.id, i.invoice_number, i.customer_id, c.name AS customer_name, c.email AS customer_email,
              i.invoice_date, i.due_date, i.total_minor, i.base_total_minor, i.currency_code,
              cur.minor_unit AS currency_minor_unit,
              i.exchange_rate_to_base, i.exchange_rate_date, i.exchange_rate_source, i.document_status,
@@ -285,6 +285,7 @@ function listInvoiceRows(
       invoice_number: string;
       customer_id: string;
       customer_name: string;
+      customer_email: string | null;
       invoice_date: string;
       due_date: string;
       total_minor: number;
@@ -307,6 +308,7 @@ function listInvoiceRows(
     invoiceNumber: row.invoice_number,
     customerId: row.customer_id,
     customerName: row.customer_name,
+    customerEmail: row.customer_email ?? null,
     invoiceDate: row.invoice_date,
     dueDate: row.due_date,
     totalMinor: row.total_minor,
@@ -809,4 +811,127 @@ export function voidInvoice(businessId: string, userId: string, invoiceId: strin
       .prepare("UPDATE sales_invoices SET document_status = 'void', voided_at = ?, updated_at = ? WHERE id = ?")
       .run(now, now, invoiceId);
   }).immediate();
+}
+
+export function postInvoice(businessId: string, userId: string, invoiceId: string) {
+  const record = getInvoice(businessId, userId, invoiceId);
+  if (!record) throw new Error("Invoice not found.");
+  if (record.invoice.documentStatus === "posted") return;
+  if (record.invoice.documentStatus === "void") throw new Error("A void invoice cannot be posted.");
+
+  const context = getBusinessDb(businessId, userId);
+  const minorUnit = getCurrency(context.sqlite, record.invoice.currencyCode).minor_unit;
+  updateInvoice(
+    businessId,
+    userId,
+    invoiceId,
+    {
+      customerId: record.invoice.customerId,
+      currencyCode: record.invoice.currencyCode,
+      exchangeRateToBase: record.invoice.exchangeRateToBase,
+      exchangeRateDate: record.invoice.exchangeRateDate,
+      exchangeRateSource: record.invoice.exchangeRateSource as "Base" | "Manual" | "CBUAE",
+      projectId: record.invoice.projectId ?? "",
+      invoiceDate: record.invoice.invoiceDate,
+      taxDate: record.invoice.taxDate,
+      supplyEmirate: record.invoice.supplyEmirate ?? "",
+      dueDate: record.invoice.dueDate,
+      reference: record.invoice.reference ?? "",
+      notes: record.invoice.notes ?? "",
+      terms: record.invoice.terms ?? "",
+      salesOrderId: record.invoice.salesOrderId ?? "",
+      quoteId: record.invoice.quoteId ?? "",
+      amountsIncludeTax: Boolean(record.invoice.amountsIncludeTax),
+      lines: record.lines.map((line) => ({
+        itemId: line.itemId ?? "",
+        description: line.description,
+        quantity: quantityMicrosToInput(line.quantityMicros),
+        unitPrice: minorToCurrencyInput(line.unitPriceMinor, minorUnit),
+        discountType: (line.discountType ?? "none") as any,
+        discountValue: line.discountValue ?? "0",
+        salesAccountId: line.salesAccountId,
+        taxCodeId: line.taxCodeId,
+        projectId: line.projectId ?? "",
+      })),
+    },
+    "post",
+  );
+}
+
+export type BatchActionResult = {
+  successCount: number;
+  failedCount: number;
+  errors: { id: string; number?: string; error: string }[];
+};
+
+export function batchPostInvoices(businessId: string, userId: string, invoiceIds: string[]): BatchActionResult {
+  const result: BatchActionResult = { successCount: 0, failedCount: 0, errors: [] };
+  for (const id of invoiceIds) {
+    try {
+      const record = getInvoice(businessId, userId, id);
+      if (!record) {
+        result.failedCount++;
+        result.errors.push({ id, error: "Invoice not found" });
+        continue;
+      }
+      if (record.invoice.documentStatus === "posted") {
+        result.successCount++;
+        continue;
+      }
+      if (record.invoice.documentStatus === "void") {
+        result.failedCount++;
+        result.errors.push({ id, number: record.invoice.invoiceNumber, error: "Cannot post a void invoice" });
+        continue;
+      }
+      postInvoice(businessId, userId, id);
+      result.successCount++;
+    } catch (err) {
+      result.failedCount++;
+      result.errors.push({ id, error: err instanceof Error ? err.message : "Posting failed" });
+    }
+  }
+  return result;
+}
+
+export function batchVoidInvoices(businessId: string, userId: string, invoiceIds: string[]): BatchActionResult {
+  const result: BatchActionResult = { successCount: 0, failedCount: 0, errors: [] };
+  for (const id of invoiceIds) {
+    try {
+      const record = getInvoice(businessId, userId, id);
+      if (!record) {
+        result.failedCount++;
+        result.errors.push({ id, error: "Invoice not found" });
+        continue;
+      }
+      if (record.invoice.documentStatus === "void") {
+        result.successCount++;
+        continue;
+      }
+      if (record.invoice.documentStatus === "draft") {
+        deleteInvoice(businessId, userId, id);
+        result.successCount++;
+        continue;
+      }
+      voidInvoice(businessId, userId, id);
+      result.successCount++;
+    } catch (err) {
+      result.failedCount++;
+      result.errors.push({ id, number: (getInvoice(businessId, userId, id)?.invoice.invoiceNumber) || id, error: err instanceof Error ? err.message : "Void failed" });
+    }
+  }
+  return result;
+}
+
+export function batchDeleteInvoices(businessId: string, userId: string, invoiceIds: string[]): BatchActionResult {
+  const result: BatchActionResult = { successCount: 0, failedCount: 0, errors: [] };
+  for (const id of invoiceIds) {
+    try {
+      deleteInvoice(businessId, userId, id);
+      result.successCount++;
+    } catch (err) {
+      result.failedCount++;
+      result.errors.push({ id, error: err instanceof Error ? err.message : "Delete failed" });
+    }
+  }
+  return result;
 }

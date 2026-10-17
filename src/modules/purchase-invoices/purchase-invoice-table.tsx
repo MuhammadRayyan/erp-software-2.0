@@ -1,8 +1,9 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, useTransition } from "react";
 import Link from "next/link";
-import { ChevronRight, MoreHorizontal, Eye, FileEdit, Download, CircleDollarSign, BookOpenText } from "lucide-react";
+import { toast } from "sonner";
+import { ChevronRight, MoreHorizontal, Eye, FileEdit, Download, CircleDollarSign, BookOpenText, CheckCircle2, FileArchive, Ban } from "lucide-react";
 import { 
   useLegacyTable as useTable,
   getCoreRowModel as createCoreRowModel,
@@ -21,6 +22,8 @@ import { DensityToggle } from "@/components/density-toggle";
 import { useTableDensity } from "@/components/use-table-density";
 import { TableTotalsBar, renderMultiCurrencyString } from "@/components/table-totals-bar";
 import { BatchActionBar } from "@/components/batch-action-bar";
+import { batchPostPurchaseInvoicesAction, batchVoidPurchaseInvoicesAction, batchDeletePurchaseInvoicesAction } from "./actions";
+import { BatchConfirmModal } from "@/components/documents/batch-confirm-modal";
 
 type Row = {
   id: string;
@@ -74,6 +77,11 @@ export function PurchaseInvoiceTable({
   const [projectId, setProjectId] = useState("");
   const [sorting, setSorting] = useState<SortingState>([]);
   const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
+  const [isPending, startTransition] = useTransition();
+  const [confirmModal, setConfirmModal] = useState<{
+    type: "void" | "post" | "delete";
+    open: boolean;
+  } | null>(null);
   const supplierOptions = useMemo(
     () => Array.from(new Map(invoices.map((invoice) => [invoice.supplier_id, invoice.supplier_name])).entries()).sort((a, b) => a[1].localeCompare(b[1])),
     [invoices],
@@ -414,37 +422,188 @@ export function PurchaseInvoiceTable({
         />
       )}
 
-      <BatchActionBar
-        selectedCount={Object.keys(rowSelection).filter((k) => rowSelection[k]).length}
-        totalCount={rows.length}
-        onClearSelection={() => setRowSelection({})}
-        onSelectAll={() => table.toggleAllRowsSelected(true)}
-        onExportSelected={() => {
-          const selected = table.getSelectedRowModel().rows.map((r: any) => r.original);
-          const headers = ["Bill Number", "Supplier", "Supplier Invoice", "Date", "Due Date", "Currency", "Total", "Balance", "Document Status", "Payment Status"];
-          const lines = selected.map((r: any) => [
-            `"${r.internal_number}"`,
-            `"${(r.supplier_name || "").replace(/"/g, '""')}"`,
-            `"${(r.supplier_invoice_number || "").replace(/"/g, '""')}"`,
-            r.invoice_date,
-            r.due_date,
-            r.currency_code,
-            (r.total_minor / 100).toFixed(2),
-            (r.balanceMinor / 100).toFixed(2),
-            r.document_status,
-            r.paymentStatus || "",
-          ]);
-          const csvContent = [headers.join(","), ...lines.map((l: any) => l.join(","))].join("\n");
-          const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
-          const url = URL.createObjectURL(blob);
-          const a = document.createElement("a");
-          a.href = url;
-          a.download = `purchase-invoices-selected-${new Date().toISOString().slice(0, 10)}.csv`;
-          a.click();
-          URL.revokeObjectURL(url);
-        }}
-        onPrintSelected={() => window.print()}
-      />
+      {(() => {
+        const selectedBills = table.getSelectedRowModel().rows.map((r: any) => r.original as Row);
+        const selectedCount = selectedBills.length;
+        const selectedDrafts = selectedBills.filter((b) => b.document_status === "draft");
+
+        const handleBatchPost = () => {
+          startTransition(async () => {
+            try {
+              const draftIds = selectedDrafts.map((b) => b.id);
+              const res = await batchPostPurchaseInvoicesAction(businessId, draftIds);
+              if (res.successCount > 0) {
+                toast.success(`Successfully posted ${res.successCount} ${res.successCount === 1 ? "bill" : "bills"}.`);
+                setRowSelection({});
+              }
+              if (res.failedCount > 0) {
+                toast.error(`Failed to post ${res.failedCount} ${res.failedCount === 1 ? "bill" : "bills"}: ${res.errors.join(", ")}`);
+              }
+            } catch (err) {
+              toast.error(err instanceof Error ? err.message : "Batch post failed.");
+            }
+          });
+        };
+
+        const handleDownloadZip = async () => {
+          try {
+            toast.info("Generating batch PDF archive...");
+            const res = await fetch(`/api/businesses/${businessId}/documents/purchase-invoice/batch-pdf`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ documentIds: selectedBills.map((b) => b.id) }),
+            });
+            if (!res.ok) throw new Error("Batch download failed");
+            const blob = await res.blob();
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement("a");
+            a.href = url;
+            a.download = `purchase-bills-batch-${new Date().toISOString().slice(0, 10)}.zip`;
+            a.click();
+            URL.revokeObjectURL(url);
+            toast.success("Download started!");
+          } catch {
+            toast.error("Failed to generate batch PDF archive.");
+          }
+        };
+
+        const handleBatchVoid = () => {
+          startTransition(async () => {
+            try {
+              const res = await batchVoidPurchaseInvoicesAction(businessId, selectedBills.map((b) => b.id));
+              if (res.successCount > 0) {
+                toast.success(`Successfully voided ${res.successCount} ${res.successCount === 1 ? "bill" : "bills"}.`);
+                setRowSelection({});
+                setConfirmModal(null);
+              }
+              if (res.failedCount > 0) {
+                toast.error(`Could not void ${res.failedCount} bills (they may have existing payment allocations).`);
+              }
+            } catch (err) {
+              toast.error(err instanceof Error ? err.message : "Batch void failed.");
+            }
+          });
+        };
+
+        const handleBatchDelete = () => {
+          startTransition(async () => {
+            try {
+              const draftIds = selectedDrafts.map((b) => b.id);
+              const res = await batchDeletePurchaseInvoicesAction(businessId, draftIds);
+              if (res.successCount > 0) {
+                toast.success(`Deleted ${res.successCount} draft bills.`);
+                setRowSelection({});
+                setConfirmModal(null);
+              }
+            } catch (err) {
+              toast.error(err instanceof Error ? err.message : "Batch delete failed.");
+            }
+          });
+        };
+
+        return (
+          <>
+            <BatchActionBar
+              selectedCount={selectedCount}
+              totalCount={rows.length}
+              onClearSelection={() => setRowSelection({})}
+              onSelectAll={() => table.toggleAllRowsSelected(true)}
+              onExportSelected={() => {
+                const headers = ["Bill Number", "Supplier", "Supplier Invoice", "Date", "Due Date", "Currency", "Total", "Balance", "Document Status", "Payment Status"];
+                const lines = selectedBills.map((r: any) => [
+                  `"${r.internal_number}"`,
+                  `"${(r.supplier_name || "").replace(/"/g, '""')}"`,
+                  `"${(r.supplier_invoice_number || "").replace(/"/g, '""')}"`,
+                  r.invoice_date,
+                  r.due_date,
+                  r.currency_code,
+                  (r.total_minor / 100).toFixed(2),
+                  (r.balanceMinor / 100).toFixed(2),
+                  r.document_status,
+                  r.paymentStatus || "",
+                ]);
+                const csvContent = [headers.join(","), ...lines.map((l: any) => l.join(","))].join("\n");
+                const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement("a");
+                a.href = url;
+                a.download = `purchase-invoices-selected-${new Date().toISOString().slice(0, 10)}.csv`;
+                a.click();
+                URL.revokeObjectURL(url);
+              }}
+              onPrintSelected={() => window.print()}
+              onDeleteSelected={selectedDrafts.length > 0 && selectedDrafts.length === selectedCount ? () => setConfirmModal({ type: "delete", open: true }) : undefined}
+              deleteLabel={`Delete Drafts (${selectedDrafts.length})`}
+              isDeleting={isPending}
+            >
+              {selectedDrafts.length > 0 && (
+                <Button
+                  type="button"
+                  variant="secondary"
+                  size="sm"
+                  onClick={handleBatchPost}
+                  disabled={isPending}
+                  className="h-8 gap-1.5 text-xs text-primary font-medium hover:bg-primary/10"
+                >
+                  <CheckCircle2 className="size-3.5" /> Post Drafts ({selectedDrafts.length})
+                </Button>
+              )}
+
+              <Button
+                type="button"
+                variant="secondary"
+                size="sm"
+                onClick={handleDownloadZip}
+                disabled={isPending}
+                className="h-8 gap-1.5 text-xs"
+              >
+                <FileArchive className="size-3.5" /> Download ZIP
+              </Button>
+
+              <Button
+                type="button"
+                variant="secondary"
+                size="sm"
+                onClick={() => setConfirmModal({ type: "void", open: true })}
+                disabled={isPending}
+                className="h-8 gap-1.5 text-xs text-danger hover:text-danger hover:bg-danger/10"
+              >
+                <Ban className="size-3.5" /> Void Selected
+              </Button>
+            </BatchActionBar>
+
+            {confirmModal && confirmModal.type === "void" && (
+              <BatchConfirmModal
+                open={confirmModal.open}
+                onOpenChange={(open) => setConfirmModal(open ? confirmModal : null)}
+                title="Void Selected Bills"
+                description="Are you sure you want to void the selected purchase bills? Any posted bills will have their General Ledger entries reversed atomically. Bills with payment allocations cannot be voided."
+                confirmLabel="Void Bills"
+                confirmTone="danger"
+                itemCount={selectedCount}
+                itemLabel="purchase bills"
+                onConfirm={handleBatchVoid}
+                isPending={isPending}
+              />
+            )}
+
+            {confirmModal && confirmModal.type === "delete" && (
+              <BatchConfirmModal
+                open={confirmModal.open}
+                onOpenChange={(open) => setConfirmModal(open ? confirmModal : null)}
+                title="Delete Draft Bills"
+                description="Are you sure you want to permanently delete the selected draft purchase bills? This action cannot be undone."
+                confirmLabel="Delete Drafts"
+                confirmTone="danger"
+                itemCount={selectedDrafts.length}
+                itemLabel="draft bills"
+                onConfirm={handleBatchDelete}
+                isPending={isPending}
+              />
+            )}
+          </>
+        );
+      })()}
     </>
   );
 }
