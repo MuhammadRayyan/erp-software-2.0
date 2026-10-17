@@ -19,6 +19,7 @@ export function BusinessForm() {
   const [serverError, setServerError] = useState("");
   const { register, handleSubmit, setError, formState: { errors, isSubmitting } } = useForm<Values>({
     resolver: zodResolver(businessInputSchema),
+    mode: "onTouched",
     defaultValues: { name: "", country: "United Arab Emirates", currency: "AED", financialYearStartMonth: 1 },
   });
 

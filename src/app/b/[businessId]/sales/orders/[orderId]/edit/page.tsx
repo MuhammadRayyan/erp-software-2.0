@@ -12,7 +12,7 @@ import { SalesOrderForm } from "@/modules/sales-orders/sales-order-form";
 import { getSalesOrder } from "@/modules/sales-orders/sales-order-service";
 import { minorToCurrencyInput } from "@/modules/currency/conversion";
 import { getCurrencySettings } from "@/modules/currency/exchange-rate";
-import { BackLink } from "@/components/back-link";
+import { Breadcrumbs } from "@/components/breadcrumbs";
 
 export default async function EditOrderPage({ params }: { params: Promise<{ businessId: string; orderId: string }> }) {
   const { businessId, orderId } = await params;
@@ -43,7 +43,14 @@ export default async function EditOrderPage({ params }: { params: Promise<{ busi
   const documentMinorUnit = currencySettings.currencies.find((entry) => entry.code === record.order.currencyCode)?.minor_unit ?? 2;
 
   return <div className="page-container">
-    <BackLink href={`/b/${businessId}/sales/orders/${orderId}`}>{record.order.orderNumber}</BackLink>
+    <Breadcrumbs
+      businessId={businessId}
+      items={[
+        { label: "Sales Orders", href: `/b/${businessId}/sales/orders` },
+        { label: record.order.orderNumber, href: `/b/${businessId}/sales/orders/${orderId}` },
+        { label: "Edit" },
+      ]}
+    />
     <div className="mb-7"><h1 className="page-title">Edit Sales Order</h1><p className="page-description">Update the draft or active order details.</p></div>
     <SalesOrderForm
       businessId={businessId}

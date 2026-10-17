@@ -28,7 +28,11 @@ export function PurchaseOrderForm({ businessId, orderId, status = "draft", suppl
   const router = useRouter();
   const [serverError, setServerError] = useState("");
   const [globalTaxCodeId, setGlobalTaxCodeId] = useState(() => initial.lines[0]?.taxCodeId || taxCodes.find((taxCode) => taxCode.rateBasisPoints === 500)?.id || taxCodes[0]?.id || "");
-  const form = useForm<PurchaseOrderInput>({ resolver: zodResolver(purchaseOrderInputSchema), defaultValues: initial });
+  const form = useForm<PurchaseOrderInput>({
+    resolver: zodResolver(purchaseOrderInputSchema),
+    mode: "onTouched",
+    defaultValues: initial,
+  });
   const { register, control, handleSubmit, setError, setValue, formState: { errors, isSubmitting } } = form;
   const { fields, append, remove, insert, move } = useFieldArray({ control, name: "lines" });
   function duplicateLine(index: number) {

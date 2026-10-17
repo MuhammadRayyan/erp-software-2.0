@@ -10,6 +10,7 @@ import { formatMoney } from "@/core/format";
 import type { DocumentLinePreview, DocumentLineTaxOption } from "./document-calculations";
 import { DocumentTotalsPanel } from "./document-totals-panel";
 import { DocumentColumnToggles } from "./document-column-toggles";
+import { SearchableItemSelect } from "./searchable-item-select";
 
 export interface DocumentLineItemOption {
   id: string;
@@ -221,6 +222,14 @@ export function DocumentLineTable({
               const line = lines[index];
               const preview = previews[index];
               const lineError = (errors?.lines as any)?.[index];
+              const isLastRow = index === fields.length - 1;
+
+              const handleLastCellTab = (e: React.KeyboardEvent) => {
+                if (e.key === "Tab" && !e.shiftKey && isLastRow) {
+                  e.preventDefault();
+                  onAppend();
+                }
+              };
 
               return (
                 <tr key={field.id}>
@@ -232,21 +241,18 @@ export function DocumentLineTable({
 
                   {items && (
                     <td className="align-top">
-                      <SelectNative
-                        aria-label={`Line ${index + 1} inventory item`}
-                        className="w-full text-xs"
-                        {...register(`lines.${index}.itemId`, {
-                          onChange: (event) => onItemSelect?.(index, event.target.value),
-                        })}
-                      >
-                        <option value="">Service / free text</option>
-                        {items.map((item) => (
-                          <option key={item.id} value={item.id}>
-                            {item.sku ? `${item.sku} — ` : ""}
-                            {item.name}
-                          </option>
-                        ))}
-                      </SelectNative>
+                      <SearchableItemSelect
+                        items={items}
+                        value={line?.itemId ?? ""}
+                        onChange={(itemId) => {
+                          register(`lines.${index}.itemId`).onChange({
+                            target: { value: itemId, name: `lines.${index}.itemId` },
+                          });
+                          onItemSelect?.(index, itemId);
+                        }}
+                        ariaLabel={`Line ${index + 1} inventory item`}
+                      />
+                      <input type="hidden" {...register(`lines.${index}.itemId`)} />
                     </td>
                   )}
 
@@ -286,9 +292,20 @@ export function DocumentLineTable({
                       onKeyDown={(e) => {
                         if (e.key === "Enter" && !e.shiftKey) {
                           e.preventDefault();
-                          if (index === fields.length - 1) {
+                          if (isLastRow) {
                             onAppend();
                           }
+                        } else if (
+                          e.key === "Tab" &&
+                          !e.shiftKey &&
+                          isLastRow &&
+                          !showDiscounts &&
+                          line?.itemId &&
+                          !showLineTaxCodes &&
+                          !showLineProjects
+                        ) {
+                          e.preventDefault();
+                          onAppend();
                         }
                       }}
                     />
@@ -314,6 +331,15 @@ export function DocumentLineTable({
                             step="any"
                             min="0"
                             {...register(`lines.${index}.discountValue`)}
+                            onKeyDown={(e) => {
+                              if (
+                                !showLineTaxCodes &&
+                                !showLineProjects &&
+                                line?.itemId
+                              ) {
+                                handleLastCellTab(e);
+                              }
+                            }}
                           />
                         )}
                       </div>
@@ -334,6 +360,11 @@ export function DocumentLineTable({
                         aria-label={`Line ${index + 1} ${resolvedAccountAria}`}
                         className="w-full text-xs"
                         {...register(`lines.${index}.${accountFieldName}`)}
+                        onKeyDown={(e) => {
+                          if (!showLineTaxCodes && !showLineProjects) {
+                            handleLastCellTab(e);
+                          }
+                        }}
                       >
                         {accountPlaceholder && (
                           <option value="">{accountPlaceholder}</option>
@@ -353,6 +384,11 @@ export function DocumentLineTable({
                         aria-label={`Line ${index + 1} tax code`}
                         className="w-full text-xs"
                         {...register(`lines.${index}.taxCodeId`)}
+                        onKeyDown={(e) => {
+                          if (!showLineProjects) {
+                            handleLastCellTab(e);
+                          }
+                        }}
                       >
                         {taxCodes.map((taxCode) => (
                           <option key={taxCode.id} value={taxCode.id}>
@@ -372,6 +408,7 @@ export function DocumentLineTable({
                         aria-label={`Line ${index + 1} project`}
                         className="w-full text-xs"
                         {...register(`lines.${index}.projectId`)}
+                        onKeyDown={handleLastCellTab}
                       >
                         <option value="">Use document Project</option>
                         {projects?.map((project) => (

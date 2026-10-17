@@ -14,7 +14,7 @@ import { QuoteRevisionSwitcher } from "@/modules/sales-quotes/quote-revision-swi
 import { ProjectLinks } from "@/modules/projects/project-links";
 import { buildDocumentEmailContext, buildDocumentEmailDefaults } from "@/modules/email/email-defaults";
 import { DocumentFlowStepper, type FlowStep } from "@/components/documents/document-flow-stepper";
-import { BackLink } from "@/components/back-link";
+import { Breadcrumbs } from "@/components/breadcrumbs";
 
 export default async function QuoteViewPage({ params, searchParams }: { params: Promise<{ businessId: string; quoteId: string }>; searchParams: Promise<{ notice?: string }> }) {
   const { businessId, quoteId } = await params;
@@ -80,7 +80,13 @@ export default async function QuoteViewPage({ params, searchParams }: { params: 
   return (
     <div className="page-container">
       <NoticeToast message={notice} />
-      <BackLink href={`/b/${businessId}/sales/quotes`}>Sales Quotes</BackLink>
+      <Breadcrumbs
+        businessId={businessId}
+        items={[
+          { label: "Sales Quotes", href: `/b/${businessId}/sales/quotes` },
+          { label: quote.quoteNumber },
+        ]}
+      />
       
       {isViewingOlderRevision && latestRevision && latestRevision.id !== quote.id && (
         <div className="mb-5 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-amber-500/30 bg-amber-500/10 p-3.5 text-sm text-amber-900 dark:text-amber-200">

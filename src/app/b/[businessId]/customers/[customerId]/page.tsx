@@ -15,7 +15,7 @@ import { listReceiptsForCustomer } from "@/modules/receipts/receipt-service";
 import { getCustomerAccountingSummary } from "@/modules/reports/customer-statement-service";
 import { listInvoicesForCustomer } from "@/modules/sales-invoices/invoice-service";
 import { DocumentStatusBadge, PaymentStatusBadge } from "@/modules/sales-invoices/invoice-status";
-import { BackLink } from "@/components/back-link";
+import { Breadcrumbs } from "@/components/breadcrumbs";
 
 export default async function CustomerPage({ params, searchParams }: { params: Promise<{ businessId: string; customerId: string }>; searchParams: Promise<{ notice?: string }> }) {
   const { businessId, customerId } = await params;
@@ -35,7 +35,13 @@ export default async function CustomerPage({ params, searchParams }: { params: P
   const currency = access.business.currency;
   return <div className="page-container">
     <NoticeToast message={notice} />
-    <BackLink href={`/b/${businessId}/customers`}>Customers</BackLink>
+    <Breadcrumbs
+      businessId={businessId}
+      items={[
+        { label: "Customers", href: `/b/${businessId}/customers` },
+        { label: customer.name },
+      ]}
+    />
     <div className="page-header">
       <div><h1 className="page-title mb-2 flex items-center gap-2">{customer.name} {!customer.isActive && <Badge tone="neutral">Inactive</Badge>}</h1><p className="page-description">Added {formatDate(customer.createdAt.slice(0, 10))}</p></div>
       <div className="flex flex-wrap gap-2"><Button asChild><Link href={`/b/${businessId}/customers/${customerId}/edit`}><Pencil className="size-4" /> Edit</Link></Button><Button asChild variant="secondary"><Link href={`/b/${businessId}/sales/invoices/new?customerId=${customerId}`}><FilePlus2 className="size-4" /> New Invoice</Link></Button>{summary.outstandingMinor > 0 && <Button asChild variant="secondary"><Link href={`/b/${businessId}/sales/receipts/new?customerId=${customerId}`}><CircleDollarSign className="size-4" /> Record Receipt</Link></Button>}<Button asChild variant="secondary"><Link href={`/b/${businessId}/customers/${customerId}/statement`}><ScrollText className="size-4" /> Statement</Link></Button></div>

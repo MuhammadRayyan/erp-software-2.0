@@ -16,6 +16,8 @@ import { listSentEmails } from "@/modules/email/email-service";
 import { parseMailboxes } from "@/modules/email/email-driver";
 import { KpiCards, type KpiCardData } from "./kpi-cards";
 import { OverviewControls, type ServerDateRange } from "./overview-controls";
+import { QuickActionsBar } from "./quick-actions-bar";
+import { CashFlowRunwayWidget } from "./cash-flow-runway-widget";
 
 const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -53,6 +55,8 @@ export default async function OverviewPage({ params, searchParams }: { params: P
   const overdue = posted.filter((invoice) => invoice.paymentStatus === "overdue").reduce((sum, invoice) => sum + invoice.baseBalanceMinor, 0);
   const canViewBanking = parseModules(access.membership.role, access.membership.modulesJson).includes("banking");
   const canViewSales = parseModules(access.membership.role, access.membership.modulesJson).includes("sales");
+  const canViewPurchases = parseModules(access.membership.role, access.membership.modulesJson).includes("purchases");
+  const canViewReports = parseModules(access.membership.role, access.membership.modulesJson).includes("reports");
   const bankBalance = canViewBanking ? getBankBalance(businessId, user.id) : null;
   const periodPosted = from || to
     ? listInvoices(businessId, user.id, { from, to }).filter((invoice) => invoice.documentStatus === "posted")
@@ -77,9 +81,22 @@ export default async function OverviewPage({ params, searchParams }: { params: P
     <div className="page-container">
       <NoticeToast message={notice} />
       <div className="page-header"><div><h1 className="page-title">Overview</h1><p className="page-description">A practical accounting snapshot of {access.business.name}.</p></div></div>
+      <QuickActionsBar
+        businessId={businessId}
+        canViewSales={canViewSales}
+        canViewPurchases={canViewPurchases}
+        canViewBanking={canViewBanking}
+      />
       <OverviewControls from={from} to={to} serverRange={serverRange} businessId={businessId} />
       <KpiCards cards={cards} businessId={businessId} serverSnapshot={decodeColumnSnapshots(preferences)["overview-cards"]} />
       <FinancialSummary businessId={businessId} userId={user.id} currency={currency} />
+      {canViewReports && (
+        <CashFlowRunwayWidget
+          businessId={businessId}
+          userId={user.id}
+          currency={currency}
+        />
+      )}
       <div className="mt-5 grid gap-5 lg:grid-cols-3">
         <section className="data-panel lg:col-span-2">
           <div className="flex h-12 items-center justify-between border-b border-border px-4"><h2 className="font-semibold">Recent Invoices</h2><Link href={`/b/${businessId}/sales/invoices`} className="flex items-center gap-1 text-xs font-medium text-primary hover:underline">View all <ArrowRight className="size-3.5" /></Link></div>

@@ -13,7 +13,7 @@ import { InvoiceForm } from "@/modules/sales-invoices/invoice-form";
 import { getInvoice } from "@/modules/sales-invoices/invoice-service";
 import { minorToCurrencyInput } from "@/modules/currency/conversion";
 import { getCurrencySettings } from "@/modules/currency/exchange-rate";
-import { BackLink } from "@/components/back-link";
+import { Breadcrumbs } from "@/components/breadcrumbs";
 
 export default async function EditInvoicePage({ params }: { params: Promise<{ businessId: string; invoiceId: string }> }) {
   const { businessId, invoiceId } = await params;
@@ -38,7 +38,14 @@ export default async function EditInvoicePage({ params }: { params: Promise<{ bu
     ? getCustomFieldValuesForEntities(businessId, user.id, "sales_invoice", [invoiceId]).get(invoiceId) ?? {}
     : {};
   return <div className="page-container">
-    <BackLink href={`/b/${businessId}/sales/invoices/${invoiceId}`}>{record.invoice.invoiceNumber}</BackLink>
+    <Breadcrumbs
+      businessId={businessId}
+      items={[
+        { label: "Sales Invoices", href: `/b/${businessId}/sales/invoices` },
+        { label: record.invoice.invoiceNumber, href: `/b/${businessId}/sales/invoices/${invoiceId}` },
+        { label: "Edit" },
+      ]}
+    />
     <div className="mb-7"><h1 className="page-title">Edit Sales Invoice</h1><p className="page-description">{record.invoice.documentStatus === "posted" ? "Financial changes rebuild the journal atomically." : "Update the draft, or post it when ready."}</p></div>
     <InvoiceForm
       businessId={businessId}

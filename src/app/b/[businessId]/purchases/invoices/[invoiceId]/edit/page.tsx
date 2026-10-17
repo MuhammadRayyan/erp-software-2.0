@@ -13,7 +13,7 @@ import { minorToCurrencyInput } from "@/modules/currency/conversion";
 import { getCurrencySettings } from "@/modules/currency/exchange-rate";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
-import { BackLink } from "@/components/back-link";
+import { Breadcrumbs } from "@/components/breadcrumbs";
 
 export default async function EditPurchaseInvoicePage({ params }: { params: Promise<{ businessId: string; invoiceId: string }> }) {
   const { businessId, invoiceId } = await params;
@@ -48,7 +48,14 @@ export default async function EditPurchaseInvoicePage({ params }: { params: Prom
   const minorUnit = currencySettings.currencies.find((currency) => currency.code === record.invoice.currencyCode)?.minor_unit ?? 2;
   return (
     <div className="page-container">
-      <BackLink href={`/b/${businessId}/purchases/invoices/${invoiceId}`}>{record.invoice.internalNumber}</BackLink>
+      <Breadcrumbs
+        businessId={businessId}
+        items={[
+          { label: "Purchase Invoices", href: `/b/${businessId}/purchases/invoices` },
+          { label: record.invoice.internalNumber, href: `/b/${businessId}/purchases/invoices/${invoiceId}` },
+          { label: "Edit" },
+        ]}
+      />
       <div className="mb-7">
         <h1 className="page-title">Edit Purchase Invoice</h1>
         <p className="page-description">{record.invoice.documentStatus === "posted" ? "Financial changes rebuild the AP journal and VAT tax detail atomically." : "Update the draft, or post it when ready."}</p>

@@ -9,6 +9,7 @@ import { useForm } from "react-hook-form";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import { CustomFieldInputs, type CustomFieldInputDefinition } from "@/modules/custom-fields/custom-field-inputs";
 import { firstMissingRequiredCustomField } from "@/modules/custom-fields/custom-field-display";
 import { createSupplierAction, updateSupplierAction } from "./actions";
@@ -24,7 +25,11 @@ export function SupplierForm({ businessId, supplierId, currencies, initial, cust
     }
     return initialCustomValues;
   });
-  const form = useForm<SupplierInput>({ resolver: zodResolver(supplierInputSchema), defaultValues: initial });
+  const form = useForm<SupplierInput>({
+    resolver: zodResolver(supplierInputSchema),
+    mode: "onTouched",
+    defaultValues: initial,
+  });
   const { register, handleSubmit, setError, formState: { errors, isSubmitting } } = form;
   async function submit(values: SupplierInput) {
     setServerError("");
@@ -48,10 +53,10 @@ export function SupplierForm({ businessId, supplierId, currencies, initial, cust
         <div className="space-y-1.5 md:col-span-2"><Label htmlFor="name">Supplier name</Label><Input id="name" autoFocus {...register("name")} aria-invalid={!!errors.name} />{errors.name && <p className="field-error">{errors.name.message}</p>}</div>
         <div className="space-y-1.5"><Label htmlFor="email">Email <span className="font-normal text-muted-foreground">(optional)</span></Label><Input id="email" type="email" {...register("email")} aria-invalid={!!errors.email} />{errors.email && <p className="field-error">{errors.email.message}</p>}</div>
         <div className="space-y-1.5"><Label htmlFor="phone">Phone <span className="font-normal text-muted-foreground">(optional)</span></Label><Input id="phone" type="tel" placeholder="+971 50 123 4567" {...register("phone")} aria-invalid={!!errors.phone} />{errors.phone && <p className="field-error">{errors.phone.message}</p>}</div>
-        <div className="space-y-1.5"><Label htmlFor="taxReference">TRN / tax reference <span className="font-normal text-muted-foreground">(optional)</span></Label><Input id="taxReference" {...register("taxReference")} /></div>
-        <div className="space-y-1.5"><Label htmlFor="address">Address <span className="font-normal text-muted-foreground">(optional)</span></Label><Input id="address" {...register("address")} /></div>
+        <div className="space-y-1.5"><Label htmlFor="taxReference">TRN / tax reference <span className="font-normal text-muted-foreground">(optional)</span></Label><Input id="taxReference" {...register("taxReference")} aria-invalid={!!errors.taxReference} />{errors.taxReference && <p className="field-error">{errors.taxReference.message}</p>}</div>
+        <div className="space-y-1.5"><Label htmlFor="address">Address <span className="font-normal text-muted-foreground">(optional)</span></Label><Input id="address" {...register("address")} aria-invalid={!!errors.address} />{errors.address && <p className="field-error">{errors.address.message}</p>}</div>
         <div className="space-y-1.5"><Label htmlFor="defaultCurrencyCode">Default document currency</Label><select id="defaultCurrencyCode" className="h-9 w-full rounded-[6px] border border-border-strong bg-surface-raised px-3 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-ring/25" {...register("defaultCurrencyCode")}>{currencies.map((currency) => <option key={currency.code} value={currency.code}>{currency.code} — {currency.name}</option>)}</select></div>
-        <div className="space-y-1.5 md:col-span-2"><Label htmlFor="notes">Notes <span className="font-normal text-muted-foreground">(optional)</span></Label><textarea id="notes" rows={4} className="w-full rounded-[6px] border border-border-strong bg-surface-raised px-3 py-2 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-ring/25" {...register("notes")} /></div>
+        <div className="space-y-1.5 md:col-span-2"><Label htmlFor="notes">Notes <span className="font-normal text-muted-foreground">(optional)</span></Label><Textarea id="notes" rows={4} {...register("notes")} aria-invalid={!!errors.notes} />{errors.notes && <p className="field-error">{errors.notes.message}</p>}</div>
         <label className="flex min-h-9 items-center gap-2 text-sm"><input type="checkbox" className="size-4 accent-[var(--primary)]" {...register("isActive")} /> Active supplier</label>
       </div>
     </section>
@@ -59,12 +64,12 @@ export function SupplierForm({ businessId, supplierId, currencies, initial, cust
       <h2 className="text-base font-semibold">Legal identity</h2>
       <p className="mt-1 text-sm text-muted-foreground">Strong identifiers (TRN, electronic address) help with supplier matching and tax reporting.</p>
       <div className="mt-5 grid gap-5 md:grid-cols-2">
-        <div className="space-y-1.5 md:col-span-2"><Label htmlFor="legalName">Legal name <span className="font-normal text-muted-foreground">(optional)</span></Label><Input id="legalName" {...register("legalName")} /></div>
-        <div className="space-y-1.5"><Label htmlFor="trn">TRN <span className="font-normal text-muted-foreground">(optional)</span></Label><Input id="trn" {...register("trn")} /></div>
-        <div className="space-y-1.5"><Label htmlFor="legalRegistrationIdentifier">Legal registration ID <span className="font-normal text-muted-foreground">(optional)</span></Label><Input id="legalRegistrationIdentifier" {...register("legalRegistrationIdentifier")} /></div>
+        <div className="space-y-1.5 md:col-span-2"><Label htmlFor="legalName">Legal name <span className="font-normal text-muted-foreground">(optional)</span></Label><Input id="legalName" {...register("legalName")} aria-invalid={!!errors.legalName} />{errors.legalName && <p className="field-error">{errors.legalName.message}</p>}</div>
+        <div className="space-y-1.5"><Label htmlFor="trn">TRN <span className="font-normal text-muted-foreground">(optional)</span></Label><Input id="trn" {...register("trn")} aria-invalid={!!errors.trn} />{errors.trn && <p className="field-error">{errors.trn.message}</p>}</div>
+        <div className="space-y-1.5"><Label htmlFor="legalRegistrationIdentifier">Legal registration ID <span className="font-normal text-muted-foreground">(optional)</span></Label><Input id="legalRegistrationIdentifier" {...register("legalRegistrationIdentifier")} aria-invalid={!!errors.legalRegistrationIdentifier} />{errors.legalRegistrationIdentifier && <p className="field-error">{errors.legalRegistrationIdentifier.message}</p>}</div>
         <div className="space-y-1.5"><Label htmlFor="electronicAddress">Electronic address <span className="font-normal text-muted-foreground">(optional)</span></Label><Input id="electronicAddress" {...register("electronicAddress")} aria-invalid={!!errors.electronicAddress} />{errors.electronicAddress && <p className="field-error">{errors.electronicAddress.message}</p>}</div>
         <div className="space-y-1.5"><Label htmlFor="electronicAddressScheme">Address scheme <span className="font-normal text-muted-foreground">(optional)</span></Label><Input id="electronicAddressScheme" placeholder="0235" {...register("electronicAddressScheme")} aria-invalid={!!errors.electronicAddressScheme} />{errors.electronicAddressScheme && <p className="field-error">{errors.electronicAddressScheme.message}</p>}</div>
-        <div className="space-y-1.5 md:col-span-2"><Label htmlFor="registeredAddress">Registered address <span className="font-normal text-muted-foreground">(optional)</span></Label><Input id="registeredAddress" {...register("registeredAddress")} /></div>
+        <div className="space-y-1.5 md:col-span-2"><Label htmlFor="registeredAddress">Registered address <span className="font-normal text-muted-foreground">(optional)</span></Label><Input id="registeredAddress" {...register("registeredAddress")} aria-invalid={!!errors.registeredAddress} />{errors.registeredAddress && <p className="field-error">{errors.registeredAddress.message}</p>}</div>
         <div className="space-y-1.5"><Label htmlFor="countryCode">Country code <span className="font-normal text-muted-foreground">(optional)</span></Label><Input id="countryCode" maxLength={2} placeholder="AE" {...register("countryCode")} aria-invalid={!!errors.countryCode} />{errors.countryCode && <p className="field-error">{errors.countryCode.message}</p>}</div>
       </div>
     </section>

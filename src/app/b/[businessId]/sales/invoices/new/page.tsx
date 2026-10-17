@@ -16,7 +16,7 @@ import { InvoiceForm } from "@/modules/sales-invoices/invoice-form";
 import { listInventoryItemOptions } from "@/modules/inventory/inventory-item-service";
 import { getCurrencySettings } from "@/modules/currency/exchange-rate";
 import { getAllCustomersUnallocatedCredit } from "@/modules/receipts/receipt-service";
-import { BackLink } from "@/components/back-link";
+import { Breadcrumbs } from "@/components/breadcrumbs";
 
 export default async function NewInvoicePage({
   params,
@@ -111,7 +111,13 @@ export default async function NewInvoicePage({
 
   return (
     <div className="page-container">
-      <BackLink href={`/b/${businessId}/sales/invoices`}>Sales Invoices</BackLink>
+      <Breadcrumbs
+        businessId={businessId}
+        items={[
+          { label: "Sales Invoices", href: `/b/${businessId}/sales/invoices` },
+          { label: "New Invoice" },
+        ]}
+      />
       <div className="mb-7">
         <h1 className="page-title">New Sales Invoice</h1>
         <p className="page-description">

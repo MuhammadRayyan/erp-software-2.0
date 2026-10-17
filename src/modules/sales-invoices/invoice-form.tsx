@@ -74,7 +74,11 @@ export function InvoiceForm({
     }
     return initialCustomValues;
   });
-  const form = useForm<InvoiceInput>({ resolver: zodResolver(invoiceInputSchema), defaultValues: initial });
+  const form = useForm<InvoiceInput>({
+    resolver: zodResolver(invoiceInputSchema),
+    mode: "onTouched",
+    defaultValues: initial,
+  });
   const { register, control, handleSubmit, setError, setValue, formState: { errors, isSubmitting } } = form;
   const { fields, append, remove, insert, move } = useFieldArray({ control, name: "lines" });
   function duplicateLine(index: number) {

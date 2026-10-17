@@ -14,7 +14,7 @@ import { OrderRevisionSwitcher } from "@/modules/sales-orders/order-revision-swi
 import { ProjectLinks } from "@/modules/projects/project-links";
 import { buildDocumentEmailContext, buildDocumentEmailDefaults } from "@/modules/email/email-defaults";
 import { DocumentFlowStepper, type FlowStep } from "@/components/documents/document-flow-stepper";
-import { BackLink } from "@/components/back-link";
+import { Breadcrumbs } from "@/components/breadcrumbs";
 
 export default async function OrderViewPage({ params, searchParams }: { params: Promise<{ businessId: string; orderId: string }>; searchParams: Promise<{ notice?: string }> }) {
   const { businessId, orderId } = await params;
@@ -96,7 +96,13 @@ export default async function OrderViewPage({ params, searchParams }: { params: 
   return (
     <div className="page-container">
       <NoticeToast message={notice} />
-      <BackLink href={`/b/${businessId}/sales/orders`}>Sales Orders</BackLink>
+      <Breadcrumbs
+        businessId={businessId}
+        items={[
+          { label: "Sales Orders", href: `/b/${businessId}/sales/orders` },
+          { label: order.orderNumber },
+        ]}
+      />
       <div className="mb-5 flex flex-col justify-between gap-4 lg:flex-row lg:items-start">
         <div><div className="flex flex-wrap items-center gap-2"><h1 className="page-title tabular">{order.orderNumber}</h1> <OrderRevisionSwitcher businessId={businessId} currentOrderId={order.id} revisions={revisions} /><StatusBadge status={order.documentStatus} /></div><p className="mt-2 text-base font-medium">{customer.name}</p><p className="mt-1 text-sm text-muted-foreground">Order date: {formatDate(order.orderDate)}{order.deliveryDate ? ` — Delivery: ${formatDate(order.deliveryDate)}` : ""}</p><div className="mt-3 flex flex-wrap items-baseline gap-x-5 gap-y-1"><span className="money text-xl font-semibold">{formatMoney(order.totalMinor, currency)}</span><span className="text-sm text-muted-foreground">No ledger impact</span></div></div>
         <SalesOrderViewActions businessId={businessId} orderId={order.id} orderNumber={order.orderNumber} documentStatus={order.documentStatus} inventoryEnabled={access.modules.includes("inventory")} hasDeliverableItems={lines.some((line) => Boolean(line.itemId) && line.remainingMicros > 0)} emailDefaults={emailDefaults} />

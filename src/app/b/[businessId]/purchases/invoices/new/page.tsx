@@ -1,5 +1,4 @@
-import Link from "next/link";
-import { ArrowLeft } from "lucide-react";
+import { Breadcrumbs } from "@/components/breadcrumbs";
 import { requireModule } from "@/core/permissions/require-module";
 import { quantityMicrosToInput } from "@/modules/accounting/calculations/money";
 import { getExpenseAccountOptions } from "@/modules/accounting/services/account-service";
@@ -92,23 +91,20 @@ export default async function NewPurchaseInvoicePage({
         },
       ];
 
-  const backHref = sourceOrder
-    ? `/b/${businessId}/purchases/orders/${sourceOrder.order.id}`
-    : sourceQuote
-    ? `/b/${businessId}/purchases/quotes/${sourceQuote.quote.id}`
-    : `/b/${businessId}/purchases/invoices`;
-
-  const backLabel =
-    sourceOrder?.order.orderNumber ?? sourceQuote?.quote.quoteNumber ?? "Purchase Invoices";
-
   return (
     <div className="page-container">
-      <Link
-        href={backHref}
-        className="mb-5 inline-flex items-center gap-1.5 text-[13px] text-muted-foreground hover:text-foreground"
-      >
-        <ArrowLeft className="size-4" /> {backLabel}
-      </Link>
+      <Breadcrumbs
+        businessId={businessId}
+        items={[
+          { label: "Purchase Invoices", href: `/b/${businessId}/purchases/invoices` },
+          ...(sourceOrder
+            ? [{ label: sourceOrder.order.orderNumber, href: `/b/${businessId}/purchases/orders/${sourceOrder.order.id}` }]
+            : sourceQuote
+            ? [{ label: sourceQuote.quote.quoteNumber, href: `/b/${businessId}/purchases/quotes/${sourceQuote.quote.id}` }]
+            : []),
+          { label: "New Purchase Invoice" },
+        ]}
+      />
       <div className="mb-7">
         <h1 className="page-title">New Purchase Invoice</h1>
         <p className="page-description">Save a non-posting draft or post the journal and VAT tax detail atomically.</p>

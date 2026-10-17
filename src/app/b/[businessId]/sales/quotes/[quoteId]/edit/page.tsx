@@ -12,7 +12,7 @@ import { SalesQuoteForm } from "@/modules/sales-quotes/quote-form";
 import { getSalesQuote } from "@/modules/sales-quotes/quote-service";
 import { minorToCurrencyInput } from "@/modules/currency/conversion";
 import { getCurrencySettings } from "@/modules/currency/exchange-rate";
-import { BackLink } from "@/components/back-link";
+import { Breadcrumbs } from "@/components/breadcrumbs";
 
 export default async function EditQuotePage({ params }: { params: Promise<{ businessId: string; quoteId: string }> }) {
   const { businessId, quoteId } = await params;
@@ -42,7 +42,14 @@ export default async function EditQuotePage({ params }: { params: Promise<{ busi
   const currencySettings = getCurrencySettings(businessId, user.id);
   const documentMinorUnit = currencySettings.currencies.find((entry) => entry.code === record.quote.currencyCode)?.minor_unit ?? 2;
   return <div className="page-container">
-    <BackLink href={`/b/${businessId}/sales/quotes/${quoteId}`}>{record.quote.quoteNumber}</BackLink>
+    <Breadcrumbs
+      businessId={businessId}
+      items={[
+        { label: "Sales Quotes", href: `/b/${businessId}/sales/quotes` },
+        { label: record.quote.quoteNumber, href: `/b/${businessId}/sales/quotes/${quoteId}` },
+        { label: "Edit" },
+      ]}
+    />
     <div className="mb-7"><h1 className="page-title">Edit Sales Quote</h1><p className="page-description">{["sent", "accepted"].includes(record.quote.documentStatus) ? "Changes will be saved as a new revision." : "Update the draft, or issue it when ready."}</p></div>
     <SalesQuoteForm
       businessId={businessId}

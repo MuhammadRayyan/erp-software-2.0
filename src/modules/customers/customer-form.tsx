@@ -9,6 +9,7 @@ import { useForm, useWatch } from "react-hook-form";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import { CustomFieldInputs, type CustomFieldInputDefinition } from "@/modules/custom-fields/custom-field-inputs";
 import { firstMissingRequiredCustomField } from "@/modules/custom-fields/custom-field-display";
 import { createCustomerAction, updateCustomerAction } from "./actions";
@@ -20,6 +21,7 @@ export function CustomerForm({ businessId, customerId, currencies, initial, cust
   const [serverError, setServerError] = useState("");
   const { register, handleSubmit, setError, control, setValue, formState: { errors, isSubmitting } } = useForm<Values>({
     resolver: zodResolver(customerInputSchema),
+    mode: "onTouched",
     defaultValues: initial ?? {
       name: "", email: "", phone: "", taxReference: "", legalName: "", trn: "",
       legalRegistrationIdentifier: "", electronicAddress: "", electronicAddressScheme: "",
@@ -75,7 +77,8 @@ export function CustomerForm({ businessId, customerId, currencies, initial, cust
         
         <div className="space-y-1.5 sm:col-span-2">
           <Label htmlFor="billingAddress">Billing Address</Label>
-          <textarea id="billingAddress" className="flex min-h-[80px] w-full rounded-[6px] border border-border-strong bg-surface-raised px-3 py-2 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-ring/25" {...register("billingAddress")} />
+          <Textarea id="billingAddress" {...register("billingAddress")} aria-invalid={!!errors.billingAddress} />
+          {errors.billingAddress && <p className="field-error">{errors.billingAddress.message}</p>}
         </div>
         
         <div className="space-y-1.5 sm:col-span-2">
@@ -88,7 +91,8 @@ export function CustomerForm({ businessId, customerId, currencies, initial, cust
         {!sameAsBilling && (
           <div className="space-y-1.5 sm:col-span-2 animate-in fade-in slide-in-from-top-1">
             <Label htmlFor="deliveryAddress">Delivery Address</Label>
-            <textarea id="deliveryAddress" className="flex min-h-[80px] w-full rounded-[6px] border border-border-strong bg-surface-raised px-3 py-2 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-ring/25" {...register("deliveryAddress")} />
+            <Textarea id="deliveryAddress" {...register("deliveryAddress")} aria-invalid={!!errors.deliveryAddress} />
+            {errors.deliveryAddress && <p className="field-error">{errors.deliveryAddress.message}</p>}
           </div>
         )}
 
@@ -104,16 +108,56 @@ export function CustomerForm({ businessId, customerId, currencies, initial, cust
         <summary className="cursor-pointer px-4 py-3 text-sm font-semibold">Legal identity details</summary>
         <div className="grid gap-5 border-t border-border p-4 sm:grid-cols-2">
           <p className="text-sm text-muted-foreground sm:col-span-2">Optional legal-name and tax-identifier details. UAE scheme 0235 electronic addresses are 10 digits beginning with 1.</p>
-          <div className="space-y-1.5 sm:col-span-2"><Label htmlFor="legalName">Legal name</Label><Input id="legalName" {...register("legalName")} /></div>
-          <div className="space-y-1.5"><Label htmlFor="trn">TRN</Label><Input id="trn" inputMode="numeric" {...register("trn")} aria-invalid={!!errors.trn} />{errors.trn && <p className="field-error">{errors.trn.message}</p>}</div>
-          <div className="space-y-1.5"><Label htmlFor="legalRegistrationIdentifier">Trade-license identifier</Label><Input id="legalRegistrationIdentifier" {...register("legalRegistrationIdentifier")} /></div>
-          <div className="space-y-1.5"><Label htmlFor="electronicAddress">Electronic address</Label><Input id="electronicAddress" inputMode="numeric" {...register("electronicAddress")} /></div>
-          <div className="space-y-1.5"><Label htmlFor="electronicAddressScheme">Electronic address scheme</Label><Input id="electronicAddressScheme" placeholder="0235" {...register("electronicAddressScheme")} /></div>
-          <div className="space-y-1.5 sm:col-span-2"><Label htmlFor="addressLine1">Street address</Label><Input id="addressLine1" {...register("addressLine1")} /></div>
-          <div className="space-y-1.5"><Label htmlFor="city">City</Label><Input id="city" {...register("city")} /></div>
-          <div className="space-y-1.5"><Label htmlFor="countrySubdivision">Emirate code</Label><Input id="countrySubdivision" placeholder="DXB" {...register("countrySubdivision")} /></div>
-          <div className="space-y-1.5"><Label htmlFor="countryCode">Country code</Label><Input id="countryCode" placeholder="AE" {...register("countryCode")} /></div>
-          <div className="space-y-1.5"><Label htmlFor="buyerReference">Buyer reference <span className="font-normal text-muted-foreground">(optional)</span></Label><Input id="buyerReference" {...register("buyerReference")} /></div>
+          <div className="space-y-1.5 sm:col-span-2">
+            <Label htmlFor="legalName">Legal name</Label>
+            <Input id="legalName" {...register("legalName")} aria-invalid={!!errors.legalName} />
+            {errors.legalName && <p className="field-error">{errors.legalName.message}</p>}
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="trn">TRN</Label>
+            <Input id="trn" inputMode="numeric" {...register("trn")} aria-invalid={!!errors.trn} />
+            {errors.trn && <p className="field-error">{errors.trn.message}</p>}
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="legalRegistrationIdentifier">Trade-license identifier</Label>
+            <Input id="legalRegistrationIdentifier" {...register("legalRegistrationIdentifier")} aria-invalid={!!errors.legalRegistrationIdentifier} />
+            {errors.legalRegistrationIdentifier && <p className="field-error">{errors.legalRegistrationIdentifier.message}</p>}
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="electronicAddress">Electronic address</Label>
+            <Input id="electronicAddress" inputMode="numeric" {...register("electronicAddress")} aria-invalid={!!errors.electronicAddress} />
+            {errors.electronicAddress && <p className="field-error">{errors.electronicAddress.message}</p>}
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="electronicAddressScheme">Electronic address scheme</Label>
+            <Input id="electronicAddressScheme" placeholder="0235" {...register("electronicAddressScheme")} aria-invalid={!!errors.electronicAddressScheme} />
+            {errors.electronicAddressScheme && <p className="field-error">{errors.electronicAddressScheme.message}</p>}
+          </div>
+          <div className="space-y-1.5 sm:col-span-2">
+            <Label htmlFor="addressLine1">Street address</Label>
+            <Input id="addressLine1" {...register("addressLine1")} aria-invalid={!!errors.addressLine1} />
+            {errors.addressLine1 && <p className="field-error">{errors.addressLine1.message}</p>}
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="city">City</Label>
+            <Input id="city" {...register("city")} aria-invalid={!!errors.city} />
+            {errors.city && <p className="field-error">{errors.city.message}</p>}
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="countrySubdivision">Emirate code</Label>
+            <Input id="countrySubdivision" placeholder="DXB" {...register("countrySubdivision")} aria-invalid={!!errors.countrySubdivision} />
+            {errors.countrySubdivision && <p className="field-error">{errors.countrySubdivision.message}</p>}
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="countryCode">Country code</Label>
+            <Input id="countryCode" placeholder="AE" {...register("countryCode")} aria-invalid={!!errors.countryCode} />
+            {errors.countryCode && <p className="field-error">{errors.countryCode.message}</p>}
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="buyerReference">Buyer reference <span className="font-normal text-muted-foreground">(optional)</span></Label>
+            <Input id="buyerReference" {...register("buyerReference")} aria-invalid={!!errors.buyerReference} />
+            {errors.buyerReference && <p className="field-error">{errors.buyerReference.message}</p>}
+          </div>
         </div>
       </details>
       {customFields.length > 0 && (

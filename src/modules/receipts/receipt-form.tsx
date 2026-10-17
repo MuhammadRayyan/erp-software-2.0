@@ -62,6 +62,7 @@ export function ReceiptForm({
 
   const form = useForm<ReceiptInput>({
     resolver: zodResolver(receiptInputSchema),
+    mode: "onTouched",
     defaultValues: initial,
   });
 

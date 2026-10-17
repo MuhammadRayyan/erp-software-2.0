@@ -9,7 +9,7 @@ import { ProjectLinks } from "@/modules/projects/project-links";
 import { getPurchaseInvoice } from "@/modules/purchase-invoices/purchase-invoice-service";
 import { PurchaseInvoiceViewActions } from "@/modules/purchase-invoices/purchase-invoice-view-actions";
 import { DocumentFlowStepper, type FlowStep } from "@/components/documents/document-flow-stepper";
-import { BackLink } from "@/components/back-link";
+import { Breadcrumbs } from "@/components/breadcrumbs";
 import { getSupplierUnallocatedCredit } from "@/modules/supplier-payments/supplier-payment-service";
 import { ApplyPrepaymentModal } from "@/modules/purchase-invoices/apply-prepayment-modal";
 
@@ -86,7 +86,13 @@ export default async function PurchaseInvoiceViewPage({
   return (
     <div className="page-container">
       <NoticeToast message={notice} />
-      <BackLink href={`/b/${businessId}/purchases/invoices`}>Purchase Invoices</BackLink>
+      <Breadcrumbs
+        businessId={businessId}
+        items={[
+          { label: "Purchase Invoices", href: `/b/${businessId}/purchases/invoices` },
+          { label: invoice.internalNumber },
+        ]}
+      />
       <div className="mb-5 flex flex-col justify-between gap-4 lg:flex-row lg:items-start">
         <div>
           <div className="flex flex-wrap items-center gap-2">

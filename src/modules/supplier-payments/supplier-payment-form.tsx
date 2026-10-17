@@ -63,6 +63,7 @@ export function SupplierPaymentForm({
 
   const form = useForm<SupplierPaymentInput>({
     resolver: zodResolver(supplierPaymentInputSchema),
+    mode: "onTouched",
     defaultValues: initial,
   });
 

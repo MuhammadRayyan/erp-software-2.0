@@ -11,7 +11,7 @@ import { PurchaseQuoteViewActions } from "@/modules/purchase-quotes/purchase-quo
 import { PurchaseQuoteRevisionSwitcher } from "@/modules/purchase-quotes/purchase-quote-revision-switcher";
 import { ProjectLinks } from "@/modules/projects/project-links";
 import { buildDocumentEmailContext, buildDocumentEmailDefaults } from "@/modules/email/email-defaults";
-import { BackLink } from "@/components/back-link";
+import { Breadcrumbs } from "@/components/breadcrumbs";
 import { DocumentFlowStepper, type FlowStep } from "@/components/documents/document-flow-stepper";
 
 export default async function PurchaseQuoteViewPage({
@@ -83,7 +83,13 @@ export default async function PurchaseQuoteViewPage({
   return (
     <div className="page-container">
       <NoticeToast message={notice} />
-      <BackLink href={`/b/${businessId}/purchases/quotes`}>Purchase Quotes</BackLink>
+      <Breadcrumbs
+        businessId={businessId}
+        items={[
+          { label: "Purchase Quotes", href: `/b/${businessId}/purchases/quotes` },
+          { label: quote.quoteNumber },
+        ]}
+      />
 
       {isViewingOlderRevision && latestRevision && latestRevision.id !== quote.id && (
         <div className="mb-5 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-amber-500/30 bg-amber-500/10 p-3.5 text-sm text-amber-900 dark:text-amber-200">

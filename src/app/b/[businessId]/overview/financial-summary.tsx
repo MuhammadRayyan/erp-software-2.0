@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { getTrialBalance } from "@/modules/reports/report-service";
 import { formatMoney } from "@/core/format";
 
@@ -35,10 +36,15 @@ export function FinancialSummary({ businessId, userId, currency }: { businessId:
         <h3 className="text-sm font-semibold border-b border-border pb-1.5 mb-2 text-foreground tracking-tight">{title}</h3>
         <div className="space-y-0.5">
           {rows.map(acc => (
-            <div key={acc.id} className="flex justify-between text-[13px] py-1.5 hover:bg-surface-muted px-2 -mx-2 rounded transition-colors">
-              <span className="text-muted-foreground">{acc.name}</span>
-              <span className="font-medium tabular-nums">{formatMoney(acc.balance, currency)}</span>
-            </div>
+            <Link
+              key={acc.id}
+              href={`/b/${businessId}/reports/general-ledger?accountId=${acc.id}`}
+              className="flex justify-between text-[13px] py-1.5 hover:bg-surface-muted/80 px-2 -mx-2 rounded transition-colors group"
+              title={`View General Ledger for ${acc.name}`}
+            >
+              <span className="text-muted-foreground group-hover:text-primary transition-colors">{acc.name}</span>
+              <span className="font-medium tabular-nums group-hover:text-primary transition-colors">{formatMoney(acc.balance, currency)}</span>
+            </Link>
           ))}
           <div className="flex justify-between text-[13px] py-1.5 font-semibold border-t border-border/50 mt-1">
             <span>Total {title}</span>

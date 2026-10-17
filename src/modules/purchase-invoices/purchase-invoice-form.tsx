@@ -93,6 +93,7 @@ export function PurchaseInvoiceForm({
   );
   const form = useForm<PurchaseInvoiceInput>({
     resolver: zodResolver(purchaseInvoiceInputSchema),
+    mode: "onTouched",
     defaultValues: initial,
   });
   const {

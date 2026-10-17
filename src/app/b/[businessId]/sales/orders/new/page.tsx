@@ -9,7 +9,7 @@ import { quantityMicrosToInput } from "@/modules/accounting/calculations/money";
 import { minorToCurrencyInput } from "@/modules/currency/conversion";
 import { getSalesQuote } from "@/modules/sales-quotes/quote-service";
 import { SalesOrderForm } from "@/modules/sales-orders/sales-order-form";
-import { BackLink } from "@/components/back-link";
+import { Breadcrumbs } from "@/components/breadcrumbs";
 
 export default async function NewOrderPage({
   params,
@@ -72,7 +72,13 @@ export default async function NewOrderPage({
 
   return (
     <div className="page-container">
-      <BackLink href={`/b/${businessId}/sales/orders`}>Sales Orders</BackLink>
+      <Breadcrumbs
+        businessId={businessId}
+        items={[
+          { label: "Sales Orders", href: `/b/${businessId}/sales/orders` },
+          { label: "New Sales Order" },
+        ]}
+      />
       <div className="mb-7">
         <h1 className="page-title">New Sales Order</h1>
         <p className="page-description">Save a draft or issue a sales order.</p>

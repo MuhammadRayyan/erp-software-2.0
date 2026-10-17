@@ -60,6 +60,7 @@ export function PurchaseQuoteForm({
 
   const form = useForm<PurchaseQuoteInput>({
     resolver: zodResolver(purchaseQuoteInputSchema),
+    mode: "onTouched",
     defaultValues: initial,
   });
   const {

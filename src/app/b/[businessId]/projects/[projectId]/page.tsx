@@ -11,7 +11,7 @@ import { ProjectViewActions } from "@/modules/projects/project-view-actions";
 import { getProjectOperationalView, type ProjectDocumentRow } from "@/modules/projects/project-view-service";
 import { ProjectStakeholders } from "@/modules/projects/project-stakeholders";
 import { listCustomers } from "@/modules/customers/customer-service";
-import { BackLink } from "@/components/back-link";
+import { Breadcrumbs } from "@/components/breadcrumbs";
 
 function Metric({ label, value, currency, emphasis = false }: { label: string; value: number | null; currency: string; emphasis?: boolean }) {
   return <div className="bg-surface-raised px-4 py-3"><dt className="text-xs text-muted-foreground">{label}</dt><dd className={`money mt-1 text-base ${emphasis ? "font-semibold" : "font-medium"}`}>{value === null ? "Not tracked" : formatMoney(value, currency)}</dd></div>;
@@ -35,7 +35,13 @@ export default async function ProjectViewPage({ params, searchParams }: { params
 
   return <div className="page-container">
     <NoticeToast message={notice} />
-    <BackLink href={`/b/${businessId}/projects`}>Projects</BackLink>
+    <Breadcrumbs
+      businessId={businessId}
+      items={[
+        { label: "Projects", href: `/b/${businessId}/projects` },
+        { label: project.name },
+      ]}
+    />
     <div className="mb-5 flex flex-col justify-between gap-4 lg:flex-row lg:items-start">
       <div>
         <div className="flex flex-wrap items-center gap-2">
