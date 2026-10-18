@@ -10,6 +10,7 @@ import { effectiveProjectId, validateProjectReferences } from "@/modules/project
 import { convertDocumentLinesToBase} from "@/modules/currency/conversion";
 import { resolveRateSnapshot } from "@/modules/currency/validation";
 import { calculateLines, totalsForLines, type StoredLine } from "@/modules/accounting/services/document-line-calculator";
+import { recordActivity } from "@/modules/activity-log/activity-log-service";
 
 export type SalesOrderStatus = "draft" | "active" | "completed" | "cancelled" | "superseded";
 export type SalesOrderIntent = "draft" | "issue";
@@ -133,12 +134,14 @@ export function saveSalesOrder(businessId: string, userId: string, input: SalesO
   const base = convertDocumentLinesToBase(lines, rate);
   const now = new Date().toISOString();
   const id = orderId ?? randomUUID();
+  let recordedOrderNumber = "";
   context.sqlite.transaction(() => {
     if (orderId) {
       const current = context.db.select().from(salesOrders).where(eq(salesOrders.id, orderId)).get();
       if (!current) throw new Error("Sales order not found.");
       if (current.documentStatus === "completed" || current.documentStatus === "cancelled") throw new Error("Closed or cancelled sales orders cannot be edited.");
       
+      recordedOrderNumber = current.orderNumber;
       const nextStatus = current.documentStatus === "active" || intent === "issue" ? "active" : "draft";
       const effectiveSalesQuoteId = data.salesQuoteId || current.salesQuoteId || null;
       context.sqlite.prepare(`UPDATE sales_orders SET customer_id = ?, project_id = ?, sales_quote_id = ?, order_date = ?, delivery_date = ?, reference = ?, document_status = ?, amounts_include_tax = ?, subtotal_minor = ?, tax_minor = ?, total_minor = ?, currency_code = ?, exchange_rate_to_base = ?, exchange_rate_date = ?, exchange_rate_source = ?, base_subtotal_minor = ?, base_tax_minor = ?, base_total_minor = ?, notes = ?, terms = ?, updated_at = ? WHERE id = ?`)
@@ -146,12 +149,28 @@ export function saveSalesOrder(businessId: string, userId: string, input: SalesO
       context.sqlite.prepare("DELETE FROM sales_order_lines WHERE order_id = ?").run(orderId);
     } else {
       const orderNumber = allocateNumber(context.sqlite, "salesOrder");
+      recordedOrderNumber = orderNumber;
       const status = intent === "issue" ? "active" : "draft";
       context.sqlite.prepare(`INSERT INTO sales_orders (id, order_number, customer_id, project_id, sales_quote_id, order_date, delivery_date, reference, document_status, amounts_include_tax, subtotal_minor, tax_minor, total_minor, currency_code, exchange_rate_to_base, exchange_rate_date, exchange_rate_source, base_subtotal_minor, base_tax_minor, base_total_minor, notes, terms, created_by, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
         .run(id, orderNumber, data.customerId, data.projectId || null, data.salesQuoteId || null, data.date, data.expectedDate || "", data.reference || null, status, data.amountsIncludeTax ? 1 : 0, amounts.subtotalMinor, amounts.taxMinor, amounts.totalMinor, rate.currencyCode, rate.exchangeRateToBase, rate.exchangeRateDate, rate.exchangeRateSource, base.baseSubtotalMinor, base.baseTaxMinor, base.baseTotalMinor, data.notes || null, data.terms || null, userId, now, now);
     }
     insertLines(context.db, id, lines);
   }).immediate();
+
+  try {
+    recordActivity(businessId, {
+      userId,
+      action: orderId ? (intent === "issue" ? "posted" : "updated") : (intent === "issue" ? "posted" : "created"),
+      entityType: "sales_order",
+      entityId: id,
+      entityNumber: recordedOrderNumber,
+      summary: `${orderId ? (intent === "issue" ? "Confirmed" : "Updated") : (intent === "issue" ? "Confirmed" : "Created")} sales order ${recordedOrderNumber}`,
+      details: { orderNumber: recordedOrderNumber, totalMinor: amounts.totalMinor, currency: rate.currencyCode, customerId: data.customerId },
+      sqlite: context.sqlite,
+    });
+  } catch (e) {
+    console.error("[ActivityLog] sales_order save failed:", e);
+  }
 
   return id;
 }
@@ -163,6 +182,21 @@ export function closeSalesOrder(businessId: string, userId: string, orderId: str
   if (order.documentStatus !== "active") throw new Error("Only an active sales order can be closed.");
   const now = new Date().toISOString();
   context.db.update(salesOrders).set({ documentStatus: "completed", updatedAt: now }).where(eq(salesOrders.id, orderId)).run();
+
+  try {
+    recordActivity(businessId, {
+      userId,
+      action: "posted",
+      entityType: "sales_order",
+      entityId: orderId,
+      entityNumber: order.orderNumber,
+      summary: `Completed sales order ${order.orderNumber}`,
+      details: { orderNumber: order.orderNumber, previousStatus: order.documentStatus, newStatus: "completed" },
+      sqlite: context.sqlite,
+    });
+  } catch (e) {
+    console.error("[ActivityLog] sales_order close failed:", e);
+  }
 }
 
 export function cancelSalesOrder(businessId: string, userId: string, orderId: string) {
@@ -173,6 +207,21 @@ export function cancelSalesOrder(businessId: string, userId: string, orderId: st
   if (order.documentStatus === "completed") throw new Error("A completed sales order cannot be cancelled.");
   const now = new Date().toISOString();
   context.db.update(salesOrders).set({ documentStatus: "cancelled", updatedAt: now }).where(eq(salesOrders.id, orderId)).run();
+
+  try {
+    recordActivity(businessId, {
+      userId,
+      action: "voided",
+      entityType: "sales_order",
+      entityId: orderId,
+      entityNumber: order.orderNumber,
+      summary: `Cancelled sales order ${order.orderNumber}`,
+      details: { orderNumber: order.orderNumber, previousStatus: order.documentStatus, newStatus: "cancelled" },
+      sqlite: context.sqlite,
+    });
+  } catch (e) {
+    console.error("[ActivityLog] sales_order cancel failed:", e);
+  }
 }
 
 const revisionConfig = {
@@ -185,12 +234,47 @@ const revisionConfig = {
 
 export function deleteSalesOrder(businessId: string, userId: string, orderId: string) {
   const context = getBusinessDb(businessId, userId);
+  const order = context.sqlite.prepare("SELECT order_number FROM sales_orders WHERE id = ?").get(orderId) as { order_number: string } | undefined;
   deleteDraftRevision(context.sqlite, revisionConfig, orderId);
+
+  if (order) {
+    try {
+      recordActivity(businessId, {
+        userId,
+        action: "deleted",
+        entityType: "sales_order",
+        entityId: orderId,
+        entityNumber: order.order_number,
+        summary: `Deleted draft sales order ${order.order_number}`,
+        sqlite: context.sqlite,
+      });
+    } catch (e) {
+      console.error("[ActivityLog] sales_order delete failed:", e);
+    }
+  }
 }
 
 export function createSalesOrderRevision(businessId: string, userId: string, sourceOrderId: string): string {
   const context = getBusinessDb(businessId, userId);
-  return createDocumentRevision(context.sqlite, revisionConfig, userId, sourceOrderId);
+  const newId = createDocumentRevision(context.sqlite, revisionConfig, userId, sourceOrderId);
+  const rev = context.sqlite.prepare("SELECT order_number, revision_number FROM sales_orders WHERE id = ?").get(newId) as { order_number: string; revision_number: number } | undefined;
+  if (rev) {
+    try {
+      recordActivity(businessId, {
+        userId,
+        action: "created",
+        entityType: "sales_order",
+        entityId: newId,
+        entityNumber: rev.order_number,
+        summary: `Created revision ${rev.revision_number} (${rev.order_number}) from sales order`,
+        details: { orderNumber: rev.order_number, revisionNumber: rev.revision_number, sourceOrderId },
+        sqlite: context.sqlite,
+      });
+    } catch (e) {
+      console.error("[ActivityLog] sales_order revision failed:", e);
+    }
+  }
+  return newId;
 }
 
 export function listSalesOrderRevisions(businessId: string, userId: string, orderId: string) {

@@ -5,6 +5,7 @@ import { getBusinessAccess } from "@/core/permissions/permissions";
 import {
   listActivityLogs,
   getActivityLogUsers,
+  getActivityLogSettings,
   type ActivityLogFilters,
 } from "@/modules/activity-log/activity-log-service";
 import { ActivityLogClient } from "./activity-log-client";
@@ -36,6 +37,9 @@ export default async function ActivityLogPage({
 
   const initialData = listActivityLogs(businessId, user.id, filters);
   const usersList = getActivityLogUsers(businessId, user.id);
+  const initialRetentionSettings = isAdmin
+    ? getActivityLogSettings(businessId, user.id)
+    : null;
 
   return (
     <SettingsShell
@@ -51,6 +55,7 @@ export default async function ActivityLogPage({
         businessId={businessId}
         initialData={initialData}
         usersList={usersList}
+        initialRetentionSettings={initialRetentionSettings}
         currentUserId={user.id}
         isAdmin={isAdmin}
       />

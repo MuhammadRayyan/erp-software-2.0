@@ -23,6 +23,7 @@ import type {
   InventoryDocumentStatus,
 } from "./inventory-document";
 import { stockAdjustmentInputSchema, type StockAdjustmentInput } from "./stock-adjustment-input";
+import { recordActivity } from "@/modules/activity-log/activity-log-service";
 import {
   averageUnitCostMicros,
   deleteSourceMovements,
@@ -373,6 +374,21 @@ export function saveStockAdjustment(
         WHERE id = ?
       `).run(now, id);
     }
+
+    try {
+      recordActivity(businessId, {
+        userId,
+        action: shouldPost ? "posted" : (adjustmentId ? "updated" : "created"),
+        entityType: "stock_adjustment",
+        entityId: id,
+        entityNumber: number,
+        summary: `${shouldPost ? "Posted" : (adjustmentId ? "Updated" : "Created")} stock adjustment ${number} (${data.reason})`,
+        details: { adjustmentNumber: number, itemId: data.itemId, reason: data.reason, locationId: data.locationId },
+        sqlite: context.sqlite,
+      });
+    } catch (e) {
+      console.error("[ActivityLog] stock_adjustment save failed:", e);
+    }
   }).immediate();
 
   return id;
@@ -458,6 +474,21 @@ export function voidStockAdjustment(
       SET document_status = 'void', voided_at = ?, updated_at = ?
       WHERE id = ?
     `).run(now, now, adjustmentId);
+
+    try {
+      recordActivity(businessId, {
+        userId,
+        action: "voided",
+        entityType: "stock_adjustment",
+        entityId: adjustmentId,
+        entityNumber: adjustment.adjustment_number,
+        summary: `Voided stock adjustment ${adjustment.adjustment_number}`,
+        details: { adjustmentNumber: adjustment.adjustment_number, itemId: adjustment.item_id },
+        sqlite: context.sqlite,
+      });
+    } catch (e) {
+      console.error("[ActivityLog] stock_adjustment void failed:", e);
+    }
   }).immediate();
 }
 
@@ -468,14 +499,28 @@ export function deleteStockAdjustment(
 ) {
   const { sqlite } = getBusinessDb(businessId, userId);
   const adjustment = sqlite
-    .prepare("SELECT document_status, date FROM stock_adjustments WHERE id = ?")
-    .get(adjustmentId) as { document_status: string; date: string } | undefined;
+    .prepare("SELECT adjustment_number, document_status, date FROM stock_adjustments WHERE id = ?")
+    .get(adjustmentId) as { adjustment_number: string; document_status: string; date: string } | undefined;
   if (!adjustment) throw new Error("Stock Adjustment not found.");
   if (adjustment.document_status !== "draft") {
     throw new Error("Only draft Stock Adjustments can be deleted.");
   }
   assertDateNotLocked(sqlite, adjustment.date, "Stock adjustment");
   sqlite.prepare("DELETE FROM stock_adjustments WHERE id = ?").run(adjustmentId);
+
+  try {
+    recordActivity(businessId, {
+      userId,
+      action: "deleted",
+      entityType: "stock_adjustment",
+      entityId: adjustmentId,
+      entityNumber: adjustment.adjustment_number,
+      summary: `Deleted draft stock adjustment ${adjustment.adjustment_number}`,
+      sqlite,
+    });
+  } catch (e) {
+    console.error("[ActivityLog] stock_adjustment delete failed:", e);
+  }
 }
 
 export function stockAdjustmentToInput(

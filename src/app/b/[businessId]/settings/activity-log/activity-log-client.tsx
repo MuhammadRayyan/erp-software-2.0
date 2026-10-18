@@ -2,6 +2,7 @@
 
 import { useMemo, useState, useTransition } from "react";
 import Link from "next/link";
+import { toast } from "sonner";
 import {
   History,
   Search,
@@ -21,6 +22,11 @@ import {
   ExternalLink,
   Users,
   Layers,
+  Clock,
+  Mail,
+  CheckCheck,
+  Upload,
+  Sliders,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -29,13 +35,19 @@ import {
   type ActivityLogItem,
   type ListActivityLogsResult,
   type ActivityLogFilters,
+  type ActivityLogSettings,
 } from "@/modules/activity-log/activity-log-service";
-import { getActivityLogsAction } from "@/modules/activity-log/actions";
+import {
+  getActivityLogsAction,
+  updateActivityLogSettingsAction,
+  runActivityLogCleanupAction,
+} from "@/modules/activity-log/actions";
 
 interface ActivityLogClientProps {
   businessId: string;
   initialData: ListActivityLogsResult;
   usersList: { id: string; name: string; email: string; role: string }[];
+  initialRetentionSettings: ActivityLogSettings | null;
   currentUserId: string;
   isAdmin: boolean;
 }
@@ -66,6 +78,24 @@ function getActionBadge(action: string) {
           <Trash2 className="size-3" /> Deleted
         </span>
       );
+    case "emailed":
+      return (
+        <span className="inline-flex items-center gap-1 rounded-full bg-blue-500/10 px-2 py-0.5 text-xs font-medium text-blue-700 dark:text-blue-300">
+          <Mail className="size-3" /> Emailed
+        </span>
+      );
+    case "reconciled":
+      return (
+        <span className="inline-flex items-center gap-1 rounded-full bg-teal-500/10 px-2 py-0.5 text-xs font-medium text-teal-700 dark:text-teal-300">
+          <CheckCheck className="size-3" /> Reconciled
+        </span>
+      );
+    case "imported":
+      return (
+        <span className="inline-flex items-center gap-1 rounded-full bg-indigo-500/10 px-2 py-0.5 text-xs font-medium text-indigo-700 dark:text-indigo-300">
+          <Upload className="size-3" /> Imported
+        </span>
+      );
     case "settings_changed":
       return (
         <span className="inline-flex items-center gap-1 rounded-full bg-purple-500/10 px-2 py-0.5 text-xs font-medium text-purple-700 dark:text-purple-300">
@@ -89,18 +119,48 @@ function getEntityLink(businessId: string, entityType: string, entityId: string 
       return `/b/${businessId}/sales/invoices/${entityId}`;
     case "receipt":
       return `/b/${businessId}/sales/receipts/${entityId}`;
+    case "sales_quote":
+      return `/b/${businessId}/sales/quotes/${entityId}`;
+    case "sales_order":
+      return `/b/${businessId}/sales/orders/${entityId}`;
+    case "sales_credit_note":
+      return `/b/${businessId}/sales/credit-notes/${entityId}`;
     case "purchase_invoice":
       return `/b/${businessId}/purchases/invoices/${entityId}`;
+    case "purchase_quote":
+      return `/b/${businessId}/purchases/quotes/${entityId}`;
+    case "purchase_order":
+      return `/b/${businessId}/purchases/orders/${entityId}`;
     case "supplier_payment":
       return `/b/${businessId}/purchases/payments/${entityId}`;
+    case "debit_note":
+      return `/b/${businessId}/purchases/debit-notes/${entityId}`;
     case "customer":
       return `/b/${businessId}/customers/${entityId}`;
     case "supplier":
       return `/b/${businessId}/suppliers/${entityId}`;
+    case "inventory_item":
+      return `/b/${businessId}/inventory/items`;
+    case "stock_adjustment":
+      return `/b/${businessId}/inventory/adjustments/${entityId}`;
+    case "bank_rule":
+      return `/b/${businessId}/settings/bank-rules`;
+    case "project":
+      return `/b/${businessId}/projects/${entityId}`;
+    case "account":
+      return `/b/${businessId}/accounting/chart-of-accounts`;
+    case "business_profile":
+      return `/b/${businessId}/settings/business-profile`;
+    case "tax_settings":
+      return `/b/${businessId}/settings/tax`;
+    case "custom_field":
+      return `/b/${businessId}/settings/custom-fields`;
     case "financial_lock":
       return `/b/${businessId}/settings/financial-lock`;
     case "user_access":
       return `/b/${businessId}/settings/users`;
+    case "activity_log_retention":
+      return `/b/${businessId}/settings/activity-log`;
     default:
       return null;
   }
@@ -112,18 +172,50 @@ function getEntityDisplayName(entityType: string) {
       return "Sales Invoice";
     case "receipt":
       return "Payment Receipt";
+    case "sales_quote":
+      return "Sales Quote";
+    case "sales_order":
+      return "Sales Order";
+    case "sales_credit_note":
+      return "Credit Note";
     case "purchase_invoice":
       return "Purchase Invoice";
+    case "purchase_quote":
+      return "Purchase Quote";
+    case "purchase_order":
+      return "Purchase Order";
     case "supplier_payment":
       return "Supplier Payment";
+    case "debit_note":
+      return "Debit Note";
     case "customer":
       return "Customer";
     case "supplier":
       return "Supplier";
+    case "inventory_item":
+      return "Inventory Item";
+    case "stock_adjustment":
+      return "Stock Adjustment";
+    case "bank_rule":
+      return "Bank Rule";
+    case "project":
+      return "Project";
+    case "account":
+      return "Chart of Accounts";
+    case "email_dispatch":
+      return "Email Dispatch";
     case "financial_lock":
       return "Financial Lock";
     case "user_access":
       return "User Access";
+    case "business_profile":
+      return "Business Profile";
+    case "tax_settings":
+      return "Tax Settings";
+    case "custom_field":
+      return "Custom Field";
+    case "activity_log_retention":
+      return "Retention Policy";
     default:
       return entityType.replace(/_/g, " ");
   }
@@ -167,11 +259,20 @@ export function ActivityLogClient({
   businessId,
   initialData,
   usersList,
+  initialRetentionSettings,
   currentUserId,
   isAdmin,
 }: ActivityLogClientProps) {
   const [data, setData] = useState<ListActivityLogsResult>(initialData);
   const [isPending, startTransition] = useTransition();
+
+  // Retention policy state (Admin only)
+  const [retentionSettings, setRetentionSettings] = useState<ActivityLogSettings | null>(initialRetentionSettings);
+  const [retentionEnabled, setRetentionEnabled] = useState(initialRetentionSettings?.retentionEnabled ?? false);
+  const [retentionDays, setRetentionDays] = useState(initialRetentionSettings?.retentionDays ?? 90);
+  const [isSavingRetention, setIsSavingRetention] = useState(false);
+  const [isPruningLogs, setIsPruningLogs] = useState(false);
+  const [showRetentionPanel, setShowRetentionPanel] = useState(false);
 
   // Filters state
   const [search, setSearch] = useState("");
@@ -185,6 +286,65 @@ export function ActivityLogClient({
 
   function toggleExpand(id: string) {
     setExpandedIds((prev) => ({ ...prev, [id]: !prev[id] }));
+  }
+
+  async function handleSaveRetention() {
+    try {
+      setIsSavingRetention(true);
+      const updated = await updateActivityLogSettingsAction(businessId, {
+        retentionEnabled,
+        retentionDays,
+      });
+      setRetentionSettings(updated);
+      toast.success(
+        updated.retentionEnabled
+          ? `Automated retention cleanup active (${updated.retentionDays} days).`
+          : "Automated retention cleanup disabled. Audit logs will be preserved indefinitely.",
+      );
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to update retention policy.");
+    } finally {
+      setIsSavingRetention(false);
+    }
+  }
+
+  async function handlePruneLogs() {
+    const confirmed = window.confirm(
+      `Permanently purge all activity logs older than ${retentionDays} days? This action cannot be undone.`,
+    );
+    if (!confirmed) return;
+
+    try {
+      setIsPruningLogs(true);
+      const result = await runActivityLogCleanupAction(businessId, retentionDays);
+      toast.success(
+        result.deletedCount > 0
+          ? `Pruned ${result.deletedCount} activity logs older than ${retentionDays} days (${result.cutoffDate.slice(0, 10)}).`
+          : `No activity logs found older than ${retentionDays} days to prune.`,
+      );
+      setRetentionSettings((prev) =>
+        prev
+          ? {
+              ...prev,
+              lastCleanupAt: result.lastCleanupAt,
+              lastCleanupCount: result.deletedCount,
+            }
+          : prev,
+      );
+      // Reload logs
+      const refreshed = await getActivityLogsAction(businessId, {
+        search,
+        userId: selectedUser === "all" ? undefined : selectedUser,
+        action: selectedAction === "all" ? undefined : selectedAction,
+        entityType: selectedEntityType === "all" ? undefined : selectedEntityType,
+        dateRange,
+      });
+      setData(refreshed);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to execute manual pruning.");
+    } finally {
+      setIsPruningLogs(false);
+    }
   }
 
   function handleFilterChange(newFilters: Partial<ActivityLogFilters>) {
@@ -355,6 +515,142 @@ export function ActivityLogClient({
         </div>
       )}
 
+      {/* Admin Automated Log Retention & Cleanup Policy */}
+      {isAdmin && retentionSettings && (
+        <div className="rounded-lg border border-border bg-surface-raised p-4 transition-all">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex items-center gap-3">
+              <div className="grid size-9 place-items-center rounded-lg bg-primary/10 text-primary">
+                <Clock className="size-4" />
+              </div>
+              <div>
+                <div className="flex items-center gap-2">
+                  <h3 className="text-sm font-semibold text-foreground">
+                    Automated Log Retention & Cleanup Policy
+                  </h3>
+                  <span
+                    className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${
+                      retentionSettings.retentionEnabled
+                        ? "bg-emerald-500/10 text-emerald-700 dark:text-emerald-300"
+                        : "bg-surface-muted text-muted-foreground"
+                    }`}
+                  >
+                    {retentionSettings.retentionEnabled
+                      ? `Active · ${retentionSettings.retentionDays} Days`
+                      : "Disabled · Indefinite"}
+                  </span>
+                </div>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  Automate log retention compliance and storage pruning across organizational operational events.
+                </p>
+              </div>
+            </div>
+
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={() => setShowRetentionPanel(!showRetentionPanel)}
+              className="gap-1.5 self-start sm:self-auto text-xs"
+            >
+              <Sliders className="size-3.5" />
+              <span>{showRetentionPanel ? "Hide Policy Controls" : "Configure Retention"}</span>
+            </Button>
+          </div>
+
+          {showRetentionPanel && (
+            <div className="mt-4 pt-4 border-t border-border/60 space-y-4">
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                {/* Enable toggle */}
+                <div className="flex items-start gap-3 rounded-lg border border-border/60 bg-surface p-3">
+                  <input
+                    type="checkbox"
+                    id="retentionEnabled"
+                    checked={retentionEnabled}
+                    onChange={(e) => setRetentionEnabled(e.target.checked)}
+                    className="mt-0.5 size-4 rounded border-border text-primary focus:ring-primary"
+                  />
+                  <div>
+                    <label htmlFor="retentionEnabled" className="text-xs font-semibold text-foreground cursor-pointer">
+                      Enable Automated Retention
+                    </label>
+                    <p className="text-[11px] text-muted-foreground mt-0.5">
+                      Automatically schedule background cleanup for logs older than the threshold.
+                    </p>
+                  </div>
+                </div>
+
+                {/* Duration selector */}
+                <div className="rounded-lg border border-border/60 bg-surface p-3 space-y-1">
+                  <label htmlFor="retentionDays" className="text-xs font-semibold text-foreground">
+                    Retention Window
+                  </label>
+                  <SelectNative
+                    id="retentionDays"
+                    value={String(retentionDays)}
+                    onChange={(e) => setRetentionDays(Number(e.target.value))}
+                    className="h-8 text-xs w-full"
+                  >
+                    <option value="30">30 Days (1 Month)</option>
+                    <option value="60">60 Days (2 Months)</option>
+                    <option value="90">90 Days (Recommended · NetSuite Standard)</option>
+                    <option value="180">180 Days (6 Months)</option>
+                    <option value="365">365 Days (1 Year)</option>
+                    <option value="730">730 Days (2 Years)</option>
+                    <option value="2555">2,555 Days (7 Years · Statutory Tax)</option>
+                  </SelectNative>
+                </div>
+
+                {/* Status info */}
+                <div className="rounded-lg border border-border/60 bg-surface p-3 flex flex-col justify-between">
+                  <div>
+                    <span className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">
+                      Pruning Telemetry
+                    </span>
+                    <p className="text-xs text-foreground mt-1">
+                      {retentionSettings.lastCleanupAt
+                        ? `Last pruned: ${new Date(retentionSettings.lastCleanupAt).toLocaleString()}`
+                        : "No manual or automated pruning recorded"}
+                    </p>
+                  </div>
+                  <p className="text-[11px] text-muted-foreground mt-1">
+                    {retentionSettings.lastCleanupCount} records pruned in latest cycle
+                  </p>
+                </div>
+              </div>
+
+              {/* Actions row */}
+              <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-border/40">
+                <p className="text-[11px] text-muted-foreground">
+                  Changes take effect immediately across all workspace activity logs.
+                </p>
+                <div className="flex items-center gap-2">
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    onClick={handlePruneLogs}
+                    disabled={isPruningLogs}
+                    className="text-xs gap-1.5 text-rose-600 hover:text-rose-700 hover:bg-rose-500/10 dark:text-rose-400"
+                  >
+                    <Trash2 className="size-3.5" />
+                    <span>{isPruningLogs ? "Pruning..." : "Prune Expired Logs Now"}</span>
+                  </Button>
+                  <Button
+                    variant="primary"
+                    size="sm"
+                    onClick={handleSaveRetention}
+                    disabled={isSavingRetention}
+                    className="text-xs gap-1.5"
+                  >
+                    <CheckCircle2 className="size-3.5" />
+                    <span>{isSavingRetention ? "Saving..." : "Save Retention Policy"}</span>
+                  </Button>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Filter and Control Toolbar */}
       <div className="rounded-lg border border-border bg-surface-raised p-4 space-y-3">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -432,14 +728,38 @@ export function ActivityLogClient({
               className="h-8 text-xs"
             >
               <option value="all">All Document Types</option>
-              <option value="sales_invoice">Sales Invoices</option>
-              <option value="receipt">Payment Receipts</option>
-              <option value="purchase_invoice">Purchase Invoices</option>
-              <option value="supplier_payment">Supplier Payments</option>
-              <option value="customer">Customers</option>
-              <option value="supplier">Suppliers</option>
-              <option value="financial_lock">Financial Lock</option>
-              <option value="user_access">User Access</option>
+              <optgroup label="Sales">
+                <option value="sales_invoice">Sales Invoices</option>
+                <option value="sales_quote">Sales Quotes</option>
+                <option value="sales_order">Sales Orders</option>
+                <option value="sales_credit_note">Credit Notes</option>
+                <option value="receipt">Payment Receipts</option>
+                <option value="customer">Customers</option>
+              </optgroup>
+              <optgroup label="Purchases">
+                <option value="purchase_invoice">Purchase Invoices</option>
+                <option value="purchase_quote">Purchase Quotes</option>
+                <option value="purchase_order">Purchase Orders</option>
+                <option value="debit_note">Debit Notes</option>
+                <option value="supplier_payment">Supplier Payments</option>
+                <option value="supplier">Suppliers</option>
+              </optgroup>
+              <optgroup label="Inventory & Projects">
+                <option value="inventory_item">Inventory Items</option>
+                <option value="stock_adjustment">Stock Adjustments</option>
+                <option value="project">Projects</option>
+              </optgroup>
+              <optgroup label="Accounting & Operations">
+                <option value="account">Chart of Accounts</option>
+                <option value="bank_rule">Bank Rules</option>
+                <option value="email_dispatch">Email Dispatches</option>
+                <option value="financial_lock">Financial Lock</option>
+                <option value="user_access">User Access</option>
+                <option value="business_profile">Business Profile</option>
+                <option value="tax_settings">Tax Settings</option>
+                <option value="custom_field">Custom Fields</option>
+                <option value="activity_log_retention">Retention Policy</option>
+              </optgroup>
             </SelectNative>
           </div>
 
@@ -469,7 +789,7 @@ export function ActivityLogClient({
         {/* Action badges filter row */}
         <div className="flex flex-wrap items-center gap-1.5 pt-1">
           <span className="text-xs text-muted-foreground font-medium mr-1">Action:</span>
-          {(["all", "posted", "created", "updated", "voided", "deleted", "settings_changed"] as const).map((act) => (
+          {(["all", "posted", "created", "updated", "voided", "deleted", "emailed", "reconciled", "settings_changed"] as const).map((act) => (
             <button
               key={act}
               type="button"

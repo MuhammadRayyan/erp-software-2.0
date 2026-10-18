@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import { asc, eq } from "drizzle-orm";
 import { getBusinessDb } from "@/core/db/business";
 import { accounts } from "@/core/db/business-schema";
+import { recordActivity } from "@/modules/activity-log/activity-log-service";
 import { accountInputSchema, accountSubtypesByType, type AccountInput } from "../account-input";
 
 function validateSubtype(data: ReturnType<typeof accountInputSchema.parse>) {
@@ -24,10 +25,26 @@ export function createAccount(businessId: string, userId: string, input: Account
   validateSubtype(data);
   const context = getBusinessDb(businessId, userId);
   const now = new Date().toISOString();
+  const id = randomUUID();
   context.db
     .insert(accounts)
-    .values({ id: randomUUID(), ...data, isSystem: false, createdAt: now, updatedAt: now })
+    .values({ id, ...data, isSystem: false, createdAt: now, updatedAt: now })
     .run();
+
+  try {
+    recordActivity(businessId, {
+      userId,
+      action: "created",
+      entityType: "account",
+      entityId: id,
+      entityNumber: data.name,
+      summary: `Created ${data.type} account "${data.name}" (${data.subtype})`,
+      details: { name: data.name, type: data.type, subtype: data.subtype },
+      sqlite: context.sqlite,
+    });
+  } catch (e) {
+    console.error("[ActivityLog] account create failed:", e);
+  }
 }
 
 export function updateAccount(
@@ -49,14 +66,31 @@ export function updateAccount(
     .set({ ...next, updatedAt: new Date().toISOString() })
     .where(eq(accounts.id, accountId))
     .run();
+
+  try {
+    recordActivity(businessId, {
+      userId,
+      action: "updated",
+      entityType: "account",
+      entityId: accountId,
+      entityNumber: data.name,
+      summary: `Updated account "${data.name}"`,
+      details: { name: data.name, type: data.type, subtype: data.subtype },
+      sqlite: context.sqlite,
+    });
+  } catch (e) {
+    console.error("[ActivityLog] account update failed:", e);
+  }
 }
 
 export function deleteAccount(businessId: string, userId: string, accountId: string) {
   const context = getBusinessDb(businessId, userId);
+  let deletedAccountName = "";
   const run = context.sqlite.transaction(() => {
     const account = context.db.select().from(accounts).where(eq(accounts.id, accountId)).get();
     if (!account) throw new Error("Account not found.");
     if (account.isSystem) throw new Error("System accounts cannot be deleted.");
+    deletedAccountName = account.name;
 
     const usageQueries = [
       "SELECT 1 FROM journal_lines WHERE account_id = ? LIMIT 1",
@@ -88,6 +122,20 @@ export function deleteAccount(businessId: string, userId: string, accountId: str
     context.db.delete(accounts).where(eq(accounts.id, accountId)).run();
   });
   run.immediate();
+
+  try {
+    recordActivity(businessId, {
+      userId,
+      action: "deleted",
+      entityType: "account",
+      entityId: accountId,
+      entityNumber: deletedAccountName,
+      summary: `Deleted account "${deletedAccountName}"`,
+      sqlite: context.sqlite,
+    });
+  } catch (e) {
+    console.error("[ActivityLog] account delete failed:", e);
+  }
 }
 
 export function getSalesAccountOptions(businessId: string, userId: string) {

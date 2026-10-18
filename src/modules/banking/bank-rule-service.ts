@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { z } from "zod";
 import { getBusinessDb } from "@/core/db/business";
+import { recordActivity } from "@/modules/activity-log/activity-log-service";
 import { saveBankTransaction } from "./bank-transaction-service";
 import type { StatementLineRow } from "./statement-service";
 
@@ -159,6 +160,21 @@ export function createBankRule(
     now,
   );
 
+  try {
+    recordActivity(businessId, {
+      userId,
+      action: "created",
+      entityType: "bank_rule",
+      entityId: id,
+      entityNumber: data.name,
+      summary: `Created bank rule "${data.name}" (${data.matchField} ${data.matchType} "${data.matchText}")`,
+      details: { name: data.name, direction: data.direction, matchField: data.matchField, matchType: data.matchType, matchText: data.matchText },
+      sqlite: context.sqlite,
+    });
+  } catch (e) {
+    console.error("[ActivityLog] bank_rule create failed:", e);
+  }
+
   return id;
 }
 
@@ -233,6 +249,21 @@ export function updateBankRule(
     now,
     ruleId,
   );
+
+  try {
+    recordActivity(businessId, {
+      userId,
+      action: "updated",
+      entityType: "bank_rule",
+      entityId: ruleId,
+      entityNumber: data.name,
+      summary: `Updated bank rule "${data.name}"`,
+      details: { name: data.name, direction: data.direction, matchField: data.matchField, matchType: data.matchType, matchText: data.matchText },
+      sqlite: context.sqlite,
+    });
+  } catch (e) {
+    console.error("[ActivityLog] bank_rule update failed:", e);
+  }
 }
 
 export function deleteBankRule(
@@ -241,8 +272,25 @@ export function deleteBankRule(
   ruleId: string,
 ): void {
   const { sqlite } = getBusinessDb(businessId, userId);
+  const existing = sqlite.prepare("SELECT name FROM bank_rules WHERE id = ?").get(ruleId) as { name: string } | undefined;
   const result = sqlite.prepare("DELETE FROM bank_rules WHERE id = ?").run(ruleId);
   if (result.changes === 0) throw new Error("Bank rule not found.");
+
+  if (existing) {
+    try {
+      recordActivity(businessId, {
+        userId,
+        action: "deleted",
+        entityType: "bank_rule",
+        entityId: ruleId,
+        entityNumber: existing.name,
+        summary: `Deleted bank rule "${existing.name}"`,
+        sqlite,
+      });
+    } catch (e) {
+      console.error("[ActivityLog] bank_rule delete failed:", e);
+    }
+  }
 }
 
 export function toggleBankRuleActive(

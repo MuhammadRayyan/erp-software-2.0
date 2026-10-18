@@ -4,6 +4,7 @@ import { getBusinessDb } from "@/core/db/business";
 import { minorToInput, parseMoneyToMinor } from "@/modules/accounting/calculations/money";
 import { inventoryItemInputSchema, type InventoryItemInput } from "./inventory-item-input";
 import { averageUnitCostMicros } from "./inventory-valuation";
+import { recordActivity } from "@/modules/activity-log/activity-log-service";
 
 function validateAccounts(sqlite: ReturnType<typeof getBusinessDb>["sqlite"], data: ReturnType<typeof inventoryItemInputSchema.parse>) {
   const rows = sqlite.prepare("SELECT id, type FROM accounts WHERE id IN (?, ?, ?) AND is_active = 1")
@@ -157,6 +158,22 @@ export function saveInventoryItem(businessId: string, userId: string, input: Inv
         price(data.purchasePrice, "Purchase price"), data.salesAccountId, data.inventoryAssetAccountId,
         data.costOfSalesAccountId, data.isActive ? 1 : 0, now, now);
   }
+
+  try {
+    recordActivity(businessId, {
+      userId,
+      action: itemId ? "updated" : "created",
+      entityType: "inventory_item",
+      entityId: id,
+      entityNumber: data.sku || data.name,
+      summary: `${itemId ? "Updated" : "Created"} inventory item "${data.name}"${data.sku ? ` (SKU: ${data.sku})` : ""}`,
+      details: { name: data.name, sku: data.sku || null, unitName: data.unitName, salesPrice: data.salesPrice, purchasePrice: data.purchasePrice },
+      sqlite,
+    });
+  } catch (e) {
+    console.error("[ActivityLog] inventory_item save failed:", e);
+  }
+
   return id;
 }
 

@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import { getBusinessDb } from "@/core/db/business";
 import { minorToInput, parseMoneyToMinor } from "@/modules/accounting/calculations/money";
 import { allocateNumber } from "@/modules/accounting/services/numbering-service";
+import { recordActivity } from "@/modules/activity-log/activity-log-service";
 import {
   projectInputSchema,
   projectCustomerInputSchema,
@@ -332,6 +333,22 @@ export function createProject(businessId: string, userId: string, input: Project
       }
     }
   }).immediate();
+
+  try {
+    recordActivity(businessId, {
+      userId,
+      action: "created",
+      entityType: "project",
+      entityId: id,
+      entityNumber: data.code || id,
+      summary: `Created project "${data.name}" (${data.status})`,
+      details: { name: data.name, code: data.code, status: data.status, customerId: data.customerId },
+      sqlite,
+    });
+  } catch (e) {
+    console.error("[ActivityLog] project create failed:", e);
+  }
+
   return id;
 }
 
@@ -382,6 +399,21 @@ export function updateProject(businessId: string, userId: string, projectId: str
       `).run(randomUUID(), projectId, data.customerId, now, now, now);
     }
   }).immediate();
+
+  try {
+    recordActivity(businessId, {
+      userId,
+      action: "updated",
+      entityType: "project",
+      entityId: projectId,
+      entityNumber: code,
+      summary: `Updated project "${data.name}" (${data.status})`,
+      details: { name: data.name, code, status: data.status, customerId: data.customerId },
+      sqlite,
+    });
+  } catch (e) {
+    console.error("[ActivityLog] project update failed:", e);
+  }
 }
 
 export function addProjectCustomer(
@@ -497,7 +529,8 @@ export function projectToInput(project: NonNullable<ReturnType<typeof getProject
 
 export function deleteProject(businessId: string, userId: string, projectId: string) {
   const { sqlite } = getBusinessDb(businessId, userId);
-  if (!sqlite.prepare("SELECT 1 FROM projects WHERE id = ?").get(projectId)) throw new Error("Project not found.");
+  const existing = sqlite.prepare("SELECT code, name FROM projects WHERE id = ?").get(projectId) as { code: string; name: string } | undefined;
+  if (!existing) throw new Error("Project not found.");
   const linked = sqlite.prepare(`
     SELECT 1 FROM (
       SELECT project_id FROM sales_invoices WHERE project_id = ?
@@ -506,7 +539,6 @@ export function deleteProject(businessId: string, userId: string, projectId: str
       UNION ALL SELECT project_id FROM sales_credit_note_lines WHERE project_id = ?
       UNION ALL SELECT project_id FROM purchase_orders WHERE project_id = ?
       UNION ALL SELECT project_id FROM purchase_order_lines WHERE project_id = ?
-      UNION ALL SELECT project_id FROM purchase_invoices WHERE project_id = ?
       UNION ALL SELECT project_id FROM purchase_invoice_lines WHERE project_id = ?
       UNION ALL SELECT project_id FROM goods_receipts WHERE project_id = ?
       UNION ALL SELECT project_id FROM goods_receipt_lines WHERE project_id = ?
@@ -522,4 +554,18 @@ export function deleteProject(businessId: string, userId: string, projectId: str
   `).get(...Array(18).fill(projectId));
   if (linked) throw new Error("Cannot delete this project because it has related documents or activity.");
   sqlite.prepare("DELETE FROM projects WHERE id = ?").run(projectId);
+
+  try {
+    recordActivity(businessId, {
+      userId,
+      action: "deleted",
+      entityType: "project",
+      entityId: projectId,
+      entityNumber: existing.code,
+      summary: `Deleted project "${existing.name}" (${existing.code})`,
+      sqlite,
+    });
+  } catch (e) {
+    console.error("[ActivityLog] project delete failed:", e);
+  }
 }

@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { desc, eq } from "drizzle-orm";
 import { getBusinessDb } from "@/core/db/business";
+import { recordActivity } from "@/modules/activity-log/activity-log-service";
 import { sentEmails } from "@/core/db/business-schema";
 import { getEmailDriver, joinMailboxes } from "./email-driver";
 import type {
@@ -126,6 +127,22 @@ export async function sendEmail(
          WHERE id = ?`,
       )
       .run(result.messageId, now, id);
+
+    try {
+      recordActivity(businessId, {
+        userId,
+        action: "emailed",
+        entityType: "email",
+        entityId: id,
+        entityNumber: input.relatedDocumentNumber || input.subject,
+        summary: `Emailed "${input.subject}" to ${toCsv}${input.relatedDocumentNumber ? ` (${input.relatedDocumentNumber})` : ""}`,
+        details: { subject: input.subject, recipients: toCsv, relatedEntityType: input.relatedEntityType, relatedEntityId: input.relatedEntityId, relatedDocumentNumber: input.relatedDocumentNumber },
+        sqlite,
+      });
+    } catch (e) {
+      console.error("[ActivityLog] email record failed:", e);
+    }
+
     return { id, messageId: result.messageId, status: "sent" };
   }
   sqlite

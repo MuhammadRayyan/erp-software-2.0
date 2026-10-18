@@ -14,6 +14,7 @@ import { creditNoteInputSchema, type CreditNoteInput } from "./credit-note-input
 import { convertDocumentLinesToBase, minorToCurrencyInput,  proportionalCarryingRelease } from "@/modules/currency/conversion";
 import { storedRateSnapshot } from "@/modules/currency/validation";
 import { calculateLines, totalsForLines, type StoredLine } from "@/modules/accounting/services/document-line-calculator";
+import { recordActivity } from "@/modules/activity-log/activity-log-service";
 
 export type CreditNoteStatus = "draft" | "posted" | "void";
 export type CreditNoteIntent = "draft" | "post";
@@ -218,6 +219,21 @@ export function saveCreditNote(businessId: string, userId: string, input: Credit
       context.sqlite.prepare(`INSERT INTO sales_credit_note_allocations (id, credit_note_id, sales_invoice_id, amount_minor, foreign_amount_allocated, base_carrying_amount_released) VALUES (?, ?, ?, ?, ?, ?) ON CONFLICT(credit_note_id, sales_invoice_id) DO UPDATE SET amount_minor = excluded.amount_minor, foreign_amount_allocated = excluded.foreign_amount_allocated, base_carrying_amount_released = excluded.base_carrying_amount_released`).run(randomUUID(), id, data.sourceInvoiceId, amounts.totalMinor, amounts.totalMinor, baseCarryingAmountReleased);
       context.sqlite.prepare("UPDATE sales_credit_notes SET document_status = 'posted', posted_at = COALESCE(posted_at, ?) WHERE id = ?").run(now, id);
     }
+
+    try {
+      recordActivity(businessId, {
+        userId,
+        action: shouldPost ? "posted" : (noteId ? "updated" : "created"),
+        entityType: "sales_credit_note",
+        entityId: id,
+        entityNumber: number,
+        summary: `${shouldPost ? "Issued" : (noteId ? "Updated" : "Created")} sales credit note ${number}`,
+        details: { creditNoteNumber: number, totalMinor: amounts.totalMinor, currency: rate.currencyCode, customerId: data.customerId, sourceInvoiceId: data.sourceInvoiceId },
+        sqlite: context.sqlite,
+      });
+    } catch (e) {
+      console.error("[ActivityLog] sales_credit_note save failed:", e);
+    }
   }).immediate();
   return id;
 }
@@ -233,6 +249,20 @@ export function deleteCreditNote(businessId: string, userId: string, noteId: str
   const context = getBusinessDb(businessId, userId); const note = context.db.select().from(salesCreditNotes).where(eq(salesCreditNotes.id, noteId)).get();
   if (!note) throw new Error("Credit note not found."); if (note.documentStatus !== "draft") throw new Error("Only draft credit notes can be deleted.");
   context.db.delete(salesCreditNotes).where(eq(salesCreditNotes.id, noteId)).run();
+
+  try {
+    recordActivity(businessId, {
+      userId,
+      action: "deleted",
+      entityType: "sales_credit_note",
+      entityId: noteId,
+      entityNumber: note.creditNoteNumber,
+      summary: `Deleted draft sales credit note ${note.creditNoteNumber}`,
+      sqlite: context.sqlite,
+    });
+  } catch (e) {
+    console.error("[ActivityLog] sales_credit_note delete failed:", e);
+  }
 }
 
 export function voidCreditNote(businessId: string, userId: string, noteId: string) {
@@ -246,5 +276,20 @@ export function voidCreditNote(businessId: string, userId: string, noteId: strin
     reverseTransaction(context.sqlite, { originalSourceType: "sales_credit_note", originalSourceId: noteId, reversalSourceType: "sales_credit_note_void", reversalSourceId: noteId, date: now.slice(0, 10), description: `Void Sales Credit Note ${note.creditNoteNumber}` });
     reverseTaxEntries(context.sqlite, { originalSourceType: "sales_credit_note", sourceId: noteId, reversalSourceType: "sales_credit_note_void", taxDate: note.taxDate });
     context.sqlite.prepare("UPDATE sales_credit_notes SET document_status = 'void', voided_at = ?, updated_at = ? WHERE id = ?").run(now, now, noteId);
+
+    try {
+      recordActivity(businessId, {
+        userId,
+        action: "voided",
+        entityType: "sales_credit_note",
+        entityId: noteId,
+        entityNumber: note.creditNoteNumber,
+        summary: `Voided sales credit note ${note.creditNoteNumber}`,
+        details: { creditNoteNumber: note.creditNoteNumber, totalMinor: note.totalMinor, customerId: note.customerId },
+        sqlite: context.sqlite,
+      });
+    } catch (e) {
+      console.error("[ActivityLog] sales_credit_note void failed:", e);
+    }
   }).immediate();
 }

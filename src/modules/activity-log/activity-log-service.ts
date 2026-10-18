@@ -388,3 +388,182 @@ export function getActivityLogUsers(
     role: membership.role,
   }));
 }
+
+export interface ActivityLogSettings {
+  retentionEnabled: boolean;
+  retentionDays: number;
+  lastCleanupAt: string | null;
+  lastCleanupCount: number;
+}
+
+/**
+ * Fetches activity log retention policy settings.
+ */
+export function getActivityLogSettings(
+  businessId: string,
+  requestingUserId: string,
+): ActivityLogSettings {
+  const access = getBusinessAccess(businessId, requestingUserId);
+  if (!access) throw new Error("BUSINESS_ACCESS_DENIED");
+
+  const sqlite = getBusinessDb(businessId, requestingUserId).sqlite;
+  const row = sqlite
+    .prepare(`
+      SELECT retention_enabled, retention_days, last_cleanup_at, last_cleanup_count
+      FROM activity_log_settings
+      WHERE business_id = ?
+      LIMIT 1
+    `)
+    .get(businessId) as {
+      retention_enabled: number;
+      retention_days: number;
+      last_cleanup_at: string | null;
+      last_cleanup_count: number;
+    } | undefined;
+
+  if (!row) {
+    return {
+      retentionEnabled: false,
+      retentionDays: 90,
+      lastCleanupAt: null,
+      lastCleanupCount: 0,
+    };
+  }
+
+  return {
+    retentionEnabled: Boolean(row.retention_enabled),
+    retentionDays: row.retention_days ?? 90,
+    lastCleanupAt: row.last_cleanup_at ?? null,
+    lastCleanupCount: row.last_cleanup_count ?? 0,
+  };
+}
+
+/**
+ * Updates activity log retention policy settings (Admin only).
+ */
+export function updateActivityLogSettings(
+  businessId: string,
+  requestingUserId: string,
+  input: { retentionEnabled: boolean; retentionDays: number },
+): ActivityLogSettings {
+  const access = getBusinessAccess(businessId, requestingUserId);
+  if (!access || access.membership.role !== "administrator") {
+    throw new Error("ADMIN_REQUIRED");
+  }
+
+  const days = Math.min(Math.max(Number(input.retentionDays) || 90, 7), 3650);
+  const enabled = Boolean(input.retentionEnabled);
+  const now = new Date().toISOString();
+
+  const sqlite = getBusinessDb(businessId, requestingUserId).sqlite;
+
+  const existing = sqlite
+    .prepare("SELECT id FROM activity_log_settings WHERE business_id = ?")
+    .get(businessId) as { id: string } | undefined;
+
+  if (existing) {
+    sqlite
+      .prepare(`
+        UPDATE activity_log_settings
+        SET retention_enabled = ?, retention_days = ?, updated_at = ?
+        WHERE business_id = ?
+      `)
+      .run(enabled ? 1 : 0, days, now, businessId);
+  } else {
+    sqlite
+      .prepare(`
+        INSERT INTO activity_log_settings (
+          id, business_id, retention_enabled, retention_days,
+          last_cleanup_at, last_cleanup_count, created_at, updated_at
+        ) VALUES (?, ?, ?, ?, NULL, 0, ?, ?)
+      `)
+      .run(randomUUID(), businessId, enabled ? 1 : 0, days, now, now);
+  }
+
+  recordActivity(businessId, {
+    userId: requestingUserId,
+    action: "settings_changed",
+    entityType: "activity_log_retention",
+    entityId: "retention-policy",
+    summary: `Updated activity log retention policy: ${
+      enabled ? `Enabled (${days} days)` : "Disabled"
+    }`,
+    details: { retentionEnabled: enabled, retentionDays: days },
+    sqlite,
+  });
+
+  return getActivityLogSettings(businessId, requestingUserId);
+}
+
+/**
+ * Executes log retention pruning, deleting logs older than specified retention days.
+ */
+export function runActivityLogCleanup(
+  businessId: string,
+  requestingUserId: string,
+  overrideDays?: number,
+): { deletedCount: number; cutoffDate: string; lastCleanupAt: string } {
+  const access = getBusinessAccess(businessId, requestingUserId);
+  if (!access || access.membership.role !== "administrator") {
+    throw new Error("ADMIN_REQUIRED");
+  }
+
+  const sqlite = getBusinessDb(businessId, requestingUserId).sqlite;
+  const currentSettings = getActivityLogSettings(businessId, requestingUserId);
+
+  const days = overrideDays ?? currentSettings.retentionDays ?? 90;
+  const cutoffTime = Date.now() - days * 24 * 60 * 60 * 1000;
+  const cutoffDate = new Date(cutoffTime).toISOString();
+  const now = new Date().toISOString();
+
+  const deleteResult = sqlite
+    .prepare(`
+      DELETE FROM activity_logs
+      WHERE business_id = ? AND created_at < ?
+    `)
+    .run(businessId, cutoffDate);
+
+  const deletedCount = deleteResult.changes;
+
+  // Update settings record with cleanup timestamp and count
+  const existing = sqlite
+    .prepare("SELECT id FROM activity_log_settings WHERE business_id = ?")
+    .get(businessId) as { id: string } | undefined;
+
+  if (existing) {
+    sqlite
+      .prepare(`
+        UPDATE activity_log_settings
+        SET last_cleanup_at = ?, last_cleanup_count = ?, updated_at = ?
+        WHERE business_id = ?
+      `)
+      .run(now, deletedCount, now, businessId);
+  } else {
+    sqlite
+      .prepare(`
+        INSERT INTO activity_log_settings (
+          id, business_id, retention_enabled, retention_days,
+          last_cleanup_at, last_cleanup_count, created_at, updated_at
+        ) VALUES (?, ?, 0, ?, ?, ?, ?, ?)
+      `)
+      .run(randomUUID(), businessId, days, now, deletedCount, now, now);
+  }
+
+  if (deletedCount > 0) {
+    recordActivity(businessId, {
+      userId: requestingUserId,
+      action: "deleted",
+      entityType: "activity_log_retention",
+      entityId: "retention-cleanup",
+      summary: `Automated retention cleanup pruned ${deletedCount} activity logs older than ${days} days (${cutoffDate.slice(0, 10)})`,
+      details: { deletedCount, cutoffDate, retentionDays: days },
+      sqlite,
+    });
+  }
+
+  return {
+    deletedCount,
+    cutoffDate,
+    lastCleanupAt: now,
+  };
+}

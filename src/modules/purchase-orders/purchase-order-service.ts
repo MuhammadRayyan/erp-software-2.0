@@ -10,6 +10,7 @@ import { effectiveProjectId, validateProjectReferences } from "@/modules/project
 import { convertDocumentLinesToBase} from "@/modules/currency/conversion";
 import { resolveRateSnapshot } from "@/modules/currency/validation";
 import { calculateLines, totalsForLines, type StoredLine } from "@/modules/accounting/services/document-line-calculator";
+import { recordActivity } from "@/modules/activity-log/activity-log-service";
 
 export type PurchaseOrderStatus = "draft" | "issued" | "closed" | "cancelled" | "superseded";
 export type PurchaseOrderIntent = "draft" | "issue";
@@ -131,12 +132,14 @@ export function savePurchaseOrder(businessId: string, userId: string, input: Pur
   const base = convertDocumentLinesToBase(lines, rate);
   const now = new Date().toISOString();
   const id = orderId ?? randomUUID();
+  let recordedOrderNumber = "";
   context.sqlite.transaction(() => {
     if (orderId) {
       const current = context.db.select().from(purchaseOrders).where(eq(purchaseOrders.id, orderId)).get();
       if (!current) throw new Error("Purchase order not found.");
       if (current.status === "closed" || current.status === "cancelled") throw new Error("Closed or cancelled purchase orders cannot be edited.");
       if (context.sqlite.prepare("SELECT 1 FROM goods_receipts WHERE purchase_order_id = ? LIMIT 1").get(orderId)) throw new Error("A Purchase Order cannot be edited after a Goods Receipt has been created.");
+      recordedOrderNumber = current.orderNumber;
       const nextStatus = current.status === "issued" || intent === "issue" ? "issued" : "draft";
       const effectivePurchaseQuoteId = data.purchaseQuoteId || current.purchaseQuoteId || null;
       context.sqlite.prepare(`UPDATE purchase_orders SET supplier_id = ?, project_id = ?, purchase_quote_id = ?, date = ?, expected_date = ?, reference = ?, notes = ?, terms = ?, status = ?, subtotal_minor = ?, tax_minor = ?, total_minor = ?, currency_code = ?, exchange_rate_to_base = ?, exchange_rate_date = ?, exchange_rate_source = ?, base_subtotal_minor = ?, base_tax_minor = ?, base_total_minor = ?, updated_at = ?, issued_at = CASE WHEN ? = 'issued' THEN COALESCE(issued_at, ?) ELSE issued_at END WHERE id = ?`)
@@ -144,12 +147,28 @@ export function savePurchaseOrder(businessId: string, userId: string, input: Pur
       context.sqlite.prepare("DELETE FROM purchase_order_lines WHERE purchase_order_id = ?").run(orderId);
     } else {
       const orderNumber = allocateNumber(context.sqlite, "purchaseOrder");
+      recordedOrderNumber = orderNumber;
       const status = intent === "issue" ? "issued" : "draft";
       context.sqlite.prepare(`INSERT INTO purchase_orders (id, order_number, supplier_id, project_id, purchase_quote_id, date, expected_date, reference, notes, terms, status, subtotal_minor, tax_minor, total_minor, currency_code, exchange_rate_to_base, exchange_rate_date, exchange_rate_source, base_subtotal_minor, base_tax_minor, base_total_minor, created_by, created_at, updated_at, issued_at, closed_at, cancelled_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL)`)
         .run(id, orderNumber, data.supplierId, data.projectId || null, data.purchaseQuoteId || null, data.date, data.expectedDate || null, data.reference || null, data.notes || null, data.terms || null, status, amounts.subtotalMinor, amounts.taxMinor, amounts.totalMinor, rate.currencyCode, rate.exchangeRateToBase, rate.exchangeRateDate, rate.exchangeRateSource, base.baseSubtotalMinor, base.baseTaxMinor, base.baseTotalMinor, userId, now, now, status === "issued" ? now : null);
     }
     insertLines(context.db, id, lines);
   }).immediate();
+
+  try {
+    recordActivity(businessId, {
+      userId,
+      action: orderId ? (intent === "issue" ? "posted" : "updated") : (intent === "issue" ? "posted" : "created"),
+      entityType: "purchase_order",
+      entityId: id,
+      entityNumber: recordedOrderNumber,
+      summary: `${orderId ? (intent === "issue" ? "Issued" : "Updated") : (intent === "issue" ? "Issued" : "Created")} purchase order ${recordedOrderNumber}`,
+      details: { orderNumber: recordedOrderNumber, totalMinor: amounts.totalMinor, currency: rate.currencyCode, supplierId: data.supplierId },
+      sqlite: context.sqlite,
+    });
+  } catch (e) {
+    console.error("[ActivityLog] purchase_order save failed:", e);
+  }
 
   return id;
 }
@@ -161,6 +180,21 @@ export function closePurchaseOrder(businessId: string, userId: string, orderId: 
   if (order.status !== "issued") throw new Error("Only an issued purchase order can be closed.");
   const now = new Date().toISOString();
   context.db.update(purchaseOrders).set({ status: "closed", closedAt: now, updatedAt: now }).where(eq(purchaseOrders.id, orderId)).run();
+
+  try {
+    recordActivity(businessId, {
+      userId,
+      action: "posted",
+      entityType: "purchase_order",
+      entityId: orderId,
+      entityNumber: order.orderNumber,
+      summary: `Closed purchase order ${order.orderNumber}`,
+      details: { orderNumber: order.orderNumber, previousStatus: order.status, newStatus: "closed" },
+      sqlite: context.sqlite,
+    });
+  } catch (e) {
+    console.error("[ActivityLog] purchase_order close failed:", e);
+  }
 }
 
 export function cancelPurchaseOrder(businessId: string, userId: string, orderId: string) {
@@ -171,6 +205,21 @@ export function cancelPurchaseOrder(businessId: string, userId: string, orderId:
   if (order.status === "closed") throw new Error("A closed purchase order cannot be cancelled.");
   const now = new Date().toISOString();
   context.db.update(purchaseOrders).set({ status: "cancelled", cancelledAt: now, updatedAt: now }).where(eq(purchaseOrders.id, orderId)).run();
+
+  try {
+    recordActivity(businessId, {
+      userId,
+      action: "voided",
+      entityType: "purchase_order",
+      entityId: orderId,
+      entityNumber: order.orderNumber,
+      summary: `Cancelled purchase order ${order.orderNumber}`,
+      details: { orderNumber: order.orderNumber, previousStatus: order.status, newStatus: "cancelled" },
+      sqlite: context.sqlite,
+    });
+  } catch (e) {
+    console.error("[ActivityLog] purchase_order cancel failed:", e);
+  }
 }
 
 const revisionConfig = {
@@ -184,12 +233,47 @@ const revisionConfig = {
 
 export function deletePurchaseOrder(businessId: string, userId: string, orderId: string) {
   const context = getBusinessDb(businessId, userId);
+  const order = context.sqlite.prepare("SELECT order_number FROM purchase_orders WHERE id = ?").get(orderId) as { order_number: string } | undefined;
   deleteDraftRevision(context.sqlite, revisionConfig, orderId);
+
+  if (order) {
+    try {
+      recordActivity(businessId, {
+        userId,
+        action: "deleted",
+        entityType: "purchase_order",
+        entityId: orderId,
+        entityNumber: order.order_number,
+        summary: `Deleted draft purchase order ${order.order_number}`,
+        sqlite: context.sqlite,
+      });
+    } catch (e) {
+      console.error("[ActivityLog] purchase_order delete failed:", e);
+    }
+  }
 }
 
 export function createPurchaseOrderRevision(businessId: string, userId: string, sourceOrderId: string): string {
   const context = getBusinessDb(businessId, userId);
-  return createDocumentRevision(context.sqlite, revisionConfig, userId, sourceOrderId);
+  const newId = createDocumentRevision(context.sqlite, revisionConfig, userId, sourceOrderId);
+  const rev = context.sqlite.prepare("SELECT order_number, revision_number FROM purchase_orders WHERE id = ?").get(newId) as { order_number: string; revision_number: number } | undefined;
+  if (rev) {
+    try {
+      recordActivity(businessId, {
+        userId,
+        action: "created",
+        entityType: "purchase_order",
+        entityId: newId,
+        entityNumber: rev.order_number,
+        summary: `Created revision ${rev.revision_number} (${rev.order_number}) from purchase order`,
+        details: { orderNumber: rev.order_number, revisionNumber: rev.revision_number, sourceOrderId },
+        sqlite: context.sqlite,
+      });
+    } catch (e) {
+      console.error("[ActivityLog] purchase_order revision failed:", e);
+    }
+  }
+  return newId;
 }
 
 export function listPurchaseOrderRevisions(businessId: string, userId: string, orderId: string) {

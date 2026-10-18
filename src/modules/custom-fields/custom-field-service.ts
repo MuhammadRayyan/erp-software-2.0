@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import type Database from "better-sqlite3";
 import { getBusinessDb } from "@/core/db/business";
+import { recordActivity } from "@/modules/activity-log/activity-log-service";
 import {
   customFieldDefinitionSchema,
   type CustomFieldDefinitionData,
@@ -129,6 +130,20 @@ export function createCustomFieldDefinition(
       now,
       now,
     );
+
+  try {
+    recordActivity(businessId, {
+      userId,
+      action: "created",
+      entityType: "custom_field",
+      entityId: id,
+      summary: `Created custom field "${data.name}" for ${data.entityType}`,
+      details: { name: data.name, entityType: data.entityType, fieldType: data.fieldType },
+    });
+  } catch (logErr) {
+    console.error("Failed to record custom field creation activity:", logErr);
+  }
+
   return id;
 }
 
@@ -144,8 +159,8 @@ export function updateCustomFieldDefinition(
   const data: CustomFieldDefinitionData = customFieldDefinitionSchema.parse(input);
   const { sqlite } = getBusinessDb(businessId, userId);
   const current = sqlite
-    .prepare("SELECT id FROM custom_field_definitions WHERE id = ?")
-    .get(definitionId) as { id: string } | undefined;
+    .prepare("SELECT id, name, entity_type FROM custom_field_definitions WHERE id = ?")
+    .get(definitionId) as { id: string; name: string; entity_type: string } | undefined;
   if (!current) throw new Error("Custom field not found.");
   sqlite
     .prepare(
@@ -163,6 +178,19 @@ export function updateCustomFieldDefinition(
       new Date().toISOString(),
       definitionId,
     );
+
+  try {
+    recordActivity(businessId, {
+      userId,
+      action: "updated",
+      entityType: "custom_field",
+      entityId: definitionId,
+      summary: `Updated custom field "${data.name}" for ${data.entityType}`,
+      details: { name: data.name, entityType: data.entityType, fieldType: data.fieldType },
+    });
+  } catch (logErr) {
+    console.error("Failed to record custom field update activity:", logErr);
+  }
 }
 
 // Deleting a definition cascades to its stored values (ON DELETE CASCADE).
@@ -172,10 +200,26 @@ export function deleteCustomFieldDefinition(
   definitionId: string,
 ): void {
   const { sqlite } = getBusinessDb(businessId, userId);
+  const current = sqlite
+    .prepare("SELECT id, name, entity_type FROM custom_field_definitions WHERE id = ?")
+    .get(definitionId) as { id: string; name: string; entity_type: string } | undefined;
   const result = sqlite
     .prepare("DELETE FROM custom_field_definitions WHERE id = ?")
     .run(definitionId);
   if (result.changes === 0) throw new Error("Custom field not found.");
+
+  try {
+    recordActivity(businessId, {
+      userId,
+      action: "deleted",
+      entityType: "custom_field",
+      entityId: definitionId,
+      summary: `Deleted custom field ${current ? `"${current.name}"` : definitionId}`,
+      details: current ? { name: current.name, entityType: current.entity_type } : null,
+    });
+  } catch (logErr) {
+    console.error("Failed to record custom field deletion activity:", logErr);
+  }
 }
 
 // Swap positions with the adjacent definition in the same entity-type group.

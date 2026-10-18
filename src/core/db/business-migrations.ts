@@ -2622,6 +2622,24 @@ export const businessMigrations = [
         `);
       },
     },
+    {
+      version: 32,
+      name: "activity_log_retention_settings",
+      up: (sqlite) => {
+        sqlite.exec(`
+          CREATE TABLE IF NOT EXISTS "activity_log_settings" (
+            "id" TEXT PRIMARY KEY NOT NULL,
+            "business_id" TEXT NOT NULL,
+            "retention_enabled" INTEGER NOT NULL DEFAULT 0,
+            "retention_days" INTEGER NOT NULL DEFAULT 90,
+            "last_cleanup_at" TEXT,
+            "last_cleanup_count" INTEGER NOT NULL DEFAULT 0,
+            "created_at" TEXT NOT NULL,
+            "updated_at" TEXT NOT NULL
+          );
+        `);
+      },
+    },
   ] satisfies readonly SqliteMigration[];
 
 

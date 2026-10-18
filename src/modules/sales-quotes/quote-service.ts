@@ -10,6 +10,7 @@ import { effectiveProjectId, validateProjectReferences } from "@/modules/project
 import { convertDocumentLinesToBase} from "@/modules/currency/conversion";
 import { resolveRateSnapshot } from "@/modules/currency/validation";
 import { calculateLines, totalsForLines, type StoredLine } from "@/modules/accounting/services/document-line-calculator";
+import { recordActivity } from "@/modules/activity-log/activity-log-service";
 
 export type SalesQuoteStatus = "draft" | "sent" | "accepted" | "rejected" | "superseded" | "cancelled";
 export type SalesQuoteIntent = "draft" | "issue";
@@ -134,6 +135,7 @@ export function saveSalesQuote(businessId: string, userId: string, input: SalesQ
   const base = convertDocumentLinesToBase(lines, rate);
   const now = new Date().toISOString();
   const id = quoteId ?? randomUUID();
+  let recordedNumber = "";
   context.sqlite.transaction(() => {
     if (quoteId) {
       const current = context.db.select().from(salesQuotes).where(eq(salesQuotes.id, quoteId)).get();
@@ -141,18 +143,35 @@ export function saveSalesQuote(businessId: string, userId: string, input: SalesQ
       if (current.documentStatus === "accepted" || current.documentStatus === "cancelled" || current.documentStatus === "superseded") {
         throw new Error("Closed, superseded, or cancelled sales quotes cannot be edited.");
       }
+      recordedNumber = current.quoteNumber;
       const nextStatus = current.documentStatus === "sent" || intent === "issue" ? "sent" : "draft";
       context.sqlite.prepare(`UPDATE sales_quotes SET customer_id = ?, project_id = ?, quote_date = ?, expiry_date = ?, reference = ?, document_status = ?, amounts_include_tax = ?, subtotal_minor = ?, tax_minor = ?, total_minor = ?, currency_code = ?, exchange_rate_to_base = ?, exchange_rate_date = ?, exchange_rate_source = ?, base_subtotal_minor = ?, base_tax_minor = ?, base_total_minor = ?, notes = ?, terms = ?, updated_at = ? WHERE id = ?`)
         .run(data.customerId, data.projectId || null, data.date, data.expectedDate || "", data.reference || null, nextStatus, data.amountsIncludeTax ? 1 : 0, amounts.subtotalMinor, amounts.taxMinor, amounts.totalMinor, rate.currencyCode, rate.exchangeRateToBase, rate.exchangeRateDate, rate.exchangeRateSource, base.baseSubtotalMinor, base.baseTaxMinor, base.baseTotalMinor, data.notes || null, data.terms || null, now, quoteId);
       context.sqlite.prepare("DELETE FROM sales_quote_lines WHERE quote_id = ?").run(quoteId);
     } else {
       const quoteNumber = allocateNumber(context.sqlite, "salesQuote");
+      recordedNumber = quoteNumber;
       const status = intent === "issue" ? "sent" : "draft";
       context.sqlite.prepare(`INSERT INTO sales_quotes (id, quote_number, base_quote_number, root_quote_id, revision_number, is_latest_revision, customer_id, project_id, quote_date, expiry_date, reference, document_status, amounts_include_tax, subtotal_minor, tax_minor, total_minor, currency_code, exchange_rate_to_base, exchange_rate_date, exchange_rate_source, base_subtotal_minor, base_tax_minor, base_total_minor, notes, terms, created_by, created_at, updated_at) VALUES (?, ?, ?, ?, 0, 1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
         .run(id, quoteNumber, quoteNumber, id, data.customerId, data.projectId || null, data.date, data.expectedDate || "", data.reference || null, status, data.amountsIncludeTax ? 1 : 0, amounts.subtotalMinor, amounts.taxMinor, amounts.totalMinor, rate.currencyCode, rate.exchangeRateToBase, rate.exchangeRateDate, rate.exchangeRateSource, base.baseSubtotalMinor, base.baseTaxMinor, base.baseTotalMinor, data.notes || null, data.terms || null, userId, now, now);
     }
     insertLines(context.db, id, lines);
   }).immediate();
+
+  try {
+    recordActivity(businessId, {
+      userId,
+      action: quoteId ? (intent === "issue" ? "posted" : "updated") : (intent === "issue" ? "posted" : "created"),
+      entityType: "sales_quote",
+      entityId: id,
+      entityNumber: recordedNumber,
+      summary: `${quoteId ? (intent === "issue" ? "Issued" : "Updated") : (intent === "issue" ? "Issued" : "Created")} sales quote ${recordedNumber}`,
+      details: { quoteNumber: recordedNumber, totalMinor: amounts.totalMinor, currency: rate.currencyCode, customerId: data.customerId },
+      sqlite: context.sqlite,
+    });
+  } catch (e) {
+    console.error("[ActivityLog] sales_quote save failed:", e);
+  }
 
   return id;
 }
@@ -164,6 +183,21 @@ export function closeSalesQuote(businessId: string, userId: string, quoteId: str
   if (quote.documentStatus !== "sent") throw new Error("Only an issued sales quote can be closed.");
   const now = new Date().toISOString();
   context.db.update(salesQuotes).set({ documentStatus: "accepted", updatedAt: now }).where(eq(salesQuotes.id, quoteId)).run();
+
+  try {
+    recordActivity(businessId, {
+      userId,
+      action: "posted",
+      entityType: "sales_quote",
+      entityId: quoteId,
+      entityNumber: quote.quoteNumber,
+      summary: `Accepted / closed sales quote ${quote.quoteNumber}`,
+      details: { quoteNumber: quote.quoteNumber, previousStatus: quote.documentStatus, newStatus: "accepted" },
+      sqlite: context.sqlite,
+    });
+  } catch (e) {
+    console.error("[ActivityLog] sales_quote close failed:", e);
+  }
 }
 
 export function cancelSalesQuote(businessId: string, userId: string, quoteId: string) {
@@ -174,6 +208,21 @@ export function cancelSalesQuote(businessId: string, userId: string, quoteId: st
   if (quote.documentStatus === "accepted") throw new Error("An accepted sales quote cannot be cancelled.");
   const now = new Date().toISOString();
   context.db.update(salesQuotes).set({ documentStatus: "cancelled", updatedAt: now }).where(eq(salesQuotes.id, quoteId)).run();
+
+  try {
+    recordActivity(businessId, {
+      userId,
+      action: "voided",
+      entityType: "sales_quote",
+      entityId: quoteId,
+      entityNumber: quote.quoteNumber,
+      summary: `Cancelled sales quote ${quote.quoteNumber}`,
+      details: { quoteNumber: quote.quoteNumber, previousStatus: quote.documentStatus, newStatus: "cancelled" },
+      sqlite: context.sqlite,
+    });
+  } catch (e) {
+    console.error("[ActivityLog] sales_quote cancel failed:", e);
+  }
 }
 
 const revisionConfig = {
@@ -186,12 +235,47 @@ const revisionConfig = {
 
 export function deleteSalesQuote(businessId: string, userId: string, quoteId: string) {
   const context = getBusinessDb(businessId, userId);
+  const quote = context.sqlite.prepare("SELECT quote_number FROM sales_quotes WHERE id = ?").get(quoteId) as { quote_number: string } | undefined;
   deleteDraftRevision(context.sqlite, revisionConfig, quoteId);
+
+  if (quote) {
+    try {
+      recordActivity(businessId, {
+        userId,
+        action: "deleted",
+        entityType: "sales_quote",
+        entityId: quoteId,
+        entityNumber: quote.quote_number,
+        summary: `Deleted draft sales quote ${quote.quote_number}`,
+        sqlite: context.sqlite,
+      });
+    } catch (e) {
+      console.error("[ActivityLog] sales_quote delete failed:", e);
+    }
+  }
 }
 
 export function createSalesQuoteRevision(businessId: string, userId: string, sourceQuoteId: string): string {
   const context = getBusinessDb(businessId, userId);
-  return createDocumentRevision(context.sqlite, revisionConfig, userId, sourceQuoteId);
+  const newId = createDocumentRevision(context.sqlite, revisionConfig, userId, sourceQuoteId);
+  const rev = context.sqlite.prepare("SELECT quote_number, revision_number FROM sales_quotes WHERE id = ?").get(newId) as { quote_number: string; revision_number: number } | undefined;
+  if (rev) {
+    try {
+      recordActivity(businessId, {
+        userId,
+        action: "created",
+        entityType: "sales_quote",
+        entityId: newId,
+        entityNumber: rev.quote_number,
+        summary: `Created revision ${rev.revision_number} (${rev.quote_number}) from quote`,
+        details: { quoteNumber: rev.quote_number, revisionNumber: rev.revision_number, sourceQuoteId },
+        sqlite: context.sqlite,
+      });
+    } catch (e) {
+      console.error("[ActivityLog] sales_quote revision failed:", e);
+    }
+  }
+  return newId;
 }
 
 export function listSalesQuoteRevisions(businessId: string, userId: string, quoteId: string) {

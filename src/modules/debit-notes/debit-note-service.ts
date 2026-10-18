@@ -21,6 +21,7 @@ import { assertDateNotLocked } from "@/modules/accounting/services/financial-loc
 import { postDebitNote } from "@/modules/accounting/services/debit-note-posting-service";
 import { reverseTransaction } from "@/modules/accounting/services/posting-service";
 import { quantityMicrosToInput, minorToInput } from "@/modules/accounting/calculations/money";
+import { recordActivity } from "@/modules/activity-log/activity-log-service";
 
 type StoredLine = {
   id: string;
@@ -221,6 +222,21 @@ export function saveDebitNote(businessId: string, userId: string, data: DebitNot
       }, postingLines);
       context.sqlite.prepare("UPDATE debit_notes SET document_status = 'posted', posted_at = COALESCE(posted_at, ?) WHERE id = ?").run(now, id);
     }
+
+    try {
+      recordActivity(businessId, {
+        userId,
+        action: shouldPost ? "posted" : (noteId ? "updated" : "created"),
+        entityType: "debit_note",
+        entityId: id,
+        entityNumber: number,
+        summary: `${shouldPost ? "Issued" : (noteId ? "Updated" : "Created")} debit note ${number}`,
+        details: { debitNoteNumber: number, totalMinor: amounts.totalMinor, currency: rate.currencyCode, supplierId: data.supplierId, purchaseInvoiceId: data.purchaseInvoiceId },
+        sqlite: context.sqlite,
+      });
+    } catch (e) {
+      console.error("[ActivityLog] debit_note save failed:", e);
+    }
   }).immediate();
   
   return id;
@@ -261,6 +277,20 @@ export function deleteDebitNote(businessId: string, userId: string, noteId: stri
   if (!note) throw new Error("Debit note not found."); 
   if (note.documentStatus !== "draft") throw new Error("Only draft debit notes can be deleted.");
   context.db.delete(debitNotes).where(eq(debitNotes.id, noteId)).run();
+
+  try {
+    recordActivity(businessId, {
+      userId,
+      action: "deleted",
+      entityType: "debit_note",
+      entityId: noteId,
+      entityNumber: note.debitNoteNumber,
+      summary: `Deleted draft debit note ${note.debitNoteNumber}`,
+      sqlite: context.sqlite,
+    });
+  } catch (e) {
+    console.error("[ActivityLog] debit_note delete failed:", e);
+  }
 }
 
 export function voidDebitNote(businessId: string, userId: string, noteId: string) {
@@ -277,6 +307,21 @@ export function voidDebitNote(businessId: string, userId: string, noteId: string
     reverseTransaction(context.sqlite, { originalSourceType: "debit_note", originalSourceId: noteId, reversalSourceType: "debit_note_void", reversalSourceId: noteId, date: now.slice(0, 10), description: `Void Debit Note ${note.debitNoteNumber}` }); 
     reverseTaxEntries(context.sqlite, { originalSourceType: "debit_note", sourceId: noteId, reversalSourceType: "debit_note_void", taxDate: note.taxDate }); 
     context.sqlite.prepare("UPDATE debit_notes SET document_status = 'void', voided_at = ?, updated_at = ? WHERE id = ?").run(now, now, noteId); 
+
+    try {
+      recordActivity(businessId, {
+        userId,
+        action: "voided",
+        entityType: "debit_note",
+        entityId: noteId,
+        entityNumber: note.debitNoteNumber,
+        summary: `Voided debit note ${note.debitNoteNumber}`,
+        details: { debitNoteNumber: note.debitNoteNumber, totalMinor: note.totalMinor, supplierId: note.supplierId },
+        sqlite: context.sqlite,
+      });
+    } catch (e) {
+      console.error("[ActivityLog] debit_note void failed:", e);
+    }
   }).immediate();
 }
 

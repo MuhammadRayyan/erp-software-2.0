@@ -1,4 +1,5 @@
 import { getBusinessDb } from "@/core/db/business";
+import { recordActivity } from "@/modules/activity-log/activity-log-service";
 import { taxSettingsInputSchema, type TaxSettingsInput } from "./tax-settings-input";
 
 export function getTaxSettings(businessId: string, userId: string) {
@@ -30,7 +31,8 @@ export function updateTaxSettings(
   input: TaxSettingsInput,
 ) {
   const data = taxSettingsInputSchema.parse(input);
-  getBusinessDb(businessId, userId).sqlite.prepare(`
+  const { sqlite } = getBusinessDb(businessId, userId);
+  sqlite.prepare(`
     UPDATE business_tax_settings
     SET vat_registered = ?, trn = ?, vat_registration_effective_date = ?,
         vat_deregistration_date = ?, default_supply_emirate = ?, updated_at = ?
@@ -38,5 +40,19 @@ export function updateTaxSettings(
   `).run(data.vatRegistered ? 1 : 0, data.trn || null,
     data.vatRegistrationEffectiveDate || null, data.vatDeregistrationDate || null,
     data.defaultSupplyEmirate || null, new Date().toISOString());
+
+  try {
+    recordActivity(businessId, {
+      userId,
+      action: "settings_changed",
+      entityType: "tax_settings",
+      entityId: "default",
+      summary: `Updated UAE VAT settings: ${data.vatRegistered ? `VAT Registered (TRN: ${data.trn || "N/A"})` : "VAT Not Registered"}`,
+      details: { vatRegistered: data.vatRegistered, trn: data.trn, defaultSupplyEmirate: data.defaultSupplyEmirate },
+      sqlite,
+    });
+  } catch (e) {
+    console.error("[ActivityLog] tax_settings update failed:", e);
+  }
 }
 

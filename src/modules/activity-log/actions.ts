@@ -22,3 +22,27 @@ export async function getActivityUsersAction(
   const user = await requireUser();
   return getActivityLogUsers(businessId, user.id);
 }
+
+export async function getActivityLogSettingsAction(businessId: string) {
+  const user = await requireUser();
+  const { getActivityLogSettings } = await import("./activity-log-service");
+  return getActivityLogSettings(businessId, user.id);
+}
+
+export async function updateActivityLogSettingsAction(
+  businessId: string,
+  input: { retentionEnabled: boolean; retentionDays: number },
+) {
+  const user = await requireUser();
+  const { updateActivityLogSettings } = await import("./activity-log-service");
+  return updateActivityLogSettings(businessId, user.id, input);
+}
+
+export async function runActivityLogCleanupAction(
+  businessId: string,
+  overrideDays?: number,
+) {
+  const user = await requireUser();
+  const { runActivityLogCleanup } = await import("./activity-log-service");
+  return runActivityLogCleanup(businessId, user.id, overrideDays);
+}

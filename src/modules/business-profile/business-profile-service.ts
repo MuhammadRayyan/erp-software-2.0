@@ -4,6 +4,7 @@ import { getBusinessDb } from "@/core/db/business";
 import { getSystemDb } from "@/core/db/system";
 import { businesses } from "@/core/db/system-schema";
 import { businessProfile, businessTaxSettings } from "@/core/db/business-schema";
+import { recordActivity } from "@/modules/activity-log/activity-log-service";
 import { getBusinessForUser } from "@/core/businesses/business-service";
 import {
   businessProfileInputSchema,
@@ -247,6 +248,20 @@ export function updateBusinessProfile(
         data.countryCode || null,
       );
   } catch { /* ignore */ }
+
+  try {
+    recordActivity(businessId, {
+      userId,
+      action: "settings_changed",
+      entityType: "business_profile",
+      entityId: "default",
+      summary: `Updated business profile "${data.tradingName || data.legalName || "Workspace"}"`,
+      details: { legalName: data.legalName, tradingName: data.tradingName, trn: data.taxId, country: data.country },
+      sqlite,
+    });
+  } catch (e) {
+    console.error("[ActivityLog] business_profile update failed:", e);
+  }
 
   return getBusinessProfile(businessId, userId);
 }

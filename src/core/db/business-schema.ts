@@ -2072,3 +2072,14 @@ export const activityLogs = sqliteTable(
     index("activity_logs_created_at_idx").on(table.createdAt),
   ],
 );
+
+export const activityLogSettings = sqliteTable("activity_log_settings", {
+  id: text("id").primaryKey(),
+  businessId: text("business_id").notNull(),
+  retentionEnabled: integer("retention_enabled", { mode: "boolean" }).notNull().default(false),
+  retentionDays: integer("retention_days").notNull().default(90),
+  lastCleanupAt: text("last_cleanup_at"),
+  lastCleanupCount: integer("last_cleanup_count").notNull().default(0),
+  createdAt: text("created_at").notNull(),
+  updatedAt: text("updated_at").notNull(),
+});
