@@ -376,6 +376,9 @@ export function DocumentLineTable({
                         ))}
                       </SelectNative>
                     )}
+                    {!showLineTaxCodes && (
+                      <input type="hidden" {...register(`lines.${index}.taxCodeId`)} />
+                    )}
                   </td>
 
                   {showLineTaxCodes && (
@@ -397,9 +400,6 @@ export function DocumentLineTable({
                         ))}
                       </SelectNative>
                     </td>
-                  )}
-                  {!showLineTaxCodes && (
-                    <input type="hidden" {...register(`lines.${index}.taxCodeId`)} />
                   )}
 
                   {showLineProjects && (

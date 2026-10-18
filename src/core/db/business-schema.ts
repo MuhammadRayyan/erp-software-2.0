@@ -1633,20 +1633,17 @@ export const customFieldDefinitions = sqliteTable(
   {
     id: text("id").primaryKey(),
     entityType: text("entity_type", { enum: customFieldEntityTypes }).notNull(),
+    name: text("name").notNull(),
     fieldType: text("field_type", { enum: customFieldFieldTypes }).notNull(),
-    key: text("key").notNull(),
-    label: text("label").notNull(),
-    description: text("description"),
-    isRequired: integer("is_required", { mode: "boolean" }).notNull().default(false),
-    optionsJson: text("options_json"),
+    selectOptions: text("select_options").notNull().default("[]"),
     position: integer("position").notNull().default(0),
-    isActive: integer("is_active", { mode: "boolean" }).notNull().default(true),
+    isRequired: integer("is_required", { mode: "boolean" }).notNull().default(false),
+    showInList: integer("show_in_list", { mode: "boolean" }).notNull().default(false),
     createdAt: text("created_at").notNull(),
     updatedAt: text("updated_at").notNull(),
   },
   (table) => [
-    uniqueIndex("custom_field_def_entity_key_idx").on(table.entityType, table.key),
-    index("custom_field_def_entity_idx").on(table.entityType),
+    index("custom_field_definitions_entity").on(table.entityType, table.position),
   ],
 );
 
@@ -1658,14 +1655,11 @@ export const customFieldValues = sqliteTable(
       .notNull()
       .references(() => customFieldDefinitions.id, { onDelete: "cascade" }),
     entityId: text("entity_id").notNull(),
-    textValue: text("text_value"),
-    numberValue: text("number_value"),
-    createdAt: text("created_at").notNull(),
+    value: text("value").notNull().default(""),
     updatedAt: text("updated_at").notNull(),
   },
   (table) => [
-    uniqueIndex("custom_field_val_def_entity_idx").on(table.definitionId, table.entityId),
-    index("custom_field_val_entity_idx").on(table.entityId),
+    uniqueIndex("custom_field_values_definition_entity").on(table.definitionId, table.entityId),
   ],
 );
 
