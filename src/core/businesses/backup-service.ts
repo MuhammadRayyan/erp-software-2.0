@@ -99,7 +99,7 @@ export async function exportBusinessBackup(businessId: string, userId: string) {
   }
 }
 
-export async function importBusinessBackup(buffer: ArrayBuffer, userId: string) {
+export async function importBusinessBackup(buffer: ArrayBuffer | Buffer, userId: string) {
   const MAX_BACKUP_BYTES = 50 * 1024 * 1024;
   if (buffer.byteLength > MAX_BACKUP_BYTES) {
     throw new Error("Backup file exceeds maximum allowed size of 50 MB.");

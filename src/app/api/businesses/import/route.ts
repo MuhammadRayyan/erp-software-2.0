@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { requireApiAuth } from "@/core/auth/api-auth";
 import { importBusinessBackup } from "@/core/businesses/backup-service";
+import { importManagerBackupToNewBusiness } from "@/modules/migration/manager-importer";
 
 export const runtime = "nodejs";
 
@@ -13,9 +14,10 @@ export async function POST(request: Request) {
 
   const formData = await request.formData();
   const file = formData.get("backup");
+  const businessNameOverride = formData.get("businessName")?.toString().trim();
 
   if (!(file instanceof File) || file.size === 0) {
-    return NextResponse.json({ error: "Choose an .erpbackup file." }, { status: 400 });
+    return NextResponse.json({ error: "Choose an .erpbackup or .manager file." }, { status: 400 });
   }
   if (file.size > maximumBackupBytes) {
     return NextResponse.json(
@@ -24,9 +26,24 @@ export async function POST(request: Request) {
     );
   }
 
+  const arrayBuffer = await file.arrayBuffer();
+  const buf = Buffer.from(arrayBuffer);
+  const SQLITE_HEADER = Buffer.from("SQLite format 3\0", "utf8");
+  const isManager = buf.length >= 16 && Buffer.compare(buf.subarray(0, 16), SQLITE_HEADER) === 0;
+
   try {
-    const businessId = await importBusinessBackup(await file.arrayBuffer(), user.id);
-    return NextResponse.json({ businessId });
+    if (isManager) {
+      const result = importManagerBackupToNewBusiness(buf, user.id, businessNameOverride || undefined);
+      return NextResponse.json({
+        businessId: result.businessId,
+        businessName: result.businessName,
+        source: "manager.io",
+        summary: result.summary,
+      });
+    }
+
+    const businessId = await importBusinessBackup(arrayBuffer, user.id);
+    return NextResponse.json({ businessId, source: "ledgerly" });
   } catch (error) {
     return NextResponse.json(
       { error: error instanceof Error ? error.message : "Could not import this backup" },
