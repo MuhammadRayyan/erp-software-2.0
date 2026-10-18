@@ -36,7 +36,7 @@ export default async function PreferencesSettingsPage({ params }: { params: Prom
   });
 
   return (
-    <SettingsShell businessId={businessId} title="Display preferences" description="Per-account UI state synced across devices for this business (column toggles, KPI cards).">
+    <SettingsShell businessId={businessId} title="Display Preferences" description="Per-account UI state synced across devices for this business (column toggles, KPI cards).">
       <PreferencesResetCard businessId={businessId} count={entries.length} />
 
       <section aria-label="Stored preference keys" className="mt-6">

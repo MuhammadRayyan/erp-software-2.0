@@ -6,7 +6,7 @@ export function BackLink({ href, children, ...props }: ComponentProps<typeof Lin
   return (
     <Link
       href={href}
-      className="mb-5 inline-flex items-center gap-1.5 text-[13px] text-muted-foreground hover:text-foreground"
+      className="mb-5 inline-flex items-center gap-1.5 text-sm font-medium text-muted-foreground hover:text-foreground transition-colors"
       {...props}
     >
       <ArrowLeft className="size-4" /> {children}

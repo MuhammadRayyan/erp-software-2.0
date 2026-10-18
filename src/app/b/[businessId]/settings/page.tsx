@@ -15,10 +15,10 @@ export default async function SettingsPage({ params }: { params: Promise<{ busin
 
   return (
     <div className="page-container max-w-6xl space-y-6">
-      <div className="page-header">
+      <div className="page-header mb-6">
         <div>
-          <h1 className="page-title">Settings</h1>
-          <p className="page-description">Business accounting, document presentation, localized formatting, and security controls.</p>
+          <h1 className="page-title text-2xl sm:text-3xl font-bold tracking-tight text-foreground">Settings</h1>
+          <p className="page-description mt-1 text-sm text-muted-foreground leading-relaxed">Business accounting, document presentation, localized formatting, and security controls.</p>
         </div>
       </div>
       <SettingsHubClient

@@ -8,7 +8,11 @@ export default async function NumberingPage({ params }: { params: Promise<{ busi
   const { user } = await requireModule(businessId, "settings");
   const settings = getAccountingSettings(businessId, user.id);
   return (
-    <SettingsShell businessId={businessId} title="Numbering" description="Business-specific document numbering controlled on the server.">
+    <SettingsShell
+      businessId={businessId}
+      title="Document Numbering Sequences"
+      description="Configure sequential prefixes, zero-padding, and atomic next-number allocators across all 16 sales, purchase, and GL series."
+    >
       <NumberingForm businessId={businessId} initial={{
         prefix: settings.invoicePrefix,
         nextNumber: settings.invoiceNextNumber,

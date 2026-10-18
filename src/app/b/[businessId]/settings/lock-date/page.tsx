@@ -1,5 +1,5 @@
 import { requireModule } from "@/core/permissions/require-module";
-import { BackLink } from "@/components/back-link";
+import { SettingsShell } from "@/components/settings-shell";
 import { getFinancialLockDate } from "@/modules/accounting/services/financial-lock-service";
 import { FinancialLockForm } from "@/modules/accounting/components/financial-lock-form";
 
@@ -17,17 +17,13 @@ export default async function FinancialLockDatePage({
   const lockDate = getFinancialLockDate(businessId, user.id);
 
   return (
-    <div className="page-container max-w-4xl space-y-6">
-      <BackLink href={`/b/${businessId}/settings`}>Settings</BackLink>
-      <div className="page-header">
-        <div>
-          <h1 className="page-title">Financial Lock Date</h1>
-          <p className="page-description">
-            Close accounting periods to prevent unauthorized or accidental modifications to finalized books.
-          </p>
-        </div>
-      </div>
+    <SettingsShell
+      businessId={businessId}
+      title="Financial Lock Date"
+      description="Close accounting periods to prevent unauthorized or accidental modifications to finalized books."
+    >
       <FinancialLockForm businessId={businessId} currentLockDate={lockDate} />
-    </div>
+    </SettingsShell>
   );
 }
+

@@ -3,7 +3,7 @@ import { notFound } from "next/navigation";
 import { ChevronRight, FileText, ShoppingCart, ReceiptText, Truck, FileInput } from "lucide-react";
 import { requireUser } from "@/core/auth/session";
 import { getBusinessForUser } from "@/core/businesses/business-service";
-import { BackLink } from "@/components/back-link";
+import { SettingsShell } from "@/components/settings-shell";
 
 const FORM_GROUPS = [
   {
@@ -41,34 +41,30 @@ export default async function FormDefaultsListPage({ params }: { params: Promise
   if (!access) notFound();
 
   return (
-    <div className="page-container max-w-4xl space-y-6">
-      <BackLink href={`/b/${businessId}/settings`}>Settings</BackLink>
-      <div className="page-header">
-        <div>
-          <h1 className="page-title">Form Defaults</h1>
-          <p className="page-description">Configure the exact fields, line toggles, payment terms, and notes that appear when creating new documents.</p>
-        </div>
-      </div>
-
+    <SettingsShell
+      businessId={businessId}
+      title="Form Defaults"
+      description="Configure the exact fields, line toggles, payment terms, and notes that appear when creating new documents."
+    >
       <div className="space-y-6">
         {FORM_GROUPS.map((group) => (
-          <div key={group.category} className="rounded-lg border border-border bg-surface-raised shadow-xs overflow-hidden">
-            <div className="border-b border-border bg-surface px-4 py-2.5">
-              <h2 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">{group.category}</h2>
+          <div key={group.category} className="rounded-xl border border-border bg-surface-raised shadow-xs overflow-hidden">
+            <div className="border-b border-border bg-surface-muted/50 px-5 py-3">
+              <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">{group.category}</h2>
             </div>
             <ul className="divide-y divide-border">
               {group.forms.map((form) => (
                 <li key={form.id}>
                   <Link
                     href={`/b/${businessId}/settings/form-defaults/${form.id}`}
-                    className="flex items-center gap-4 p-4 hover:bg-surface-muted/50 transition-colors"
+                    className="flex items-center gap-4 p-4 sm:p-5 hover:bg-surface-muted/50 transition-colors"
                   >
-                    <div className="flex size-10 shrink-0 items-center justify-center rounded-md bg-primary/10 text-primary">
+                    <div className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
                       <form.icon className="size-5" />
                     </div>
                     <div className="flex-1">
-                      <h3 className="text-sm font-semibold text-foreground">{form.label}</h3>
-                      <p className="mt-0.5 text-xs text-muted-foreground">{form.description}</p>
+                      <h3 className="text-sm sm:text-base font-semibold text-foreground">{form.label}</h3>
+                      <p className="mt-0.5 text-xs sm:text-sm text-muted-foreground">{form.description}</p>
                     </div>
                     <ChevronRight className="size-5 text-muted-foreground" />
                   </Link>
@@ -78,6 +74,6 @@ export default async function FormDefaultsListPage({ params }: { params: Promise
           </div>
         ))}
       </div>
-    </div>
+    </SettingsShell>
   );
 }

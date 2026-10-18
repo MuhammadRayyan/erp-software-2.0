@@ -6,7 +6,7 @@ import { getBusinessPaths, SYSTEM_DB_PATH } from "@/core/db/paths";
 import { openBusinessDatabase } from "@/core/db/business";
 import { getSystemSqlite } from "@/core/db/system";
 import { getRecentLogs } from "@/core/logger";
-import { BackLink } from "@/components/back-link";
+import { SettingsShell } from "@/components/settings-shell";
 import { SystemHealthClient, type SystemHealthData } from "./system-health-client";
 
 export const metadata = {
@@ -96,17 +96,12 @@ export default async function SystemHealthPage({
   };
 
   return (
-    <div className="page-container max-w-5xl space-y-6">
-      <BackLink href={`/b/${businessId}/settings`}>Settings</BackLink>
-      <div className="page-header">
-        <div>
-          <h1 className="page-title">System Health & Diagnostics</h1>
-          <p className="page-description">
-            Live database engine metrics, write-ahead log (WAL) utilization, memory telemetry, and correlated OpenTelemetry/Sentry traces.
-          </p>
-        </div>
-      </div>
+    <SettingsShell
+      businessId={businessId}
+      title="System Health & Diagnostics"
+      description="Live database engine metrics, write-ahead log (WAL) utilization, memory telemetry, and correlated OpenTelemetry/Sentry traces."
+    >
       <SystemHealthClient initialData={healthData} />
-    </div>
+    </SettingsShell>
   );
 }

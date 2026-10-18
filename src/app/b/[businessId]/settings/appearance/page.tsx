@@ -27,7 +27,11 @@ export default async function AppearanceSettingsPage({ params }: { params: Promi
   }
 
   return (
-    <SettingsShell businessId={businessId} title="Appearance Settings" description="Configure global font families and text scaling for your account.">
+    <SettingsShell
+      businessId={businessId}
+      title="Appearance & Theme"
+      description="Configure light/dark theme modes, global typography font families, and interface text scaling for your account."
+    >
       <AppearanceForm initialFont={themeFont} initialSize={themeSize} />
     </SettingsShell>
   );

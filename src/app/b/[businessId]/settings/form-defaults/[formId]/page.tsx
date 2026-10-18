@@ -35,18 +35,18 @@ export default async function FormDefaultsDetailPage({
   const label = FORM_LABELS[formId] ?? formId;
 
   return (
-    <div className="page-container max-w-3xl">
-      <div className="mb-5 flex items-center gap-1.5 text-[13px] text-muted-foreground">
-        <Link href={`/b/${businessId}/settings`} className="hover:text-foreground">Settings</Link>
+    <div className="page-container max-w-4xl space-y-6">
+      <div className="mb-5 flex items-center gap-1.5 text-sm font-medium text-muted-foreground">
+        <Link href={`/b/${businessId}/settings`} className="hover:text-foreground transition-colors">Settings</Link>
         <ChevronRight className="size-4" />
-        <Link href={`/b/${businessId}/settings/form-defaults`} className="hover:text-foreground">Form Defaults</Link>
+        <Link href={`/b/${businessId}/settings/form-defaults`} className="hover:text-foreground transition-colors">Form Defaults</Link>
         <ChevronRight className="size-4" />
-        <span className="text-foreground">{label}</span>
+        <span className="text-foreground font-semibold">{label}</span>
       </div>
-      <div className="page-header">
+      <div className="page-header mb-6">
         <div>
-          <h1 className="page-title">{label} defaults</h1>
-          <p className="page-description">Configure the default fields and layout that appear when creating a new {label.toLowerCase()}.</p>
+          <h1 className="page-title text-2xl sm:text-3xl font-bold tracking-tight text-foreground">{label} Defaults</h1>
+          <p className="page-description mt-1 text-sm text-muted-foreground leading-relaxed">Configure the default fields and layout that appear when creating a new {label.toLowerCase()}.</p>
         </div>
       </div>
       <FormDefaultsEditor businessId={businessId} formType={formId} initial={initial} />

@@ -35,8 +35,8 @@ export function TemplateSelector({ currentType, businessId }: { currentType: str
   return (
     <div className="mb-6 flex flex-wrap items-center justify-between gap-4">
       {/* Quick Pills */}
-      <div className="flex flex-wrap items-center gap-1.5">
-        <span className="text-xs font-medium text-muted-foreground mr-1">Quick Select:</span>
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="text-sm font-medium text-muted-foreground mr-1">Quick Select:</span>
         {POPULAR_TYPES.map((pt) => {
           const Icon = pt.icon;
           const isActive = currentType === pt.value;
@@ -45,13 +45,13 @@ export function TemplateSelector({ currentType, businessId }: { currentType: str
               key={pt.value}
               type="button"
               onClick={() => selectType(pt.value)}
-              className={`inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors ${
+              className={`inline-flex items-center gap-2 rounded-lg border px-3.5 py-1.5 text-sm font-medium transition-all ${
                 isActive
-                  ? "border-primary bg-primary text-primary-foreground shadow-2xs"
+                  ? "border-primary bg-primary text-primary-foreground shadow-xs font-semibold"
                   : "border-border bg-surface text-muted-foreground hover:bg-surface-muted hover:text-foreground"
               }`}
             >
-              <Icon className="size-3.5" />
+              <Icon className="size-4" />
               {pt.label}
             </button>
           );
@@ -60,11 +60,11 @@ export function TemplateSelector({ currentType, businessId }: { currentType: str
 
       {/* Full Dropdown */}
       <div className="flex items-center gap-2">
-        <span className="text-xs font-medium text-muted-foreground">All Documents:</span>
+        <span className="text-sm font-medium text-muted-foreground">All Documents:</span>
         <SelectNative
           value={currentType}
           onChange={(e) => selectType(e.target.value)}
-          className="h-8 text-xs min-w-[180px]"
+          className="h-9 text-sm min-w-[200px]"
         >
           <optgroup label="Sales Documents">
             {SUPPORTED_DOCUMENT_TYPES.filter((t) => t.category === "Sales").map((t) => (
