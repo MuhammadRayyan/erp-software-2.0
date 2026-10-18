@@ -44,7 +44,11 @@ export default async function ReceiptViewPage({
               {status === "posted" ? "Posted" : "Reversed"}
             </Badge>
           </div>
-          <p className="mt-2 font-medium">{String(receipt.customer_name)}</p>
+          <p className="mt-2 font-medium">
+            <Link href={`/b/${businessId}/customers/${String(receipt.customer_id)}`} className="hover:text-primary hover:underline transition-colors">
+              {String(receipt.customer_name)}
+            </Link>
+          </p>
           <p className="mt-1 text-sm text-muted-foreground">{formatDate(String(receipt.date))}</p>
           <p className="money mt-3 text-xl font-semibold">
             {formatMoney(Number(receipt.amount_minor), String(receipt.currency_code))}

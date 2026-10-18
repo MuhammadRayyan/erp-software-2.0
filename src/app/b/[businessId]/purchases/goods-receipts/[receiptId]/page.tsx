@@ -47,7 +47,15 @@ export default async function GoodsReceiptViewPage({
             <h1 className="page-title tabular">{String(r.receipt_number)}</h1>
             <StatusBadge status={status} />
           </div>
-          <p className="mt-2 font-medium">{String(r.supplier_name)}</p>
+          <p className="mt-2 font-medium">
+            {(r as any).supplier_id ? (
+              <Link href={`/b/${businessId}/suppliers/${String((r as any).supplier_id)}`} className="hover:text-primary hover:underline transition-colors">
+                {String(r.supplier_name)}
+              </Link>
+            ) : (
+              String(r.supplier_name)
+            )}
+          </p>
           <p className="mt-1 text-sm text-muted-foreground">
             {formatDate(String(r.date))} · {String(r.location_code)} {String(r.location_name)}
           </p>

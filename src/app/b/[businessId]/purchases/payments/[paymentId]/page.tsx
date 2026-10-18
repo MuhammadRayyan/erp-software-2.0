@@ -44,7 +44,11 @@ export default async function SupplierPaymentViewPage({
               {status === "posted" ? "Posted" : "Reversed"}
             </Badge>
           </div>
-          <p className="mt-2 font-medium">{String(payment.supplier_name)}</p>
+          <p className="mt-2 font-medium">
+            <Link href={`/b/${businessId}/suppliers/${String(payment.supplier_id)}`} className="hover:text-primary hover:underline transition-colors">
+              {String(payment.supplier_name)}
+            </Link>
+          </p>
           <p className="mt-1 text-sm text-muted-foreground">{formatDate(String(payment.date))}</p>
           <p className="money mt-3 text-xl font-semibold">
             {formatMoney(Number(payment.amount_minor), String(payment.currency_code))}

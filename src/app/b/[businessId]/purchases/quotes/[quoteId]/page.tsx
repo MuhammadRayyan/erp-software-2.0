@@ -130,7 +130,11 @@ export default async function PurchaseQuoteViewPage({
             />
             <StatusBadge status={quote.documentStatus} />
           </div>
-          <p className="mt-2 text-base font-medium">{supplier.name}</p>
+          <p className="mt-2 text-base font-medium">
+            <Link href={`/b/${businessId}/suppliers/${supplier.id}`} className="hover:text-primary hover:underline transition-colors">
+              {supplier.name}
+            </Link>
+          </p>
           <p className="mt-1 text-sm text-muted-foreground">
             Quote date: {formatDate(quote.quoteDate)}
             {quote.expiryDate ? ` · Expiry: ${formatDate(quote.expiryDate)}` : ""}
@@ -189,7 +193,11 @@ export default async function PurchaseQuoteViewPage({
         <div className="grid gap-6 border-b border-border pb-6 sm:grid-cols-2 -mx-5 -mt-5 bg-surface-muted/30 p-5 sm:-mx-7 sm:-mt-7 sm:p-7 rounded-t-xl">
           <div>
             <p className="text-xs font-semibold tracking-[0.08em] text-muted-foreground uppercase">Supplier</p>
-            <p className="mt-2 font-semibold">{supplier.name}</p>
+            <p className="mt-2 font-semibold">
+              <Link href={`/b/${businessId}/suppliers/${supplier.id}`} className="hover:text-primary hover:underline transition-colors">
+                {supplier.name}
+              </Link>
+            </p>
             {supplier.email && <p className="mt-1 text-sm text-muted-foreground">{supplier.email}</p>}
             {supplier.phone && <p className="text-sm text-muted-foreground">{supplier.phone}</p>}
           </div>

@@ -298,6 +298,11 @@ export function ReceiptForm({
               aria-invalid={!!errors.amount}
             />
             {errors.amount && <p className="field-error">{errors.amount.message}</p>}
+            {unallocatedMinor > 0 && totalAllocatedMinor > 0 && (
+              <p className="text-xs text-emerald-600 dark:text-emerald-400 font-medium">
+                Includes {formatMoney(unallocatedMinor, currencyCode, minorUnit)} advance deposit (credited to customer credit pool).
+              </p>
+            )}
           </div>
 
           <div className="space-y-1.5">
@@ -397,6 +402,13 @@ export function ReceiptForm({
                 {customerInvoices.map((invoice) => {
                   const currentAllocStr = allocationsMap[invoice.id] || "";
                   const isOverdue = invoice.dueDate && invoice.dueDate < today;
+                  let currentAllocMinor = 0;
+                  try {
+                    if (currentAllocStr.trim()) {
+                      currentAllocMinor = parseCurrencyAmountToMinor(currentAllocStr, invoice.minorUnit);
+                    }
+                  } catch {}
+                  const isLineOverAllocated = currentAllocMinor > invoice.balanceMinor;
 
                   return (
                     <tr key={invoice.id}>
@@ -420,10 +432,30 @@ export function ReceiptForm({
                           step="0.000001"
                           min="0"
                           placeholder="0.00"
-                          className="money text-right h-8 text-sm"
+                          className={`money text-right h-8 text-sm ${isLineOverAllocated ? "border-danger ring-1 ring-danger/30 text-danger font-semibold" : ""}`}
                           value={currentAllocStr}
                           onChange={(e) => handleAllocationChange(invoice.id, e.target.value)}
                         />
+                        {isLineOverAllocated && (
+                          <div className="mt-1.5 text-[11px] text-danger flex flex-col items-end gap-1">
+                            <span>Exceeds balance by {formatMoney(currentAllocMinor - invoice.balanceMinor, invoice.currencyCode, invoice.minorUnit)}</span>
+                            <button
+                              type="button"
+                              className="text-[11px] font-semibold text-primary underline hover:text-primary/80 transition-colors"
+                              onClick={() => {
+                                setAllocationsMap((prev) => ({
+                                  ...prev,
+                                  [invoice.id]: minorToCurrencyInput(invoice.balanceMinor, invoice.minorUnit),
+                                }));
+                                if (totalAmountMinor < currentAllocMinor) {
+                                  setValue("amount", currentAllocStr, { shouldValidate: true });
+                                }
+                              }}
+                            >
+                              Cap to balance & keep excess as Advance
+                            </button>
+                          </div>
+                        )}
                       </td>
                       <td className="text-center">
                         <Button

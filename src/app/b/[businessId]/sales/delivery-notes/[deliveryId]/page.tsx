@@ -47,7 +47,15 @@ export default async function DeliveryNoteViewPage({
             <h1 className="page-title tabular">{String(d.delivery_number)}</h1>
             <StatusBadge status={status} />
           </div>
-          <p className="mt-2 font-medium">{String(d.customer_name)}</p>
+          <p className="mt-2 font-medium">
+            {(d as any).customer_id ? (
+              <Link href={`/b/${businessId}/customers/${String((d as any).customer_id)}`} className="hover:text-primary hover:underline transition-colors">
+                {String(d.customer_name)}
+              </Link>
+            ) : (
+              String(d.customer_name)
+            )}
+          </p>
           <p className="mt-1 text-sm text-muted-foreground">
             {formatDate(String(d.date))} · {String(d.location_code)} {String(d.location_name)}
           </p>

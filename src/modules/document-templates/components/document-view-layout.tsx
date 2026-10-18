@@ -38,9 +38,11 @@ export function DocumentViewLayout({
     <div className="w-full space-y-4">
       {/* View Switcher Bar */}
       <div className="flex flex-wrap items-center justify-between gap-3 no-print border-b border-border pb-3">
-        <div className="flex items-center gap-1.5 p-1 rounded-lg bg-surface-muted border border-border">
+        <div role="tablist" aria-label="Document view modes" className="flex items-center gap-1.5 p-1 rounded-lg bg-surface-muted border border-border">
           <button
             type="button"
+            role="tab"
+            aria-selected={activeTab === "document"}
             onClick={() => setActiveTab("document")}
             className={`flex items-center gap-2 px-3 py-1.5 rounded-md text-xs font-semibold transition-all ${
               activeTab === "document"
@@ -54,6 +56,8 @@ export function DocumentViewLayout({
           {children && (
             <button
               type="button"
+              role="tab"
+              aria-selected={activeTab === "operations"}
               onClick={() => setActiveTab("operations")}
               className={`flex items-center gap-2 px-3 py-1.5 rounded-md text-xs font-semibold transition-all ${
                 activeTab === "operations"
@@ -70,26 +74,32 @@ export function DocumentViewLayout({
         {activeTab === "document" && (
           <div className="flex items-center gap-2">
             {/* Zoom Controls */}
-            <div className="hidden sm:flex items-center gap-1 text-xs text-muted-foreground bg-surface-muted px-2 py-1 rounded-md border border-border">
+            <div className="hidden sm:flex items-center gap-1 text-xs text-muted-foreground bg-surface-muted px-2 py-1 rounded-md border border-border" role="toolbar" aria-label="Zoom controls">
               <span className="text-[11px] font-medium mr-1">Zoom:</span>
               <button
                 type="button"
+                title="Scale to 75%"
+                aria-pressed={zoom === "75"}
                 onClick={() => setZoom("75")}
-                className={`px-1.5 py-0.5 rounded ${zoom === "75" ? "bg-surface-raised font-bold text-foreground" : "hover:text-foreground"}`}
+                className={`px-1.5 py-0.5 rounded transition-colors ${zoom === "75" ? "bg-surface-raised font-bold text-foreground shadow-xs" : "hover:text-foreground"}`}
               >
                 75%
               </button>
               <button
                 type="button"
+                title="Fit to container width"
+                aria-pressed={zoom === "fit"}
                 onClick={() => setZoom("fit")}
-                className={`px-1.5 py-0.5 rounded ${zoom === "fit" ? "bg-surface-raised font-bold text-foreground" : "hover:text-foreground"}`}
+                className={`px-1.5 py-0.5 rounded transition-colors ${zoom === "fit" ? "bg-surface-raised font-bold text-foreground shadow-xs" : "hover:text-foreground"}`}
               >
                 Fit
               </button>
               <button
                 type="button"
+                title="100% standard size"
+                aria-pressed={zoom === "100"}
                 onClick={() => setZoom("100")}
-                className={`px-1.5 py-0.5 rounded ${zoom === "100" ? "bg-surface-raised font-bold text-foreground" : "hover:text-foreground"}`}
+                className={`px-1.5 py-0.5 rounded transition-colors ${zoom === "100" ? "bg-surface-raised font-bold text-foreground shadow-xs" : "hover:text-foreground"}`}
               >
                 100%
               </button>

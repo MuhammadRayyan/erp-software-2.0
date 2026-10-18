@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { notFound } from "next/navigation";
 import { NoticeToast } from "@/components/notice-toast";
 import { requireModule } from "@/core/permissions/require-module";
@@ -60,7 +61,11 @@ export default async function DebitNoteViewPage({
             <h1 className="page-title tabular">{note.debitNoteNumber}</h1>
             <StatusBadge status={note.documentStatus} />
           </div>
-          <p className="mt-2 text-base font-medium">{note.supplierName}</p>
+          <p className="mt-2 text-base font-medium">
+            <Link href={`/b/${businessId}/suppliers/${note.supplierId}`} className="hover:text-primary hover:underline transition-colors">
+              {note.supplierName}
+            </Link>
+          </p>
           <p className="mt-1 text-sm text-muted-foreground">
             Debit Note date: {formatDate(note.debitNoteDate)}
           </p>
@@ -115,7 +120,11 @@ export default async function DebitNoteViewPage({
           <div className="grid gap-6 border-b border-border pb-6 sm:grid-cols-2 -mx-5 -mt-5 bg-surface-muted/30 p-5 sm:-mx-7 sm:-mt-7 sm:p-7 rounded-t-xl">
             <div>
               <p className="text-xs font-semibold tracking-[0.08em] text-muted-foreground uppercase">Supplier</p>
-              <p className="mt-2 font-semibold">{note.supplierName}</p>
+              <p className="mt-2 font-semibold">
+                <Link href={`/b/${businessId}/suppliers/${note.supplierId}`} className="hover:text-primary hover:underline transition-colors">
+                  {note.supplierName}
+                </Link>
+              </p>
             </div>
             <dl className="grid grid-cols-2 gap-x-5 gap-y-3 text-sm sm:justify-self-end">
               <dt className="text-muted-foreground">Debit note date</dt>
