@@ -2,7 +2,7 @@
 import { Document, Page, Text, View, Image } from "@react-pdf/renderer";
 import { classicStyles as styles, colors, getLogoDimensions, getFontScale } from "./primitives";
 import type { TemplateSettings } from "../template-settings";
-import type { DocumentTemplateData, DocumentTemplateVariant } from "./modern-document-template";
+import type { DocumentTemplateData, DocumentTemplateVariant } from "../types";
 
 export function ClassicDocumentTemplate({ data, settings, variant }: { data: DocumentTemplateData; settings: TemplateSettings; variant: DocumentTemplateVariant }) {
   const primaryColor = settings.primaryColor || colors.text;
@@ -105,7 +105,7 @@ export function ClassicDocumentTemplate({ data, settings, variant }: { data: Doc
               <Text style={{ fontSize: 8.5, fontWeight: "heavy" }}>Date:</Text>
               <Text style={{ fontSize: 8.5 }}>{data.invoiceDate.replace("Invoice date: ", "").replace("Date: ", "")}</Text>
             </View>
-            {variant.showDueDate && data.dueDate && (
+            {variant.showDueDate && data.dueDate && data.dueDate !== "-" && (
               <View style={{ flexDirection: "row", justifyContent: "space-between" }}>
                 <Text style={{ fontSize: 8.5, fontWeight: "heavy" }}>Due Date:</Text>
                 <Text style={{ fontSize: 8.5 }}>{data.dueDate.replace("Due date: ", "")}</Text>

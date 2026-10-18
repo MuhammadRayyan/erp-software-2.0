@@ -1,5 +1,5 @@
 import React from "react";
-import type { DocumentTemplateData, DocumentTemplateVariant } from "../react-pdf/modern-document-template";
+import type { DocumentTemplateData, DocumentTemplateVariant } from "../types";
 import type { TemplateSettings } from "../template-settings";
 
 export interface DocumentPaperSheetProps {

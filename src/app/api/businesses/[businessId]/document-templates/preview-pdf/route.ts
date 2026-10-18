@@ -3,7 +3,7 @@ import { requireApiAuth } from "@/core/auth/api-auth";
 import { renderDocumentPdf } from "@/modules/document-templates/template-registry";
 import { getBusinessProfile } from "@/modules/business-profile/business-profile-service";
 import { templateSettingsSchema } from "@/modules/document-templates/template-settings";
-import type { DocumentTemplateData } from "@/modules/document-templates/react-pdf/modern-document-template";
+import type { DocumentTemplateData } from "@/modules/document-templates/types";
 
 export const runtime = "nodejs";
 

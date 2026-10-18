@@ -4,7 +4,7 @@ import { useState } from "react";
 import { Printer, Download, FileText, Layers } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { DocumentPaperSheet } from "./document-paper-sheet";
-import type { DocumentTemplateData, DocumentTemplateVariant } from "../react-pdf/modern-document-template";
+import type { DocumentTemplateData, DocumentTemplateVariant } from "../types";
 import type { TemplateSettings } from "../template-settings";
 
 export interface DocumentViewLayoutProps {

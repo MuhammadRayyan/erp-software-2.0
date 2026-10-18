@@ -2,7 +2,7 @@
 import { Document, Page, Text, View, StyleSheet, Image } from "@react-pdf/renderer";
 import { minimalStyles as styles, getLogoDimensions, getFontScale } from "./primitives";
 import type { TemplateSettings } from "../template-settings";
-import type { DocumentTemplateData, DocumentTemplateVariant } from "./modern-document-template";
+import type { DocumentTemplateData, DocumentTemplateVariant } from "../types";
 
 const localStyles = StyleSheet.create({
   ...styles,
@@ -103,7 +103,7 @@ export function MinimalDocumentTemplate({ data, settings, variant }: { data: Doc
             <Text style={[localStyles.invoiceTitle, { color: primaryColor }]}>{variant.title}</Text>
             <Text style={{ fontSize: 10, fontWeight: "heavy", marginTop: 4, letterSpacing: 0.5 }}>#{data.invoiceNumber}</Text>
             <Text style={{ fontSize: fontScale.subtext, color: "#71717a", marginTop: 2 }}>{data.invoiceDate}</Text>
-            {variant.showDueDate && data.dueDate && (
+            {variant.showDueDate && data.dueDate && data.dueDate !== "-" && (
               <Text style={{ fontSize: fontScale.subtext, color: "#71717a", marginTop: 1 }}>{data.dueDate}</Text>
             )}
           </View>

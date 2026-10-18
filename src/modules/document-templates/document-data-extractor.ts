@@ -17,7 +17,7 @@ import { getCustomFieldPairsForEntity } from "@/modules/custom-fields/custom-fie
 import { getBusinessProfile } from "@/modules/business-profile/business-profile-service";
 import { getTemplateSettings } from "./template-service";
 import { type TemplateSettings } from "./template-settings";
-import type { DocumentTemplateData, DocumentTemplateVariant } from "./react-pdf/modern-document-template";
+import type { DocumentTemplateData, DocumentTemplateVariant } from "./types";
 
 export interface ExtractedDocumentData {
   data: DocumentTemplateData;

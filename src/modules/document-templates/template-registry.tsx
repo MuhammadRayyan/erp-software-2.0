@@ -1,9 +1,11 @@
 
 import { renderReactPdf } from "./react-pdf/render";
-import { ModernDocumentTemplate, type DocumentTemplateData, type DocumentTemplateVariant } from "./react-pdf/modern-document-template";
+import { ModernDocumentTemplate } from "./react-pdf/modern-document-template";
 import { ClassicDocumentTemplate } from "./react-pdf/classic-document-template";
 import { MinimalDocumentTemplate } from "./react-pdf/minimal-document-template";
 import { ClassicStatementDocument, type StatementTemplateData } from "./react-pdf/statement-template";
+import type { DocumentTemplateData, DocumentTemplateVariant } from "./types";
+import { resolveDocumentVariant } from "./document-data-extractor";
 
 import { renderHtmlTemplate } from "./html-templates/render";
 import { getTemplateSettings } from "./template-service";
@@ -32,18 +34,7 @@ export async function renderDocumentPdf(
     return renderHtmlTemplate(settings.customHtml, data, settings);
   }
 
-  const showDueDate = ["sales-invoice", "purchase-invoice", "sales-quote", "purchase-quote", "sales-order", "purchase-order"].includes(documentType);
-  const showTax = ["sales-invoice", "purchase-invoice", "sales-quote", "purchase-quote", "sales-order", "purchase-order", "sales-credit-note", "debit-note"].includes(documentType);
-  const showBuyerTrn = ["sales-invoice", "sales-quote", "sales-order", "sales-credit-note"].includes(documentType);
-  
-  const variant: DocumentTemplateVariant = {
-    title: settings.customDocumentTitle || data.invoiceTitle || "DOCUMENT",
-    partyLabel: settings.customPartyLabel || data.customerLabel || "PARTY",
-    showDueDate,
-    showBuyerTrn,
-    totalLabel: settings.customTotalLabel || "Total",
-    showTax
-  };
+  const variant: DocumentTemplateVariant = resolveDocumentVariant(documentType, settings, data);
 
   if (settings.templateType === "classic") {
     return renderReactPdf(<ClassicDocumentTemplate data={data} settings={settings} variant={variant} />);

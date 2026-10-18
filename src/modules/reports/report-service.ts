@@ -248,31 +248,31 @@ export function getBankBalance(businessId: string, userId: string) {
 export function getDashboardCounts(businessId: string, userId: string) {
   const { sqlite } = getBusinessDb(businessId, userId);
   
-  const getCount = (table: string) => {
+  const safeCount = (query: string) => {
     try {
-      const result = sqlite.prepare(`SELECT COUNT(*) as c FROM ${table}`).get() as { c: number };
-      return result.c;
+      const result = sqlite.prepare(query).get() as { c: number } | undefined;
+      return result?.c ?? 0;
     } catch {
-      return 0; // table might not exist yet or error
+      return 0;
     }
   };
 
   return {
-    customers: getCount("customers"),
-    salesQuotes: getCount("sales_quotes"),
-    salesOrders: getCount("sales_orders"),
-    salesInvoices: getCount("sales_invoices"),
-    salesCreditNotes: getCount("sales_credit_notes"),
-    suppliers: getCount("suppliers"),
-    purchaseOrders: getCount("purchase_orders"),
-    purchaseInvoices: getCount("purchase_invoices"),
-    inventoryItems: getCount("inventory_items"),
-    goodsReceipts: getCount("goods_receipts"),
-    deliveryNotes: getCount("delivery_notes"),
-    bankAccounts: getCount("accounts WHERE subtype IN ('bank', 'cash')"),
-    receipts: getCount("receipts"),
-    payments: getCount("supplier_payments"),
-    journals: getCount("journal_entries")
+    customers: safeCount("SELECT COUNT(*) as c FROM customers"),
+    salesQuotes: safeCount("SELECT COUNT(*) as c FROM sales_quotes"),
+    salesOrders: safeCount("SELECT COUNT(*) as c FROM sales_orders"),
+    salesInvoices: safeCount("SELECT COUNT(*) as c FROM sales_invoices"),
+    salesCreditNotes: safeCount("SELECT COUNT(*) as c FROM sales_credit_notes"),
+    suppliers: safeCount("SELECT COUNT(*) as c FROM suppliers"),
+    purchaseOrders: safeCount("SELECT COUNT(*) as c FROM purchase_orders"),
+    purchaseInvoices: safeCount("SELECT COUNT(*) as c FROM purchase_invoices"),
+    inventoryItems: safeCount("SELECT COUNT(*) as c FROM inventory_items"),
+    goodsReceipts: safeCount("SELECT COUNT(*) as c FROM goods_receipts"),
+    deliveryNotes: safeCount("SELECT COUNT(*) as c FROM delivery_notes"),
+    bankAccounts: safeCount("SELECT COUNT(*) as c FROM accounts WHERE subtype IN ('bank', 'cash')"),
+    receipts: safeCount("SELECT COUNT(*) as c FROM receipts"),
+    payments: safeCount("SELECT COUNT(*) as c FROM supplier_payments"),
+    journals: safeCount("SELECT COUNT(*) as c FROM journal_entries")
   };
 }
 

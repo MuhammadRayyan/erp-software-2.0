@@ -2,52 +2,9 @@
 import { Document, Page, Text, View, StyleSheet, Image } from "@react-pdf/renderer";
 import { sharedStyles, colors, getLogoDimensions, getFontScale } from "./primitives";
 import type { TemplateSettings } from "../template-settings";
+import type { DocumentTemplateData, DocumentTemplateVariant, DocumentTemplateLine } from "../types";
 
-export interface DocumentTemplateData {
-  companyName: string;
-  companyAddress?: string;
-  companyEmail?: string;
-  companyPhone?: string;
-  companyWebsite?: string;
-  sellerTrn?: string;
-  logoUrl?: string;
-  invoiceTitle: string;
-  invoiceNumber: string;
-  invoiceDate: string;
-  dueDate?: string;
-  customerLabel?: string;
-  customerName: string;
-  customerAddress?: string;
-  customerTrn?: string;
-  customerEmail?: string;
-  customerPhone?: string;
-  lines: Array<{
-    description: string;
-    quantity: string;
-    unitPrice: string;
-    amount: string;
-    discount?: string;
-    tax?: string;
-    project?: string;
-  }>;
-  subtotal: string;
-  tax: string;
-  total: string;
-  notes?: string;
-  terms?: string;
-  foreignDetail?: string;
-  customFields?: Array<{ name: string; value: string }>;
-  status?: string;
-}
-
-export type DocumentTemplateVariant = {
-  title: string;
-  partyLabel: string;
-  showDueDate: boolean;
-  showBuyerTrn: boolean;
-  totalLabel: string;
-  showTax: boolean;
-};
+export type { DocumentTemplateData, DocumentTemplateVariant, DocumentTemplateLine };
 
 const styles = StyleSheet.create({
   ...sharedStyles,
