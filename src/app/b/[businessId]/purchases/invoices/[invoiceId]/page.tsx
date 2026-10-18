@@ -111,7 +111,11 @@ export default async function PurchaseInvoiceViewPage({
             <StatusBadge status={invoice.documentStatus} />
             {record.paymentStatus && <StatusBadge status={record.paymentStatus} />}
           </div>
-          <p className="mt-2 text-base font-medium">{supplier.name}</p>
+          <p className="mt-2 text-base font-medium">
+            <Link href={`/b/${businessId}/suppliers/${supplier.id}`} className="hover:text-primary hover:underline transition-colors">
+              {supplier.name}
+            </Link>
+          </p>
           <p className="mt-1 text-sm text-muted-foreground">
             Supplier invoice: {invoice.supplierInvoiceNumber} · Invoice date: {formatDate(invoice.invoiceDate)} · Due: {formatDate(invoice.dueDate)}
           </p>
@@ -119,7 +123,14 @@ export default async function PurchaseInvoiceViewPage({
             {invoice.documentStatus === "void" ? (
               <>
                 <span className="money text-xl font-semibold line-through text-muted-foreground">{formatMoney(invoice.totalMinor, currency)}</span>
-                <span className="text-sm font-semibold text-danger">Voided · 0.00 Balance (GL Reversal Posted)</span>
+                <span className="text-sm font-semibold text-danger">
+                  Voided · 0.00 Balance
+                  {record.reversalJournal ? (
+                    <> (Reversal: <Link href={`/b/${businessId}/accounting/journal/${record.reversalJournal.id}`} className="underline hover:text-danger/80">{record.reversalJournal.entryNumber}</Link>)</>
+                  ) : (
+                    " (GL Reversal Posted)"
+                  )}
+                </span>
               </>
             ) : (
               <>
@@ -143,6 +154,7 @@ export default async function PurchaseInvoiceViewPage({
           balanceMinor={record.balanceMinor}
           totalMinor={invoice.totalMinor}
           journalEntryId={record.journal?.id ?? null}
+          reversalJournalEntryId={record.reversalJournal?.id ?? null}
           inventoryEnabled={access.modules.includes("inventory")}
           hasInventoryLines={lines.some((line) => Boolean(line.itemId))}
           hasGoodsReceipts={record.goodsReceipts.length > 0}
@@ -198,7 +210,11 @@ export default async function PurchaseInvoiceViewPage({
         <div className="grid gap-6 border-b border-border pb-6 sm:grid-cols-2 -mx-5 -mt-5 bg-surface-muted/30 p-5 sm:-mx-7 sm:-mt-7 sm:p-7 rounded-t-xl">
           <div>
             <p className="text-xs font-semibold tracking-[0.08em] text-muted-foreground uppercase">Supplier</p>
-            <p className="mt-2 font-semibold">{supplier.name}</p>
+            <p className="mt-2 font-semibold">
+              <Link href={`/b/${businessId}/suppliers/${supplier.id}`} className="hover:text-primary hover:underline transition-colors">
+                {supplier.name}
+              </Link>
+            </p>
             {supplier.email && <p className="mt-1 text-sm text-muted-foreground">{supplier.email}</p>}
             {supplier.phone && <p className="text-sm text-muted-foreground">{supplier.phone}</p>}
           </div>

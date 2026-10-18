@@ -402,6 +402,9 @@ export function getInvoice(businessId: string, userId: string, invoiceId: string
   const journal = context.sqlite
     .prepare("SELECT id, entry_number FROM journal_entries WHERE source_type = 'sales_invoice' AND source_id = ?")
     .get(invoiceId) as { id: string; entry_number: string } | undefined;
+  const reversalJournal = context.sqlite
+    .prepare("SELECT id, entry_number FROM journal_entries WHERE source_type = 'sales_invoice_void' AND source_id = ?")
+    .get(invoiceId) as { id: string; entry_number: string } | undefined;
   const creditNotes = context.sqlite
     .prepare(`
       SELECT scn.id, scn.credit_note_number, scn.date, scn.document_status,
@@ -457,6 +460,7 @@ export function getInvoice(businessId: string, userId: string, invoiceId: string
       allocatedMinor: note.allocated_minor,
     })),
     journal: journal ? { id: journal.id, entryNumber: journal.entry_number } : null,
+    reversalJournal: reversalJournal ? { id: reversalJournal.id, entryNumber: reversalJournal.entry_number } : null,
     deliveryNotes: context.sqlite.prepare("SELECT id, delivery_number, date, document_status FROM delivery_notes WHERE sales_invoice_id = ? ORDER BY date DESC, created_at DESC").all(invoiceId) as { id: string; delivery_number: string; date: string; document_status: string }[],
     linkedOrder: header.invoice.salesOrderId
       ? (context.sqlite.prepare("SELECT id, order_number, document_status, sales_quote_id FROM sales_orders WHERE id = ?").get(header.invoice.salesOrderId) as { id: string; order_number: string; document_status: string; sales_quote_id: string | null } | undefined)

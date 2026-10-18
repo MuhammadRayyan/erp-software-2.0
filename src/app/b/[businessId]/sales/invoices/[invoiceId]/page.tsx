@@ -134,13 +134,24 @@ export default async function InvoiceViewPage({ params, searchParams }: { params
             <DocumentStatusBadge status={invoice.documentStatus} />
             {record.paymentStatus && <PaymentStatusBadge status={record.paymentStatus} />}
           </div>
-          <p className="mt-2 text-base font-medium">{customer.name}</p>
+          <p className="mt-2 text-base font-medium">
+            <Link href={`/b/${businessId}/customers/${customer.id}`} className="hover:text-primary hover:underline transition-colors">
+              {customer.name}
+            </Link>
+          </p>
           <p className="mt-1 text-sm text-muted-foreground">Invoice date: {formatDate(invoice.invoiceDate)}{invoice.dueDate ? ` · Due: ${formatDate(invoice.dueDate)}` : ""}</p>
           <div className="mt-3 flex flex-wrap items-baseline gap-x-5 gap-y-1">
             {invoice.documentStatus === "void" ? (
               <>
                 <span className="money text-xl font-semibold line-through text-muted-foreground">{formatMoney(invoice.totalMinor, currency)}</span>
-                <span className="text-sm font-semibold text-danger">Voided · 0.00 Balance (GL Reversal Posted)</span>
+                <span className="text-sm font-semibold text-danger">
+                  Voided · 0.00 Balance
+                  {record.reversalJournal ? (
+                    <> (Reversal: <Link href={`/b/${businessId}/accounting/journal/${record.reversalJournal.id}`} className="underline hover:text-danger/80">{record.reversalJournal.entryNumber}</Link>)</>
+                  ) : (
+                    " (GL Reversal Posted)"
+                  )}
+                </span>
               </>
             ) : (
               <>
@@ -154,7 +165,7 @@ export default async function InvoiceViewPage({ params, searchParams }: { params
             )}
           </div>
         </div>
-        <InvoiceViewActions businessId={businessId} invoiceId={invoice.id} invoiceNumber={invoice.invoiceNumber} documentStatus={invoice.documentStatus} balanceMinor={record.balanceMinor} totalMinor={invoice.totalMinor} hasDeliveryNotes={record.deliveryNotes.length > 0} journalEntryId={record.journal?.id ?? null} inventoryEnabled={access.modules.includes("inventory")} hasDeliverableItems={lines.some((line) => Boolean(line.itemId) && line.remainingToDeliverMicros > 0)} emailDefaults={emailDefaults} />
+        <InvoiceViewActions businessId={businessId} invoiceId={invoice.id} invoiceNumber={invoice.invoiceNumber} documentStatus={invoice.documentStatus} balanceMinor={record.balanceMinor} totalMinor={invoice.totalMinor} hasDeliveryNotes={record.deliveryNotes.length > 0} journalEntryId={record.journal?.id ?? null} reversalJournalEntryId={record.reversalJournal?.id ?? null} inventoryEnabled={access.modules.includes("inventory")} hasDeliverableItems={lines.some((line) => Boolean(line.itemId) && line.remainingToDeliverMicros > 0)} emailDefaults={emailDefaults} />
       </div>
       <DocumentViewLayout
         data={viewBundle.data}
@@ -177,7 +188,7 @@ export default async function InvoiceViewPage({ params, searchParams }: { params
       )}
       {currency !== access.business.currency && <section aria-label="Currency snapshot" className="mb-5 rounded-lg border border-border bg-surface-raised p-4"><dl className="grid gap-4 text-sm sm:grid-cols-2 lg:grid-cols-4"><div><dt className="text-xs text-muted-foreground">Stored rate</dt><dd className="money mt-1">1 {currency} = {invoice.exchangeRateToBase} {access.business.currency}</dd></div><div><dt className="text-xs text-muted-foreground">Rate date</dt><dd className="mt-1">{formatDate(invoice.exchangeRateDate)}</dd></div><div><dt className="text-xs text-muted-foreground">Rate source</dt><dd className="mt-1">{invoice.exchangeRateSource}</dd></div><div><dt className="text-xs text-muted-foreground">Base equivalent</dt><dd className="money mt-1 font-semibold">{formatMoney(invoice.baseTotalMinor, access.business.currency)}</dd></div></dl><p className="mt-3 text-xs text-muted-foreground">Base VAT {formatMoney(invoice.baseTaxMinor, access.business.currency)} · Posted snapshots never follow later rate-table changes.</p></section>}
       <article className="rounded-xl border border-border bg-surface-raised shadow-sm p-5 sm:p-7 dark:shadow-none">
-        <div className="grid gap-6 border-b border-border pb-6 sm:grid-cols-2 -mx-5 -mt-5 bg-surface-muted/30 p-5 sm:-mx-7 sm:-mt-7 sm:p-7 rounded-t-xl"><div><p className="text-xs font-semibold tracking-[0.08em] text-muted-foreground uppercase">Bill to</p><p className="mt-2 font-semibold">{customer.name}</p>{customer.email && <p className="mt-1 text-sm text-muted-foreground">{customer.email}</p>}{customer.phone && <p className="text-sm text-muted-foreground">{customer.phone}</p>}</div><dl className="grid grid-cols-2 gap-x-5 gap-y-3 text-sm sm:justify-self-end"><dt className="text-muted-foreground">Invoice date</dt><dd className="text-right">{formatDate(invoice.invoiceDate)}</dd><dt className="text-muted-foreground">VAT tax date</dt><dd className="text-right">{formatDate(invoice.taxDate)}</dd><dt className="text-muted-foreground">Supply Emirate</dt><dd className="text-right">{invoice.supplyEmirate ? emirateLabels[invoice.supplyEmirate as Emirate] : "Business default"}</dd>{invoice.dueDate && <><dt className="text-muted-foreground">Due date</dt><dd className="text-right">{formatDate(invoice.dueDate)}</dd></>}<dt className="text-muted-foreground">Reference</dt><dd className="text-right">{invoice.reference || "—"}</dd><dt className="text-muted-foreground">Project</dt><dd className="text-right"><ProjectLinks businessId={businessId} projects={linkedProjects} /></dd></dl></div>
+        <div className="grid gap-6 border-b border-border pb-6 sm:grid-cols-2 -mx-5 -mt-5 bg-surface-muted/30 p-5 sm:-mx-7 sm:-mt-7 sm:p-7 rounded-t-xl"><div><p className="text-xs font-semibold tracking-[0.08em] text-muted-foreground uppercase">Bill to</p><p className="mt-2 font-semibold"><Link href={`/b/${businessId}/customers/${customer.id}`} className="hover:text-primary hover:underline transition-colors">{customer.name}</Link></p>{customer.email && <p className="mt-1 text-sm text-muted-foreground">{customer.email}</p>}{customer.phone && <p className="text-sm text-muted-foreground">{customer.phone}</p>}</div><dl className="grid grid-cols-2 gap-x-5 gap-y-3 text-sm sm:justify-self-end"><dt className="text-muted-foreground">Invoice date</dt><dd className="text-right">{formatDate(invoice.invoiceDate)}</dd><dt className="text-muted-foreground">VAT tax date</dt><dd className="text-right">{formatDate(invoice.taxDate)}</dd><dt className="text-muted-foreground">Supply Emirate</dt><dd className="text-right">{invoice.supplyEmirate ? emirateLabels[invoice.supplyEmirate as Emirate] : "Business default"}</dd>{invoice.dueDate && <><dt className="text-muted-foreground">Due date</dt><dd className="text-right">{formatDate(invoice.dueDate)}</dd></>}<dt className="text-muted-foreground">Reference</dt><dd className="text-right">{invoice.reference || "—"}</dd><dt className="text-muted-foreground">Project</dt><dd className="text-right"><ProjectLinks businessId={businessId} projects={linkedProjects} /></dd></dl></div>
         <div className="mt-6 overflow-x-auto"><table className={`data-table ${showLineProjects ? "min-w-[1020px]" : "min-w-[880px]"}`}><thead><tr><th>Item / Description</th><th className="text-right!">Qty</th><th className="text-right!">Delivered</th><th className="text-right!">Remaining</th><th className="text-right!">Rate</th><th>VAT</th>{showLineProjects && <th>Project</th>}<th className="text-right!">Amount</th></tr></thead><tbody>{lines.map((line) => <tr key={line.id}><td><span className="font-medium">{line.item ? `${line.item.sku ? `${line.item.sku} · ` : ""}${line.item.name}` : line.description}</span>{line.item && <span className="mt-0.5 block text-xs text-muted-foreground">{line.description}</span>}<span className="mt-0.5 block text-xs text-muted-foreground">{line.salesAccount ? line.salesAccount.name : "Sales account unavailable"}</span></td><td className="money text-right">{quantityMicrosToInput(line.quantityMicros)}</td><td className="money text-right">{line.item ? quantityMicrosToInput(line.deliveredMicros) : "—"}</td><td className="money text-right">{line.item ? quantityMicrosToInput(line.remainingToDeliverMicros) : "—"}</td><td className="money text-right">{formatMoney(line.unitPriceMinor, currency)}</td><td>{line.taxCode ? `${line.taxCode.name} (${rateBasisPointsToPercent(line.taxCode.rate_basis_points)}%)` : "—"}</td>{showLineProjects && <td><ProjectLinks businessId={businessId} projects={line.project ? [line.project] : []} empty="—" /></td>}<td className="money text-right">{formatMoney(line.grossAmountMinor, currency)}</td></tr>)}</tbody></table></div>
         <dl className="mt-6 ml-auto w-full max-w-xs space-y-2 text-sm">
           <div className="flex justify-between">

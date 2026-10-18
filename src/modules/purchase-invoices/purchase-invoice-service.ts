@@ -289,6 +289,7 @@ export function getPurchaseInvoice(businessId: string, userId: string, invoiceId
   const paidMinor = paidForPurchaseInvoice(context.sqlite, invoiceId);
   const payments = context.sqlite.prepare(`SELECT sp.id, sp.payment_number, sp.date, sp.reference, spa.amount_minor AS allocated_minor FROM supplier_payment_allocations spa INNER JOIN supplier_payments sp ON sp.id = spa.payment_id WHERE spa.purchase_invoice_id = ? AND sp.document_status = 'posted' ORDER BY sp.date DESC, sp.created_at DESC`).all(invoiceId) as { id: string; payment_number: string; date: string; reference: string | null; allocated_minor: number }[];
   const journal = context.sqlite.prepare("SELECT id, entry_number FROM journal_entries WHERE source_type = 'purchase_invoice' AND source_id = ?").get(invoiceId) as { id: string; entry_number: string } | undefined;
+  const reversalJournal = context.sqlite.prepare("SELECT id, entry_number FROM journal_entries WHERE source_type = 'purchase_invoice_void' AND source_id = ?").get(invoiceId) as { id: string; entry_number: string } | undefined;
   const order = header.invoice.purchaseOrderId ? context.sqlite.prepare("SELECT id, order_number FROM purchase_orders WHERE id = ?").get(header.invoice.purchaseOrderId) as { id: string; order_number: string } | undefined : undefined;
   return {
     ...header,
@@ -302,6 +303,7 @@ export function getPurchaseInvoice(businessId: string, userId: string, invoiceId
     paymentStatus: deriveStatus(header.invoice.documentStatus, header.invoice.totalMinor, paidMinor, header.invoice.dueDate),
     payments: payments.map((row) => ({ id: row.id, paymentNumber: row.payment_number, date: row.date, reference: row.reference, allocatedMinor: row.allocated_minor })),
     journal: journal ? { id: journal.id, entryNumber: journal.entry_number } : null,
+    reversalJournal: reversalJournal ? { id: reversalJournal.id, entryNumber: reversalJournal.entry_number } : null,
     order: order ? { id: order.id, orderNumber: order.order_number } : null,
     linkedQuote: header.invoice.purchaseOrderId
       ? (context.sqlite.prepare("SELECT pq.id, pq.quote_number, pq.document_status FROM purchase_quotes pq INNER JOIN purchase_orders po ON po.purchase_quote_id = pq.id WHERE po.id = ?").get(header.invoice.purchaseOrderId) as { id: string; quote_number: string; document_status: string } | undefined)

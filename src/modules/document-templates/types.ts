@@ -22,6 +22,7 @@ export interface DocumentTemplateData {
   dueDate?: string;
   customerLabel?: string;
   customerName: string;
+  partyHref?: string;
   customerAddress?: string;
   customerTrn?: string;
   customerEmail?: string;

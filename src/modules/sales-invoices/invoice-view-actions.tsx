@@ -21,6 +21,7 @@ export function InvoiceViewActions({
   totalMinor,
   hasDeliveryNotes,
   journalEntryId,
+  reversalJournalEntryId,
   inventoryEnabled,
   hasDeliverableItems,
   emailDefaults,
@@ -33,6 +34,7 @@ export function InvoiceViewActions({
   totalMinor?: number;
   hasDeliveryNotes?: boolean;
   journalEntryId: string | null;
+  reversalJournalEntryId?: string | null;
   inventoryEnabled: boolean;
   hasDeliverableItems: boolean;
   emailDefaults: DocumentEmailDefaults;
@@ -120,6 +122,11 @@ export function InvoiceViewActions({
             {journalEntryId && (
               <DropdownMenuItem asChild>
                 <Link href={`/b/${businessId}/accounting/journal/${journalEntryId}`}><BookOpenText className="size-4" /> View Journal Entry</Link>
+              </DropdownMenuItem>
+            )}
+            {reversalJournalEntryId && (
+              <DropdownMenuItem asChild>
+                <Link href={`/b/${businessId}/accounting/journal/${reversalJournalEntryId}`}><BookOpenText className="size-4 text-danger" /> View Reversal Journal</Link>
               </DropdownMenuItem>
             )}
           </>

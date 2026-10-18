@@ -172,7 +172,18 @@ export function DocumentPaperSheet({
           <p className="text-[11px] font-bold uppercase tracking-wider text-slate-400">
             {variant.partyLabel}
           </p>
-          <p className="mt-1 text-base font-bold text-slate-900">{data.customerName}</p>
+          <p className="mt-1 text-base font-bold text-slate-900">
+            {data.partyHref ? (
+              <a
+                href={data.partyHref}
+                className="hover:underline hover:text-primary transition-colors print:text-inherit print:no-underline"
+              >
+                {data.customerName}
+              </a>
+            ) : (
+              data.customerName
+            )}
+          </p>
           {data.customerAddress && (
             <p className="mt-0.5 text-xs text-slate-500 max-w-sm whitespace-pre-line leading-relaxed">
               {data.customerAddress}

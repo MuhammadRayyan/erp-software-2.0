@@ -96,6 +96,7 @@ export function buildDocumentTemplateData(
   let partyTrn: string | undefined = undefined;
   let partyEmail: string | undefined = undefined;
   let partyPhone: string | undefined = undefined;
+  let partyHref: string | undefined = undefined;
   let docNotes: string | undefined = undefined;
   let docTerms: string | undefined = undefined;
   let dateLabel = "";
@@ -124,6 +125,7 @@ export function buildDocumentTemplateData(
     number = record.invoice.invoiceNumber;
     status = record.invoice.documentStatus;
     partyName = record.customer.name;
+    partyHref = `/b/${businessId}/customers/${record.customer.id}`;
     partyAddress =
       record.customer.billingAddress ||
       [record.customer.addressLine1, record.customer.city, record.customer.countrySubdivision, record.customer.countryCode]
@@ -167,6 +169,7 @@ export function buildDocumentTemplateData(
     status = (record.invoice as any).documentStatus;
     partyLabel = "SUPPLIER";
     partyName = record.supplier.name;
+    partyHref = `/b/${businessId}/suppliers/${record.supplier.id}`;
     partyAddress = record.supplier.address || undefined;
     partyTrn = record.supplier.trn || record.supplier.taxReference || undefined;
     partyEmail = record.supplier.email || undefined;
@@ -204,6 +207,7 @@ export function buildDocumentTemplateData(
     status = (record.order as any).status;
     partyLabel = "SUPPLIER";
     partyName = record.supplier.name;
+    partyHref = `/b/${businessId}/suppliers/${record.supplier.id}`;
     partyAddress = record.supplier.address || undefined;
     partyTrn = record.supplier.trn || record.supplier.taxReference || undefined;
     partyEmail = record.supplier.email || undefined;
@@ -244,6 +248,7 @@ export function buildDocumentTemplateData(
     status = (record.note as any).documentStatus;
     partyLabel = "CREDIT TO";
     partyName = record.customer.name;
+    partyHref = `/b/${businessId}/customers/${record.customer.id}`;
     partyAddress =
       record.customer.billingAddress ||
       [record.customer.addressLine1, record.customer.city, record.customer.countrySubdivision, record.customer.countryCode]
@@ -286,6 +291,7 @@ export function buildDocumentTemplateData(
     status = (record.note as any).documentStatus;
     partyLabel = "SUPPLIER";
     partyName = record.note.supplierName;
+    partyHref = (record.note as any).supplier_id ? `/b/${businessId}/suppliers/${(record.note as any).supplier_id}` : undefined;
     partyAddress = (record.note as any).supplierAddress || undefined;
     partyTrn = (record.note as any).supplierTrn || undefined;
     partyEmail = (record.note as any).supplierEmail || undefined;
@@ -318,6 +324,7 @@ export function buildDocumentTemplateData(
     number = record.quote.quoteNumber;
     status = (record.quote as any).documentStatus;
     partyName = record.customer.name;
+    partyHref = `/b/${businessId}/customers/${record.customer.id}`;
     partyAddress =
       record.customer.billingAddress ||
       [record.customer.addressLine1, record.customer.city, record.customer.countrySubdivision, record.customer.countryCode]
@@ -360,6 +367,7 @@ export function buildDocumentTemplateData(
     number = record.order.orderNumber;
     status = (record.order as any).documentStatus;
     partyName = record.customer.name;
+    partyHref = `/b/${businessId}/customers/${record.customer.id}`;
     partyAddress =
       record.customer.billingAddress ||
       [record.customer.addressLine1, record.customer.city, record.customer.countrySubdivision, record.customer.countryCode]
@@ -403,6 +411,7 @@ export function buildDocumentTemplateData(
     status = (record.quote as any).documentStatus;
     partyLabel = "SUPPLIER";
     partyName = record.supplier.name;
+    partyHref = `/b/${businessId}/suppliers/${record.supplier.id}`;
     partyAddress = record.supplier.address || undefined;
     partyTrn = record.supplier.trn || record.supplier.taxReference || undefined;
     partyEmail = record.supplier.email || undefined;
@@ -437,6 +446,7 @@ export function buildDocumentTemplateData(
     number = String(record.receipt.receipt_number);
     partyLabel = "SUPPLIER";
     partyName = String(record.receipt.supplier_name);
+    partyHref = (record.receipt as any).supplier_id ? `/b/${businessId}/suppliers/${(record.receipt as any).supplier_id}` : undefined;
     dateLabel = formatDate(String(record.receipt.date));
     dueLabel = `Location: ${String(record.receipt.location_code)} - ${String(record.receipt.location_name)}`;
     docNotes = (record.receipt as any).notes || undefined;
@@ -456,6 +466,7 @@ export function buildDocumentTemplateData(
     number = String(record.delivery.delivery_number);
     partyLabel = "DELIVER TO";
     partyName = String(record.delivery.customer_name);
+    partyHref = (record.delivery as any).customer_id ? `/b/${businessId}/customers/${(record.delivery as any).customer_id}` : undefined;
     dateLabel = formatDate(String(record.delivery.date));
     dueLabel = `Location: ${String(record.delivery.location_code)} - ${String(record.delivery.location_name)}`;
     docNotes = (record.delivery as any).notes || undefined;
@@ -480,6 +491,7 @@ export function buildDocumentTemplateData(
     status = String(record.receipt.document_status);
     partyLabel = "RECEIVED FROM";
     partyName = String(record.receipt.customer_name);
+    partyHref = (record.receipt as any).customer_id ? `/b/${businessId}/customers/${(record.receipt as any).customer_id}` : undefined;
     dateLabel = formatDate(String(record.receipt.date));
     dueLabel = record.receipt.bank_account_name ? `Account: ${String(record.receipt.bank_account_name)}` : undefined;
     if (currency !== baseCurrency) {
@@ -531,6 +543,7 @@ export function buildDocumentTemplateData(
     status = String(record.payment.document_status);
     partyLabel = "PAID TO";
     partyName = String(record.payment.supplier_name);
+    partyHref = (record.payment as any).supplier_id ? `/b/${businessId}/suppliers/${(record.payment as any).supplier_id}` : undefined;
     dateLabel = formatDate(String(record.payment.date));
     dueLabel = record.payment.bank_account_name ? `Paid From: ${String(record.payment.bank_account_name)}` : undefined;
     if (currency !== baseCurrency) {
@@ -619,6 +632,7 @@ export function buildDocumentTemplateData(
     invoiceNumber: number,
     customerLabel: partyLabel,
     customerName: partyName,
+    partyHref,
     customerAddress: partyAddress,
     customerTrn: partyTrn,
     customerEmail: partyEmail,

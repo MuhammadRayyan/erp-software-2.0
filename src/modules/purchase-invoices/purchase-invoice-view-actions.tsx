@@ -11,9 +11,9 @@ import type { PurchaseInvoiceStatus } from "./purchase-invoice-service";
 import { DocumentViewActions } from "@/components/document-view-actions";
 
 export function PurchaseInvoiceViewActions({
-  businessId, invoiceId, internalNumber, documentStatus, balanceMinor, totalMinor, journalEntryId, inventoryEnabled, hasInventoryLines, hasGoodsReceipts = false
+  businessId, invoiceId, internalNumber, documentStatus, balanceMinor, totalMinor, journalEntryId, reversalJournalEntryId, inventoryEnabled, hasInventoryLines, hasGoodsReceipts = false
 }: {
-  businessId: string; invoiceId: string; internalNumber: string; documentStatus: PurchaseInvoiceStatus; balanceMinor: number; totalMinor?: number; journalEntryId: string | null; inventoryEnabled: boolean; hasInventoryLines: boolean; hasGoodsReceipts?: boolean;
+  businessId: string; invoiceId: string; internalNumber: string; documentStatus: PurchaseInvoiceStatus; balanceMinor: number; totalMinor?: number; journalEntryId: string | null; reversalJournalEntryId?: string | null; inventoryEnabled: boolean; hasInventoryLines: boolean; hasGoodsReceipts?: boolean;
 }) {
   const router = useRouter();
 
@@ -99,6 +99,11 @@ export function PurchaseInvoiceViewActions({
           {journalEntryId && (
             <DropdownMenuItem asChild>
               <Link href={`/b/${businessId}/accounting/journal/${journalEntryId}`}><BookOpenText className="size-4" /> View Journal Entry</Link>
+            </DropdownMenuItem>
+          )}
+          {reversalJournalEntryId && (
+            <DropdownMenuItem asChild>
+              <Link href={`/b/${businessId}/accounting/journal/${reversalJournalEntryId}`}><BookOpenText className="size-4 text-danger" /> View Reversal Journal</Link>
             </DropdownMenuItem>
           )}
         </>
