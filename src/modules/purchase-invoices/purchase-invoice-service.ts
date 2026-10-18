@@ -17,6 +17,7 @@ import { resolveRateSnapshot } from "@/modules/currency/validation";
 import { calculateLines, totalsForLines, type StoredLine } from "@/modules/accounting/services/document-line-calculator";
 import { getSupplierUnallocatedPrepayments, supplierPaymentConfig, type SupplierUnallocatedPrepayment } from "@/modules/supplier-payments/supplier-payment-service";
 import { applySettlementCredit } from "@/modules/settlement/settlement-service";
+import { recordActivity } from "@/modules/activity-log/activity-log-service";
 
 export type PurchaseInvoiceStatus = "draft" | "posted" | "void";
 export type PurchasePaymentStatus = "unpaid" | "partially_paid" | "paid" | "overdue";
@@ -356,6 +357,7 @@ export function savePurchaseInvoice(
   const base = convertDocumentLinesToBase(lines, rate);
   const now = new Date().toISOString();
   const id = invoiceId ?? randomUUID();
+  let recordedNumber = "";
   context.sqlite.transaction(() => {
     let internalNumber: string;
     let shouldPost = intent === "post";
@@ -373,6 +375,7 @@ export function savePurchaseInvoice(
       if (paidMinor > 0 && current.supplierId !== data.supplierId) throw new Error("Cannot change the supplier after payments have been allocated.");
       if (amounts.totalMinor < paidMinor) throw new Error("Purchase invoice total cannot be lower than amount already paid.");
       internalNumber = current.internalNumber;
+      recordedNumber = internalNumber;
       shouldPost = current.documentStatus === "posted" || intent === "post";
       replace = current.documentStatus === "posted";
       assertSupplierInvoiceNumberAvailable(context.sqlite, data.supplierId, data.supplierInvoiceNumber, invoiceId);
@@ -387,6 +390,7 @@ export function savePurchaseInvoice(
       context.sqlite.prepare("DELETE FROM purchase_invoice_lines WHERE purchase_invoice_id = ?").run(invoiceId);
     } else {
       internalNumber = allocateNumber(context.sqlite, "purchaseInvoice");
+      recordedNumber = internalNumber;
       assertSupplierInvoiceNumberAvailable(context.sqlite, data.supplierId, data.supplierInvoiceNumber);
       context.sqlite.prepare(`
         INSERT INTO purchase_invoices (
@@ -452,6 +456,19 @@ export function savePurchaseInvoice(
       }
     }
   }).immediate();
+
+  const formattedTotal = (amounts.totalMinor / (10 ** rate.currencyMinorUnit)).toFixed(2);
+  const action = !invoiceId ? (intent === "post" ? "posted" : "created") : (intent === "post" ? "posted" : "updated");
+  recordActivity(businessId, {
+    userId,
+    action,
+    entityType: "purchase_invoice",
+    entityId: id,
+    entityNumber: recordedNumber || data.supplierInvoiceNumber,
+    summary: `${action === "posted" ? "Posted" : action === "created" ? "Created draft" : "Updated"} purchase invoice ${recordedNumber || data.supplierInvoiceNumber} for ${rate.currencyCode} ${formattedTotal}`,
+    details: { supplierId: data.supplierId, totalMinor: amounts.totalMinor, currency: rate.currencyCode, supplierInvoiceNumber: data.supplierInvoiceNumber },
+  });
+
   return id;
 }
 
@@ -480,6 +497,15 @@ export function deletePurchaseInvoice(businessId: string, userId: string, invoic
   context.sqlite.transaction(() => {
     context.db.delete(purchaseInvoices).where(eq(purchaseInvoices.id, invoiceId)).run();
   }).immediate();
+
+  recordActivity(businessId, {
+    userId,
+    action: "deleted",
+    entityType: "purchase_invoice",
+    entityId: invoiceId,
+    entityNumber: invoice.internalNumber,
+    summary: `Deleted draft purchase invoice ${invoice.internalNumber}`,
+  });
 }
 
 export function voidPurchaseInvoice(businessId: string, userId: string, invoiceId: string) {
@@ -503,6 +529,16 @@ export function voidPurchaseInvoice(businessId: string, userId: string, invoiceI
     reverseTaxEntries(context.sqlite, { originalSourceType: "purchase_invoice", sourceId: invoiceId, reversalSourceType: "purchase_invoice_void", taxDate: invoice.taxDate });
     context.sqlite.prepare("UPDATE purchase_invoices SET document_status = 'void', voided_at = ?, updated_at = ? WHERE id = ?").run(now, now, invoiceId);
   }).immediate();
+
+  recordActivity(businessId, {
+    userId,
+    action: "voided",
+    entityType: "purchase_invoice",
+    entityId: invoiceId,
+    entityNumber: invoice.internalNumber,
+    summary: `Voided purchase invoice ${invoice.internalNumber}`,
+    details: { supplierId: invoice.supplierId, supplierInvoiceNumber: invoice.supplierInvoiceNumber },
+  });
 }
 
 export function postPurchaseInvoiceDoc(businessId: string, userId: string, invoiceId: string) {

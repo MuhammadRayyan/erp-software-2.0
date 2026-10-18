@@ -2,6 +2,7 @@ import { createSettlement, voidSettlement, applySettlementCredit, type Settlemen
 import { getBusinessDb } from "@/core/db/business";
 import { postSupplierPayment } from "@/modules/accounting/services/supplier-payment-posting-service";
 import { supplierPaymentInputSchema, type SupplierPaymentInput, type ApplySupplierPaymentCreditInput } from "./supplier-payment-input";
+import { recordActivity } from "@/modules/activity-log/activity-log-service";
 
 
 export const supplierPaymentConfig: SettlementConfig = {
@@ -52,6 +53,22 @@ export function createSupplierPayment(businessId: string, userId: string, input:
   context.sqlite.transaction(() => {
     result = createSettlement(context.sqlite, paymentConfig, settlementInput, userId);
   }).immediate();
+
+  const paymentRow = context.sqlite
+    .prepare("SELECT payment_number FROM supplier_payments WHERE id = ?")
+    .get(result.id) as { payment_number: string } | undefined;
+  const paymentNumber = paymentRow?.payment_number || "Payment";
+
+  recordActivity(businessId, {
+    userId,
+    action: "posted",
+    entityType: "supplier_payment",
+    entityId: result.id,
+    entityNumber: paymentNumber,
+    summary: `Recorded supplier payment ${paymentNumber} for ${data.currencyCode} ${data.amount}`,
+    details: { supplierId: data.supplierId, amount: data.amount, currency: data.currencyCode },
+  });
+
   return result;
 }
 
@@ -277,9 +294,23 @@ export function getSupplierPayment(
 
 export function voidSupplierPayment(businessId: string, userId: string, paymentId: string) {
   const context = getBusinessDb(businessId, userId);
+  const payment = context.sqlite
+    .prepare("SELECT payment_number, supplier_id FROM supplier_payments WHERE id = ?")
+    .get(paymentId) as { payment_number: string; supplier_id: string } | undefined;
+
   context.sqlite.transaction(() => {
     voidSettlement(context.sqlite, paymentConfig, paymentId);
   }).immediate();
+
+  recordActivity(businessId, {
+    userId,
+    action: "voided",
+    entityType: "supplier_payment",
+    entityId: paymentId,
+    entityNumber: payment?.payment_number ?? null,
+    summary: `Voided supplier payment ${payment?.payment_number || paymentId}`,
+    details: { supplierId: payment?.supplier_id },
+  });
 }
 
 export type SupplierUnallocatedPrepayment = {

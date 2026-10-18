@@ -22,6 +22,7 @@ import { resolveRateSnapshot } from "@/modules/currency/validation";
 import { calculateLines, totalsForLines, type StoredLine } from "@/modules/accounting/services/document-line-calculator";
 import { getCustomerUnallocatedCredit, receiptConfig } from "@/modules/receipts/receipt-service";
 import { applySettlementCredit } from "@/modules/settlement/settlement-service";
+import { recordActivity } from "@/modules/activity-log/activity-log-service";
 
 export type DocumentStatus = "draft" | "posted" | "void";
 export type PaymentStatus = "unpaid" | "partially_paid" | "paid" | "overdue";
@@ -500,10 +501,12 @@ export function createInvoice(
   const base = convertDocumentLinesToBase(lines, rate);
   const id = randomUUID();
   const now = new Date().toISOString();
+  let recordedInvoiceNumber = "";
 
   context.sqlite.transaction(() => {
     if (intent === "post") assertVatDateUnlocked(context.sqlite, taxDate, lines.map((line) => line.taxCodeId));
     const invoiceNumber = allocateNumber(context.sqlite, "invoice");
+    recordedInvoiceNumber = invoiceNumber;
     context.sqlite
       .prepare(`
         INSERT INTO sales_invoices (
@@ -615,6 +618,18 @@ export function createInvoice(
       }
     }
   }).immediate();
+
+  const formattedTotal = (totals.totalMinor / (10 ** rate.currencyMinorUnit)).toFixed(2);
+  recordActivity(businessId, {
+    userId,
+    action: intent === "post" ? "posted" : "created",
+    entityType: "sales_invoice",
+    entityId: id,
+    entityNumber: recordedInvoiceNumber,
+    summary: `${intent === "post" ? "Posted" : "Created draft"} sales invoice ${recordedInvoiceNumber} for ${rate.currencyCode} ${formattedTotal}`,
+    details: { customerId: data.customerId, totalMinor: totals.totalMinor, currency: rate.currencyCode, status: intent === "post" ? "posted" : "draft" },
+  });
+
   return id;
 }
 
@@ -749,6 +764,18 @@ export function updateInvoice(
         .run(now, invoiceId);
     }
   }).immediate();
+
+  const formattedTotal = (totals.totalMinor / (10 ** rate.currencyMinorUnit)).toFixed(2);
+  const action = shouldPost && current.documentStatus !== "posted" ? "posted" : "updated";
+  recordActivity(businessId, {
+    userId,
+    action,
+    entityType: "sales_invoice",
+    entityId: invoiceId,
+    entityNumber: current.invoiceNumber,
+    summary: `${action === "posted" ? "Posted" : "Updated"} sales invoice ${current.invoiceNumber} for ${rate.currencyCode} ${formattedTotal}`,
+    details: { customerId: data.customerId, totalMinor: totals.totalMinor, currency: rate.currencyCode, status: shouldPost ? "posted" : current.documentStatus },
+  });
 }
 
 export function deleteInvoice(businessId: string, userId: string, invoiceId: string) {
@@ -757,6 +784,15 @@ export function deleteInvoice(businessId: string, userId: string, invoiceId: str
   if (!invoice) throw new Error("Invoice not found.");
   if (invoice.documentStatus !== "draft") throw new Error("Only draft invoices can be deleted.");
   context.db.delete(salesInvoices).where(eq(salesInvoices.id, invoiceId)).run();
+
+  recordActivity(businessId, {
+    userId,
+    action: "deleted",
+    entityType: "sales_invoice",
+    entityId: invoiceId,
+    entityNumber: invoice.invoiceNumber,
+    summary: `Deleted draft sales invoice ${invoice.invoiceNumber}`,
+  });
 }
 
 export function duplicateInvoice(businessId: string, userId: string, invoiceId: string) {
@@ -826,6 +862,16 @@ export function voidInvoice(businessId: string, userId: string, invoiceId: strin
       .prepare("UPDATE sales_invoices SET document_status = 'void', voided_at = ?, updated_at = ? WHERE id = ?")
       .run(now, now, invoiceId);
   }).immediate();
+
+  recordActivity(businessId, {
+    userId,
+    action: "voided",
+    entityType: "sales_invoice",
+    entityId: invoiceId,
+    entityNumber: invoice.invoiceNumber,
+    summary: `Voided sales invoice ${invoice.invoiceNumber}`,
+    details: { customerId: invoice.customerId },
+  });
 }
 
 export function postInvoice(businessId: string, userId: string, invoiceId: string) {

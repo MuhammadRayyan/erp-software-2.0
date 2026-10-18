@@ -6,6 +6,7 @@ import { suppliers } from "@/core/db/business-schema";
 import { saveCustomFieldValuesInTransaction } from "@/modules/custom-fields/custom-field-service";
 import { supplierInputSchema, type SupplierInput } from "./supplier-input";
 import { getBaseCurrency, getCurrency } from "@/modules/currency/currency";
+import { recordActivity } from "@/modules/activity-log/activity-log-service";
 
 export function listSuppliers(businessId: string, userId: string) {
   const { sqlite } = getBusinessDb(businessId, userId);
@@ -139,6 +140,17 @@ export function createSupplier(
   } else {
     insertSupplier();
   }
+
+  recordActivity(businessId, {
+    userId,
+    action: "created",
+    entityType: "supplier",
+    entityId: id,
+    entityNumber: data.name,
+    summary: `Created supplier ${data.name}`,
+    details: { email: data.email, phone: data.phone },
+  });
+
   return id;
 }
 
@@ -182,6 +194,16 @@ export function updateSupplier(
   } else {
     updateSupplierRow();
   }
+
+  recordActivity(businessId, {
+    userId,
+    action: "updated",
+    entityType: "supplier",
+    entityId: supplierId,
+    entityNumber: data.name,
+    summary: `Updated supplier ${data.name}`,
+    details: { email: data.email, phone: data.phone },
+  });
 }
 
 export const listActiveSuppliers = cache((businessId: string, userId: string) => {

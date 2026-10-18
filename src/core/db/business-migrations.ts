@@ -2595,6 +2595,33 @@ export const businessMigrations = [
         `);
       },
     },
+    {
+      version: 31,
+      name: "activity_logs",
+      up: (sqlite) => {
+        sqlite.exec(`
+          CREATE TABLE IF NOT EXISTS "activity_logs" (
+            "id" TEXT PRIMARY KEY NOT NULL,
+            "business_id" TEXT NOT NULL,
+            "user_id" TEXT NOT NULL,
+            "user_name" TEXT NOT NULL,
+            "user_email" TEXT NOT NULL,
+            "action" TEXT NOT NULL,
+            "entity_type" TEXT NOT NULL,
+            "entity_id" TEXT,
+            "entity_number" TEXT,
+            "summary" TEXT NOT NULL,
+            "details_json" TEXT,
+            "ip_address" TEXT,
+            "created_at" TEXT NOT NULL
+          );
+          CREATE INDEX IF NOT EXISTS "activity_logs_user_idx" ON "activity_logs" ("user_id");
+          CREATE INDEX IF NOT EXISTS "activity_logs_entity_idx" ON "activity_logs" ("entity_type", "entity_id");
+          CREATE INDEX IF NOT EXISTS "activity_logs_action_idx" ON "activity_logs" ("action");
+          CREATE INDEX IF NOT EXISTS "activity_logs_created_at_idx" ON "activity_logs" ("created_at" DESC);
+        `);
+      },
+    },
   ] satisfies readonly SqliteMigration[];
 
 

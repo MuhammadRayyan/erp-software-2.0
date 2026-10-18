@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Banknote, CircleHelp, ContactRound, FileInput, FolderKanban, HandCoins, Menu, Receipt, ReceiptText, Search, ShoppingCart, Truck, UserRound } from "lucide-react";
+import { Banknote, CircleHelp, ContactRound, FileInput, FolderKanban, HandCoins, History, Menu, Receipt, ReceiptText, Search, ShoppingCart, Truck, UserRound } from "lucide-react";
 import { BrandMark } from "@/components/brand-mark";
 import { CommandPalette, type CommandItem } from "@/components/command-palette";
 import { Button } from "@/components/ui/button";
@@ -52,6 +52,9 @@ function buildCommands(businessId: string, modules: ModuleKey[], push: (path: st
       { label: systemHealthNav.label, hint: "Go to", icon: systemHealthNav.icon, keywords: "system health diagnostics logs traces sentry metrics wal", onSelect: go(systemHealthNav.path) },
     );
   }
+  navigation.push(
+    { label: "Activity & Audit Log", hint: "Go to", icon: History, keywords: "activity audit log history user trail tracking actions operations inspection", onSelect: go("/settings/activity-log") },
+  );
 
   const actions: CommandItem[] = [];
   if (modules.includes("sales")) {
@@ -140,6 +143,11 @@ export function AppShell({ children, business, businesses, modules, user }: Shel
               <DropdownMenuSeparator />
               <ThemeMenu />
               <DropdownMenuSeparator />
+              <DropdownMenuItem asChild>
+                <Link href={`/b/${business.id}/settings/activity-log`} className="flex items-center gap-2">
+                  <History className="size-4" /> Activity Log
+                </Link>
+              </DropdownMenuItem>
               <DropdownMenuItem asChild><Link href="/businesses">Switch business</Link></DropdownMenuItem>
               <DropdownMenuItem asChild><Link href="/logout">Sign out</Link></DropdownMenuItem>
             </DropdownMenuContent>

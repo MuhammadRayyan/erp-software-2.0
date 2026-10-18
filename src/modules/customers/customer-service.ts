@@ -5,6 +5,7 @@ import { customers } from "@/core/db/business-schema";
 import { saveCustomFieldValuesInTransaction } from "@/modules/custom-fields/custom-field-service";
 import { customerInputSchema, type CustomerInput } from "./customer-input";
 import { getBaseCurrency, getCurrency } from "@/modules/currency/currency";
+import { recordActivity } from "@/modules/activity-log/activity-log-service";
 
 export function listCustomers(businessId: string, userId: string, includeInactive = false) {
   const db = getBusinessDb(businessId, userId).db;
@@ -126,14 +127,25 @@ export function createCustomer(
       .run();
   if (!customFieldValues) {
     insertCustomer();
-    return id;
+  } else {
+    // The drizzle handle and the raw sqlite handle share one connection, so the
+    // customer row and its custom field values are saved atomically.
+    context.sqlite.transaction(() => {
+      insertCustomer();
+      saveCustomFieldValuesInTransaction(context.sqlite, "customer", id, customFieldValues);
+    }).immediate();
   }
-  // The drizzle handle and the raw sqlite handle share one connection, so the
-  // customer row and its custom field values are saved atomically.
-  context.sqlite.transaction(() => {
-    insertCustomer();
-    saveCustomFieldValuesInTransaction(context.sqlite, "customer", id, customFieldValues);
-  }).immediate();
+
+  recordActivity(businessId, {
+    userId,
+    action: "created",
+    entityType: "customer",
+    entityId: id,
+    entityNumber: data.name,
+    summary: `Created customer ${data.name}`,
+    details: { email: data.email, phone: data.phone },
+  });
+
   return id;
 }
 
@@ -158,10 +170,20 @@ export function updateCustomer(
       .run();
   if (!customFieldValues) {
     updateCustomerRow();
-    return;
+  } else {
+    context.sqlite.transaction(() => {
+      updateCustomerRow();
+      saveCustomFieldValuesInTransaction(context.sqlite, "customer", customerId, customFieldValues);
+    }).immediate();
   }
-  context.sqlite.transaction(() => {
-    updateCustomerRow();
-    saveCustomFieldValuesInTransaction(context.sqlite, "customer", customerId, customFieldValues);
-  }).immediate();
+
+  recordActivity(businessId, {
+    userId,
+    action: "updated",
+    entityType: "customer",
+    entityId: customerId,
+    entityNumber: data.name,
+    summary: `Updated customer ${data.name}`,
+    details: { email: data.email, phone: data.phone },
+  });
 }

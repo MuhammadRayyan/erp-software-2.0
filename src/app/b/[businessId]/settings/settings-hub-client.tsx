@@ -26,6 +26,7 @@ import {
   Activity,
   Wand2,
   Layers,
+  History,
 } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
@@ -214,6 +215,13 @@ export function SettingsHubClient({
             href: `/b/${businessId}/settings/users`,
             icon: ShieldCheck,
             keywords: "users members access roles permissions admin security",
+          },
+          {
+            title: "Activity & Audit Log",
+            description: "Track user actions, operations, invoice postings, and system audit trail across the workspace.",
+            href: `/b/${businessId}/settings/activity-log`,
+            icon: History,
+            keywords: "activity audit log history user trail tracking actions operations inspection",
           },
           {
             title: "Display Preferences",

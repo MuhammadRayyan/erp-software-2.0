@@ -1,5 +1,6 @@
 import { getBusinessDb } from "@/core/db/business";
 import type Database from "better-sqlite3";
+import { recordActivity } from "@/modules/activity-log/activity-log-service";
 
 export function getFinancialLockDate(businessId: string, userId: string): string | null {
   const { sqlite } = getBusinessDb(businessId, userId);
@@ -15,6 +16,14 @@ export function setFinancialLockDate(businessId: string, userId: string, lockDat
   sqlite
     .prepare("UPDATE business_accounting_settings SET financial_lock_date = ?, updated_at = ? WHERE id = 'default'")
     .run(lockDate || null, now);
+
+  recordActivity(businessId, {
+    userId,
+    action: "settings_changed",
+    entityType: "financial_lock",
+    summary: lockDate ? `Updated financial lock date to ${lockDate}` : "Removed financial lock date",
+    details: { financialLockDate: lockDate },
+  });
 }
 
 export function assertFinancialLock(sqlite: Database.Database, date: string, actionDesc = "Transactions"): void {

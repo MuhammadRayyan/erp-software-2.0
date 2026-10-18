@@ -7,6 +7,7 @@ import {
   type ReceiptInput,
   type ApplyReceiptCreditInput,
 } from "./receipt-input";
+import { recordActivity } from "@/modules/activity-log/activity-log-service";
 
 export const receiptConfig: SettlementConfig = {
   partyType: "customer",
@@ -54,6 +55,22 @@ export function createReceipt(businessId: string, userId: string, input: Receipt
   context.sqlite.transaction(() => {
     result = createSettlement(context.sqlite, receiptConfig, data, userId);
   }).immediate();
+
+  const receiptRow = context.sqlite
+    .prepare("SELECT receipt_number FROM receipts WHERE id = ?")
+    .get(result.id) as { receipt_number: string } | undefined;
+  const receiptNumber = receiptRow?.receipt_number || "Receipt";
+
+  recordActivity(businessId, {
+    userId,
+    action: "posted",
+    entityType: "receipt",
+    entityId: result.id,
+    entityNumber: receiptNumber,
+    summary: `Recorded payment receipt ${receiptNumber} for ${data.currencyCode} ${data.amount}`,
+    details: { customerId: data.customerId, amount: data.amount, currency: data.currencyCode },
+  });
+
   return result;
 }
 
@@ -277,9 +294,23 @@ export function getReceipt(businessId: string, userId: string, receiptId: string
 
 export function voidReceipt(businessId: string, userId: string, receiptId: string) {
   const context = getBusinessDb(businessId, userId);
+  const receipt = context.sqlite
+    .prepare("SELECT receipt_number, customer_id FROM receipts WHERE id = ?")
+    .get(receiptId) as { receipt_number: string; customer_id: string } | undefined;
+
   context.sqlite.transaction(() => {
     voidSettlement(context.sqlite, receiptConfig, receiptId);
   }).immediate();
+
+  recordActivity(businessId, {
+    userId,
+    action: "voided",
+    entityType: "receipt",
+    entityId: receiptId,
+    entityNumber: receipt?.receipt_number ?? null,
+    summary: `Voided payment receipt ${receipt?.receipt_number || receiptId}`,
+    details: { customerId: receipt?.customer_id },
+  });
 }
 
 export type CustomerUnallocatedCredit = {

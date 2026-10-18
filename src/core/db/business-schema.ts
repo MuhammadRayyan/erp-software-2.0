@@ -2048,5 +2048,27 @@ export const bankRules = sqliteTable(
   ],
 );
 
-
-
+export const activityLogs = sqliteTable(
+  "activity_logs",
+  {
+    id: text("id").primaryKey(),
+    businessId: text("business_id").notNull(),
+    userId: text("user_id").notNull(),
+    userName: text("user_name").notNull(),
+    userEmail: text("user_email").notNull(),
+    action: text("action").notNull(),
+    entityType: text("entity_type").notNull(),
+    entityId: text("entity_id"),
+    entityNumber: text("entity_number"),
+    summary: text("summary").notNull(),
+    detailsJson: text("details_json"),
+    ipAddress: text("ip_address"),
+    createdAt: text("created_at").notNull(),
+  },
+  (table) => [
+    index("activity_logs_user_idx").on(table.userId),
+    index("activity_logs_entity_idx").on(table.entityType, table.entityId),
+    index("activity_logs_action_idx").on(table.action),
+    index("activity_logs_created_at_idx").on(table.createdAt),
+  ],
+);

@@ -22,7 +22,11 @@ export function moduleForBusinessPath(pathname: string): { businessId: string; m
   if (section === "purchases") {
     return { businessId, module: subsection === "goods-receipts" ? "inventory" : "purchases" };
   }
-  if (section === "banking" || section === "projects" || section === "inventory" || section === "accounting" || section === "reports" || section === "settings") {
+  if (section === "settings") {
+    if (subsection === "activity-log") return null;
+    return { businessId, module: "settings" };
+  }
+  if (section === "banking" || section === "projects" || section === "inventory" || section === "accounting" || section === "reports") {
     return { businessId, module: section };
   }
   if (section === "tax") return { businessId, module: "reports" };
