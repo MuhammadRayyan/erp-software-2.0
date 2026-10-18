@@ -2083,3 +2083,52 @@ export const activityLogSettings = sqliteTable("activity_log_settings", {
   createdAt: text("created_at").notNull(),
   updatedAt: text("updated_at").notNull(),
 });
+
+export const employees = sqliteTable(
+  "employees",
+  {
+    id: text("id").primaryKey(),
+    code: text("code"),
+    name: text("name").notNull(),
+    email: text("email"),
+    phone: text("phone"),
+    address: text("address"),
+    designation: text("designation"),
+    isActive: integer("is_active", { mode: "boolean" }).notNull().default(true),
+    createdAt: text("created_at").notNull(),
+    updatedAt: text("updated_at").notNull(),
+  },
+  (table) => [
+    index("employee_name_idx").on(table.name),
+  ],
+);
+
+export const payslips = sqliteTable(
+  "payslips",
+  {
+    id: text("id").primaryKey(),
+    payslipNumber: text("payslip_number").notNull(),
+    employeeId: text("employee_id")
+      .notNull()
+      .references(() => employees.id),
+    date: text("date").notNull(),
+    periodDescription: text("period_description"),
+    grossAmountMinor: integer("gross_amount_minor").notNull(),
+    deductionsMinor: integer("deductions_minor").notNull().default(0),
+    netAmountMinor: integer("net_amount_minor").notNull(),
+    documentStatus: text("document_status", { enum: ["draft", "posted", "void"] })
+      .notNull()
+      .default("posted"),
+    notes: text("notes"),
+    createdBy: text("created_by").notNull(),
+    createdAt: text("created_at").notNull(),
+    postedAt: text("posted_at"),
+    updatedAt: text("updated_at").notNull(),
+  },
+  (table) => [
+    uniqueIndex("payslip_number_idx").on(table.payslipNumber),
+    index("payslip_employee_idx").on(table.employeeId),
+    index("payslip_date_idx").on(table.date),
+  ],
+);
+

@@ -58,6 +58,10 @@ server.log
 .npm-cache
 .node-gyp
 .pnpm-store
+
+# Large external Manager.io backup files
+*.manager
+!manager_backup_file.manager
 /data/
 
 # SQLite databases and WAL files

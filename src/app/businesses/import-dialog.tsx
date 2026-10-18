@@ -7,12 +7,16 @@ import {
   CheckCircle2,
   Database,
   FileArchive,
+  FileCheck2,
   FolderKanban,
+  HardHat,
   LoaderCircle,
   Package,
   Receipt,
+  ShoppingCart,
   Upload,
   Users,
+  WalletCards,
 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -35,8 +39,14 @@ interface ManagerSummary {
   bankAccountsCount: number;
   salesInvoicesCount: number;
   salesQuotesCount: number;
+  salesOrdersCount?: number;
   purchaseInvoicesCount: number;
+  receiptsCount?: number;
+  paymentsCount?: number;
   bankTransfersCount: number;
+  employeesCount?: number;
+  payslipsCount?: number;
+  journalEntriesCount?: number;
 }
 
 interface InspectionResult {
@@ -65,6 +75,7 @@ export function ImportDialog() {
   const [error, setError] = useState("");
   const [inspection, setInspection] = useState<InspectionResult | null>(null);
   const [businessName, setBusinessName] = useState("");
+  const [documentStatus, setDocumentStatus] = useState<"posted" | "draft">("posted");
   const formRef = useRef<HTMLFormElement>(null);
   const router = useRouter();
 
@@ -116,6 +127,7 @@ export function ImportDialog() {
     if (businessName.trim()) {
       formData.set("businessName", businessName.trim());
     }
+    formData.set("documentStatus", documentStatus);
 
     let result: ImportResult;
     try {
@@ -149,6 +161,7 @@ export function ImportDialog() {
       setError("");
       setInspection(null);
       setBusinessName("");
+      setDocumentStatus("posted");
     }
   }
 
@@ -249,7 +262,9 @@ export function ImportDialog() {
                     <div className="font-bold text-foreground">
                       {inspection.summary.salesInvoicesCount + inspection.summary.purchaseInvoicesCount}
                     </div>
-                    <div className="text-[10px] text-muted-foreground">Invoices & Bills</div>
+                    <div className="text-[10px] text-muted-foreground">
+                      {inspection.summary.salesInvoicesCount} Inv · {inspection.summary.purchaseInvoicesCount} Bills
+                    </div>
                   </div>
                 </div>
                 <div className="flex items-center gap-1.5 bg-background/80 p-2 rounded border">
@@ -258,6 +273,88 @@ export function ImportDialog() {
                     <div className="font-bold text-foreground">{inspection.summary.bankAccountsCount} Banks</div>
                     <div className="text-[10px] text-muted-foreground">{inspection.summary.bankTransfersCount} Transfers</div>
                   </div>
+                </div>
+
+                {((inspection.summary.receiptsCount ?? 0) > 0 || (inspection.summary.paymentsCount ?? 0) > 0) && (
+                  <div className="flex items-center gap-1.5 bg-background/80 p-2 rounded border">
+                    <WalletCards className="size-3.5 text-sky-500" />
+                    <div>
+                      <div className="font-bold text-foreground">
+                        {(inspection.summary.receiptsCount ?? 0) + (inspection.summary.paymentsCount ?? 0)}
+                      </div>
+                      <div className="text-[10px] text-muted-foreground">
+                        {inspection.summary.receiptsCount ?? 0} Rec · {inspection.summary.paymentsCount ?? 0} Pay
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {((inspection.summary.salesOrdersCount ?? 0) > 0 || (inspection.summary.salesQuotesCount ?? 0) > 0) && (
+                  <div className="flex items-center gap-1.5 bg-background/80 p-2 rounded border">
+                    <ShoppingCart className="size-3.5 text-orange-500" />
+                    <div>
+                      <div className="font-bold text-foreground">
+                        {(inspection.summary.salesOrdersCount ?? 0) + (inspection.summary.salesQuotesCount ?? 0)}
+                      </div>
+                      <div className="text-[10px] text-muted-foreground">
+                        {inspection.summary.salesOrdersCount ?? 0} Orders · {inspection.summary.salesQuotesCount ?? 0} Quotes
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {((inspection.summary.employeesCount ?? 0) > 0 || (inspection.summary.payslipsCount ?? 0) > 0) && (
+                  <div className="flex items-center gap-1.5 bg-background/80 p-2 rounded border">
+                    <HardHat className="size-3.5 text-rose-500" />
+                    <div>
+                      <div className="font-bold text-foreground">
+                        {inspection.summary.employeesCount ?? 0} Staff
+                      </div>
+                      <div className="text-[10px] text-muted-foreground">
+                        {inspection.summary.payslipsCount ?? 0} Payslips
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Posting Mode Toggle */}
+              <div className="pt-2 border-t border-border/50">
+                <Label className="text-xs font-medium text-foreground">Document Status on Import</Label>
+                <div className="mt-1.5 grid grid-cols-2 gap-2 text-xs">
+                  <button
+                    type="button"
+                    onClick={() => setDocumentStatus("posted")}
+                    className={`flex flex-col text-left p-2.5 rounded-lg border transition-all ${
+                      documentStatus === "posted"
+                        ? "border-primary bg-primary/10 text-foreground font-medium ring-1 ring-primary"
+                        : "border-border bg-background/60 text-muted-foreground hover:bg-background"
+                    }`}
+                  >
+                    <span className="flex items-center gap-1 text-foreground font-semibold">
+                      <FileCheck2 className="size-3.5 text-primary" /> Active Ledger Mode
+                    </span>
+                    <span className="text-[11px] text-muted-foreground mt-0.5">
+                      Recommended: Invoices & bills imported as posted with active balances & payment links.
+                    </span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setDocumentStatus("draft")}
+                    className={`flex flex-col text-left p-2.5 rounded-lg border transition-all ${
+                      documentStatus === "draft"
+                        ? "border-primary bg-primary/10 text-foreground font-medium ring-1 ring-primary"
+                        : "border-border bg-background/60 text-muted-foreground hover:bg-background"
+                    }`}
+                  >
+                    <span className="flex items-center gap-1 text-foreground font-semibold">
+                      <Receipt className="size-3.5 text-amber-500" /> Draft Review Mode
+                    </span>
+                    <span className="text-[11px] text-muted-foreground mt-0.5">
+                      All documents imported as drafts for manual review before posting.
+                    </span>
+                  </button>
                 </div>
               </div>
 

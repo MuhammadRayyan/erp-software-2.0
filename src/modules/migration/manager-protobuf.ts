@@ -189,13 +189,33 @@ export function decodeManagerDate(val: unknown): string {
  */
 export function decodeManagerDecimal(sub: any): number {
   if (typeof sub === "number") return sub;
+  if (typeof sub === "string") {
+    const num = Number(sub);
+    return isNaN(num) ? 0 : num;
+  }
   if (!sub || typeof sub !== "object") return 0;
-  const low = sub["1"] || 0;
-  const high = sub["2"] || 0;
-  const signScale = sub["3"] || 0;
-  const scale = signScale >>> 1;
-  const isNeg = (signScale & 1) === 1;
-  const raw = Number(BigInt(low) + (BigInt(high) << 64n));
-  const val = raw / Math.pow(10, scale);
-  return isNeg ? -val : val;
+
+  // If sub has an inner "1" that is itself an object, recurse
+  if (sub["1"] && typeof sub["1"] === "object") {
+    return decodeManagerDecimal(sub["1"]);
+  }
+
+  let low = sub["1"];
+  let high = sub["2"];
+  let signScale = sub["3"];
+
+  if (typeof low !== "number" && typeof low !== "bigint") low = 0;
+  if (typeof high !== "number" && typeof high !== "bigint") high = 0;
+  if (typeof signScale !== "number") signScale = 0;
+
+  try {
+    const scale = signScale >>> 1;
+    const isNeg = (signScale & 1) === 1;
+    const raw = Number(BigInt(low) + (BigInt(high) << 64n));
+    const val = raw / Math.pow(10, scale);
+    return isNeg ? -val : val;
+  } catch {
+    return 0;
+  }
 }
+

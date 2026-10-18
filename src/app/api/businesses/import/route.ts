@@ -15,6 +15,8 @@ export async function POST(request: Request) {
   const formData = await request.formData();
   const file = formData.get("backup");
   const businessNameOverride = formData.get("businessName")?.toString().trim();
+  const rawStatus = formData.get("documentStatus")?.toString().trim();
+  const documentStatus: "posted" | "draft" = rawStatus === "draft" ? "draft" : "posted";
 
   if (!(file instanceof File) || file.size === 0) {
     return NextResponse.json({ error: "Choose an .erpbackup or .manager file." }, { status: 400 });
@@ -33,7 +35,10 @@ export async function POST(request: Request) {
 
   try {
     if (isManager) {
-      const result = importManagerBackupToNewBusiness(buf, user.id, businessNameOverride || undefined);
+      const result = importManagerBackupToNewBusiness(buf, user.id, {
+        overrideBusinessName: businessNameOverride || undefined,
+        documentStatus,
+      });
       return NextResponse.json({
         businessId: result.businessId,
         businessName: result.businessName,

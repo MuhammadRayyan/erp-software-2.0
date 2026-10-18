@@ -2640,6 +2640,46 @@ export const businessMigrations = [
         `);
       },
     },
+    {
+      version: 33,
+      name: "employees_and_contracting_payroll",
+      up: (sqlite) => {
+        sqlite.exec(`
+          CREATE TABLE IF NOT EXISTS "employees" (
+            "id" TEXT PRIMARY KEY NOT NULL,
+            "code" TEXT,
+            "name" TEXT NOT NULL,
+            "email" TEXT,
+            "phone" TEXT,
+            "address" TEXT,
+            "designation" TEXT,
+            "is_active" INTEGER NOT NULL DEFAULT 1,
+            "created_at" TEXT NOT NULL,
+            "updated_at" TEXT NOT NULL
+          );
+          CREATE INDEX IF NOT EXISTS "employee_name_idx" ON "employees"("name");
+
+          CREATE TABLE IF NOT EXISTS "payslips" (
+            "id" TEXT PRIMARY KEY NOT NULL,
+            "payslip_number" TEXT NOT NULL UNIQUE,
+            "employee_id" TEXT NOT NULL REFERENCES "employees"("id"),
+            "date" TEXT NOT NULL,
+            "period_description" TEXT,
+            "gross_amount_minor" INTEGER NOT NULL,
+            "deductions_minor" INTEGER NOT NULL DEFAULT 0,
+            "net_amount_minor" INTEGER NOT NULL,
+            "document_status" TEXT NOT NULL DEFAULT 'posted' CHECK ("document_status" IN ('draft', 'posted', 'void')),
+            "notes" TEXT,
+            "created_by" TEXT NOT NULL,
+            "created_at" TEXT NOT NULL,
+            "posted_at" TEXT,
+            "updated_at" TEXT NOT NULL
+          );
+          CREATE INDEX IF NOT EXISTS "payslip_employee_idx" ON "payslips"("employee_id");
+          CREATE INDEX IF NOT EXISTS "payslip_date_idx" ON "payslips"("date");
+        `);
+      },
+    },
   ] satisfies readonly SqliteMigration[];
 
 

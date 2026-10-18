@@ -76,12 +76,14 @@ export interface ManagerExtractedData {
     invoiceNumber: string;
     issueDate: string;
     customerId: string;
+    projectId?: string;
     notes?: string;
     lines: Array<{
       itemId?: string;
       description: string;
       quantity: number;
       unitPrice: number;
+      projectId?: string;
     }>;
     customFieldValues: Record<string, string>;
   }>;
@@ -98,17 +100,33 @@ export interface ManagerExtractedData {
       unitPrice: number;
     }>;
   }>;
-  purchaseInvoices: Array<{
+  salesOrders: Array<{
     id: string;
-    invoiceNumber: string;
-    issueDate: string;
-    supplierId: string;
+    orderNumber: string;
+    orderDate: string;
+    customerId: string;
+    salesQuoteId?: string;
     notes?: string;
     lines: Array<{
       itemId?: string;
       description: string;
       quantity: number;
       unitPrice: number;
+    }>;
+  }>;
+  purchaseInvoices: Array<{
+    id: string;
+    invoiceNumber: string;
+    issueDate: string;
+    supplierId: string;
+    projectId?: string;
+    notes?: string;
+    lines: Array<{
+      itemId?: string;
+      description: string;
+      quantity: number;
+      unitPrice: number;
+      projectId?: string;
     }>;
   }>;
   receipts: Array<{
@@ -119,6 +137,10 @@ export interface ManagerExtractedData {
     customerId?: string;
     amount: number;
     description: string;
+    allocations: Array<{
+      invoiceId: string;
+      amount: number;
+    }>;
   }>;
   payments: Array<{
     id: string;
@@ -128,6 +150,10 @@ export interface ManagerExtractedData {
     supplierId?: string;
     amount: number;
     description: string;
+    allocations: Array<{
+      invoiceId: string;
+      amount: number;
+    }>;
   }>;
   bankTransfers: Array<{
     id: string;
@@ -137,9 +163,37 @@ export interface ManagerExtractedData {
     amount: number;
     description: string;
   }>;
+  employees: Array<{
+    id: string;
+    name: string;
+    address?: string;
+  }>;
+  payslips: Array<{
+    id: string;
+    payslipNumber: string;
+    employeeId: string;
+    date: string;
+    periodDescription?: string;
+    grossAmount: number;
+    deductions: number;
+    netAmount: number;
+    notes?: string;
+  }>;
+  journalEntries: Array<{
+    id: string;
+    entryNumber: string;
+    date: string;
+    narration: string;
+    lines: Array<{
+      accountId: string;
+      description: string;
+      debit: number;
+      credit: number;
+    }>;
+  }>;
 }
 
-// Well-known Manager.io ContentType UUIDs
+// Well-known Manager.io ContentType UUIDs (both Legacy and Modern formats)
 export const MANAGER_CONTENT_TYPES = {
   BUSINESS_DETAILS: "38cf4712-6e95-4ce1-b53a-bff03edad273",
   LOCALIZATION_SETTINGS: "a56e89d1-7bee-4509-8b84-c9ebc3808b0c",
@@ -152,19 +206,43 @@ export const MANAGER_CONTENT_TYPES = {
   BANK_AND_CASH_ACCOUNTS: "1408c33b-6284-4f50-9e31-48cbea21f3cf",
   SPECIAL_ACCOUNTS: "6ef13e42-ad89-4d42-9480-546e0c04a411",
   ACCOUNT_GROUPS: "5770616c-0e01-46ca-a172-f7042275da6c",
-  SALES_INVOICES: "a0f6a539-f6a4-4a38-a69a-546a608a1f6d",
-  SALES_QUOTES_BOM: "efc4f2cc-acf0-4815-a9a8-13bae00c6167",
-  PURCHASE_INVOICES: "866217a4-f841-47de-a4e6-87152405c88d",
-  RECEIPTS: "c6b97908-627b-453b-9b62-3e6308a96ace",
-  PAYMENTS: "3c2d2934-27a8-4df3-9afd-890ebeb6fb4e",
+
+  // Invoices (Legacy vs Modern)
+  SALES_INVOICES_LEGACY: "a0f6a539-f6a4-4a38-a69a-546a608a1f6d",
+  SALES_INVOICES_MODERN: "ad12b60b-23bf-4421-94df-8be79cef533e",
+
+  // Quotes (Legacy vs Modern)
+  SALES_QUOTES_LEGACY: "efc4f2cc-acf0-4815-a9a8-13bae00c6167",
+  SALES_QUOTES_MODERN: "ba89de75-cb87-4bde-b20f-314f01b31037",
+
+  // Orders
+  SALES_ORDERS: "2dac5598-128d-4954-b2e4-21515047b3a7",
+
+  // Bills (Legacy vs Modern)
+  PURCHASE_INVOICES_LEGACY: "866217a4-f841-47de-a4e6-87152405c88d",
+  PURCHASE_INVOICES_MODERN: "58b9eb90-f6b8-4abc-8ea1-12fd77b8336e",
+
+  // Receipts (Legacy vs Modern)
+  RECEIPTS_LEGACY: "c6b97908-627b-453b-9b62-3e6308a96ace",
+  RECEIPTS_MODERN: "7662b887-c8d8-486e-98fd-f9dbcd41c6dc",
+
+  // Payments (Legacy vs Modern)
+  PAYMENTS_LEGACY: "3c2d2934-27a8-4df3-9afd-890ebeb6fb4e",
+  PAYMENTS_MODERN: "79f99d26-e43a-4ecb-a9c9-0774601a9b2e",
+
   INTER_ACCOUNT_TRANSFERS: "dea4f923-c498-4504-b3ef-30be3c33175e",
   CUSTOM_FIELDS_DEF: "411f5975-0376-4ba9-b7ff-5bb2baa6f69f",
   CUSTOM_FIELD_OPTIONS: "cc7fc110-e3e4-4b3b-823d-86c4a4cdabbc",
+
+  // Contracting Payroll
   EMPLOYEES: "dadb7f95-a5dd-45c0-945d-6ad4ee28776e",
   PAYSLIPS: "1d103fa7-6fc1-4951-811e-972968b842cc",
+
+  // General Journal
+  JOURNAL_ENTRIES: "5ea52bc4-90ae-4e4a-aec4-ef1224b279ad",
 };
 
-function extractGuid(sub: any): string | null {
+export function extractGuid(sub: any): string | null {
   if (!sub) return null;
   if (typeof sub === "string" && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(sub)) {
     return sub.toLowerCase();
@@ -259,11 +337,18 @@ export function extractManagerData(sqliteDb: Database.Database): ManagerExtracte
     const name = String(d["1"] || "Unnamed Customer").trim();
     const phoneVal = typeof d["2"] === "string" ? d["2"].trim() : undefined;
     const addrVal = typeof d["7"] === "string" ? d["7"].trim() : undefined;
+    let custTrn: string | undefined;
+    if (d["19"]?.["1"]?.[0]?.["2"]) {
+      custTrn = String(d["19"]["1"][0]["2"]);
+    } else if (d["19"]?.["1"]?.["2"]) {
+      custTrn = String(d["19"]["1"]["2"]);
+    }
     customers.push({
       id: c.Key.toLowerCase(),
       name,
       phone: phoneVal,
       address: addrVal,
+      trn: custTrn,
     });
   }
 
@@ -355,32 +440,46 @@ export function extractManagerData(sqliteDb: Database.Database): ManagerExtracte
     itemMap.set(it.id, it);
   }
 
-  // 11. Sales Invoices
+  // 11. Sales Invoices (Support both Legacy and Modern ContentType)
   const salesInvoices: ManagerExtractedData["salesInvoices"] = [];
-  const invRows = sqliteDb.prepare('SELECT Key, Content FROM "Objects" WHERE ContentType = ?').all(MANAGER_CONTENT_TYPES.SALES_INVOICES) as Array<{ Key: string; Content: Buffer }>;
+  const invRows = sqliteDb.prepare(
+    'SELECT Key, ContentType, Content FROM "Objects" WHERE ContentType IN (?, ?)'
+  ).all(MANAGER_CONTENT_TYPES.SALES_INVOICES_LEGACY, MANAGER_CONTENT_TYPES.SALES_INVOICES_MODERN) as Array<{ Key: string; ContentType: string; Content: Buffer }>;
   let invSeq = 1;
   for (const r of invRows) {
     const d = decodeProtobuf(r.Content);
-    const issueDate = decodeManagerDate(d["3"]);
-    const customerId = extractGuid(d["4"]) || "";
-    const rawLines = Array.isArray(d["15"]) ? d["15"] : (d["15"] ? [d["15"]] : []);
-    const lines: ManagerExtractedData["salesInvoices"][0]["lines"] = [];
+    const isModern = r.ContentType === MANAGER_CONTENT_TYPES.SALES_INVOICES_MODERN;
 
+    const issueDate = decodeManagerDate(isModern ? d["1"] : d["3"]) || new Date().toISOString().slice(0, 10);
+    const customerId = extractGuid(isModern ? d["3"] : d["4"]) || "";
+    const notes = typeof (isModern ? d["12"] : d["9"]) === "string" ? (isModern ? d["12"] : d["9"]).trim() : undefined;
+    const invNumberFromDoc = typeof d["2"] === "string" ? d["2"].trim() : "";
+    const invoiceNumber = invNumberFromDoc || `INV-${String(invSeq++).padStart(5, "0")}`;
+
+    const rawLines = isModern
+      ? (Array.isArray(d["49"]) ? d["49"] : (d["49"] ? [d["49"]] : []))
+      : (Array.isArray(d["15"]) ? d["15"] : (d["15"] ? [d["15"]] : []));
+
+    const lines: ManagerExtractedData["salesInvoices"][0]["lines"] = [];
     for (const l of rawLines) {
-      const itemId = extractGuid(l["1"]);
-      const item = itemId ? itemMap.get(itemId) : undefined;
-      const description = String(l["2"] || item?.name || "Service Line").trim();
-      const quantity = decodeManagerDecimal(l["3"]) || 1;
-      let unitPrice = decodeManagerDecimal(l["4"]);
-      if (unitPrice === 0 && item) {
-        unitPrice = item.salesUnitPrice;
+      if (isModern) {
+        const itemId = extractGuid(l["2"]);
+        const item = itemId ? itemMap.get(itemId) : undefined;
+        const description = String(l["17"] || item?.name || "Service Line").trim();
+        const quantity = decodeManagerDecimal(l["18"]) || 1;
+        let unitPrice = decodeManagerDecimal(l["19"]);
+        if (unitPrice === 0 && item) unitPrice = item.salesUnitPrice;
+        const lineProjectId = extractGuid(l["26"]) || undefined;
+        lines.push({ itemId: itemId || undefined, description, quantity, unitPrice, projectId: lineProjectId });
+      } else {
+        const itemId = extractGuid(l["1"]);
+        const item = itemId ? itemMap.get(itemId) : undefined;
+        const description = String(l["2"] || item?.name || "Service Line").trim();
+        const quantity = decodeManagerDecimal(l["3"]) || 1;
+        let unitPrice = decodeManagerDecimal(l["4"]);
+        if (unitPrice === 0 && item) unitPrice = item.salesUnitPrice;
+        lines.push({ itemId: itemId || undefined, description, quantity, unitPrice });
       }
-      lines.push({
-        itemId: itemId || undefined,
-        description,
-        quantity,
-        unitPrice,
-      });
     }
 
     // Extract custom fields (Chassis, Mileage, Plate)
@@ -390,95 +489,262 @@ export function extractManagerData(sqliteDb: Database.Database): ManagerExtracte
       for (const cf of cfArray) {
         const fieldGuid = extractGuid(cf["1"]);
         const fieldVal = typeof cf["2"] === "string" ? cf["2"].trim() : "";
-        if (fieldGuid && fieldVal) {
-          customFieldValues[fieldGuid] = fieldVal;
-        }
+        if (fieldGuid && fieldVal) customFieldValues[fieldGuid] = fieldVal;
       }
     }
 
-    const invoiceNumber = `INV-${String(invSeq++).padStart(5, "0")}`;
     salesInvoices.push({
       id: r.Key.toLowerCase(),
       invoiceNumber,
       issueDate,
       customerId,
+      notes,
       lines,
       customFieldValues,
     });
   }
 
-  // 12. Sales Quotes / Job Estimates
+  // 12. Sales Quotes (Support both Legacy and Modern ContentType)
   const salesQuotes: ManagerExtractedData["salesQuotes"] = [];
-  const quoteRows = sqliteDb.prepare('SELECT Key, Content FROM "Objects" WHERE ContentType = ?').all(MANAGER_CONTENT_TYPES.SALES_QUOTES_BOM) as Array<{ Key: string; Content: Buffer }>;
+  const quoteRows = sqliteDb.prepare(
+    'SELECT Key, ContentType, Content FROM "Objects" WHERE ContentType IN (?, ?)'
+  ).all(MANAGER_CONTENT_TYPES.SALES_QUOTES_LEGACY, MANAGER_CONTENT_TYPES.SALES_QUOTES_MODERN) as Array<{ Key: string; ContentType: string; Content: Buffer }>;
   let quoteSeq = 1;
   for (const q of quoteRows) {
     const d = decodeProtobuf(q.Content);
-    const title = String(d["1"] || "Quote").trim();
-    const rawLines = Array.isArray(d["3"]) ? d["3"] : (d["3"] ? [d["3"]] : []);
-    const lines: ManagerExtractedData["salesQuotes"][0]["lines"] = [];
+    const isModern = q.ContentType === MANAGER_CONTENT_TYPES.SALES_QUOTES_MODERN;
 
+    const issueDate = decodeManagerDate(d["1"]) || new Date().toISOString().slice(0, 10);
+    const quoteNumberFromDoc = typeof d["2"] === "string" ? d["2"].trim() : "";
+    const quoteNumber = quoteNumberFromDoc || `SQ-${String(quoteSeq++).padStart(5, "0")}`;
+    const customerId = extractGuid(isModern ? d["3"] : d["2"]) || undefined;
+    const title = String((isModern ? d["9"] : d["1"]) || "Sales Quote").trim();
+
+    const rawLines = isModern
+      ? (Array.isArray(d["24"]) ? d["24"] : (d["24"] ? [d["24"]] : []))
+      : (Array.isArray(d["3"]) ? d["3"] : (d["3"] ? [d["3"]] : []));
+
+    const lines: ManagerExtractedData["salesQuotes"][0]["lines"] = [];
     for (const l of rawLines) {
-      const itemId = extractGuid(l["1"]);
-      const item = itemId ? itemMap.get(itemId) : undefined;
-      const quantity = decodeManagerDecimal(l["3"]) || 1;
-      const unitPrice = item ? item.salesUnitPrice : 0;
-      lines.push({
-        itemId: itemId || undefined,
-        description: item?.name || "Quote Item",
-        quantity,
-        unitPrice,
-      });
+      if (isModern) {
+        const description = String(l["2"] || "Quote Item").trim();
+        const quantity = decodeManagerDecimal(l["3"]) || 1;
+        const unitPrice = decodeManagerDecimal(l["4"]) || 0;
+        lines.push({ description, quantity, unitPrice });
+      } else {
+        const itemId = extractGuid(l["1"]);
+        const item = itemId ? itemMap.get(itemId) : undefined;
+        const quantity = decodeManagerDecimal(l["3"]) || 1;
+        const unitPrice = item ? item.salesUnitPrice : 0;
+        lines.push({
+          itemId: itemId || undefined,
+          description: item?.name || "Quote Item",
+          quantity,
+          unitPrice,
+        });
+      }
     }
 
-    const customerId = extractGuid(d["2"]) || undefined;
     salesQuotes.push({
       id: q.Key.toLowerCase(),
-      quoteNumber: `SQ-${String(quoteSeq++).padStart(5, "0")}`,
-      issueDate: new Date().toISOString().slice(0, 10),
+      quoteNumber,
+      issueDate,
       title,
       customerId,
       lines,
     });
   }
 
-  // 13. Purchase Invoices
-  const purchaseInvoices: ManagerExtractedData["purchaseInvoices"] = [];
-  const billRows = sqliteDb.prepare('SELECT Key, Content FROM "Objects" WHERE ContentType = ?').all(MANAGER_CONTENT_TYPES.PURCHASE_INVOICES) as Array<{ Key: string; Content: Buffer }>;
-  let billSeq = 1;
-  for (const b of billRows) {
-    const d = decodeProtobuf(b.Content);
-    const issueDate = decodeManagerDate(d["3"]);
-    const supplierId = extractGuid(d["4"]) || "";
-    const rawLines = Array.isArray(d["15"]) ? d["15"] : (d["15"] ? [d["15"]] : []);
-    const lines: ManagerExtractedData["purchaseInvoices"][0]["lines"] = [];
+  // 13. Sales Orders
+  const salesOrders: ManagerExtractedData["salesOrders"] = [];
+  const orderRows = sqliteDb.prepare(
+    'SELECT Key, Content FROM "Objects" WHERE ContentType = ?'
+  ).all(MANAGER_CONTENT_TYPES.SALES_ORDERS) as Array<{ Key: string; Content: Buffer }>;
+  let orderSeq = 1;
+  for (const o of orderRows) {
+    const d = decodeProtobuf(o.Content);
+    const orderDate = decodeManagerDate(d["1"]) || new Date().toISOString().slice(0, 10);
+    const orderNumberFromDoc = typeof d["2"] === "string" ? d["2"].trim() : "";
+    const orderNumber = orderNumberFromDoc || `SO-${String(orderSeq++).padStart(5, "0")}`;
+    const customerId = extractGuid(d["3"]) || "";
+    const notes = typeof d["12"] === "string" ? d["12"].trim() : (typeof d["11"] === "string" ? d["11"].trim() : undefined);
+    const salesQuoteId = extractGuid(d["19"]) || undefined;
 
+    const rawLines = Array.isArray(d["18"]) ? d["18"] : (d["18"] ? [d["18"]] : []);
+    const lines: ManagerExtractedData["salesOrders"][0]["lines"] = [];
     for (const l of rawLines) {
-      const itemId = extractGuid(l["1"]);
-      const item = itemId ? itemMap.get(itemId) : undefined;
-      const description = String(l["2"] || item?.name || "Purchase Item").trim();
+      const description = String(l["2"] || "Order Line Item").trim();
       const quantity = decodeManagerDecimal(l["3"]) || 1;
-      let unitPrice = decodeManagerDecimal(l["4"]);
-      if (unitPrice === 0 && item) {
-        unitPrice = item.purchaseUnitPrice;
-      }
-      lines.push({
-        itemId: itemId || undefined,
-        description,
-        quantity,
-        unitPrice,
-      });
+      const unitPrice = decodeManagerDecimal(l["4"]) || 0;
+      lines.push({ description, quantity, unitPrice });
     }
 
-    purchaseInvoices.push({
-      id: b.Key.toLowerCase(),
-      invoiceNumber: `BILL-${String(billSeq++).padStart(5, "0")}`,
-      issueDate,
-      supplierId,
+    salesOrders.push({
+      id: o.Key.toLowerCase(),
+      orderNumber,
+      orderDate,
+      customerId,
+      salesQuoteId,
+      notes,
       lines,
     });
   }
 
-  // 14. Inter-Account Transfers
+  // 14. Purchase Invoices / Bills (Support both Legacy and Modern ContentType)
+  const purchaseInvoices: ManagerExtractedData["purchaseInvoices"] = [];
+  const billRows = sqliteDb.prepare(
+    'SELECT Key, ContentType, Content FROM "Objects" WHERE ContentType IN (?, ?)'
+  ).all(MANAGER_CONTENT_TYPES.PURCHASE_INVOICES_LEGACY, MANAGER_CONTENT_TYPES.PURCHASE_INVOICES_MODERN) as Array<{ Key: string; ContentType: string; Content: Buffer }>;
+  let billSeq = 1;
+  for (const b of billRows) {
+    const d = decodeProtobuf(b.Content);
+    const isModern = b.ContentType === MANAGER_CONTENT_TYPES.PURCHASE_INVOICES_MODERN;
+
+    const issueDate = decodeManagerDate(isModern ? d["1"] : d["3"]) || new Date().toISOString().slice(0, 10);
+    const supplierId = extractGuid(isModern ? d["3"] : d["4"]) || "";
+    const billNumFromDoc = typeof d["2"] === "string" ? d["2"].trim() : "";
+    const invoiceNumber = billNumFromDoc || `BILL-${String(billSeq++).padStart(5, "0")}`;
+    const notes = typeof (isModern ? d["9"] : d["8"]) === "string" ? (isModern ? d["9"] : d["8"]).trim() : undefined;
+
+    const rawLines = isModern
+      ? (Array.isArray(d["23"]) ? d["23"] : (d["23"] ? [d["23"]] : (Array.isArray(d["24"]) ? d["24"] : (d["24"] ? [d["24"]] : []))))
+      : (Array.isArray(d["15"]) ? d["15"] : (d["15"] ? [d["15"]] : []));
+
+    const lines: ManagerExtractedData["purchaseInvoices"][0]["lines"] = [];
+    for (const l of rawLines) {
+      if (isModern) {
+        const itemId = extractGuid(l["2"]);
+        const item = itemId ? itemMap.get(itemId) : undefined;
+        const description = String(l["17"] || item?.name || "Purchase Item").trim();
+        const quantity = decodeManagerDecimal(l["18"]) || 1;
+        let unitPrice = decodeManagerDecimal(l["19"]);
+        if (unitPrice === 0 && item) unitPrice = item.purchaseUnitPrice;
+        const lineProjectId = extractGuid(l["26"]) || undefined;
+        lines.push({ itemId: itemId || undefined, description, quantity, unitPrice, projectId: lineProjectId });
+      } else {
+        const itemId = extractGuid(l["1"]);
+        const item = itemId ? itemMap.get(itemId) : undefined;
+        const description = String(l["2"] || item?.name || "Purchase Item").trim();
+        const quantity = decodeManagerDecimal(l["3"]) || 1;
+        let unitPrice = decodeManagerDecimal(l["4"]);
+        if (unitPrice === 0 && item) unitPrice = item.purchaseUnitPrice;
+        lines.push({ itemId: itemId || undefined, description, quantity, unitPrice });
+      }
+    }
+
+    purchaseInvoices.push({
+      id: b.Key.toLowerCase(),
+      invoiceNumber,
+      issueDate,
+      supplierId,
+      notes,
+      lines,
+    });
+  }
+
+  // 15. Customer Receipts
+  const receipts: ManagerExtractedData["receipts"] = [];
+  const rcvRows = sqliteDb.prepare(
+    'SELECT Key, ContentType, Content FROM "Objects" WHERE ContentType IN (?, ?)'
+  ).all(MANAGER_CONTENT_TYPES.RECEIPTS_LEGACY, MANAGER_CONTENT_TYPES.RECEIPTS_MODERN) as Array<{ Key: string; ContentType: string; Content: Buffer }>;
+  let rcvSeq = 1;
+  for (const r of rcvRows) {
+    const d = decodeProtobuf(r.Content);
+    const isModern = r.ContentType === MANAGER_CONTENT_TYPES.RECEIPTS_MODERN;
+
+    const receiptDate = decodeManagerDate(d["1"]) || new Date().toISOString().slice(0, 10);
+    const receiptNumberFromDoc = typeof d["2"] === "string" ? d["2"].trim() : "";
+    const receiptNumber = receiptNumberFromDoc || `RCV-${String(rcvSeq++).padStart(5, "0")}`;
+    const accountId = extractGuid(isModern ? d["7"] : d["4"]) || undefined;
+    const customerId = extractGuid(isModern ? d["4"] : d["5"]) || undefined;
+    const description = String((isModern ? d["10"] : d["2"]) || "Customer Receipt").trim();
+
+    const allocations: ManagerExtractedData["receipts"][0]["allocations"] = [];
+    let totalAmount = 0;
+
+    if (isModern && d["11"]) {
+      const rawLines = Array.isArray(d["11"]) ? d["11"] : [d["11"]];
+      for (const l of rawLines) {
+        const invId = extractGuid(l["4"]);
+        const lineAmt = decodeManagerDecimal(l["18"]);
+        totalAmount += lineAmt;
+        if (invId && lineAmt > 0) {
+          allocations.push({ invoiceId: invId, amount: lineAmt });
+        }
+      }
+    } else {
+      totalAmount = decodeManagerDecimal(d["3"]);
+    }
+
+    if (totalAmount <= 0 && d["8"]) {
+      totalAmount = decodeManagerDecimal(d["8"]);
+    }
+
+    receipts.push({
+      id: r.Key.toLowerCase(),
+      receiptNumber,
+      receiptDate,
+      accountId,
+      customerId,
+      amount: totalAmount,
+      description,
+      allocations,
+    });
+  }
+
+  // 16. Supplier Payments
+  const payments: ManagerExtractedData["payments"] = [];
+  const payRows = sqliteDb.prepare(
+    'SELECT Key, ContentType, Content FROM "Objects" WHERE ContentType IN (?, ?)'
+  ).all(MANAGER_CONTENT_TYPES.PAYMENTS_LEGACY, MANAGER_CONTENT_TYPES.PAYMENTS_MODERN) as Array<{ Key: string; ContentType: string; Content: Buffer }>;
+  let paySeq = 1;
+  for (const p of payRows) {
+    const d = decodeProtobuf(p.Content);
+    const isModern = p.ContentType === MANAGER_CONTENT_TYPES.PAYMENTS_MODERN;
+
+    const paymentDate = decodeManagerDate(d["1"]) || new Date().toISOString().slice(0, 10);
+    const payNumberFromDoc = typeof d["2"] === "string" ? d["2"].trim() : "";
+    const paymentNumber = payNumberFromDoc || `PAY-${String(paySeq++).padStart(5, "0")}`;
+    const accountId = extractGuid(isModern ? d["7"] : d["4"]) || undefined;
+    let supplierId = extractGuid(isModern ? undefined : d["5"]) || undefined;
+    const description = String((isModern ? d["10"] : d["2"]) || "Supplier Payment").trim();
+
+    const allocations: ManagerExtractedData["payments"][0]["allocations"] = [];
+    let totalAmount = 0;
+
+    if (isModern && d["11"]) {
+      const rawLines = Array.isArray(d["11"]) ? d["11"] : [d["11"]];
+      for (const l of rawLines) {
+        const lineSuppId = extractGuid(l["7"]);
+        if (!supplierId && lineSuppId) supplierId = lineSuppId;
+        const billId = extractGuid(l["8"]);
+        const lineAmt = decodeManagerDecimal(l["18"]);
+        totalAmount += lineAmt;
+        if (billId && lineAmt > 0) {
+          allocations.push({ invoiceId: billId, amount: lineAmt });
+        }
+      }
+    } else {
+      totalAmount = decodeManagerDecimal(d["3"]);
+    }
+
+    if (totalAmount <= 0 && d["8"]) {
+      totalAmount = decodeManagerDecimal(d["8"]);
+    }
+
+    payments.push({
+      id: p.Key.toLowerCase(),
+      paymentNumber,
+      paymentDate,
+      accountId,
+      supplierId,
+      amount: totalAmount,
+      description,
+      allocations,
+    });
+  }
+
+  // 17. Inter-Account Transfers
   const bankTransfers: ManagerExtractedData["bankTransfers"] = [];
   const transferRows = sqliteDb.prepare('SELECT Key, Content FROM "Objects" WHERE ContentType = ?').all(MANAGER_CONTENT_TYPES.INTER_ACCOUNT_TRANSFERS) as Array<{ Key: string; Content: Buffer }>;
   for (const tr of transferRows) {
@@ -496,6 +762,85 @@ export function extractManagerData(sqliteDb: Database.Database): ManagerExtracte
       toAccountId,
       amount,
       description,
+    });
+  }
+
+  // 18. Employees
+  const employees: ManagerExtractedData["employees"] = [];
+  const empRows = sqliteDb.prepare('SELECT Key, Content FROM "Objects" WHERE ContentType = ?').all(MANAGER_CONTENT_TYPES.EMPLOYEES) as Array<{ Key: string; Content: Buffer }>;
+  for (const er of empRows) {
+    const d = decodeProtobuf(er.Content);
+    const name = String(d["1"] || "Employee").trim();
+    const address = typeof d["2"] === "string" ? d["2"].trim() : undefined;
+    employees.push({
+      id: er.Key.toLowerCase(),
+      name,
+      address,
+    });
+  }
+
+  // 19. Payslips
+  const payslips: ManagerExtractedData["payslips"] = [];
+  const slipRows = sqliteDb.prepare('SELECT Key, Content FROM "Objects" WHERE ContentType = ?').all(MANAGER_CONTENT_TYPES.PAYSLIPS) as Array<{ Key: string; Content: Buffer }>;
+  let slipSeq = 1;
+  for (const sr of slipRows) {
+    const d = decodeProtobuf(sr.Content);
+    const date = decodeManagerDate(d["1"]) || new Date().toISOString().slice(0, 10);
+    const employeeId = extractGuid(d["2"]) || "";
+    const payslipNumber = `PS-${String(slipSeq++).padStart(5, "0")}`;
+    const periodDescription = typeof d["11"] === "string" ? d["11"].trim() : (typeof d["12"] === "string" ? d["12"].trim() : undefined);
+    const notes = typeof d["12"] === "string" ? d["12"].trim() : undefined;
+
+    let grossAmount = 0;
+    if (d["3"]) {
+      const items = Array.isArray(d["3"]) ? d["3"] : [d["3"]];
+      for (const item of items) {
+        grossAmount += decodeManagerDecimal(item["3"]);
+      }
+    }
+
+    payslips.push({
+      id: sr.Key.toLowerCase(),
+      payslipNumber,
+      employeeId,
+      date,
+      periodDescription,
+      grossAmount,
+      deductions: 0,
+      netAmount: grossAmount,
+      notes,
+    });
+  }
+
+  // 20. Journal Entries
+  const journalEntries: ManagerExtractedData["journalEntries"] = [];
+  const jeRows = sqliteDb.prepare('SELECT Key, Content FROM "Objects" WHERE ContentType = ?').all(MANAGER_CONTENT_TYPES.JOURNAL_ENTRIES) as Array<{ Key: string; Content: Buffer }>;
+  let jeSeq = 1;
+  for (const jr of jeRows) {
+    const d = decodeProtobuf(jr.Content);
+    const date = decodeManagerDate(d["1"]) || new Date().toISOString().slice(0, 10);
+    const entryNumberFromDoc = typeof d["2"] === "string" ? d["2"].trim() : "";
+    const entryNumber = entryNumberFromDoc || `JE-${String(jeSeq++).padStart(4, "0")}`;
+    const narration = String(d["3"] || "Journal Entry").trim();
+
+    const lines: ManagerExtractedData["journalEntries"][0]["lines"] = [];
+    if (d["14"]) {
+      const rawLines = Array.isArray(d["14"]) ? d["14"] : [d["14"]];
+      for (const l of rawLines) {
+        const accountId = extractGuid(l["1"]) || "";
+        const desc = typeof l["12"] === "string" ? l["12"].trim() : "";
+        const debit = decodeManagerDecimal(l["13"]) || 0;
+        const credit = decodeManagerDecimal(l["14"]) || 0;
+        lines.push({ accountId, description: desc, debit, credit });
+      }
+    }
+
+    journalEntries.push({
+      id: jr.Key.toLowerCase(),
+      entryNumber,
+      date,
+      narration,
+      lines,
     });
   }
 
@@ -522,9 +867,13 @@ export function extractManagerData(sqliteDb: Database.Database): ManagerExtracte
     customFields,
     salesInvoices,
     salesQuotes,
+    salesOrders,
     purchaseInvoices,
-    receipts: [],
-    payments: [],
+    receipts,
+    payments,
     bankTransfers,
+    employees,
+    payslips,
+    journalEntries,
   };
 }
