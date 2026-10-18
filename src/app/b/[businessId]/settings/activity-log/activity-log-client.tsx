@@ -9,8 +9,6 @@ import {
   Calendar,
   User,
   Download,
-  ChevronDown,
-  ChevronRight,
   FileText,
   CheckCircle2,
   PlusCircle,
@@ -280,13 +278,6 @@ export function ActivityLogClient({
   const [selectedAction, setSelectedAction] = useState<string>("all");
   const [selectedEntityType, setSelectedEntityType] = useState<string>("all");
   const [dateRange, setDateRange] = useState<"all" | "today" | "7d" | "30d">("all");
-
-  // Expanded payload details
-  const [expandedIds, setExpandedIds] = useState<Record<string, boolean>>({});
-
-  function toggleExpand(id: string) {
-    setExpandedIds((prev) => ({ ...prev, [id]: !prev[id] }));
-  }
 
   async function handleSaveRetention() {
     try {
@@ -849,7 +840,6 @@ export function ActivityLogClient({
               <div className="space-y-2">
                 {group.items.map((log) => {
                   const link = getEntityLink(businessId, log.entityType, log.entityId);
-                  const isExpanded = Boolean(expandedIds[log.id]);
 
                   return (
                     <div
@@ -911,30 +901,6 @@ export function ActivityLogClient({
                       <p className="mt-2 text-sm text-foreground/90 leading-relaxed">
                         {log.summary}
                       </p>
-
-                      {/* Expandable details */}
-                      {log.details && Object.keys(log.details).length > 0 && (
-                        <div className="mt-2.5 pt-2 border-t border-border/40">
-                          <button
-                            type="button"
-                            onClick={() => toggleExpand(log.id)}
-                            className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
-                          >
-                            {isExpanded ? (
-                              <ChevronDown className="size-3.5" />
-                            ) : (
-                              <ChevronRight className="size-3.5" />
-                            )}
-                            <span>{isExpanded ? "Hide audit details" : "View audit details"}</span>
-                          </button>
-
-                          {isExpanded && (
-                            <pre className="mt-2 max-h-48 overflow-auto rounded bg-surface p-2.5 text-[11px] font-mono text-muted-foreground border border-border">
-                              {JSON.stringify(log.details, null, 2)}
-                            </pre>
-                          )}
-                        </div>
-                      )}
                     </div>
                   );
                 })}

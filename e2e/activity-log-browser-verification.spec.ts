@@ -124,15 +124,8 @@ test.describe('Activity & Audit Log Browser Verification Suite', () => {
     await allActionBtn.click();
     await page.waitForTimeout(500);
 
-    // Expand audit event payload details if events exist
-    const detailsBtn = page.getByRole('button', { name: /View audit details/i }).first();
-    if (await detailsBtn.isVisible()) {
-      await detailsBtn.click();
-      await expect(page.locator('pre').first()).toBeVisible();
-      // Collapse again
-      const hideBtn = page.getByRole('button', { name: /Hide audit details/i }).first();
-      await hideBtn.click();
-    }
+    // Verify compact card layout without View audit details button per user preference
+    await expect(page.getByRole('button', { name: /View audit details/i })).toHaveCount(0);
   });
 
   test('4. Verify Search functionality and Export CSV', async ({ page }) => {
