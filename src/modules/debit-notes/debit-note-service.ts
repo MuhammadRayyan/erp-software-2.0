@@ -17,6 +17,7 @@ import {
   assertVatDateUnlocked,
   assertVatSourceUnlocked,
 } from "@/modules/tax/tax-lock-service";
+import { assertDateNotLocked } from "@/modules/accounting/services/financial-lock-service";
 import { postDebitNote } from "@/modules/accounting/services/debit-note-posting-service";
 import { reverseTransaction } from "@/modules/accounting/services/posting-service";
 import { quantityMicrosToInput, minorToInput } from "@/modules/accounting/calculations/money";
@@ -102,6 +103,12 @@ export function listDebitNotes(
 
 export function saveDebitNote(businessId: string, userId: string, data: DebitNoteInput, intent: DebitNoteIntent, noteId?: string) {
   const context = getBusinessDb(businessId, userId);
+  if (noteId) {
+    const current = context.db.select().from(debitNotes).where(eq(debitNotes.id, noteId)).get();
+    if (current?.documentStatus === "posted") {
+      assertDateNotLocked(context.sqlite, current.debitNoteDate, "Debit note");
+    }
+  }
   const status = intent === "post" ? "posted" : "draft";
 
   const taxDate = data.taxDate || data.date;
@@ -170,7 +177,10 @@ export function saveDebitNote(businessId: string, userId: string, data: DebitNot
       const current = context.db.select().from(debitNotes).where(eq(debitNotes.id, noteId)).get();
       if (!current) throw new Error("Debit note not found.");
       if (current.documentStatus === "void") throw new Error("A void debit note cannot be edited.");
-      if (current.documentStatus === "posted") assertVatSourceUnlocked(context.sqlite, "debit_note", noteId, current.taxDate);
+      if (current.documentStatus === "posted") {
+        assertDateNotLocked(context.sqlite, current.debitNoteDate, "Debit note");
+        assertVatSourceUnlocked(context.sqlite, "debit_note", noteId, current.taxDate);
+      }
       if (current.purchaseInvoiceId !== data.purchaseInvoiceId && current.documentStatus === "posted") throw new Error("Cannot change the source invoice after posting.");
       
       number = current.debitNoteNumber;
@@ -200,6 +210,7 @@ export function saveDebitNote(businessId: string, userId: string, data: DebitNot
     insertLines(context.db, id, lines);
     
     if (shouldPost) {
+      assertDateNotLocked(context.sqlite, data.date, "Debit note");
       assertVatDateUnlocked(context.sqlite, taxDate, lines.map((line) => line.taxCodeId));
       const postingLines = lines.map((line: any) => ({ ...line, projectId: effectiveProjectId(line.projectId || null, data.projectId || null) }));
       postDebitNote(context.sqlite, { id, debitNoteNumber: number, supplierId: data.supplierId, date: data.date, totalMinor: amounts.totalMinor, rate }, postingLines, false);
@@ -260,6 +271,8 @@ export function voidDebitNote(businessId: string, userId: string, noteId: string
   
   const now = new Date().toISOString();
   context.sqlite.transaction(() => { 
+    assertDateNotLocked(context.sqlite, note.debitNoteDate, "Debit note void");
+    assertDateNotLocked(context.sqlite, now.slice(0, 10), "Debit note void");
     assertVatSourceUnlocked(context.sqlite, "debit_note", noteId, note.taxDate); 
     reverseTransaction(context.sqlite, { originalSourceType: "debit_note", originalSourceId: noteId, reversalSourceType: "debit_note_void", reversalSourceId: noteId, date: now.slice(0, 10), description: `Void Debit Note ${note.debitNoteNumber}` }); 
     reverseTaxEntries(context.sqlite, { originalSourceType: "debit_note", sourceId: noteId, reversalSourceType: "debit_note_void", taxDate: note.taxDate }); 

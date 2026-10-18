@@ -24,6 +24,7 @@ import { TableTotalsBar, renderMultiCurrencyString } from "@/components/table-to
 import { BatchActionBar } from "@/components/batch-action-bar";
 import { batchPostPurchaseInvoicesAction, batchVoidPurchaseInvoicesAction, batchDeletePurchaseInvoicesAction } from "./actions";
 import { BatchConfirmModal } from "@/components/documents/batch-confirm-modal";
+import { exportCsv } from "@/lib/export-csv";
 
 type Row = {
   id: string;
@@ -509,27 +510,22 @@ export function PurchaseInvoiceTable({
               onClearSelection={() => setRowSelection({})}
               onSelectAll={() => table.toggleAllRowsSelected(true)}
               onExportSelected={() => {
-                const headers = ["Bill Number", "Supplier", "Supplier Invoice", "Date", "Due Date", "Currency", "Total", "Balance", "Document Status", "Payment Status"];
-                const lines = selectedBills.map((r: any) => [
-                  `"${r.internal_number}"`,
-                  `"${(r.supplier_name || "").replace(/"/g, '""')}"`,
-                  `"${(r.supplier_invoice_number || "").replace(/"/g, '""')}"`,
-                  r.invoice_date,
-                  r.due_date,
-                  r.currency_code,
-                  (r.total_minor / 100).toFixed(2),
-                  (r.balanceMinor / 100).toFixed(2),
-                  r.document_status,
-                  r.paymentStatus || "",
-                ]);
-                const csvContent = [headers.join(","), ...lines.map((l: any) => l.join(","))].join("\n");
-                const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
-                const url = URL.createObjectURL(blob);
-                const a = document.createElement("a");
-                a.href = url;
-                a.download = `purchase-invoices-selected-${new Date().toISOString().slice(0, 10)}.csv`;
-                a.click();
-                URL.revokeObjectURL(url);
+                exportCsv(
+                  `purchase-invoices-selected-${new Date().toISOString().slice(0, 10)}.csv`,
+                  [
+                    { header: "Bill Number", accessorKey: "internal_number" },
+                    { header: "Supplier", accessorKey: "supplier_name" },
+                    { header: "Supplier Invoice", accessorKey: "supplier_invoice_number" },
+                    { header: "Date", accessorKey: "invoice_date" },
+                    { header: "Due Date", accessorKey: "due_date" },
+                    { header: "Currency", accessorKey: "currency_code" },
+                    { header: "Total", accessorFn: (r: any) => (r.total_minor / 100).toFixed(2) },
+                    { header: "Balance", accessorFn: (r: any) => (r.balanceMinor / 100).toFixed(2) },
+                    { header: "Document Status", accessorKey: "document_status" },
+                    { header: "Payment Status", accessorKey: "paymentStatus" },
+                  ],
+                  selectedBills
+                );
               }}
               onPrintSelected={() => window.print()}
               onDeleteSelected={selectedDrafts.length > 0 && selectedDrafts.length === selectedCount ? () => setConfirmModal({ type: "delete", open: true }) : undefined}

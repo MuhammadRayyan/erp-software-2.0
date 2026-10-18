@@ -12,6 +12,7 @@ import {
   reverseTransaction,
   type JournalLineInput,
 } from "@/modules/accounting/services/posting-service";
+import { assertDateNotLocked } from "@/modules/accounting/services/financial-lock-service";
 import {
   effectiveProjectId,
   validateProjectReferences,
@@ -329,12 +330,13 @@ export function saveDeliveryNote(
     let shouldPost = intent === "post";
     if (deliveryId) {
       const current = context.sqlite.prepare(`
-        SELECT delivery_number, document_status
+        SELECT delivery_number, document_status, date
         FROM delivery_notes
         WHERE id = ?
       `).get(deliveryId) as {
         delivery_number: string;
         document_status: InventoryDocumentStatus;
+        date: string;
       } | undefined;
       if (!current) throw new Error("Delivery Note not found.");
       if (current.document_status === "void") {
@@ -344,6 +346,7 @@ export function saveDeliveryNote(
       wasPosted = current.document_status === "posted";
       shouldPost = wasPosted || intent === "post";
       if (wasPosted) {
+        assertDateNotLocked(context.sqlite, current.date, "Delivery note");
         assertInventorySourceIsLatest(
           context.sqlite,
           "delivery_note",
@@ -356,6 +359,7 @@ export function saveDeliveryNote(
     }
 
     if (shouldPost) {
+      assertDateNotLocked(context.sqlite, data.date, "Delivery note");
       assertInventoryPostingOrder(
         context.sqlite,
         data.date,
@@ -447,6 +451,8 @@ export function voidDeliveryNote(businessId: string, userId: string, deliveryId:
     if (delivery.document_status !== "posted") {
       throw new Error("Only a posted Delivery Note can be voided.");
     }
+    assertDateNotLocked(context.sqlite, delivery.date, "Delivery note void");
+    assertDateNotLocked(context.sqlite, now.slice(0, 10), "Delivery note void");
     assertInventorySourceIsLatest(
       context.sqlite,
       "delivery_note",

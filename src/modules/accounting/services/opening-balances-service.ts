@@ -1,6 +1,7 @@
 import { getBusinessDb } from "@/core/db/business";
 import { randomUUID } from "node:crypto";
 import { listAccounts } from "./account-service";
+import { assertDateNotLocked } from "./financial-lock-service";
 
 export type OpeningBalanceLine = {
   accountId: string;
@@ -81,6 +82,14 @@ export function saveOpeningBalances(
   const { sqlite } = getBusinessDb(businessId, userId);
 
   sqlite.transaction(() => {
+    assertDateNotLocked(sqlite, date, "Opening balances");
+    const existingSettings = sqlite
+      .prepare("SELECT opening_balances_date FROM business_accounting_settings WHERE id = 'default'")
+      .get() as { opening_balances_date?: string | null } | undefined;
+    if (existingSettings?.opening_balances_date) {
+      assertDateNotLocked(sqlite, existingSettings.opening_balances_date, "Opening balances");
+    }
+
     const now = new Date().toISOString();
     sqlite
       .prepare("UPDATE business_accounting_settings SET opening_balances_date = ?, updated_at = ? WHERE id = 'default'")

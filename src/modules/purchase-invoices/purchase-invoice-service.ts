@@ -9,6 +9,7 @@ import { reverseTransaction } from "@/modules/accounting/services/posting-servic
 import { effectiveProjectId, validateProjectReferences } from "@/modules/projects/project-validation";
 import { replaceTaxEntries, reverseTaxEntries } from "@/modules/tax/tax-entry-service";
 import { assertVatDateUnlocked, assertVatSourceUnlocked } from "@/modules/tax/tax-lock-service";
+import { assertDateNotLocked } from "@/modules/accounting/services/financial-lock-service";
 import { purchaseInvoiceInputSchema, type PurchaseInvoiceInput } from "./purchase-invoice-input";
 import { convertDocumentLinesToBase, minorToCurrencyInput, parseCurrencyAmountToMinor } from "@/modules/currency/conversion";
 import { getCurrency } from "@/modules/currency/currency";
@@ -323,6 +324,9 @@ export function savePurchaseInvoice(
   const currentHeader = invoiceId
     ? context.db.select().from(purchaseInvoices).where(eq(purchaseInvoices.id, invoiceId)).get()
     : undefined;
+  if (currentHeader?.documentStatus === "posted") {
+    assertDateNotLocked(context.sqlite, currentHeader.invoiceDate, "Purchase invoice");
+  }
   const taxDate = data.taxDate || data.invoiceDate;
   const rate = resolveRateSnapshot(context.sqlite, {
     currencyCode: input.currencyCode ?? supplier.defaultCurrencyCode ?? data.currencyCode,
@@ -358,7 +362,10 @@ export function savePurchaseInvoice(
       const current = currentHeader;
       if (!current) throw new Error("Purchase invoice not found.");
       if (current.documentStatus === "void") throw new Error("A void purchase invoice cannot be edited.");
-      if (current.documentStatus === "posted") assertVatSourceUnlocked(context.sqlite, "purchase_invoice", invoiceId, current.taxDate);
+      if (current.documentStatus === "posted") {
+        assertDateNotLocked(context.sqlite, current.invoiceDate, "Purchase invoice");
+        assertVatSourceUnlocked(context.sqlite, "purchase_invoice", invoiceId, current.taxDate);
+      }
       if (context.sqlite.prepare("SELECT 1 FROM goods_receipts WHERE purchase_invoice_id = ? LIMIT 1").get(invoiceId)) throw new Error("A Purchase Invoice cannot be edited after a Goods Receipt has been created from it.");
       const paidMinor = paidForPurchaseInvoice(context.sqlite, invoiceId);
       if (paidMinor > 0 && current.supplierId !== data.supplierId) throw new Error("Cannot change the supplier after payments have been allocated.");
@@ -391,7 +398,7 @@ export function savePurchaseInvoice(
     }
     insertLines(context.db, id, lines);
     if (shouldPost) {
-
+      assertDateNotLocked(context.sqlite, data.invoiceDate, "Purchase invoice");
       assertVatDateUnlocked(context.sqlite, taxDate, lines.map((line) => line.taxCodeId));
       const postingLines = lines.map((line) => ({ ...line, projectId: effectiveProjectId(line.projectId, data.projectId) }));
       postPurchaseInvoice(context.sqlite, { id, internalNumber, supplierId: data.supplierId, invoiceDate: data.invoiceDate, totalMinor: amounts.totalMinor, rate }, postingLines, replace);
@@ -487,6 +494,8 @@ export function voidPurchaseInvoice(businessId: string, userId: string, invoiceI
   }
   const now = new Date().toISOString();
   context.sqlite.transaction(() => {
+    assertDateNotLocked(context.sqlite, invoice.invoiceDate, "Purchase invoice void");
+    assertDateNotLocked(context.sqlite, now.slice(0, 10), "Purchase invoice void");
     assertVatSourceUnlocked(context.sqlite, "purchase_invoice", invoiceId, invoice.taxDate);
     reverseTransaction(context.sqlite, { originalSourceType: "purchase_invoice", originalSourceId: invoiceId, reversalSourceType: "purchase_invoice_void", reversalSourceId: invoiceId, date: now.slice(0, 10), description: `Void Purchase Invoice ${invoice.internalNumber}` });
     reverseTaxEntries(context.sqlite, { originalSourceType: "purchase_invoice", sourceId: invoiceId, reversalSourceType: "purchase_invoice_void", taxDate: invoice.taxDate });

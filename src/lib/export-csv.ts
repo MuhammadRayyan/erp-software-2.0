@@ -1,26 +1,12 @@
-/**
- * Core utility for exporting arrays of objects to a CSV file on the client side.
- */
+import { escapeCsvCell } from "./csv-utils";
+
+export { escapeCsvCell, formatCsv } from "./csv-utils";
 
 export type CsvColumn<T = any> = {
   header: string;
   accessorKey?: string;
   accessorFn?: (row: T) => string | number | boolean | null | undefined;
 };
-
-function escapeCsvCell(cell: unknown): string {
-  if (cell === null || cell === undefined) return "";
-  let str = String(cell);
-  // Protect against CSV formula injection (OWASP recommendation)
-  if (/^[=+\-@\t\r]/.test(str)) {
-    str = `'${str}`;
-  }
-  // If it contains quotes, commas, or newlines, enclose in quotes and double the internal quotes.
-  if (str.includes('"') || str.includes(',') || str.includes('\n') || str.includes('\r')) {
-    return `"${str.replace(/"/g, '""')}"`;
-  }
-  return str;
-}
 
 export function exportCsv<T extends Record<string, any>>(filename: string, columns: CsvColumn<T>[], data: T[]) {
   const headers = columns.map((col) => escapeCsvCell(col.header)).join(",");

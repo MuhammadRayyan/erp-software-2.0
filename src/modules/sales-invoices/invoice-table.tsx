@@ -27,6 +27,7 @@ import { BatchActionBar } from "@/components/batch-action-bar";
 import { batchPostInvoicesAction, batchVoidInvoicesAction, batchDeleteInvoicesAction } from "./actions";
 import { BatchEmailModal } from "./batch-email-modal";
 import { BatchConfirmModal } from "@/components/documents/batch-confirm-modal";
+import { exportCsv } from "@/lib/export-csv";
 
 export type InvoiceRow = {
   id: string;
@@ -481,26 +482,21 @@ export function InvoiceTable({
             onClearSelection={() => setRowSelection({})}
             onSelectAll={() => table.toggleAllRowsSelected(true)}
             onExportSelected={() => {
-              const headers = ["Invoice Number", "Customer", "Date", "Due Date", "Currency", "Total", "Balance", "Document Status", "Payment Status"];
-              const lines = selectedInvoices.map((r: any) => [
-                `"${r.invoiceNumber}"`,
-                `"${(r.customerName || "").replace(/"/g, '""')}"`,
-                r.invoiceDate,
-                r.dueDate,
-                r.currencyCode,
-                (r.totalMinor / 100).toFixed(2),
-                (r.balanceMinor / 100).toFixed(2),
-                r.documentStatus,
-                r.paymentStatus || "",
-              ]);
-              const csvContent = [headers.join(","), ...lines.map((l: any) => l.join(","))].join("\n");
-              const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
-              const url = URL.createObjectURL(blob);
-              const a = document.createElement("a");
-              a.href = url;
-              a.download = `sales-invoices-selected-${new Date().toISOString().slice(0, 10)}.csv`;
-              a.click();
-              URL.revokeObjectURL(url);
+              exportCsv(
+                `sales-invoices-selected-${new Date().toISOString().slice(0, 10)}.csv`,
+                [
+                  { header: "Invoice Number", accessorKey: "invoiceNumber" },
+                  { header: "Customer", accessorKey: "customerName" },
+                  { header: "Date", accessorKey: "invoiceDate" },
+                  { header: "Due Date", accessorKey: "dueDate" },
+                  { header: "Currency", accessorKey: "currencyCode" },
+                  { header: "Total", accessorFn: (r: any) => (r.totalMinor / 100).toFixed(2) },
+                  { header: "Balance", accessorFn: (r: any) => (r.balanceMinor / 100).toFixed(2) },
+                  { header: "Document Status", accessorKey: "documentStatus" },
+                  { header: "Payment Status", accessorKey: "paymentStatus" },
+                ],
+                selectedInvoices
+              );
             }}
             onPrintSelected={() => window.print()}
             onDeleteSelected={selectedDrafts.length > 0 && selectedDrafts.length === selectedCount ? () => setConfirmModal({ type: "delete", open: true }) : undefined}

@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { allocateNumber } from "@/modules/accounting/services/numbering-service";
 import { reverseTransaction } from "@/modules/accounting/services/posting-service";
+import { assertDateNotLocked } from "@/modules/accounting/services/financial-lock-service";
 import { parseCurrencyAmountToMinor, convertToBase } from "@/modules/currency/conversion";
 import { calculateSettlementAllocation } from "@/modules/currency/settlement";
 import { resolveRateSnapshot } from "@/modules/currency/validation";
@@ -37,6 +38,8 @@ export function createSettlement(
   const execute = () => {
     const id = randomUUID();
     const now = new Date().toISOString();
+
+    assertDateNotLocked(sqlite, data.date, config.partyType === "customer" ? "Receipt" : "Payment");
 
     const partyId = data.customerId || data.supplierId;
 
@@ -239,6 +242,7 @@ export function applySettlementCredit(
     `).get(data.paymentId) as any;
     if (!payment) throw new Error("Payment record not found.");
     if (payment.document_status !== "posted") throw new Error("Only posted payments can be allocated.");
+    assertDateNotLocked(sqlite, payment.date, "Credit allocation");
 
     // Calculate current allocated total for this payment
     const currentAllocated = sqlite.prepare(`
@@ -323,7 +327,7 @@ export function voidSettlement(
     const now = new Date().toISOString();
     
     const payment = sqlite.prepare(`
-      SELECT ${config.paymentNumberColumn} AS payment_number, document_status
+      SELECT ${config.paymentNumberColumn} AS payment_number, document_status, date
       FROM ${config.paymentTable}
       WHERE id = ?
     `).get(paymentId) as any;
@@ -331,6 +335,8 @@ export function voidSettlement(
     if (payment.document_status !== "posted") {
       throw new Error("Only a posted payment can be reversed.");
     }
+    assertDateNotLocked(sqlite, payment.date, config.partyType === "customer" ? "Receipt void" : "Payment void");
+    assertDateNotLocked(sqlite, now.slice(0, 10), config.partyType === "customer" ? "Receipt void" : "Payment void");
 
     const statementLine = sqlite.prepare(`
       SELECT id FROM bank_statement_lines

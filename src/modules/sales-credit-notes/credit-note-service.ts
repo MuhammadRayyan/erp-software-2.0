@@ -9,6 +9,7 @@ import { reverseTransaction } from "@/modules/accounting/services/posting-servic
 import { effectiveProjectId, validateProjectReferences } from "@/modules/projects/project-validation";
 import { replaceTaxEntries, reverseTaxEntries } from "@/modules/tax/tax-entry-service";
 import { assertVatDateUnlocked, assertVatSourceUnlocked } from "@/modules/tax/tax-lock-service";
+import { assertDateNotLocked } from "@/modules/accounting/services/financial-lock-service";
 import { creditNoteInputSchema, type CreditNoteInput } from "./credit-note-input";
 import { convertDocumentLinesToBase, minorToCurrencyInput,  proportionalCarryingRelease } from "@/modules/currency/conversion";
 import { storedRateSnapshot } from "@/modules/currency/validation";
@@ -147,6 +148,12 @@ export function getCreditNote(businessId: string, userId: string, noteId: string
 export function saveCreditNote(businessId: string, userId: string, input: CreditNoteInput, intent: CreditNoteIntent, noteId?: string) {
   const data = creditNoteInputSchema.parse(input);
   const context = getBusinessDb(businessId, userId);
+  if (noteId) {
+    const current = context.db.select().from(salesCreditNotes).where(eq(salesCreditNotes.id, noteId)).get();
+    if (current?.documentStatus === "posted") {
+      assertDateNotLocked(context.sqlite, current.date, "Sales credit note");
+    }
+  }
   const invoice = context.db.select().from(salesInvoices).where(eq(salesInvoices.id, data.sourceInvoiceId)).get();
   if (!invoice || invoice.documentStatus !== "posted" || invoice.customerId !== data.customerId) throw new Error("Choose a posted invoice belonging to this customer.");
   if (input.currencyCode && input.currencyCode.toUpperCase() !== invoice.currencyCode) {
@@ -174,7 +181,10 @@ export function saveCreditNote(businessId: string, userId: string, input: Credit
       const current = context.db.select().from(salesCreditNotes).where(eq(salesCreditNotes.id, noteId)).get();
       if (!current) throw new Error("Credit note not found.");
       if (current.documentStatus === "void") throw new Error("A void credit note cannot be edited.");
-      if (current.documentStatus === "posted") assertVatSourceUnlocked(context.sqlite, "sales_credit_note", noteId, current.taxDate);
+      if (current.documentStatus === "posted") {
+        assertDateNotLocked(context.sqlite, current.date, "Sales credit note");
+        assertVatSourceUnlocked(context.sqlite, "sales_credit_note", noteId, current.taxDate);
+      }
       if (current.sourceInvoiceId !== data.sourceInvoiceId && current.documentStatus === "posted") throw new Error("Cannot change the source invoice after posting.");
       number = current.creditNoteNumber; shouldPost = current.documentStatus === "posted" || intent === "post"; replace = current.documentStatus === "posted";
       context.sqlite.prepare(`UPDATE sales_credit_notes SET customer_id = ?, project_id = ?, source_invoice_id = ?, date = ?, tax_date = ?, supply_emirate = ?, reference = ?, reason = ?, subtotal_minor = ?, tax_minor = ?, total_minor = ?, currency_code = ?, exchange_rate_to_base = ?, exchange_rate_date = ?, exchange_rate_source = ?, base_subtotal_minor = ?, base_tax_minor = ?, base_total_minor = ?, updated_at = ? WHERE id = ?`).run(data.customerId, data.projectId || null, data.sourceInvoiceId, data.date, taxDate, data.supplyEmirate || null, data.reference || null, data.reason || null, amounts.subtotalMinor, amounts.taxMinor, amounts.totalMinor, rate.currencyCode, rate.exchangeRateToBase, rate.exchangeRateDate, rate.exchangeRateSource, base.baseSubtotalMinor, base.baseTaxMinor, baseCarryingAmountReleased, now, noteId);
@@ -196,7 +206,7 @@ export function saveCreditNote(businessId: string, userId: string, input: Credit
     }
     insertLines(context.db, id, lines);
     if (shouldPost) {
-
+      assertDateNotLocked(context.sqlite, data.date, "Sales credit note");
       assertVatDateUnlocked(context.sqlite, taxDate, lines.map((line) => line.taxCodeId));
       const postingLines = lines.map((line) => ({ ...line, projectId: effectiveProjectId(line.projectId, data.projectId) }));
       postCreditNote(context.sqlite, { id, creditNoteNumber: number, customerId: data.customerId, date: data.date, totalMinor: amounts.totalMinor, rate, baseCarryingAmountReleased }, postingLines, replace);
@@ -229,5 +239,12 @@ export function voidCreditNote(businessId: string, userId: string, noteId: strin
   const context = getBusinessDb(businessId, userId); const note = context.db.select().from(salesCreditNotes).where(eq(salesCreditNotes.id, noteId)).get();
   if (!note) throw new Error("Credit note not found."); if (note.documentStatus !== "posted") throw new Error("Only posted credit notes can be voided.");
   const now = new Date().toISOString();
-  context.sqlite.transaction(() => { assertVatSourceUnlocked(context.sqlite, "sales_credit_note", noteId, note.taxDate); reverseTransaction(context.sqlite, { originalSourceType: "sales_credit_note", originalSourceId: noteId, reversalSourceType: "sales_credit_note_void", reversalSourceId: noteId, date: now.slice(0, 10), description: `Void Sales Credit Note ${note.creditNoteNumber}` }); reverseTaxEntries(context.sqlite, { originalSourceType: "sales_credit_note", sourceId: noteId, reversalSourceType: "sales_credit_note_void", taxDate: note.taxDate }); context.sqlite.prepare("UPDATE sales_credit_notes SET document_status = 'void', voided_at = ?, updated_at = ? WHERE id = ?").run(now, now, noteId); }).immediate();
+  context.sqlite.transaction(() => {
+    assertDateNotLocked(context.sqlite, note.date, "Sales credit note void");
+    assertDateNotLocked(context.sqlite, now.slice(0, 10), "Sales credit note void");
+    assertVatSourceUnlocked(context.sqlite, "sales_credit_note", noteId, note.taxDate);
+    reverseTransaction(context.sqlite, { originalSourceType: "sales_credit_note", originalSourceId: noteId, reversalSourceType: "sales_credit_note_void", reversalSourceId: noteId, date: now.slice(0, 10), description: `Void Sales Credit Note ${note.creditNoteNumber}` });
+    reverseTaxEntries(context.sqlite, { originalSourceType: "sales_credit_note", sourceId: noteId, reversalSourceType: "sales_credit_note_void", taxDate: note.taxDate });
+    context.sqlite.prepare("UPDATE sales_credit_notes SET document_status = 'void', voided_at = ?, updated_at = ? WHERE id = ?").run(now, now, noteId);
+  }).immediate();
 }

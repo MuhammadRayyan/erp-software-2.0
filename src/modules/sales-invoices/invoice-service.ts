@@ -13,6 +13,7 @@ import { reverseTransaction } from "@/modules/accounting/services/posting-servic
 import { effectiveProjectId, validateProjectReferences } from "@/modules/projects/project-validation";
 import { replaceTaxEntries, reverseTaxEntries } from "@/modules/tax/tax-entry-service";
 import { assertVatDateUnlocked, assertVatSourceUnlocked } from "@/modules/tax/tax-lock-service";
+import { assertDateNotLocked } from "@/modules/accounting/services/financial-lock-service";
 import { saveCustomFieldValuesInTransaction } from "@/modules/custom-fields/custom-field-service";
 import { invoiceInputSchema, type InvoiceInput } from "./invoice-input";
 import { convertDocumentLinesToBase, minorToCurrencyInput, parseCurrencyAmountToMinor } from "@/modules/currency/conversion";
@@ -545,6 +546,7 @@ export function createInvoice(
       saveCustomFieldValuesInTransaction(context.sqlite, "sales_invoice", id, customFieldValues);
     }
     if (intent === "post") {
+      assertDateNotLocked(context.sqlite, data.invoiceDate, "Sales invoice");
       postSalesInvoice(
         context.sqlite,
         {
@@ -625,6 +627,9 @@ export function updateInvoice(
   const current = context.db.select().from(salesInvoices).where(eq(salesInvoices.id, invoiceId)).get();
   if (!current) throw new Error("Invoice not found.");
   if (current.documentStatus === "void") throw new Error("A void invoice cannot be edited.");
+  if (current.documentStatus === "posted") {
+    assertDateNotLocked(context.sqlite, current.invoiceDate, "Sales invoice");
+  }
   if (context.sqlite.prepare("SELECT 1 FROM delivery_notes WHERE sales_invoice_id = ? LIMIT 1").get(invoiceId)) throw new Error("A Sales Invoice cannot be edited after a Delivery Note has been created from it.");
   const customer = context.db.select().from(customers).where(eq(customers.id, data.customerId)).get();
   if (!customer) throw new Error("Customer not found.");
@@ -660,9 +665,13 @@ export function updateInvoice(
 
   context.sqlite.transaction(() => {
     if (current.documentStatus === "posted") {
+      assertDateNotLocked(context.sqlite, current.invoiceDate, "Sales invoice");
       assertVatSourceUnlocked(context.sqlite, "sales_invoice", invoiceId, current.taxDate);
     }
-    if (shouldPost) assertVatDateUnlocked(context.sqlite, taxDate, lines.map((line) => line.taxCodeId));
+    if (shouldPost) {
+      assertDateNotLocked(context.sqlite, data.invoiceDate, "Sales invoice");
+      assertVatDateUnlocked(context.sqlite, taxDate, lines.map((line) => line.taxCodeId));
+    }
     const effectiveSalesOrderId = data.salesOrderId || current.salesOrderId || null;
     const effectiveQuoteId = data.quoteId || current.quoteId || null;
     context.sqlite
@@ -794,6 +803,8 @@ export function voidInvoice(businessId: string, userId: string, invoiceId: strin
   }
   const now = new Date().toISOString();
   context.sqlite.transaction(() => {
+    assertDateNotLocked(context.sqlite, invoice.invoiceDate, "Sales invoice void");
+    assertDateNotLocked(context.sqlite, now.slice(0, 10), "Sales invoice void");
     assertVatSourceUnlocked(context.sqlite, "sales_invoice", invoiceId, invoice.taxDate);
     reverseTransaction(context.sqlite, {
       originalSourceType: "sales_invoice",

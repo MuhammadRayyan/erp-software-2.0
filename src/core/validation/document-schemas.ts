@@ -36,4 +36,14 @@ export const itemIdField = z
 export const amountsIncludeTaxSchema = z.boolean().default(false);
 
 export const discountTypeSchema = z.enum(["none", "percentage", "fixed"]).default("none");
-export const discountValueSchema = z.string().trim().default("0");
+export const discountValueSchema = z
+  .union([
+    z.literal(""),
+    z
+      .string()
+      .trim()
+      .regex(/^\d{1,10}(?:\.\d{1,4})?$/, "Discount must be a positive number with up to 4 decimal places"),
+  ])
+  .transform((val) => (val === "" ? "0" : val))
+  .default("0");
+

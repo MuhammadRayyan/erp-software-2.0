@@ -18,6 +18,7 @@ import {
   EDIT_INVENTORY_CHRONOLOGY_ERROR,
   VOID_INVENTORY_CHRONOLOGY_ERROR,
 } from "./inventory-chronology";
+import { assertDateNotLocked } from "@/modules/accounting/services/financial-lock-service";
 import type {
   InventoryDocumentIntent,
   InventoryDocumentStatus,
@@ -241,12 +242,13 @@ export function saveGoodsReceipt(
 
     if (receiptId) {
       const current = context.sqlite.prepare(`
-        SELECT receipt_number, document_status
+        SELECT receipt_number, document_status, date
         FROM goods_receipts
         WHERE id = ?
       `).get(receiptId) as {
         receipt_number: string;
         document_status: InventoryDocumentStatus;
+        date: string;
       } | undefined;
       if (!current) throw new Error("Goods Receipt not found.");
       if (current.document_status === "void") {
@@ -257,6 +259,7 @@ export function saveGoodsReceipt(
       wasPosted = current.document_status === "posted";
       shouldPost = wasPosted || intent === "post";
       if (wasPosted) {
+        assertDateNotLocked(context.sqlite, current.date, "Goods receipt");
         assertInventorySourceIsLatest(
           context.sqlite,
           "goods_receipt",
@@ -277,6 +280,7 @@ export function saveGoodsReceipt(
     }
 
     if (shouldPost) {
+      assertDateNotLocked(context.sqlite, data.date, "Goods receipt");
       assertInventoryPostingOrder(
         context.sqlite,
         data.date,
@@ -390,6 +394,8 @@ export function voidGoodsReceipt(businessId: string, userId: string, receiptId: 
     if (receipt.document_status !== "posted") {
       throw new Error("Only a posted Goods Receipt can be voided.");
     }
+    assertDateNotLocked(context.sqlite, receipt.date, "Goods receipt void");
+    assertDateNotLocked(context.sqlite, now.slice(0, 10), "Goods receipt void");
     assertInventorySourceIsLatest(
       context.sqlite,
       "goods_receipt",

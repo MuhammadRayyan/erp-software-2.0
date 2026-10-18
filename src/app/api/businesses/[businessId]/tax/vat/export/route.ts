@@ -3,14 +3,9 @@ import { requireApiAuth } from "@/core/auth/api-auth";
 import { getVatTransactionDetail, getVatWorkingPaper } from "@/modules/tax/vat-report-service";
 import { emirateLabels, vatReportBuckets, type Emirate, type VatReportBucket } from "@/modules/tax/uae-vat-config";
 
-export const runtime = "nodejs";
+import { formatCsv } from "@/lib/csv-utils";
 
-function csv(rows: (string | number | null | undefined)[][]) {
-  return rows.map((row) => row.map((value) => {
-    const text = String(value ?? "");
-    return /[",\r\n]/.test(text) ? `"${text.replaceAll('"', '""')}"` : text;
-  }).join(",")).join("\r\n");
-}
+export const runtime = "nodejs";
 
 export async function GET(request: Request, { params }: { params: Promise<{ businessId: string }> }) {
   const { businessId } = await params;
@@ -50,12 +45,12 @@ export async function GET(request: Request, { params }: { params: Promise<{ busi
       [],
       ["Preparation working paper only", "No FTA or EmaraTax submission is performed or claimed."],
     ];
-    body = csv(rows);
+    body = formatCsv(rows);
     filename = `vat-working-paper-${report.period.period_reference.replace(/[^a-z0-9]+/gi, "-").toLowerCase()}.csv`;
   } else {
     const filters = Object.fromEntries(url.searchParams.entries());
     const rows = getVatTransactionDetail(businessId, session.user.id, filters);
-    body = csv([
+    body = formatCsv([
       ["Tax Date", "Document", "Source Type", "Party", "Tax Code", "Category", "Direction", "Emirate", "Net Minor", "VAT Minor", "Output VAT Minor", "Recoverable VAT Minor"],
       ...rows.map((row) => [row.tax_date, row.source_number, row.source_type, row.party_name, row.tax_code_name, row.vat_category, row.direction, row.supply_emirate ? emirateLabels[row.supply_emirate] : "", row.net_amount_minor, row.vat_amount_minor, row.output_vat_minor, row.recoverable_vat_minor]),
     ]);

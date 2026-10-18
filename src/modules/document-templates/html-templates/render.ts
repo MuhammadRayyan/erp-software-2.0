@@ -25,6 +25,8 @@ export async function renderHtmlTemplate(
 
   try {
     const page = await browser.newPage();
+    // Disable client-side JavaScript inside headless Chromium to block XSS and malicious scripts entirely
+    await page.setJavaScriptEnabled(false);
     // The template renders fully offline: block any external network request
     // (images, fonts, scripts) so template HTML cannot exfiltrate data or
     // make the server call arbitrary URLs.

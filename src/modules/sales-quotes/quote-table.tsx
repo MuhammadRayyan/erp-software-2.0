@@ -21,6 +21,7 @@ import { DensityToggle } from "@/components/density-toggle";
 import { useTableDensity } from "@/components/use-table-density";
 import { TableTotalsBar, renderMultiCurrencyString } from "@/components/table-totals-bar";
 import { BatchActionBar } from "@/components/batch-action-bar";
+import { exportCsv } from "@/lib/export-csv";
 
 type Row = {
   id: string;
@@ -378,24 +379,19 @@ export function SalesQuoteTable({
         onSelectAll={() => table.toggleAllRowsSelected(true)}
         onExportSelected={() => {
           const selected = table.getSelectedRowModel().rows.map((r: any) => r.original);
-          const headers = ["Quote Number", "Customer", "Date", "Expected Date", "Currency", "Total", "Status"];
-          const lines = selected.map((r: any) => [
-            `"${r.quote_number}"`,
-            `"${(r.customer_name || "").replace(/"/g, '""')}"`,
-            r.date,
-            r.expected_date || "",
-            r.currency_code,
-            (r.total_minor / 100).toFixed(2),
-            r.documentStatus,
-          ]);
-          const csvContent = [headers.join(","), ...lines.map((l: any) => l.join(","))].join("\n");
-          const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
-          const url = URL.createObjectURL(blob);
-          const a = document.createElement("a");
-          a.href = url;
-          a.download = `sales-quotes-selected-${new Date().toISOString().slice(0, 10)}.csv`;
-          a.click();
-          URL.revokeObjectURL(url);
+          exportCsv(
+            `sales-quotes-selected-${new Date().toISOString().slice(0, 10)}.csv`,
+            [
+              { header: "Quote Number", accessorKey: "quote_number" },
+              { header: "Customer", accessorKey: "customer_name" },
+              { header: "Date", accessorKey: "date" },
+              { header: "Expected Date", accessorKey: "expected_date" },
+              { header: "Currency", accessorKey: "currency_code" },
+              { header: "Total", accessorFn: (r: any) => (r.total_minor / 100).toFixed(2) },
+              { header: "Status", accessorKey: "documentStatus" },
+            ],
+            selected
+          );
         }}
         onPrintSelected={() => window.print()}
       />
