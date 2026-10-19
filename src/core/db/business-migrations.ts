@@ -2680,6 +2680,124 @@ export const businessMigrations = [
         `);
       },
     },
+    {
+      version: 34,
+      name: "payroll_items_and_lines",
+      up: (sqlite) => {
+        // 1. Extend employees with optional compensation & departmental fields
+        const empCols = (sqlite.prepare("PRAGMA table_info(employees)").all() as { name: string }[]).map((c) => c.name);
+        if (!empCols.includes("joining_date")) {
+          sqlite.exec(`ALTER TABLE employees ADD COLUMN joining_date TEXT;`);
+        }
+        if (!empCols.includes("department")) {
+          sqlite.exec(`ALTER TABLE employees ADD COLUMN department TEXT;`);
+        }
+        if (!empCols.includes("basic_salary_minor")) {
+          sqlite.exec(`ALTER TABLE employees ADD COLUMN basic_salary_minor INTEGER;`);
+        }
+        if (!empCols.includes("housing_allowance_minor")) {
+          sqlite.exec(`ALTER TABLE employees ADD COLUMN housing_allowance_minor INTEGER;`);
+        }
+        if (!empCols.includes("transport_allowance_minor")) {
+          sqlite.exec(`ALTER TABLE employees ADD COLUMN transport_allowance_minor INTEGER;`);
+        }
+        if (!empCols.includes("other_allowances_minor")) {
+          sqlite.exec(`ALTER TABLE employees ADD COLUMN other_allowances_minor INTEGER;`);
+        }
+
+        // 2. Extend payslips with journal_entry_id
+        const payslipCols = (sqlite.prepare("PRAGMA table_info(payslips)").all() as { name: string }[]).map((c) => c.name);
+        if (!payslipCols.includes("journal_entry_id")) {
+          sqlite.exec(`ALTER TABLE payslips ADD COLUMN journal_entry_id TEXT REFERENCES journal_entries(id);`);
+          sqlite.exec(`CREATE INDEX IF NOT EXISTS "payslip_journal_entry_idx" ON "payslips"("journal_entry_id");`);
+        }
+
+        // 3. Extend business_accounting_settings with payslip numbering sequences
+        const acctCols = (sqlite.prepare("PRAGMA table_info(business_accounting_settings)").all() as { name: string }[]).map((c) => c.name);
+        if (!acctCols.includes("payslip_prefix")) {
+          sqlite.exec(`ALTER TABLE business_accounting_settings ADD COLUMN payslip_prefix TEXT NOT NULL DEFAULT 'PS-';`);
+        }
+        if (!acctCols.includes("payslip_next_number")) {
+          sqlite.exec(`ALTER TABLE business_accounting_settings ADD COLUMN payslip_next_number INTEGER NOT NULL DEFAULT 1;`);
+        }
+        if (!acctCols.includes("payslip_padding")) {
+          sqlite.exec(`ALTER TABLE business_accounting_settings ADD COLUMN payslip_padding INTEGER NOT NULL DEFAULT 4;`);
+        }
+
+        // 4. Create payslip_items and payslip_lines tables
+        sqlite.exec(`
+          CREATE TABLE IF NOT EXISTS "payslip_items" (
+            "id" TEXT PRIMARY KEY NOT NULL,
+            "name" TEXT NOT NULL,
+            "type" TEXT NOT NULL CHECK ("type" IN ('earnings', 'deduction')),
+            "account_id" TEXT NOT NULL REFERENCES "accounts"("id"),
+            "description" TEXT,
+            "is_active" INTEGER NOT NULL DEFAULT 1,
+            "position" INTEGER NOT NULL DEFAULT 0,
+            "created_at" TEXT NOT NULL,
+            "updated_at" TEXT NOT NULL
+          );
+          CREATE INDEX IF NOT EXISTS "payslip_items_type_idx" ON "payslip_items"("type", "is_active");
+
+          CREATE TABLE IF NOT EXISTS "payslip_lines" (
+            "id" TEXT PRIMARY KEY NOT NULL,
+            "payslip_id" TEXT NOT NULL REFERENCES "payslips"("id") ON DELETE CASCADE,
+            "item_id" TEXT REFERENCES "payslip_items"("id"),
+            "type" TEXT NOT NULL CHECK ("type" IN ('earnings', 'deduction')),
+            "description" TEXT NOT NULL,
+            "account_id" TEXT NOT NULL REFERENCES "accounts"("id"),
+            "amount_minor" INTEGER NOT NULL,
+            "position" INTEGER NOT NULL DEFAULT 0
+          );
+          CREATE INDEX IF NOT EXISTS "payslip_lines_payslip_idx" ON "payslip_lines"("payslip_id");
+          CREATE INDEX IF NOT EXISTS "payslip_lines_account_idx" ON "payslip_lines"("account_id");
+        `);
+
+        // 5. Seed standard default accounts (strictly without 'code' column)
+        const now = new Date().toISOString();
+        sqlite.prepare(`
+          INSERT OR IGNORE INTO accounts (id, name, type, subtype, is_system, is_active, created_at, updated_at)
+          VALUES (?, ?, ?, ?, 1, 1, ?, ?)
+        `).run("acct-salaries-expense-6100", "6100 - Salaries & Wages Expense", "expense", "operating_expense", now, now);
+
+        sqlite.prepare(`
+          INSERT OR IGNORE INTO accounts (id, name, type, subtype, is_system, is_active, created_at, updated_at)
+          VALUES (?, ?, ?, ?, 1, 1, ?, ?)
+        `).run("acct-payroll-payable-2200", "2200 - Payroll Payable", "liability", "current_liability", now, now);
+
+        sqlite.prepare(`
+          INSERT OR IGNORE INTO accounts (id, name, type, subtype, is_system, is_active, created_at, updated_at)
+          VALUES (?, ?, ?, ?, 1, 1, ?, ?)
+        `).run("acct-employee-advances-1220", "1220 - Employee Advances & Loans", "asset", "current_asset", now, now);
+
+        sqlite.prepare(`
+          INSERT OR IGNORE INTO accounts (id, name, type, subtype, is_system, is_active, created_at, updated_at)
+          VALUES (?, ?, ?, ?, 1, 1, ?, ?)
+        `).run("acct-payroll-deductions-4200", "4200 - Payroll Deductions Recovery", "income", "other_income", now, now);
+
+        // 6. Seed default payslip_items
+        const defaultItems = [
+          { id: "item-basic-salary", name: "Basic Salary", type: "earnings", accountId: "acct-salaries-expense-6100", description: "Standard monthly basic salary", pos: 1 },
+          { id: "item-housing-allowance", name: "Housing Allowance", type: "earnings", accountId: "acct-salaries-expense-6100", description: "Standard housing allowance", pos: 2 },
+          { id: "item-transport-allowance", name: "Transport Allowance", type: "earnings", accountId: "acct-salaries-expense-6100", description: "Standard transport allowance", pos: 3 },
+          { id: "item-overtime-pay", name: "Overtime Pay", type: "earnings", accountId: "acct-salaries-expense-6100", description: "Additional hours overtime compensation", pos: 4 },
+          { id: "item-bonus-commission", name: "Bonus / Commission", type: "earnings", accountId: "acct-salaries-expense-6100", description: "Performance bonus or sales commission", pos: 5 },
+          { id: "item-eosb-gratuity", name: "End of Service Gratuity", type: "earnings", accountId: "acct-salaries-expense-6100", description: "UAE Labor Law Article 51 severance gratuity", pos: 6 },
+          { id: "item-advance-deduction", name: "Advance / Loan Deduction", type: "deduction", accountId: "acct-employee-advances-1220", description: "Recovery of employee salary advance or loan", pos: 7 },
+          { id: "item-unpaid-leave", name: "Unpaid Leave / Absence", type: "deduction", accountId: "acct-salaries-expense-6100", description: "Deduction for unpaid leave or unauthorized absence", pos: 8 },
+          { id: "item-other-deduction", name: "Other Deduction", type: "deduction", accountId: "acct-payroll-deductions-4200", description: "Miscellaneous payroll deduction", pos: 9 },
+        ];
+
+        const insertItem = sqlite.prepare(`
+          INSERT OR IGNORE INTO payslip_items (id, name, type, account_id, description, is_active, position, created_at, updated_at)
+          VALUES (?, ?, ?, ?, ?, 1, ?, ?, ?)
+        `);
+
+        for (const it of defaultItems) {
+          insertItem.run(it.id, it.name, it.type, it.accountId, it.description, it.pos, now, now);
+        }
+      },
+    },
   ] satisfies readonly SqliteMigration[];
 
 

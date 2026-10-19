@@ -6,6 +6,7 @@ export const moduleKeys = [
   "inventory",
   "accounting",
   "reports",
+  "payroll",
   "settings",
 ] as const;
 export type ModuleKey = (typeof moduleKeys)[number];
@@ -26,6 +27,7 @@ export function moduleForBusinessPath(pathname: string): { businessId: string; m
     if (subsection === "activity-log") return null;
     return { businessId, module: "settings" };
   }
+  if (section === "payroll") return { businessId, module: "payroll" };
   if (section === "banking" || section === "projects" || section === "inventory" || section === "accounting" || section === "reports") {
     return { businessId, module: section };
   }

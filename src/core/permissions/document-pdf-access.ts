@@ -17,6 +17,7 @@ const documentModules = {
   "purchase-payment": "purchases",
   "supplier-payment": "purchases",
   "payment": "purchases",
+  "payslip": "payroll",
 } as const satisfies Record<string, ModuleKey>;
 
 export type PdfDocumentType = keyof typeof documentModules;

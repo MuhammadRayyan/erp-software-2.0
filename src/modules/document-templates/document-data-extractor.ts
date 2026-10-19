@@ -12,6 +12,7 @@ import { getDeliveryNote } from "@/modules/inventory/delivery-note-service";
 import { getDebitNote } from "@/modules/debit-notes/debit-note-service";
 import { getReceipt } from "@/modules/receipts/receipt-service";
 import { getSupplierPayment } from "@/modules/supplier-payments/supplier-payment-service";
+import { getPayslipWithLines } from "@/modules/payroll/services/payroll-service";
 import { averageUnitCostMicros, formatUnitCostMicros } from "@/modules/inventory/inventory-valuation";
 import { getCustomFieldPairsForEntity } from "@/modules/custom-fields/custom-field-service";
 import { getBusinessProfile } from "@/modules/business-profile/business-profile-service";
@@ -74,7 +75,7 @@ export function resolveDocumentVariant(
     partyLabel: settings.customPartyLabel || data.customerLabel || "PARTY",
     showDueDate,
     showBuyerTrn,
-    totalLabel: settings.customTotalLabel || "Total",
+    totalLabel: settings.customTotalLabel || (documentType === "payslip" ? "Net Pay" : "Total"),
     showTax,
   };
 }
@@ -581,6 +582,39 @@ export function buildDocumentTemplateData(
           amount: formatMoney(totalMinor, currency),
         },
       ];
+    }
+  } else if (documentType === "payslip") {
+    const record = getPayslipWithLines(businessId, userId, documentId);
+    if (!record) throw new Error("Payslip not found");
+    currency = baseCurrency;
+    title = "PAYSLIP";
+    number = record.payslip.payslipNumber;
+    status = record.payslip.documentStatus;
+    partyLabel = "EMPLOYEE";
+    partyName = record.employee.name;
+    partyHref = `/b/${businessId}/payroll/employees`;
+    partyAddress = [record.employee.designation, record.employee.department, record.employee.address].filter(Boolean).join(" • ") || undefined;
+    partyEmail = record.employee.email || undefined;
+    partyPhone = record.employee.phone || undefined;
+    docNotes = record.payslip.notes || undefined;
+    dateLabel = formatDate(record.payslip.date);
+    dueLabel = record.payslip.periodDescription ? `Period: ${record.payslip.periodDescription}` : undefined;
+    subtotalMinor = record.payslip.grossAmountMinor;
+    taxMinor = 0;
+    totalMinor = record.payslip.netAmountMinor;
+    rows = record.lines.map((l) => ({
+      description: `[${l.type === "earnings" ? "EARNINGS" : "DEDUCTION"}] ${l.description}`,
+      quantity: "1",
+      unitPrice: formatMoney(l.amountMinor, currency),
+      amount: l.type === "deduction" ? `-${formatMoney(l.amountMinor, currency)}` : formatMoney(l.amountMinor, currency),
+    }));
+    if (rows.length === 0 && record.payslip.grossAmountMinor > 0) {
+      rows.push({
+        description: `[EARNINGS] Wages / Salary`,
+        quantity: "1",
+        unitPrice: formatMoney(record.payslip.grossAmountMinor, currency),
+        amount: formatMoney(record.payslip.grossAmountMinor, currency),
+      });
     }
   } else {
     throw new Error(`Unsupported document type: ${documentType}`);

@@ -113,6 +113,8 @@ export function deleteAccount(businessId: string, userId: string, accountId: str
             OR accounts_payable_account_id = ? OR input_vat_account_id = ?
             OR default_purchase_expense_account_id = ? OR default_inventory_asset_account_id = ?
             OR default_cost_of_sales_account_id = ? OR inventory_adjustment_account_id = ? LIMIT 1`,
+      "SELECT 1 FROM payslip_items WHERE account_id = ? LIMIT 1",
+      "SELECT 1 FROM payslip_lines WHERE account_id = ? LIMIT 1",
     ];
     const used = usageQueries.some((query) => {
       const values = Array.from({ length: query.match(/\?/g)?.length ?? 0 }, () => accountId);

@@ -223,6 +223,9 @@ export const accountingSettings = sqliteTable("business_accounting_settings", {
   journalPrefix: text("journal_prefix").notNull(),
   journalNextNumber: integer("journal_next_number").notNull(),
   journalPadding: integer("journal_padding").notNull().default(4),
+  payslipPrefix: text("payslip_prefix").notNull().default("PS-"),
+  payslipNextNumber: integer("payslip_next_number").notNull().default(1),
+  payslipPadding: integer("payslip_padding").notNull().default(4),
   financialLockDate: text("financial_lock_date"),
   openingBalancesDate: text("opening_balances_date"),
   createdAt: text("created_at").notNull(),
@@ -2094,6 +2097,12 @@ export const employees = sqliteTable(
     phone: text("phone"),
     address: text("address"),
     designation: text("designation"),
+    department: text("department"),
+    joiningDate: text("joining_date"),
+    basicSalaryMinor: integer("basic_salary_minor"),
+    housingAllowanceMinor: integer("housing_allowance_minor"),
+    transportAllowanceMinor: integer("transport_allowance_minor"),
+    otherAllowancesMinor: integer("other_allowances_minor"),
     isActive: integer("is_active", { mode: "boolean" }).notNull().default(true),
     createdAt: text("created_at").notNull(),
     updatedAt: text("updated_at").notNull(),
@@ -2120,6 +2129,7 @@ export const payslips = sqliteTable(
       .notNull()
       .default("posted"),
     notes: text("notes"),
+    journalEntryId: text("journal_entry_id").references(() => journalEntries.id),
     createdBy: text("created_by").notNull(),
     createdAt: text("created_at").notNull(),
     postedAt: text("posted_at"),
@@ -2129,6 +2139,50 @@ export const payslips = sqliteTable(
     uniqueIndex("payslip_number_idx").on(table.payslipNumber),
     index("payslip_employee_idx").on(table.employeeId),
     index("payslip_date_idx").on(table.date),
+    index("payslip_journal_entry_idx").on(table.journalEntryId),
   ],
 );
+
+export const payslipItems = sqliteTable(
+  "payslip_items",
+  {
+    id: text("id").primaryKey(),
+    name: text("name").notNull(),
+    type: text("type", { enum: ["earnings", "deduction"] }).notNull(),
+    accountId: text("account_id")
+      .notNull()
+      .references(() => accounts.id),
+    description: text("description"),
+    isActive: integer("is_active", { mode: "boolean" }).notNull().default(true),
+    position: integer("position").notNull().default(0),
+    createdAt: text("created_at").notNull(),
+    updatedAt: text("updated_at").notNull(),
+  },
+  (table) => [
+    index("payslip_items_type_idx").on(table.type, table.isActive),
+  ],
+);
+
+export const payslipLines = sqliteTable(
+  "payslip_lines",
+  {
+    id: text("id").primaryKey(),
+    payslipId: text("payslip_id")
+      .notNull()
+      .references(() => payslips.id, { onDelete: "cascade" }),
+    itemId: text("item_id").references(() => payslipItems.id),
+    type: text("type", { enum: ["earnings", "deduction"] }).notNull(),
+    description: text("description").notNull(),
+    accountId: text("account_id")
+      .notNull()
+      .references(() => accounts.id),
+    amountMinor: integer("amount_minor").notNull(),
+    position: integer("position").notNull().default(0),
+  },
+  (table) => [
+    index("payslip_lines_payslip_idx").on(table.payslipId),
+    index("payslip_lines_account_idx").on(table.accountId),
+  ],
+);
+
 
