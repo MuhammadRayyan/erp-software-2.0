@@ -8,7 +8,12 @@ import { formatDate, formatDateTime, formatMoney } from "@/core/format";
 import { parseModules } from "@/core/permissions/permissions";
 import { listPreferences } from "@/modules/preferences/preference-service";
 import { decodeColumnSnapshots } from "@/modules/preferences/snapshot-codec";
-import { getBankBalance } from "@/modules/reports/report-service";
+import {
+  getBankBalance,
+  getDashboardCounts,
+  getMonthlyFinancialTrend,
+  getReceivablesAgingSummary,
+} from "@/modules/reports/report-service";
 import { FinancialSummary } from "./financial-summary";
 import { listInvoices } from "@/modules/sales-invoices/invoice-service";
 import { DocumentStatusBadge, PaymentStatusBadge } from "@/modules/sales-invoices/invoice-status";
@@ -18,6 +23,9 @@ import { KpiCards, type KpiCardData } from "./kpi-cards";
 import { OverviewControls, type ServerDateRange } from "./overview-controls";
 import { QuickActionsBar } from "./quick-actions-bar";
 import { CashFlowRunwayWidget } from "./cash-flow-runway-widget";
+import { ManagerSummary } from "./manager-summary";
+import { FinancialCharts } from "./financial-charts";
+import { OverviewTabsLayout } from "./overview-tabs-layout";
 
 const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -37,15 +45,22 @@ function decodeServerRange(preferences: Record<string, string>): ServerDateRange
   }
 }
 
-export default async function OverviewPage({ params, searchParams }: { params: Promise<{ businessId: string }>; searchParams: Promise<{ notice?: string; from?: string; to?: string }> }) {
+export default async function OverviewPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ businessId: string }>;
+  searchParams: Promise<{ notice?: string; from?: string; to?: string; view?: string }>;
+}) {
   const { businessId } = await params;
-  const { notice, from: rawFrom, to: rawTo } = await searchParams;
+  const { notice, from: rawFrom, to: rawTo, view: rawView } = await searchParams;
   const user = await requireUser();
   const access = getBusinessForUser(businessId, user.id);
   if (!access) notFound();
 
   const from = DATE_PATTERN.test(rawFrom ?? "") ? rawFrom : undefined;
   const to = DATE_PATTERN.test(rawTo ?? "") ? rawTo : undefined;
+  const initialView = rawView === "operations" ? "operations" : "financial";
   const currency = access.business.currency;
 
   const invoiceList = listInvoices(businessId, user.id);
@@ -77,63 +92,144 @@ export default async function OverviewPage({ params, searchParams }: { params: P
     { id: "overdue", icon: "overdue", label: "Overdue", value: formatMoney(overdue, currency), note: `${posted.filter((item) => item.paymentStatus === "overdue").length} overdue invoices`, caption: "as of today", tooltip: "Posted invoices past their due date that still have an open balance.", href: `/b/${businessId}/sales/invoices?status=overdue` },
     ...(bankBalance === null ? [] : [{ id: "bank", icon: "bank" as const, label: "Bank & Cash", value: formatMoney(bankBalance, currency), note: "Posted receipt balance", caption: "as of today", tooltip: "Sum of posted bank and cash account balances from the general ledger.", href: `/b/${businessId}/reports/bank-transactions` }]),
   ];
+
+  // Financial trends & Receivables aging summary
+  const trend = getMonthlyFinancialTrend(businessId, user.id, 6);
+  const aging = getReceivablesAgingSummary(businessId, user.id);
+
+  // Operations Matrix counts
+  const counts = getDashboardCounts(businessId, user.id);
+
   return (
     <div className="page-container">
       <NoticeToast message={notice} />
-      <div className="page-header"><div><h1 className="page-title">Overview</h1><p className="page-description">A practical accounting snapshot of {access.business.name}.</p></div></div>
+      <div className="page-header">
+        <div>
+          <h1 className="page-title">Overview</h1>
+          <p className="page-description">A practical accounting snapshot of {access.business.name}.</p>
+        </div>
+      </div>
       <QuickActionsBar
         businessId={businessId}
         canViewSales={canViewSales}
         canViewPurchases={canViewPurchases}
         canViewBanking={canViewBanking}
       />
-      <OverviewControls from={from} to={to} serverRange={serverRange} businessId={businessId} />
-      <KpiCards cards={cards} businessId={businessId} serverSnapshot={decodeColumnSnapshots(preferences)["overview-cards"]} />
-      <FinancialSummary businessId={businessId} userId={user.id} currency={currency} />
-      {canViewReports && (
-        <CashFlowRunwayWidget
-          businessId={businessId}
-          userId={user.id}
-          currency={currency}
-        />
-      )}
-      <div className="mt-5 grid gap-5 lg:grid-cols-3">
-        <section className="data-panel lg:col-span-2">
-          <div className="flex h-12 items-center justify-between border-b border-border px-4"><h2 className="font-semibold">Recent Invoices</h2><Link href={`/b/${businessId}/sales/invoices`} className="flex items-center gap-1 text-xs font-medium text-primary hover:underline">View all <ArrowRight className="size-3.5" /></Link></div>
-          {invoiceList.length ? <div className="overflow-x-auto"><table className="data-table min-w-[760px]"><thead><tr><th>Invoice</th><th>Customer</th><th>Date</th><th className="text-right!">Total</th><th>Status</th></tr></thead><tbody>{invoiceList.slice(0, 6).map((invoice) => <tr key={invoice.id} className="hover:bg-surface-muted/40"><td><Link href={`/b/${businessId}/sales/invoices/${invoice.id}`} className="tabular font-medium text-primary hover:underline">{invoice.invoiceNumber}</Link></td><td>{invoice.customerName}</td><td>{formatDate(invoice.invoiceDate, { day: "2-digit", month: "short" })}</td><td className="money text-right">{formatMoney(invoice.totalMinor, invoice.currencyCode, invoice.currencyMinorUnit)}</td><td><div className="flex gap-1.5"><DocumentStatusBadge status={invoice.documentStatus} />{invoice.paymentStatus && <PaymentStatusBadge status={invoice.paymentStatus} />}</div></td></tr>)}</tbody></table></div> : <div className="p-8 text-center"><p className="font-medium">No recent invoices</p><p className="mt-1 text-sm text-muted-foreground">Create an invoice to see it listed here.</p></div>}
-        </section>
-        {canViewSales && (
-          <section className="data-panel">
-            <div className="flex h-12 items-center justify-between border-b border-border px-4"><h2 className="flex items-center gap-2 font-semibold"><Mail className="size-4 text-muted-foreground" /> Recent Emails</h2><Link href={`/b/${businessId}/emails`} className="flex items-center gap-1 text-xs font-medium text-primary hover:underline">View all <ArrowRight className="size-3.5" /></Link></div>
-            {recentEmails.length ? (
-              <ul className="divide-y divide-border">
-                {recentEmails.map((email) => {
-                  const to = parseMailboxes(email.toAddresses)[0];
-                  return (
-                    <li key={email.id} className="hover:bg-surface-muted/40">
-                      <Link href={`/b/${businessId}/emails/${email.id}`} className="block px-4 py-2.5">
-                        <div className="flex items-center justify-between gap-3">
-                          <p className="min-w-0 truncate text-sm font-medium text-foreground">{email.subject}</p>
-                          <span className="shrink-0 text-xs text-muted-foreground">{formatDateTime(email.createdAt)}</span>
-                        </div>
-                        <p className="mt-0.5 truncate text-xs text-muted-foreground">
-                          To {to ? (to.name ?? to.email) : "—"}{email.relatedDocumentNumber ? ` · ${email.relatedDocumentNumber}` : ""}
-                        </p>
-                      </Link>
-                    </li>
-                  );
-                })}
-              </ul>
-            ) : (
-              <div className="p-8 text-center">
-                <Mail className="mx-auto mb-2 size-6 text-muted-foreground/60" aria-hidden />
-                <p className="font-medium">No emails sent yet</p>
-                <p className="mt-1 text-sm text-muted-foreground">Open an invoice and use the Email action.</p>
-              </div>
+      <OverviewTabsLayout
+        initialView={initialView}
+        financialView={
+          <div className="space-y-5">
+            <OverviewControls from={from} to={to} serverRange={serverRange} businessId={businessId} />
+            <KpiCards cards={cards} businessId={businessId} serverSnapshot={decodeColumnSnapshots(preferences)["overview-cards"]} />
+            <FinancialCharts businessId={businessId} currency={currency} trend={trend} aging={aging} />
+            <FinancialSummary businessId={businessId} userId={user.id} currency={currency} />
+            {canViewReports && (
+              <CashFlowRunwayWidget
+                businessId={businessId}
+                userId={user.id}
+                currency={currency}
+              />
             )}
-          </section>
-        )}
-      </div>
+            <div className="grid gap-5 lg:grid-cols-3">
+              <section className="data-panel lg:col-span-2">
+                <div className="flex h-12 items-center justify-between border-b border-border px-4">
+                  <h2 className="font-semibold">Recent Invoices</h2>
+                  <Link href={`/b/${businessId}/sales/invoices`} className="flex items-center gap-1 text-xs font-medium text-primary hover:underline">
+                    View all <ArrowRight className="size-3.5" />
+                  </Link>
+                </div>
+                {invoiceList.length ? (
+                  <div className="overflow-x-auto">
+                    <table className="data-table min-w-[760px]">
+                      <thead>
+                        <tr>
+                          <th>Invoice</th>
+                          <th>Customer</th>
+                          <th>Date</th>
+                          <th className="text-right!">Total</th>
+                          <th>Status</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {invoiceList.slice(0, 6).map((invoice) => (
+                          <tr key={invoice.id} className="hover:bg-surface-muted/40">
+                            <td>
+                              <Link href={`/b/${businessId}/sales/invoices/${invoice.id}`} className="tabular font-medium text-primary hover:underline">
+                                {invoice.invoiceNumber}
+                              </Link>
+                            </td>
+                            <td>{invoice.customerName}</td>
+                            <td>{formatDate(invoice.invoiceDate, { day: "2-digit", month: "short" })}</td>
+                            <td className="money text-right">
+                              {formatMoney(invoice.totalMinor, invoice.currencyCode, invoice.currencyMinorUnit)}
+                            </td>
+                            <td>
+                              <div className="flex gap-1.5">
+                                <DocumentStatusBadge status={invoice.documentStatus} />
+                                {invoice.paymentStatus && <PaymentStatusBadge status={invoice.paymentStatus} />}
+                              </div>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                ) : (
+                  <div className="p-8 text-center">
+                    <p className="font-medium">No recent invoices</p>
+                    <p className="mt-1 text-sm text-muted-foreground">Create an invoice to see it listed here.</p>
+                  </div>
+                )}
+              </section>
+              {canViewSales && (
+                <section className="data-panel">
+                  <div className="flex h-12 items-center justify-between border-b border-border px-4">
+                    <h2 className="flex items-center gap-2 font-semibold">
+                      <Mail className="size-4 text-muted-foreground" /> Recent Emails
+                    </h2>
+                    <Link href={`/b/${businessId}/emails`} className="flex items-center gap-1 text-xs font-medium text-primary hover:underline">
+                      View all <ArrowRight className="size-3.5" />
+                    </Link>
+                  </div>
+                  {recentEmails.length ? (
+                    <ul className="divide-y divide-border">
+                      {recentEmails.map((email) => {
+                        const to = parseMailboxes(email.toAddresses)[0];
+                        return (
+                          <li key={email.id} className="hover:bg-surface-muted/40">
+                            <Link href={`/b/${businessId}/emails/${email.id}`} className="block px-4 py-2.5">
+                              <div className="flex items-center justify-between gap-3">
+                                <p className="min-w-0 truncate text-sm font-medium text-foreground">{email.subject}</p>
+                                <span className="shrink-0 text-xs text-muted-foreground">{formatDateTime(email.createdAt)}</span>
+                              </div>
+                              <p className="mt-0.5 truncate text-xs text-muted-foreground">
+                                To {to ? (to.name ?? to.email) : "—"}{email.relatedDocumentNumber ? ` · ${email.relatedDocumentNumber}` : ""}
+                              </p>
+                            </Link>
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  ) : (
+                    <div className="p-8 text-center">
+                      <Mail className="mx-auto mb-2 size-6 text-muted-foreground/60" aria-hidden />
+                      <p className="font-medium">No emails sent yet</p>
+                      <p className="mt-1 text-sm text-muted-foreground">Open an invoice and use the Email action.</p>
+                    </div>
+                  )}
+                </section>
+              )}
+            </div>
+          </div>
+        }
+        operationsView={
+          <ManagerSummary
+            businessId={businessId}
+            counts={counts}
+            allowedModules={parseModules(access.membership.role, access.membership.modulesJson)}
+          />
+        }
+      />
     </div>
   );
 }

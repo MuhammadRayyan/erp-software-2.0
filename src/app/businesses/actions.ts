@@ -10,6 +10,7 @@ import {
   createBusiness,
   deleteBusiness,
   renameBusiness,
+  setBusinessPinned,
 } from "@/core/businesses/business-service";
 
 export type ActionResult = { error?: string; fieldErrors?: Record<string, string[]> };
@@ -54,3 +55,15 @@ export async function deleteBusinessAction(businessId: string): Promise<ActionRe
     return { error: "Could not delete business" };
   }
 }
+
+export async function togglePinBusinessAction(businessId: string, pinned: boolean): Promise<ActionResult> {
+  const user = await requireUser();
+  try {
+    setBusinessPinned(businessId, user.id, pinned);
+    revalidatePath("/businesses");
+    return {};
+  } catch {
+    return { error: "Could not update pinned status" };
+  }
+}
+

@@ -24,7 +24,7 @@ export function moduleForBusinessPath(pathname: string): { businessId: string; m
     return { businessId, module: subsection === "goods-receipts" ? "inventory" : "purchases" };
   }
   if (section === "settings") {
-    if (subsection === "activity-log") return null;
+    if (subsection === "activity-log" || subsection === "profile") return null;
     return { businessId, module: "settings" };
   }
   if (section === "payroll") return { businessId, module: "payroll" };

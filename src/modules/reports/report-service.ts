@@ -1,4 +1,5 @@
 import { getBusinessDb } from "@/core/db/business";
+import { listInvoices } from "@/modules/sales-invoices/invoice-service";
 
 export type LedgerFilters = {
   dateFrom?: string;
@@ -263,16 +264,151 @@ export function getDashboardCounts(businessId: string, userId: string) {
     salesOrders: safeCount("SELECT COUNT(*) as c FROM sales_orders"),
     salesInvoices: safeCount("SELECT COUNT(*) as c FROM sales_invoices"),
     salesCreditNotes: safeCount("SELECT COUNT(*) as c FROM sales_credit_notes"),
+    deliveryNotes: safeCount("SELECT COUNT(*) as c FROM delivery_notes"),
     suppliers: safeCount("SELECT COUNT(*) as c FROM suppliers"),
     purchaseOrders: safeCount("SELECT COUNT(*) as c FROM purchase_orders"),
     purchaseInvoices: safeCount("SELECT COUNT(*) as c FROM purchase_invoices"),
-    inventoryItems: safeCount("SELECT COUNT(*) as c FROM inventory_items"),
+    supplierPayments: safeCount("SELECT COUNT(*) as c FROM supplier_payments"),
+    payments: safeCount("SELECT COUNT(*) as c FROM supplier_payments"),
+    debitNotes: safeCount("SELECT COUNT(*) as c FROM debit_notes"),
     goodsReceipts: safeCount("SELECT COUNT(*) as c FROM goods_receipts"),
-    deliveryNotes: safeCount("SELECT COUNT(*) as c FROM delivery_notes"),
+    inventoryItems: safeCount("SELECT COUNT(*) as c FROM inventory_items"),
     bankAccounts: safeCount("SELECT COUNT(*) as c FROM accounts WHERE subtype IN ('bank', 'cash')"),
     receipts: safeCount("SELECT COUNT(*) as c FROM receipts"),
-    payments: safeCount("SELECT COUNT(*) as c FROM supplier_payments"),
-    journals: safeCount("SELECT COUNT(*) as c FROM journal_entries")
+    journals: safeCount("SELECT COUNT(*) as c FROM journal_entries"),
+    chartOfAccounts: safeCount("SELECT COUNT(*) as c FROM accounts"),
+    employees: safeCount("SELECT COUNT(*) as c FROM employees WHERE is_active = 1"),
+    payslips: safeCount("SELECT COUNT(*) as c FROM payslips"),
+    payslipItems: safeCount("SELECT COUNT(*) as c FROM payslip_items"),
+    projects: safeCount("SELECT COUNT(*) as c FROM projects"),
+    vatPeriods: safeCount("SELECT COUNT(*) as c FROM vat_periods"),
+  };
+}
+
+export type MonthlyFinancialTrend = {
+  month: string;
+  label: string;
+  revenueMinor: number;
+  expensesMinor: number;
+  netIncomeMinor: number;
+};
+
+export type ReceivablesAgingSummary = {
+  currentMinor: number;
+  currentCount: number;
+  days30Minor: number;
+  days30Count: number;
+  days60Minor: number;
+  days60Count: number;
+  days60PlusMinor: number;
+  days60PlusCount: number;
+  totalMinor: number;
+  totalCount: number;
+};
+
+export function getMonthlyFinancialTrend(
+  businessId: string,
+  userId: string,
+  monthsCount = 6,
+): MonthlyFinancialTrend[] {
+  const { sqlite } = getBusinessDb(businessId, userId);
+
+  const now = new Date();
+  const months: { key: string; label: string }[] = [];
+  for (let i = monthsCount - 1; i >= 0; i--) {
+    const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+    const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+    const label = d.toLocaleDateString("en-US", { month: "short", year: "numeric" });
+    months.push({ key, label });
+  }
+
+  const startKey = months[0].key;
+  const endKey = months[months.length - 1].key;
+
+  const rows = sqlite
+    .prepare(`
+      SELECT 
+        a.type,
+        substr(je.date, 1, 7) AS month,
+        COALESCE(SUM(CASE WHEN a.type = 'income' THEN jl.credit_minor - jl.debit_minor ELSE jl.debit_minor - jl.credit_minor END), 0) AS net_minor
+      FROM accounts a
+      INNER JOIN journal_lines jl ON a.id = jl.account_id
+      INNER JOIN journal_entries je ON jl.journal_entry_id = je.id AND je.status = 'posted'
+      WHERE a.type IN ('income', 'expense') AND substr(je.date, 1, 7) >= ? AND substr(je.date, 1, 7) <= ?
+      GROUP BY a.type, substr(je.date, 1, 7)
+    `)
+    .all(startKey, endKey) as { type: string; month: string; net_minor: number }[];
+
+  const incomeMap = new Map<string, number>();
+  const expenseMap = new Map<string, number>();
+
+  for (const r of rows) {
+    if (r.type === "income") incomeMap.set(r.month, r.net_minor);
+    else if (r.type === "expense") expenseMap.set(r.month, r.net_minor);
+  }
+
+  return months.map((m) => {
+    const revenueMinor = Math.max(0, incomeMap.get(m.key) ?? 0);
+    const expensesMinor = Math.max(0, expenseMap.get(m.key) ?? 0);
+    const netIncomeMinor = revenueMinor - expensesMinor;
+    return {
+      month: m.key,
+      label: m.label,
+      revenueMinor,
+      expensesMinor,
+      netIncomeMinor,
+    };
+  });
+}
+
+export function getReceivablesAgingSummary(businessId: string, userId: string): ReceivablesAgingSummary {
+  const today = new Date().toISOString().slice(0, 10);
+  const invoices = listInvoices(businessId, userId).filter(
+    (inv) => inv.documentStatus === "posted" && inv.baseBalanceMinor > 0,
+  );
+
+  let currentMinor = 0, currentCount = 0;
+  let days30Minor = 0, days30Count = 0;
+  let days60Minor = 0, days60Count = 0;
+  let days60PlusMinor = 0, days60PlusCount = 0;
+
+  for (const inv of invoices) {
+    const dueDate = inv.dueDate || today;
+    if (dueDate >= today) {
+      currentMinor += inv.baseBalanceMinor;
+      currentCount++;
+    } else {
+      const ageDays = Math.max(
+        0,
+        Math.floor((Date.parse(`${today}T00:00:00Z`) - Date.parse(`${dueDate}T00:00:00Z`)) / 86_400_000),
+      );
+      if (ageDays <= 30) {
+        days30Minor += inv.baseBalanceMinor;
+        days30Count++;
+      } else if (ageDays <= 60) {
+        days60Minor += inv.baseBalanceMinor;
+        days60Count++;
+      } else {
+        days60PlusMinor += inv.baseBalanceMinor;
+        days60PlusCount++;
+      }
+    }
+  }
+
+  const totalMinor = currentMinor + days30Minor + days60Minor + days60PlusMinor;
+  const totalCount = currentCount + days30Count + days60Count + days60PlusCount;
+
+  return {
+    currentMinor,
+    currentCount,
+    days30Minor,
+    days30Count,
+    days60Minor,
+    days60Count,
+    days60PlusMinor,
+    days60PlusCount,
+    totalMinor,
+    totalCount,
   };
 }
 

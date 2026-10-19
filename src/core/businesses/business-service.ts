@@ -3,12 +3,13 @@ import { randomUUID } from "node:crypto";
 import { rmSync } from "node:fs";
 import { and, desc, eq } from "drizzle-orm";
 import { z } from "zod";
-import { closeBusinessConnection, openBusinessDatabase } from "@/core/db/business";
+import { closeBusinessConnection, getBusinessDb, openBusinessDatabase } from "@/core/db/business";
 import { getBusinessPaths } from "@/core/db/paths";
-import { businesses, memberships } from "@/core/db/system-schema";
+import { businesses, memberships, userBusinessPreferences } from "@/core/db/system-schema";
 import { getSystemDb } from "@/core/db/system";
 import { businessInputSchema, type BusinessInput } from "./business-input";
 import { synchronizeBusinessBaseCurrency } from "@/modules/currency/exchange-rate";
+import { listInvoices } from "@/modules/sales-invoices/invoice-service";
 
 export function listBusinessesForUser(userId: string, includeArchived = false) {
   const conditions = [eq(memberships.userId, userId)];
@@ -129,3 +130,131 @@ export function deleteBusiness(businessId: string, userId: string) {
   getSystemDb().delete(businesses).where(eq(businesses.id, businessId)).run();
   rmSync(paths.directory, { recursive: true, force: true });
 }
+
+export type BusinessQuickKpis = {
+  liquidBalanceMinor: number;
+  outstandingReceivablesMinor: number;
+  overdueCount: number;
+  overdueMinor: number;
+  activeEmployeesCount: number;
+};
+
+export function getBusinessQuickKpis(businessId: string, userId: string): BusinessQuickKpis {
+  try {
+    const { sqlite } = getBusinessDb(businessId, userId);
+
+    // 1. Bank & Cash balance from posted journal lines
+    let liquidBalanceMinor = 0;
+    try {
+      const bankRow = sqlite
+        .prepare(`
+          SELECT COALESCE(SUM(jl.debit_minor - jl.credit_minor), 0) AS balance_minor
+          FROM journal_lines jl
+          INNER JOIN journal_entries je ON je.id = jl.journal_entry_id AND je.status = 'posted'
+          INNER JOIN accounts a ON a.id = jl.account_id
+          WHERE a.subtype IN ('bank', 'cash')
+        `)
+        .get() as { balance_minor: number } | undefined;
+      liquidBalanceMinor = bankRow?.balance_minor ?? 0;
+    } catch {
+      liquidBalanceMinor = 0;
+    }
+
+    // 2. Open / Outstanding Receivables and Overdue Invoices
+    let outstandingReceivablesMinor = 0;
+    let overdueCount = 0;
+    let overdueMinor = 0;
+    try {
+      const invList = listInvoices(businessId, userId).filter(
+        (inv) => inv.documentStatus === "posted" && inv.baseBalanceMinor > 0,
+      );
+      for (const inv of invList) {
+        outstandingReceivablesMinor += inv.baseBalanceMinor;
+        if (inv.paymentStatus === "overdue") {
+          overdueCount++;
+          overdueMinor += inv.baseBalanceMinor;
+        }
+      }
+    } catch {
+      // fallback
+    }
+
+    // 3. Active Employees count
+    let activeEmployeesCount = 0;
+    try {
+      const empRow = sqlite
+        .prepare(`SELECT COUNT(*) as c FROM employees WHERE is_active = 1`)
+        .get() as { c: number } | undefined;
+      activeEmployeesCount = empRow?.c ?? 0;
+    } catch {
+      activeEmployeesCount = 0;
+    }
+
+    return {
+      liquidBalanceMinor,
+      outstandingReceivablesMinor,
+      overdueCount,
+      overdueMinor,
+      activeEmployeesCount,
+    };
+  } catch {
+    return {
+      liquidBalanceMinor: 0,
+      outstandingReceivablesMinor: 0,
+      overdueCount: 0,
+      overdueMinor: 0,
+      activeEmployeesCount: 0,
+    };
+  }
+}
+
+export function getPinnedBusinessIdsForUser(userId: string): Set<string> {
+  try {
+    const rows = getSystemDb()
+      .select({ businessId: userBusinessPreferences.businessId, value: userBusinessPreferences.value })
+      .from(userBusinessPreferences)
+      .where(
+        and(
+          eq(userBusinessPreferences.userId, userId),
+          eq(userBusinessPreferences.key, "business.pinned"),
+        ),
+      )
+      .all();
+    return new Set(rows.filter((r) => r.value === "true").map((r) => r.businessId));
+  } catch {
+    return new Set();
+  }
+}
+
+export function setBusinessPinned(businessId: string, userId: string, pinned: boolean): void {
+  const access = getBusinessForUser(businessId, userId);
+  if (!access) throw new Error("BUSINESS_ACCESS_DENIED");
+
+  const db = getSystemDb();
+  if (pinned) {
+    db.insert(userBusinessPreferences)
+      .values({
+        userId,
+        businessId,
+        key: "business.pinned",
+        value: "true",
+        updatedAt: new Date(),
+      })
+      .onConflictDoUpdate({
+        target: [userBusinessPreferences.userId, userBusinessPreferences.businessId, userBusinessPreferences.key],
+        set: { value: "true", updatedAt: new Date() },
+      })
+      .run();
+  } else {
+    db.delete(userBusinessPreferences)
+      .where(
+        and(
+          eq(userBusinessPreferences.userId, userId),
+          eq(userBusinessPreferences.businessId, businessId),
+          eq(userBusinessPreferences.key, "business.pinned"),
+        ),
+      )
+      .run();
+  }
+}
+

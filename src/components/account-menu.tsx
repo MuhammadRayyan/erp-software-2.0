@@ -27,6 +27,11 @@ export function AccountMenu({ user }: { user: { name: string; email: string } })
         <DropdownMenuSeparator />
         <ThemeMenu />
         <DropdownMenuSeparator />
+        <DropdownMenuItem asChild>
+          <Link href="/profile" className="flex items-center gap-2">
+            <UserRound className="size-4" /> Profile & Security
+          </Link>
+        </DropdownMenuItem>
         <DropdownMenuItem asChild><Link href="/logout">Sign out</Link></DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>

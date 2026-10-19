@@ -27,6 +27,7 @@ import {
   Wand2,
   Layers,
   History,
+  UserRound,
 } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
@@ -209,6 +210,13 @@ export function SettingsHubClient({
         description: "Team member access roles, per-account synchronized view preferences, and database WAL diagnostics.",
         icon: ShieldCheck,
         items: [
+          {
+            title: "My Profile & Security",
+            description: "View account credentials, update your display name, and change account password.",
+            href: `/b/${businessId}/settings/profile`,
+            icon: UserRound,
+            keywords: "profile user account password change security name credentials",
+          },
           {
             title: "Users & Access Control",
             description: "Assign team members, administrator/standard roles, and module access permissions.",

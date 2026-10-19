@@ -53,6 +53,7 @@ function buildCommands(businessId: string, modules: ModuleKey[], push: (path: st
     );
   }
   navigation.push(
+    { label: "My Profile & Security", hint: "Go to", icon: UserRound, keywords: "profile user account password change security name credentials", onSelect: go("/settings/profile") },
     { label: "Activity & Audit Log", hint: "Go to", icon: History, keywords: "activity audit log history user trail tracking actions operations inspection", onSelect: go("/settings/activity-log") },
   );
 
@@ -143,6 +144,11 @@ export function AppShell({ children, business, businesses, modules, user }: Shel
               <DropdownMenuSeparator />
               <ThemeMenu />
               <DropdownMenuSeparator />
+              <DropdownMenuItem asChild>
+                <Link href={`/b/${business.id}/settings/profile`} className="flex items-center gap-2">
+                  <UserRound className="size-4" /> Profile & Security
+                </Link>
+              </DropdownMenuItem>
               <DropdownMenuItem asChild>
                 <Link href={`/b/${business.id}/settings/activity-log`} className="flex items-center gap-2">
                   <History className="size-4" /> Activity Log
