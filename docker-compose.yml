@@ -1,0 +1,42 @@
+services:
+  modern-erp:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: modern-erp:latest
+    container_name: modern-erp
+    restart: unless-stopped
+    environment:
+      - NODE_ENV=production
+      - PORT=3000
+      - ERP_DATA_DIR=/app/data
+      - BETTER_AUTH_SECRET=${BETTER_AUTH_SECRET:-ledgerly-secret-change-in-production-random-key-64chars}
+      - BETTER_AUTH_URL=${BETTER_AUTH_URL:-http://localhost}
+    volumes:
+      - /opt/modern-erp/data:/app/data
+    networks:
+      - erp-network
+
+  caddy:
+    image: caddy:2-alpine
+    container_name: erp-caddy
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - modern-erp
+    networks:
+      - erp-network
+
+networks:
+  erp-network:
+    driver: bridge
+
+volumes:
+  caddy_data:
+  caddy_config:

@@ -1,0 +1,23 @@
+# Caddyfile for Modern ERP
+# Direct IP access mode (for initial testing without a domain):
+:80 {
+    encode gzip zstd
+
+    # Security headers
+    header {
+        X-Content-Type-Options "nosniff"
+        X-Frame-Options "SAMEORIGIN"
+        Referrer-Policy "strict-origin-when-cross-origin"
+    }
+
+    # Reverse proxy to Next.js container with automatic request buffering
+    reverse_proxy modern-erp:3000 {
+        # Buffer requests during container zero-downtime restarts
+        lb_try_duration 10s
+        lb_try_interval 250ms
+    }
+}
+
+# NOTE: When you are ready to attach your Hostinger domain/subdomain,
+# simply change ':80' above to your domain (e.g., 'erp.yourdomain.com')
+# and Caddy will automatically provision and renew free Let's Encrypt HTTPS certificates!
