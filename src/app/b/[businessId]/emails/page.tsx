@@ -1,27 +1,14 @@
 import Link from "next/link";
 import { Mail, Paperclip } from "lucide-react";
 import { EmptyState } from "@/components/empty-state";
-import { Badge } from "@/components/ui/badge";
+import { StatusBadge } from "@/components/status-badge";
+import { DensityToggle } from "@/components/density-toggle";
 import { requireModule } from "@/core/permissions/require-module";
-import { formatDateTime } from "@/core/format";
+import { formatBytes, formatDateTime } from "@/core/format";
 import { listSentEmails } from "@/modules/email/email-service";
 import { parseMailboxes } from "@/modules/email/email-driver";
 
 export const metadata = { title: "Sent Emails" };
-
-const STATUS_TONES: Record<string, "success" | "danger" | "neutral" | "info"> = {
-  sent: "success",
-  delivered: "success",
-  failed: "danger",
-  queued: "info",
-};
-
-function formatSize(bytes: number | null): string {
-  if (bytes == null) return "—";
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-  return `${(bytes / 1024 / 1024).toFixed(2)} MB`;
-}
 
 export default async function SentEmailsPage({ params }: { params: Promise<{ businessId: string }> }) {
   const { businessId } = await params;
@@ -35,6 +22,7 @@ export default async function SentEmailsPage({ params }: { params: Promise<{ bus
           <h1 className="page-title">Sent Emails</h1>
           <p className="page-description">Audit log of every invoice email dispatched from this business.</p>
         </div>
+        <DensityToggle businessId={businessId} />
       </div>
       {emails.length ? (
         <div className="data-panel overflow-x-auto">
@@ -85,7 +73,7 @@ export default async function SentEmailsPage({ params }: { params: Promise<{ bus
                         <span className="inline-flex items-center gap-1.5 text-xs text-muted-foreground">
                           <Paperclip className="size-3.5" />
                           {email.attachmentFilename}
-                          <span className="text-muted-foreground/60">· {formatSize(email.attachmentSizeBytes)}</span>
+                          <span className="text-muted-foreground/60">· {formatBytes(email.attachmentSizeBytes)}</span>
                         </span>
                       ) : (
                         <span className="text-muted-foreground">—</span>
@@ -93,9 +81,7 @@ export default async function SentEmailsPage({ params }: { params: Promise<{ bus
                     </td>
                     <td className="text-muted-foreground">{formatDateTime(email.createdAt)}</td>
                     <td>
-                      <Badge tone={STATUS_TONES[email.status] ?? "neutral"} className="capitalize">
-                        {email.status}
-                      </Badge>
+                      <StatusBadge status={email.status} />
                     </td>
                   </tr>
                 );

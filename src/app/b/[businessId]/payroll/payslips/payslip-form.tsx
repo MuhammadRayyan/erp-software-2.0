@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { SelectNative } from "@/components/ui/select-native";
+import { formatMoney } from "@/core/format";
 import {
   type EmployeeRecord,
   type PayslipItemRecord,
@@ -22,7 +23,7 @@ interface LineFormState {
   type: "earnings" | "deduction";
   description: string;
   accountId: string;
-  amount: string; // AED string
+  amount: string; // decimal string
 }
 
 interface PayslipFormProps {
@@ -30,6 +31,7 @@ interface PayslipFormProps {
   employees: EmployeeRecord[];
   items: PayslipItemRecord[];
   accounts: Array<{ id: string; name: string; type: string }>;
+  currency?: string;
   initialPayslip?: PayslipRecord | null;
   initialLines?: PayslipLineRecord[];
   prefill?: {
@@ -45,6 +47,7 @@ export function PayslipForm({
   employees,
   items,
   accounts,
+  currency = "AED",
   initialPayslip,
   initialLines,
   prefill,
@@ -360,7 +363,7 @@ export function PayslipForm({
       )}
 
       {/* Header Form Card */}
-      <div className="rounded-lg border border-border bg-card p-5 space-y-4">
+      <div className="rounded-lg border border-border bg-surface-raised p-5 space-y-4">
         <h3 className="text-sm font-semibold text-foreground uppercase tracking-wider">
           Payslip Details
         </h3>
@@ -429,7 +432,7 @@ export function PayslipForm({
       </div>
 
       {/* Earnings Table Card */}
-      <div className="rounded-lg border border-border bg-card p-5 space-y-4">
+      <div className="rounded-lg border border-border bg-surface-raised p-5 space-y-4">
         <div className="flex justify-between items-center">
           <div>
             <h3 className="text-sm font-semibold text-foreground uppercase tracking-wider">
@@ -448,28 +451,28 @@ export function PayslipForm({
           </Button>
         </div>
 
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-sm">
-            <thead className="border-b border-border bg-muted/30 text-xs font-medium text-muted-foreground uppercase">
+        <div className="overflow-x-auto pb-2 -mx-1 px-1">
+          <table className="line-item-table w-full">
+            <thead>
               <tr>
-                <th className="py-2.5 px-3 w-1/4">Predefined Item</th>
-                <th className="py-2.5 px-3">Description</th>
-                <th className="py-2.5 px-3 w-1/4">GL Account</th>
-                <th className="py-2.5 px-3 w-32 text-right">Amount (AED)</th>
-                <th className="py-2.5 px-3 w-10"></th>
+                <th className="w-[26%] min-w-[160px]">Predefined Item</th>
+                <th className="min-w-[160px]">Description</th>
+                <th className="w-[26%] min-w-[160px]">GL Account</th>
+                <th className="w-32 min-w-[110px] col-numeric text-right!">Amount ({currency})</th>
+                <th className="w-10 text-center"><span className="sr-only">Actions</span></th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-border">
+            <tbody>
               {earningsLines.length === 0 ? (
                 <tr>
-                  <td colSpan={5} className="py-4 text-center text-xs text-muted-foreground">
-                    No earnings lines added.
+                  <td colSpan={5} className="py-6 text-center text-xs text-muted-foreground">
+                    No earnings lines added. Click &ldquo;Add Earnings&rdquo; to insert a compensation line.
                   </td>
                 </tr>
               ) : (
                 earningsLines.map(({ line, originalIndex }) => (
-                  <tr key={originalIndex} className="hover:bg-muted/20">
-                    <td className="py-2 px-3">
+                  <tr key={originalIndex}>
+                    <td>
                       <SelectNative
                         value={line.itemId || ""}
                         onChange={(e) => updateLine(originalIndex, { itemId: e.target.value || undefined })}
@@ -485,7 +488,7 @@ export function PayslipForm({
                           ))}
                       </SelectNative>
                     </td>
-                    <td className="py-2 px-3">
+                    <td>
                       <Input
                         value={line.description}
                         onChange={(e) => updateLine(originalIndex, { description: e.target.value })}
@@ -493,7 +496,7 @@ export function PayslipForm({
                         className="h-8 text-xs"
                       />
                     </td>
-                    <td className="py-2 px-3">
+                    <td>
                       <SelectNative
                         value={line.accountId}
                         onChange={(e) => updateLine(originalIndex, { accountId: e.target.value })}
@@ -506,23 +509,24 @@ export function PayslipForm({
                         ))}
                       </SelectNative>
                     </td>
-                    <td className="py-2 px-3">
+                    <td>
                       <Input
                         type="number"
                         step="0.01"
                         min="0"
                         value={line.amount}
                         onChange={(e) => updateLine(originalIndex, { amount: e.target.value })}
-                        className="h-8 text-xs text-right font-medium"
+                        className="money h-8 text-xs text-right font-medium"
                       />
                     </td>
-                    <td className="py-2 px-3 text-right">
+                    <td className="text-center align-middle">
                       <Button
                         type="button"
                         variant="ghost"
                         size="sm"
                         onClick={() => removeLine(originalIndex)}
-                        className="h-7 w-7 p-0 text-muted-foreground hover:text-danger"
+                        className="h-7 w-7 p-0 text-muted-foreground hover:text-danger hover:bg-danger/10"
+                        title="Remove line"
                       >
                         <Trash2 className="size-3.5" />
                       </Button>
@@ -536,7 +540,7 @@ export function PayslipForm({
       </div>
 
       {/* Deductions Table Card */}
-      <div className="rounded-lg border border-border bg-card p-5 space-y-4">
+      <div className="rounded-lg border border-border bg-surface-raised p-5 space-y-4">
         <div className="flex justify-between items-center">
           <div>
             <h3 className="text-sm font-semibold text-foreground uppercase tracking-wider">
@@ -555,28 +559,28 @@ export function PayslipForm({
           </Button>
         </div>
 
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-sm">
-            <thead className="border-b border-border bg-muted/30 text-xs font-medium text-muted-foreground uppercase">
+        <div className="overflow-x-auto pb-2 -mx-1 px-1">
+          <table className="line-item-table w-full">
+            <thead>
               <tr>
-                <th className="py-2.5 px-3 w-1/4">Predefined Item</th>
-                <th className="py-2.5 px-3">Description</th>
-                <th className="py-2.5 px-3 w-1/4">GL Account</th>
-                <th className="py-2.5 px-3 w-32 text-right">Amount (AED)</th>
-                <th className="py-2.5 px-3 w-10"></th>
+                <th className="w-[26%] min-w-[160px]">Predefined Item</th>
+                <th className="min-w-[160px]">Description</th>
+                <th className="w-[26%] min-w-[160px]">GL Account</th>
+                <th className="w-32 min-w-[110px] col-numeric text-right!">Amount ({currency})</th>
+                <th className="w-10 text-center"><span className="sr-only">Actions</span></th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-border">
+            <tbody>
               {deductionLines.length === 0 ? (
                 <tr>
-                  <td colSpan={5} className="py-4 text-center text-xs text-muted-foreground">
-                    No deduction lines added.
+                  <td colSpan={5} className="py-6 text-center text-xs text-muted-foreground">
+                    No deduction lines added. Click &ldquo;Add Deduction&rdquo; to insert a deduction line.
                   </td>
                 </tr>
               ) : (
                 deductionLines.map(({ line, originalIndex }) => (
-                  <tr key={originalIndex} className="hover:bg-muted/20">
-                    <td className="py-2 px-3">
+                  <tr key={originalIndex}>
+                    <td>
                       <SelectNative
                         value={line.itemId || ""}
                         onChange={(e) => updateLine(originalIndex, { itemId: e.target.value || undefined })}
@@ -592,7 +596,7 @@ export function PayslipForm({
                           ))}
                       </SelectNative>
                     </td>
-                    <td className="py-2 px-3">
+                    <td>
                       <Input
                         value={line.description}
                         onChange={(e) => updateLine(originalIndex, { description: e.target.value })}
@@ -600,7 +604,7 @@ export function PayslipForm({
                         className="h-8 text-xs"
                       />
                     </td>
-                    <td className="py-2 px-3">
+                    <td>
                       <SelectNative
                         value={line.accountId}
                         onChange={(e) => updateLine(originalIndex, { accountId: e.target.value })}
@@ -613,23 +617,24 @@ export function PayslipForm({
                         ))}
                       </SelectNative>
                     </td>
-                    <td className="py-2 px-3">
+                    <td>
                       <Input
                         type="number"
                         step="0.01"
                         min="0"
                         value={line.amount}
                         onChange={(e) => updateLine(originalIndex, { amount: e.target.value })}
-                        className="h-8 text-xs text-right font-medium"
+                        className="money h-8 text-xs text-right font-medium"
                       />
                     </td>
-                    <td className="py-2 px-3 text-right">
+                    <td className="text-center align-middle">
                       <Button
                         type="button"
                         variant="ghost"
                         size="sm"
                         onClick={() => removeLine(originalIndex)}
-                        className="h-7 w-7 p-0 text-muted-foreground hover:text-danger"
+                        className="h-7 w-7 p-0 text-muted-foreground hover:text-danger hover:bg-danger/10"
+                        title="Remove line"
                       >
                         <Trash2 className="size-3.5" />
                       </Button>
@@ -643,7 +648,7 @@ export function PayslipForm({
       </div>
 
       {/* Totals Summary Panel */}
-      <div className="rounded-lg border border-border bg-card p-5">
+      <div className="rounded-lg border border-border bg-surface-raised p-5">
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
           <div className="text-xs text-muted-foreground">
             Balanced GL Posting: debits salary expense accounts, credits payroll payable & advances.
@@ -652,20 +657,20 @@ export function PayslipForm({
           <div className="space-y-1.5 min-w-[280px]">
             <div className="flex justify-between text-sm text-foreground">
               <span>Gross Earnings:</span>
-              <span className="font-medium">
-                AED {grossTotal.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              <span className="font-medium money">
+                {formatMoney(Math.round(grossTotal * 100), currency)}
               </span>
             </div>
             <div className="flex justify-between text-sm text-muted-foreground">
               <span>Total Deductions:</span>
-              <span className="font-medium">
-                -AED {deductionsTotal.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              <span className="font-medium money">
+                {deductionsTotal > 0 ? `-${formatMoney(Math.round(deductionsTotal * 100), currency)}` : formatMoney(0, currency)}
               </span>
             </div>
             <div className="pt-2 border-t border-border flex justify-between text-base font-bold text-foreground">
               <span>Net Pay:</span>
-              <span className="text-primary text-lg">
-                AED {netPay.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              <span className="text-primary text-lg money font-black">
+                {formatMoney(Math.round(netPay * 100), currency)}
               </span>
             </div>
           </div>

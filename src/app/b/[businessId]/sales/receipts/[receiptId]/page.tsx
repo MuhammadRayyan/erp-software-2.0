@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { Badge } from "@/components/ui/badge";
+import { StatusBadge } from "@/components/status-badge";
 import { formatDate, formatMoney } from "@/core/format";
 import { requireModule } from "@/core/permissions/require-module";
 import { getReceipt } from "@/modules/receipts/receipt-service";
@@ -40,9 +40,7 @@ export default async function ReceiptViewPage({
         <div>
           <div className="flex items-center gap-2">
             <h1 className="page-title tabular">{number}</h1>
-            <Badge tone={status === "posted" ? "info" : "danger"}>
-              {status === "posted" ? "Posted" : "Reversed"}
-            </Badge>
+            <StatusBadge status={status} />
           </div>
           <p className="mt-2 font-medium">
             <Link href={`/b/${businessId}/customers/${String(receipt.customer_id)}`} className="hover:text-primary hover:underline transition-colors">

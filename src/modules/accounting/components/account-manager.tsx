@@ -7,6 +7,9 @@ import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { StatusBadge } from "@/components/status-badge";
+import { DensityToggle } from "@/components/density-toggle";
+import { useTableDensity } from "@/components/use-table-density";
 import { DialogContent, DialogDescription, DialogRoot, DialogTitle } from "@/components/ui/dialog";
 import {
   DropdownMenu,
@@ -54,6 +57,7 @@ export function AccountManager({
   currency?: string;
 }) {
   const router = useRouter();
+  const { density } = useTableDensity(businessId);
   const [editing, setEditing] = useState<AccountRow | null | undefined>(undefined);
   const [values, setValues] = useState<AccountInput>(emptyAccount);
   const [errors, setErrors] = useState<Record<string, string[]>>({});
@@ -98,7 +102,8 @@ export function AccountManager({
 
   return (
     <>
-      <div className="mb-4 flex justify-end">
+      <div className="mb-4 flex items-center justify-end gap-2">
+        <DensityToggle businessId={businessId} />
         <Button onClick={() => openEditor()}><Plus className="size-4" /> New Account</Button>
       </div>
       <div className="space-y-5">
@@ -112,14 +117,14 @@ export function AccountManager({
                 <span className="ml-2 text-xs text-muted-foreground">{rows.length}</span>
               </div>
               <div className="overflow-x-auto">
-                <table className="data-table min-w-[650px]">
+                <table className="data-table min-w-[650px]" data-density={density}>
                   <thead><tr><th>Account</th><th>Subtype</th><th>Status</th><th className="text-right!">Balance</th><th className="w-12"><span className="sr-only">Actions</span></th></tr></thead>
                   <tbody>
                     {rows.map((account) => (
                       <tr key={account.id}>
                         <td><span className="font-medium">{account.name}</span>{account.isSystem && <Badge className="ml-2">System</Badge>}</td>
                         <td className="text-muted-foreground">{accountSubtypeLabels[account.subtype]}</td>
-                        <td><Badge tone={account.isActive ? "success" : "neutral"}>{account.isActive ? "Active" : "Inactive"}</Badge></td>
+                        <td><StatusBadge status={account.isActive ? "active" : "inactive"} /></td>
                         <td className="money text-right">
                           <Link
                             href={`/b/${businessId}/reports/general-ledger?accountId=${account.id}`}

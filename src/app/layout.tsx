@@ -40,8 +40,13 @@ export default async function RootLayout({ children }: Readonly<{ children: Reac
 
   const cookieFont = cookieStore.get("ui-font")?.value;
   const cookieSize = cookieStore.get("ui-size")?.value;
+  const cookieDensity = cookieStore.get("ui-density")?.value;
+  let themeDensity = "default";
   if (cookieFont && isFontKey(cookieFont)) fontKey = cookieFont;
   if (cookieSize && ["small", "normal", "large"].includes(cookieSize)) themeSize = cookieSize;
+  if (cookieDensity && ["compact", "default", "comfortable"].includes(cookieDensity)) {
+    themeDensity = cookieDensity;
+  }
 
   // If cookies are missing but user is logged in, hydrate cookies from DB
   if (session?.user && (!cookieFont || !cookieSize)) {
@@ -65,6 +70,7 @@ export default async function RootLayout({ children }: Readonly<{ children: Reac
       suppressHydrationWarning
       data-font={fontKey}
       data-size={themeSize}
+      data-table-density={themeDensity}
       className={inter.variable}
     >
       <head>

@@ -3,6 +3,7 @@
 A compact, Manager.io-inspired multi-business accounting/ERP application for local and self-hosted use.
 
 **Current release: v2.6.0** — Advanced Accounting, Liquidity Treasury & Usability Suite:
+- **HR & Payroll Module & Standardized Global Theming**: Employee master directory, predefined compensation items, double-entry automatic payslip posting (Salaries Expense, Payroll Payable, Advances), 1-click batch monthly pay run generator, UAE Labor Law No. 33 of 2021 End of Service Benefits (EOSB) calculator, and 100% standardized global table & row theming (`DataTable`, `ListToolbar`, `DensityToggle`, `useColumns` visibility dropdown, `TableTotalsBar`, multi-currency formatting, and `line-item-table` floating rows).
 - **Find & Recode / Bulk Transaction Editor**: Search across Sales Invoices, Purchase Bills, Bank Entries, and Manual Journals to bulk-reclassify GL Accounts, Tax Codes, or Project Tags with atomic double-entry journal replacement.
 - **30/60/90-Day Cash Flow & Liquidity Forecast**: Real-time treasury engine projecting cash runway, liquidity trajectories, deficit days count, minimum cash trough alerts, and horizon aging buckets with CSV export.
 - **Inline Customer Credit & Supplier Prepayment Drawdown**: Proactive detection of unallocated retainer/prepayment pools during invoice and bill creation with 1-click FIFO auto-drawdown on post.

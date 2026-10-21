@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Badge } from "@/components/ui/badge";
+import { StatusBadge } from "@/components/status-badge";
 import { formatDate, formatMoney } from "@/core/format";
 import { requireModule } from "@/core/permissions/require-module";
 import { journalSourceHref, journalSourceLabel } from "@/modules/accounting/journal-source";
@@ -17,7 +18,7 @@ export default async function JournalEntryPage({ params }: { params: Promise<{ b
   return <div className="page-container">
     <BackLink href={`/b/${businessId}/accounting/journal`}>Journal</BackLink>
     <div className="mb-5 flex flex-wrap items-start justify-between gap-4">
-      <div><div className="flex items-center gap-3"><h1 className="page-title tabular">{record.entry.entry_number}</h1><Badge tone="info">Posted</Badge></div><p className="mt-2 text-sm text-muted-foreground">{formatDate(record.entry.date)} · {record.entry.description}</p></div>
+      <div><div className="flex items-center gap-3"><h1 className="page-title tabular">{record.entry.entry_number}</h1><StatusBadge status="posted" /></div><p className="mt-2 text-sm text-muted-foreground">{formatDate(record.entry.date)} · {record.entry.description}</p></div>
       <div className="text-right text-sm"><p className="text-muted-foreground">Source</p>{sourceHref ? <Link href={sourceHref} className="font-medium text-primary hover:underline">{journalSourceLabel(record.entry.source_type)} {sourceReference}</Link> : <p className="font-medium">{journalSourceLabel(record.entry.source_type)} {sourceReference}</p>}</div>
     </div>
     <section className="data-panel overflow-x-auto">

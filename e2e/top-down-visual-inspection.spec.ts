@@ -1,6 +1,4 @@
 import { test, expect } from '@playwright/test';
-import * as fs from 'fs';
-import * as path from 'path';
 
 test.describe('Top-Down Visual and Architecture Flow Verification', () => {
   let businessId = '';
@@ -29,7 +27,6 @@ test.describe('Top-Down Visual and Architecture Flow Verification', () => {
     // Click on the first invoice link in the table
     const firstInvoiceLink = page.locator('table tbody tr a').first();
     await expect(firstInvoiceLink).toBeVisible();
-    const invoiceNumber = await firstInvoiceLink.textContent();
     await firstInvoiceLink.click();
 
     // 1. Check Breadcrumb / BackLink

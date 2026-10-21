@@ -565,22 +565,26 @@ test("UAE HR & Payroll Module Test Suite (Manager.io-Inspired)", async (t) => {
     // Disable foreign keys temporarily to simulate raw corrupt/migrated legacy state
     context.sqlite.pragma("foreign_keys = OFF");
     const orphanPayslipId = `orphan-slip-${randomUUID().slice(0, 8)}`;
-    context.sqlite
-      .prepare(`
-        INSERT INTO payslips (
-          id, payslip_number, employee_id, date, period_description,
-          gross_amount_minor, deductions_minor, net_amount_minor,
-          document_status, created_by, created_at, updated_at
-        ) VALUES (?, 'PS-9999', 'non-existent-employee-id', '2026-10-31', 'Legacy Run', 500000, 0, 500000, 'posted', ?, ?, ?)
-      `)
-      .run(orphanPayslipId, testUserId, new Date().toISOString(), new Date().toISOString());
-    context.sqlite.pragma("foreign_keys = ON");
+    try {
+      context.sqlite
+        .prepare(`
+          INSERT INTO payslips (
+            id, payslip_number, employee_id, date, period_description,
+            gross_amount_minor, deductions_minor, net_amount_minor,
+            document_status, created_by, created_at, updated_at
+          ) VALUES (?, 'PS-9999', 'non-existent-employee-id', '2026-10-31', 'Legacy Run', 500000, 0, 500000, 'posted', ?, ?, ?)
+        `)
+        .run(orphanPayslipId, testUserId, new Date().toISOString(), new Date().toISOString());
+      context.sqlite.pragma("foreign_keys = ON");
 
-    // Must not return null or throw an unhandled error
-    const record = getPayslipWithLines(testBusinessId, testUserId, orphanPayslipId);
-    assert.ok(record, "Should successfully return record with fallback employee details");
-    assert.ok(record.employee);
-    assert.equal(record.employee.id, "non-existent-employee-id");
+      // Must not return null or throw an unhandled error
+      const record = getPayslipWithLines(testBusinessId, testUserId, orphanPayslipId);
+      assert.ok(record, "Should successfully return record with fallback employee details");
+      assert.ok(record.employee);
+      assert.equal(record.employee.id, "non-existent-employee-id");
+    } finally {
+      context.sqlite.prepare("DELETE FROM payslips WHERE id = ?").run(orphanPayslipId);
+    }
   });
 
   // -------------------------------------------------------------

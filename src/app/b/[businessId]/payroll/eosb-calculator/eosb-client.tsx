@@ -8,6 +8,9 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { SelectNative } from "@/components/ui/select-native";
 import { Badge } from "@/components/ui/badge";
+import { formatMoney, minorToDecimalString } from "@/core/format";
+import { DensityToggle } from "@/components/density-toggle";
+import { useTableDensity } from "@/components/use-table-density";
 import { type EmployeeRecord } from "@/modules/payroll/services/payroll-service";
 import { calculateUaeEosb, type EosbCalculationResult } from "@/modules/payroll/services/eosb-calculator";
 
@@ -17,6 +20,7 @@ interface EosbClientProps {
 }
 
 export function EosbClient({ businessId, employees }: EosbClientProps) {
+  const { density } = useTableDensity(businessId);
   const today = new Date().toISOString().slice(0, 10);
 
   const [selectedEmpId, setSelectedEmpId] = useState<string>("");
@@ -36,7 +40,7 @@ export function EosbClient({ businessId, employees }: EosbClientProps) {
     const emp = employees.find((e) => e.id === empId);
     if (emp) {
       if (emp.joiningDate) setJoiningDate(emp.joiningDate);
-      if (emp.basicSalaryMinor) setBasicSalaryAED((emp.basicSalaryMinor / 100).toFixed(2));
+      if (emp.basicSalaryMinor) setBasicSalaryAED(minorToDecimalString(emp.basicSalaryMinor, "AED"));
     }
   };
 
@@ -71,17 +75,13 @@ export function EosbClient({ businessId, employees }: EosbClientProps) {
     }
   };
 
-  const formatAED = (minor: number) => {
-    return `AED ${(minor / 100).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-  };
-
   const getFinalPayslipUrl = () => {
     if (!calculation) return "#";
     const params = new URLSearchParams();
     if (selectedEmpId) params.set("employeeId", selectedEmpId);
-    params.set("gratuityAED", (calculation.gratuityMinor / 100).toFixed(2));
+    params.set("gratuityAED", minorToDecimalString(calculation.gratuityMinor, "AED"));
     if (calculation.leaveEncashmentMinor > 0) {
-      params.set("leaveEncashmentAED", (calculation.leaveEncashmentMinor / 100).toFixed(2));
+      params.set("leaveEncashmentAED", minorToDecimalString(calculation.leaveEncashmentMinor, "AED"));
     }
     params.set("periodDescription", `Final Settlement (${calculation.durationSummary.years} yrs service)`);
     return `/b/${businessId}/payroll/payslips/new?${params.toString()}`;
@@ -90,7 +90,7 @@ export function EosbClient({ businessId, employees }: EosbClientProps) {
   return (
     <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
       {/* Left Column: Calculation Parameters Form */}
-      <div className="lg:col-span-5 rounded-lg border border-border bg-card p-5 space-y-4">
+      <div className="lg:col-span-5 rounded-lg border border-border bg-surface-raised p-5 space-y-4">
         <div className="flex items-center gap-2 border-b border-border pb-3">
           <Calculator className="size-5 text-primary" />
           <div>
@@ -207,7 +207,7 @@ export function EosbClient({ businessId, employees }: EosbClientProps) {
       {/* Right Column: Statutory Breakdown Card */}
       <div className="lg:col-span-7 space-y-4">
         {calculation ? (
-          <div className="rounded-lg border border-border bg-card p-6 shadow-sm space-y-6">
+          <div className="rounded-lg border border-border bg-surface-raised p-6 shadow-sm space-y-6">
             <div className="flex justify-between items-start border-b border-border pb-4">
               <div>
                 <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
@@ -217,9 +217,12 @@ export function EosbClient({ businessId, employees }: EosbClientProps) {
                   End of Service Settlement
                 </h3>
               </div>
-              <Badge tone={calculation.eligibleForGratuity ? "success" : "neutral"} className="text-xs">
-                {calculation.eligibleForGratuity ? "Eligible (1+ Year)" : "Ineligible (<1 Year)"}
-              </Badge>
+              <div className="flex items-center gap-2">
+                <DensityToggle businessId={businessId} />
+                <Badge tone={calculation.eligibleForGratuity ? "success" : "neutral"} className="text-xs">
+                  {calculation.eligibleForGratuity ? "Eligible (1+ Year)" : "Ineligible (<1 Year)"}
+                </Badge>
+              </div>
             </div>
 
             {/* Service Duration Details */}
@@ -239,80 +242,93 @@ export function EosbClient({ businessId, employees }: EosbClientProps) {
               <div>
                 <span className="text-muted-foreground block">Daily Basic Wage</span>
                 <span className="font-semibold text-foreground text-sm">
-                  {formatAED(calculation.dailyWageMinor)}
+                  {formatMoney(calculation.dailyWageMinor, "AED")}
                 </span>
               </div>
             </div>
 
-            {/* Gratuity Calculation Breakdown */}
+            {/* Gratuity Calculation Breakdown Table */}
             <div className="space-y-2">
               <h4 className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
-                Article 51 Severance Gratuity Breakdown
+                Article 51 Severance Gratuity & Settlement Breakdown
               </h4>
-              <div className="divide-y divide-border text-xs rounded-md border border-border overflow-hidden">
-                <div className="p-3 flex justify-between items-center bg-card">
-                  <div>
-                    <div className="font-medium text-foreground">First 5 Years (21 Days / Year)</div>
-                    <div className="text-[11px] text-muted-foreground">
-                      Service up to 5 years computed at 21 days&apos; basic wage per year
-                    </div>
-                  </div>
-                  <div className="font-semibold text-foreground">
-                    {formatAED(calculation.gratuityTier1Minor)}
-                  </div>
-                </div>
+              <div className="data-panel overflow-hidden">
+                <table className="data-table w-full" data-density={density}>
+                  <thead>
+                    <tr>
+                      <th>Tier / Statutory Component</th>
+                      <th>Service Basis</th>
+                      <th className="col-numeric text-right!">Amount</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr>
+                      <td>
+                        <div className="font-medium text-foreground">First 5 Years (Tier 1)</div>
+                        <div className="text-xs text-muted-foreground">
+                          Service up to 5 years computed at 21 days&apos; basic wage per year
+                        </div>
+                      </td>
+                      <td className="text-xs text-muted-foreground">
+                        21 days / year
+                      </td>
+                      <td className="money text-right font-medium text-foreground">
+                        {formatMoney(calculation.gratuityTier1Minor, "AED")}
+                      </td>
+                    </tr>
 
-                {calculation.yearsOfService > 5 && (
-                  <div className="p-3 flex justify-between items-center bg-card">
-                    <div>
-                      <div className="font-medium text-foreground">Additional Service (30 Days / Year)</div>
-                      <div className="text-[11px] text-muted-foreground">
-                        Service exceeding 5 years computed at 30 days&apos; basic wage per year
-                      </div>
-                    </div>
-                    <div className="font-semibold text-foreground">
-                      {formatAED(calculation.gratuityTier2Minor)}
-                    </div>
-                  </div>
-                )}
-
-                <div className="p-3 flex justify-between items-center bg-muted/20 font-medium">
-                  <div>
-                    <span className="text-foreground">Uncapped Gratuity Amount</span>
-                    {calculation.isCapped && (
-                      <span className="text-[11px] text-danger ml-2 font-normal">
-                        (Capped at 24 months basic salary: {formatAED(calculation.maxCapMinor)})
-                      </span>
+                    {calculation.yearsOfService > 5 && (
+                      <tr>
+                        <td>
+                          <div className="font-medium text-foreground">Additional Service (Tier 2)</div>
+                          <div className="text-xs text-muted-foreground">
+                            Service exceeding 5 years computed at 30 days&apos; basic wage per year
+                          </div>
+                        </td>
+                        <td className="text-xs text-muted-foreground">
+                          30 days / year
+                        </td>
+                        <td className="money text-right font-medium text-foreground">
+                          {formatMoney(calculation.gratuityTier2Minor, "AED")}
+                        </td>
+                      </tr>
                     )}
-                  </div>
-                  <div className="font-bold text-foreground">
-                    {formatAED(calculation.gratuityMinor)}
-                  </div>
-                </div>
+
+                    {calculation.unusedLeaveDays > 0 && (
+                      <tr>
+                        <td>
+                          <div className="font-medium text-foreground">Article 29 Annual Leave Encashment</div>
+                          <div className="text-xs text-muted-foreground">
+                            {calculation.unusedLeaveDays} days unused leave balance
+                          </div>
+                        </td>
+                        <td className="text-xs text-muted-foreground">
+                          {calculation.unusedLeaveDays} days × {formatMoney(calculation.dailyWageMinor, "AED")}
+                        </td>
+                        <td className="money text-right font-medium text-foreground">
+                          {formatMoney(calculation.leaveEncashmentMinor, "AED")}
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                  <tfoot>
+                    <tr className="border-t border-border-strong bg-surface font-semibold">
+                      <td colSpan={2} className="text-foreground">
+                        Total Statutory Gratuity
+                        {calculation.isCapped && (
+                          <span className="text-xs text-danger ml-2 font-normal">
+                            (Capped at 24 months basic salary: {formatMoney(calculation.maxCapMinor, "AED")})
+                          </span>
+                        )}
+                      </td>
+                      <td className="money text-right font-bold text-foreground">
+                        {formatMoney(calculation.gratuityMinor, "AED")}
+                      </td>
+                    </tr>
+                  </tfoot>
+                </table>
               </div>
             </div>
-
-            {/* Leave Encashment if applicable */}
-            {calculation.unusedLeaveDays > 0 && (
-              <div className="space-y-2">
-                <h4 className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
-                  Article 29 Annual Leave Encashment
-                </h4>
-                <div className="p-3 rounded-md border border-border bg-card flex justify-between items-center text-xs">
-                  <div>
-                    <div className="font-medium text-foreground">
-                      {calculation.unusedLeaveDays} Days Unused Annual Leave
-                    </div>
-                    <div className="text-[11px] text-muted-foreground">
-                      Calculated as {calculation.unusedLeaveDays} days × {formatAED(calculation.dailyWageMinor)} daily wage
-                    </div>
-                  </div>
-                  <div className="font-bold text-foreground">
-                    {formatAED(calculation.leaveEncashmentMinor)}
-                  </div>
-                </div>
-              </div>
-            )}
 
             {/* Total Settlement Box */}
             <div className="rounded-lg bg-primary/10 border border-primary/20 p-5 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
@@ -325,7 +341,7 @@ export function EosbClient({ businessId, employees }: EosbClientProps) {
                 </div>
               </div>
               <div className="text-2xl font-black text-primary">
-                {formatAED(calculation.totalSettlementMinor)}
+                {formatMoney(calculation.totalSettlementMinor, "AED")}
               </div>
             </div>
 

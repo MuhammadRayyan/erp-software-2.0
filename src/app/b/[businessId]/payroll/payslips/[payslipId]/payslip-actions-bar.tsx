@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 import { Printer, Download, Ban, CheckCircle2, Edit } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
+import { StatusBadge } from "@/components/status-badge";
 import { postPayslipAction, voidPayslipAction } from "@/modules/payroll/actions/payroll-actions";
 
 interface PayslipActionsBarProps {
@@ -71,11 +71,7 @@ export function PayslipActionsBar({
   return (
     <div className="flex flex-wrap items-center justify-between gap-3 print:hidden">
       <div className="flex items-center gap-2">
-        <Badge
-          tone={status === "posted" ? "success" : status === "draft" ? "neutral" : "danger"}
-        >
-          {status.toUpperCase()}
-        </Badge>
+        <StatusBadge status={status} />
         {journalEntryId && (
           <Link
             href={`/b/${businessId}/accounting/journal`}

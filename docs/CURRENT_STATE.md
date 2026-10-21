@@ -23,6 +23,15 @@ This is the compact source of truth for the code that exists now. Historical pha
 - Banking: GL-mapped Bank Accounts, CSV statement import/mapping/deduplication, matching/ignore controls, Money In/Out Bank Transactions, one-document Bank Transfers, reconciliation, transaction history, and reconciliation reports.
 - UAE VAT: signed posting snapshots, working papers, explicit periods, review issues, manual adjustments, drill-down/export/reconciliation, finalization/locking/reopening, audit history, and Filed Externally snapshots.
 - Multi-currency foundation: per-business currency master, configurable minor units, one pre-activity base currency, dated Manual/CBUAE-labelled rates, immutable posting snapshots, deterministic base conversion, foreign AR/AP carrying values, realized settlement FX, base-valued inventory/projects/reports/VAT, currency-aware PDFs, and demo USD/EUR workflows. There are no live-rate calls.
+- HR & Payroll: Manager.io-inspired employee master directory, predefined compensation categories (earnings & allowances, deductions & recoveries) mapped to General Ledger accounts, payslip creation and automatic GL posting (Dr 6100 Salaries Expense, Cr 2200 Payroll Payable & 1220 Advances), 1-click batch monthly pay run generator, UAE Labor Law No. 33 of 2021 End of Service Benefits (EOSB) severance calculator (Article 51 gratuity computation with 5-year tier thresholds and 2-year cap, Article 29 leave encashment), and printable payslips.
+  - **Global Table & Row Theming Standardization**:
+    - **Employees Register (`EmployeeTable`)**: Standardized with `@tanstack/react-table` legacy model (`DataTable`), `ListToolbar`, `SearchInput`, `ToolbarSelect` (Active/Inactive), `DensityToggle`, column sorting (Name, Designation, Joining Date, Basic Salary, Total Standard Pay, Status), right-aligned tabular numbers (`meta: { numeric: true }`, `.col-numeric`, `.money`), `StatusBadge`, context kebab dropdown menu (`DropdownMenu` with `MoreHorizontal`), hover action chevron (`ChevronRight`), and `TableTotalsBar` showing active headcount, basic salary sum, and total monthly commitment.
+    - **Payslips Register (`PayslipTable`)**: Fully aligned with commercial registers using `DataTable`, `ListToolbar`, `SearchInput`, `ToolbarSelect` (Posted/Draft/Void), `DensityToggle`, column sorting, right-aligned monetary values, `StatusBadge`, row kebab actions (View, Edit Draft), hover chevron, and `TableTotalsBar` aggregating total gross earnings, total deductions, and net payable.
+    - **Payslip Items Manager (`ItemsClient`)**: Standardized earnings and deduction tables inside `.data-panel` with section headers, item counts, `data-table` styling with `data-density`, search filtering via `SearchInput`, and kebab dropdown menus.
+    - **EOSB Calculator (`EosbClient`)**: Upgraded statutory computation breakdown into a standardized `.data-panel` + `.data-table` layout with tier breakdown, service basis, right-aligned figures, and bold summary total footer.
+    - **Pay Run Generator (`PayRunDialog`)**: Upgraded employee selection list to an embedded `.data-panel` + `.data-table` with master select-all checkbox, per-employee selection, designations, and right-aligned monthly pay.
+    - **Payslip Form (`PayslipForm`)**: Standardized earnings and deductions line-item tables with `.line-item-table` styling matching `DocumentLineTable` (separate border-spacing, floating rounded cards, subtle elevation on hover, uppercase letter-spaced headers, and clean delete button).
+    - **Payslip Detail View (`PayslipDetailPage`)**: Standardized line items using `.data-panel` and `.data-table` with `.money text-right` and bold summary totals footers matching sales and purchase document view layouts.
 
 - **Core Commercial Flow Hardening & Deep Accounting Verification**:
   - Comprehensive 9-stage verification suite (`tests/deep-audit-verification.test.ts`) validating end-to-end commercial flows: Quote (Rev 0) → Revision (Rev 1) → Sales Order → Sales Invoice → Delivery Note (stock reduction & COGS) → Overpayment Receipt (advance credit pool creation) → Trial Balance equilibrium.
@@ -302,6 +311,18 @@ Last verified on 24 August 2026 (review round 7 + v2.1.0 packaging): explicit mi
   - Floating sticky batch action bar displaying selected lines count, net amount total, and action triggers: *Recode Account*, *Recode Project*, and *Recode Tax Code*.
   - Radix modal dialogs with safety confirmation, destination selection, and atomic execution via server action `recodeLinesAction`.
 - **Integrated Navigation**: Added to sidebar under Accounting and header shortcut button on Journal Entries (`/accounting/journal`).
+
+### HR & Payroll Module Theming & Table Standardization
+- **Global Table Alignment**:
+  - `src/modules/payroll/employee-table.tsx`: Migrated to full `@tanstack/react-table` legacy model with `DataTable`, `ListToolbar`, `SearchInput`, `ToolbarSelect` (Active/Inactive), `ActiveFiltersRow`, `DensityToggle` (`useTableDensity`), and `useColumns` (`payroll-employees` storage key). Supports `meta: { wrap: true }`, `meta: { numeric: true }`, formatted joining dates (`formatDate`), dynamic business currency, and conditional `TableTotalsBar`.
+  - `src/modules/payroll/payslip-table.tsx`: Migrated to full `DataTable` model with `useColumns` (`payroll-payslips` storage key), `DensityToggle`, `useTableDensity`, `meta: { wrap: true }`, `meta: { numeric: true }`, formatted dates, dynamic business currency, and conditional `TableTotalsBar`.
+  - `src/app/b/[businessId]/payroll/items/items-client.tsx`: Enclosed in `.data-panel`, bound to `data-density={density}`, with `DensityToggle`, status filters, filter chips, and standardized `StatusBadge` indicators.
+  - `src/app/b/[businessId]/payroll/eosb-calculator/eosb-client.tsx`: Statutory breakdown table converted to `.data-panel` + `.data-table` with `data-density={density}`, `DensityToggle`, and numeric right-aligned amount columns.
+  - `src/app/b/[businessId]/payroll/payslips/pay-run-dialog.tsx`: Employee selection table bound to `data-density={density}` with `.col-numeric text-right!` and active selection highlighting (`bg-primary/5`).
+  - `src/app/b/[businessId]/payroll/payslips/[payslipId]/page.tsx`: Printable detail view with `.data-panel`, `.data-table`, multi-currency formatting, and print-friendly styles (`print-document-paper`).
+  - `src/app/b/[businessId]/payroll/payslips/payslip-form.tsx`: Standardized `.line-item-table` styling with dynamic currency and money-formatted summary footer.
+- **CSS High-Specificity Rules**:
+  - Added `.data-table th.col-numeric`, `.data-table td.col-numeric`, `.data-table th.col-wrap`, and `.data-table td.col-wrap` to `globals.css` ensuring reliable numeric right-alignment and text wrapping over default `.data-table th` left alignment.
 
 
 

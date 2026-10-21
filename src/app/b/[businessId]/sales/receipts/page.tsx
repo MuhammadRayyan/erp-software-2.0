@@ -4,7 +4,8 @@ import { EmptyState } from "@/components/empty-state";
 import { ListDateFilter } from "@/components/list-date-filter";
 import { ListPagination } from "@/components/list-pagination";
 import { PageHeader } from "@/components/page-header";
-import { Badge } from "@/components/ui/badge";
+import { StatusBadge } from "@/components/status-badge";
+import { DensityToggle } from "@/components/density-toggle";
 import { Button } from "@/components/ui/button";
 import { formatDate, formatMoney } from "@/core/format";
 import { requireModule } from "@/core/permissions/require-module";
@@ -36,6 +37,7 @@ export default async function ReceiptsPage({
   return (
     <div className="page-container">
       <PageHeader title="Receipts" description="Posted customer collections and their reversals.">
+        <DensityToggle businessId={businessId} />
         <Button asChild>
           <Link href={`/b/${businessId}/sales/receipts/new`}>
             <Plus className="size-4" /> Record Receipt
@@ -87,9 +89,7 @@ export default async function ReceiptsPage({
                         {formatMoney(receipt.base_amount_minor, access.business.currency)}
                       </td>
                       <td>
-                        <Badge tone={receipt.document_status === "posted" ? "info" : "danger"}>
-                          {receipt.document_status === "posted" ? "Posted" : "Reversed"}
-                        </Badge>
+                        <StatusBadge status={receipt.document_status} />
                       </td>
                       <td>
                         <ReceiptRowActions

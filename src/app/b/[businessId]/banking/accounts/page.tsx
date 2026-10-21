@@ -3,6 +3,7 @@ import { ArrowRightLeft, Landmark, LineChart, Plus } from "lucide-react";
 import { EmptyState } from "@/components/empty-state";
 import { PageHeader } from "@/components/page-header";
 import { StatusBadge } from "@/components/status-badge";
+import { DensityToggle } from "@/components/density-toggle";
 import { Button } from "@/components/ui/button";
 import { formatMoney } from "@/core/format";
 import { requireModule } from "@/core/permissions/require-module";
@@ -24,6 +25,7 @@ export default async function BankAccountsPage({ params }: { params: Promise<{ b
         title="Bank Accounts"
         description="Base-currency bank and cash accounts mapped directly to Asset ledger accounts."
       >
+        <DensityToggle businessId={businessId} />
         <Button asChild variant="secondary">
           <Link href={`/b/${businessId}/reports/cash-flow-forecast`}>
             <LineChart className="size-4" /> Liquidity Forecast

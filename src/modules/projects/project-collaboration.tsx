@@ -7,12 +7,11 @@ import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { DialogClose, DialogContent, DialogDescription, DialogRoot, DialogTitle } from "@/components/ui/dialog";
-import { formatDate } from "@/core/format";
+import { formatDate, formatBytes } from "@/core/format";
 import { addProjectNoteAction, deleteProjectAttachmentAction, deleteProjectNoteAction, uploadProjectAttachmentAction } from "./actions";
 
 type Note = { id: string; body: string; created_at: string };
 type Attachment = { id: string; original_name: string; mime_type: string; size_bytes: number; created_at: string };
-function formatBytes(bytes: number) { if (bytes < 1024) return `${bytes} B`; if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`; return `${(bytes / (1024 * 1024)).toFixed(1)} MB`; }
 
 export function ProjectNotes({ businessId, projectId, notes }: { businessId: string; projectId: string; notes: Note[] }) {
   const [body, setBody] = useState(""); const [pending, setPending] = useState(false); const [error, setError] = useState(""); const router = useRouter();

@@ -4,6 +4,7 @@ import { EmptyState } from "@/components/empty-state";
 import { ListDateFilter } from "@/components/list-date-filter";
 import { PageHeader } from "@/components/page-header";
 import { StatusBadge } from "@/components/status-badge";
+import { DensityToggle } from "@/components/density-toggle";
 import { Button } from "@/components/ui/button";
 import { formatDate, formatMoney } from "@/core/format";
 import { requireModule } from "@/core/permissions/require-module";
@@ -42,6 +43,7 @@ export default async function GoodsReceiptsPage({
         title="Goods Receipts"
         description="Supplier receipts change physical stock without duplicating AP accounting."
       >
+        <DensityToggle businessId={businessId} />
         <Button asChild>
           <Link href={`/b/${businessId}/purchases/goods-receipts/new`}>
             <Plus className="size-4" /> New Goods Receipt

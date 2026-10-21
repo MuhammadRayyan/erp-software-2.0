@@ -1,7 +1,7 @@
 
 "use client";
 
-import { AlignJustify, LayoutList, Rows2 } from "lucide-react";
+import { AlignJustify, Check, LayoutList, Rows2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { useTableDensity } from "@/components/use-table-density";
@@ -19,14 +19,23 @@ export function DensityToggle({ businessId }: { businessId?: string }) {
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-40">
-        <DropdownMenuItem onSelect={() => setDensity("compact")}>
-          <span className="w-4">{density === "compact" ? "?" : ""}</span> Compact
+        <DropdownMenuItem onSelect={() => setDensity("compact")} className="flex items-center gap-2">
+          <div className="flex size-4 items-center justify-center">
+            {density === "compact" && <Check className="size-4" />}
+          </div>
+          Compact
         </DropdownMenuItem>
-        <DropdownMenuItem onSelect={() => setDensity("default")}>
-          <span className="w-4">{density === "default" ? "?" : ""}</span> Default
+        <DropdownMenuItem onSelect={() => setDensity("default")} className="flex items-center gap-2">
+          <div className="flex size-4 items-center justify-center">
+            {density === "default" && <Check className="size-4" />}
+          </div>
+          Default
         </DropdownMenuItem>
-        <DropdownMenuItem onSelect={() => setDensity("comfortable")}>
-          <span className="w-4">{density === "comfortable" ? "?" : ""}</span> Comfortable
+        <DropdownMenuItem onSelect={() => setDensity("comfortable")} className="flex items-center gap-2">
+          <div className="flex size-4 items-center justify-center">
+            {density === "comfortable" && <Check className="size-4" />}
+          </div>
+          Comfortable
         </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>

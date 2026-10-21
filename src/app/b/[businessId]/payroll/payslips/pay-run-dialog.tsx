@@ -11,12 +11,16 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { formatMoney } from "@/core/format";
+import { useTableDensity } from "@/components/use-table-density";
+import { cn } from "@/lib/cn";
 import { type EmployeeRecord } from "@/modules/payroll/services/payroll-service";
 import { generateBatchPayslipsAction } from "@/modules/payroll/actions/payroll-actions";
 
 interface PayRunDialogProps {
   businessId: string;
   employees: EmployeeRecord[];
+  currency?: string;
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onGenerated?: () => void;
@@ -25,10 +29,12 @@ interface PayRunDialogProps {
 export function PayRunDialog({
   businessId,
   employees,
+  currency = "AED",
   open,
   onOpenChange,
   onGenerated,
 }: PayRunDialogProps) {
+  const { density } = useTableDensity(businessId);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -93,11 +99,6 @@ export function PayRunDialog({
     }
   };
 
-  const formatAED = (minor?: number | null) => {
-    if (!minor) return "AED 0.00";
-    return `AED ${(minor / 100).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-  };
-
   return (
     <DialogRoot open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
@@ -151,45 +152,73 @@ export function PayRunDialog({
               </Button>
             </div>
 
-            <div className="max-h-56 overflow-y-auto divide-y divide-border rounded-md border border-border bg-card">
+            <div className="data-panel max-h-56 overflow-y-auto">
               {activeEmployees.length === 0 ? (
                 <div className="p-4 text-center text-sm text-muted-foreground">
                   No active employees found. Please add or activate employees first.
                 </div>
               ) : (
-                activeEmployees.map((emp) => {
-                  const total =
-                    (emp.basicSalaryMinor ?? 0) +
-                    (emp.housingAllowanceMinor ?? 0) +
-                    (emp.transportAllowanceMinor ?? 0) +
-                    (emp.otherAllowancesMinor ?? 0);
-                  const isChecked = selectedIds.includes(emp.id);
-
-                  return (
-                    <label
-                      key={emp.id}
-                      className="flex items-center justify-between p-2.5 hover:bg-muted/30 cursor-pointer transition-colors"
-                    >
-                      <div className="flex items-center gap-2.5">
+                <table className="data-table w-full" data-density={density}>
+                  <thead>
+                    <tr>
+                      <th className="w-10 text-center">
                         <input
                           type="checkbox"
-                          checked={isChecked}
-                          onChange={() => toggleEmployee(emp.id)}
+                          checked={selectedIds.length === activeEmployees.length && activeEmployees.length > 0}
+                          onChange={toggleAll}
+                          aria-label="Select all active employees"
                           className="rounded border-border text-primary focus:ring-primary size-4"
                         />
-                        <div>
-                          <div className="text-sm font-medium text-foreground">{emp.name}</div>
-                          <div className="text-xs text-muted-foreground">
-                            {emp.code || "No code"} {emp.designation ? `• ${emp.designation}` : ""}
-                          </div>
-                        </div>
-                      </div>
-                      <div className="text-right text-xs font-medium text-foreground">
-                        {formatAED(total)}
-                      </div>
-                    </label>
-                  );
-                })
+                      </th>
+                      <th>Employee</th>
+                      <th>Designation & Dept</th>
+                      <th className="col-numeric text-right!">Monthly Pay</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {activeEmployees.map((emp) => {
+                      const total =
+                        (emp.basicSalaryMinor ?? 0) +
+                        (emp.housingAllowanceMinor ?? 0) +
+                        (emp.transportAllowanceMinor ?? 0) +
+                        (emp.otherAllowancesMinor ?? 0);
+                      const isChecked = selectedIds.includes(emp.id);
+
+                      return (
+                        <tr
+                          key={emp.id}
+                          className={cn(
+                            "cursor-pointer transition-colors",
+                            isChecked ? "bg-primary/5 font-medium" : "hover:bg-surface-muted"
+                          )}
+                          onClick={() => toggleEmployee(emp.id)}
+                        >
+                          <td className="text-center" onClick={(e) => e.stopPropagation()}>
+                            <input
+                              type="checkbox"
+                              checked={isChecked}
+                              onChange={() => toggleEmployee(emp.id)}
+                              aria-label={`Select ${emp.name}`}
+                              className="rounded border-border text-primary focus:ring-primary size-4"
+                            />
+                          </td>
+                          <td>
+                            <div className="font-medium text-foreground">{emp.name}</div>
+                            <div className="text-xs text-muted-foreground">
+                              {emp.code || "No code"}
+                            </div>
+                          </td>
+                          <td className="text-xs text-muted-foreground">
+                            {emp.designation || emp.department || "—"}
+                          </td>
+                          <td className="money text-right font-medium text-foreground">
+                            {formatMoney(total, currency)}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
               )}
             </div>
           </div>

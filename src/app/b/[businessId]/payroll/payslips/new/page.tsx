@@ -22,7 +22,7 @@ export default async function NewPayslipPage({
 }) {
   const { businessId } = await params;
   const sp = await searchParams;
-  const { user } = await requireModule(businessId, "payroll");
+  const { user, access } = await requireModule(businessId, "payroll");
 
   const employees = listEmployees(businessId, user.id, { isActive: true });
   const items = listPayslipItems(businessId, user.id, { isActive: true });
@@ -39,6 +39,7 @@ export default async function NewPayslipPage({
         employees={employees}
         items={items}
         accounts={accounts.map((a) => ({ id: a.id, name: a.name, type: a.type }))}
+        currency={access.business.currency}
         prefill={{
           employeeId: sp.employeeId,
           gratuityAED: sp.gratuityAED,

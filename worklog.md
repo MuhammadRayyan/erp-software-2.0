@@ -6,6 +6,57 @@ Uploaded via `upload/erp-software-2.0-antigravity-edits (2).zip`, extracted to `
 Environment: bun package manager + Node 24 runtime, Next dev on port 3000, single app (no docker).
 
 ---
+Task ID: Payroll-HR-Theming-Standardization
+Agent: Antigravity
+Task: Global table and row theming standardization across Payroll & HR modules and documentation update
+
+Work Log:
+- Deep visual and code audit of all HR & Payroll views and tables against standard ERP table paradigms in Sales, Purchases, Banking, and Settings.
+- Created `src/modules/payroll/employee-table.tsx`: Standardized workforce register with `@tanstack/react-table` legacy model (`DataTable`), `ListToolbar`, `SearchInput`, `ToolbarSelect`, `DensityToggle`, interactive column sorting (Name, Designation & Dept, Joining Date, Basic Salary, Total Standard Pay, Status), right-aligned tabular currency (`meta: { numeric: true }`, `.col-numeric`, `.money`), `StatusBadge`, context kebab dropdown menu (`DropdownMenu` with `MoreHorizontal`), hover action chevron (`ChevronRight`), empty state with filters reset, and `TableTotalsBar` aggregating active headcount, total basic salary, and total payroll commitment.
+- Refactored `src/app/b/[businessId]/payroll/employees/employees-client.tsx` to delegate cleanly to `EmployeeTable` and manage employee dialog state.
+- Created `src/modules/payroll/payslip-table.tsx`: Fully standardized payslips register matching commercial registers (`DataTable`), `ListToolbar`, `SearchInput`, `ToolbarSelect` (All, Posted, Draft, Void), `DensityToggle`, column sorting, right-aligned monetary values, `StatusBadge`, row kebab actions (View Details, Edit Draft), hover action chevron, and `TableTotalsBar` aggregating total gross, total deductions, and net payable.
+- Refactored `src/app/b/[businessId]/payroll/payslips/payslips-client.tsx` to delegate cleanly to `PayslipTable` and manage pay run dialog state.
+- Standardized `src/app/b/[businessId]/payroll/items/items-client.tsx`: Enclosed Earnings & Allowances and Deductions & Recoveries tables inside `.data-panel` with section headers, item counts, `data-table` styling with `data-density`, search filtering via `SearchInput`, and kebab dropdown menus.
+- Standardized `src/app/b/[businessId]/payroll/eosb-calculator/eosb-client.tsx`: Transformed statutory computation breakdown into a standardized `.data-panel` + `.data-table` layout with tier breakdown, service basis, right-aligned figures, and bold summary total footer.
+- Standardized `src/app/b/[businessId]/payroll/payslips/pay-run-dialog.tsx`: Upgraded employee selection list to an embedded `.data-panel` + `.data-table` with master select-all checkbox, per-employee selection, designations, and right-aligned monthly pay.
+- Standardized `src/app/b/[businessId]/payroll/payslips/payslip-form.tsx`: Replaced raw table with `.line-item-table` styling matching `DocumentLineTable` (separate border-spacing, floating rounded cards, subtle elevation on hover, uppercase letter-spaced headers, and clean delete button) and updated section backgrounds to `bg-surface-raised`.
+- Standardized `src/app/b/[businessId]/payroll/payslips/[payslipId]/page.tsx`: Standardized line items using `.data-panel` and `.data-table` with `.money text-right` and bold summary totals footers matching sales and purchase document view layouts.
+- Updated `docs/THEME.md`: Explicitly documented the three standardized table paradigms (Primary List / Data Tables, Document Line-Item Tables, Read-Only Detail Tables) and HR & Payroll compliance.
+- Updated `docs/CURRENT_STATE.md`: Documented the HR & Payroll module and the global table and row theming standardization.
+- Updated `README.md`: Added HR & Payroll module and standardized global theming to current release feature highlights.
+- Verified: All 259 existing tests pass with 0 failures, and `next build` compiled with 0 errors.
+
+Stage Summary:
+- HR and Payroll tables and rows are now 100% globally standardized with the rest of Ledgerly ERP. All documentation updated.
+
+---
+Task ID: Payroll-HR-Theming-Review-And-Fix
+Agent: Antigravity (Reviewer)
+Task: Deep review, break-testing, edge case verification, and final fix of Payroll & HR table & row theming standardization
+
+Work Log:
+- Skeptical Review & Gaps Identified:
+  1. Omission of `useColumns` column visibility dropdown: The prior implementation lacked `useColumns` and column hiding dropdown on both `EmployeeTable` and `PayslipTable`, which is a core paradigm of all other registers (Sales, Purchases, Banking). Fixed by wiring `useColumns` with persistent storage keys `payroll-employees` and `payroll-payslips`.
+  2. Missing `meta: { wrap: true }`: `DataTable` applies `whitespace-nowrap truncate` by default to cells unless `meta: { wrap: true }` is specified. Long employee designations, multi-word department names, and periods were being truncated. Added `meta: { wrap: true }` across Employee, Designation, and Date columns.
+  3. Raw unformatted date strings: Joining dates and payslip issue dates were rendering raw ISO strings (`2026-04-01`). Refactored to use standard `formatDate` (`01 Apr 2026`).
+  4. Hardcoded "AED" strings: Currency was hardcoded to "AED" instead of reading the active business currency from `access.business.currency`. Threaded dynamic `currency` prop through `EmployeesClient`, `PayslipsClient`, `PayslipForm` (new/edit pages), and `PayslipDetailPage`.
+  5. Unconditional `TableTotalsBar` render: Summary bar was rendered even when zero filtered rows were returned, showing a redundant bar under the empty state. Added conditional rendering `filteredRows.length > 0 && <TableTotalsBar ... />`.
+  6. CSS Specificity conflict: `.data-table th` has `text-align: left;` with specificity (0,1,1). Added `.data-table th.col-numeric`, `.data-table td.col-numeric`, `.data-table th.col-wrap`, and `.data-table td.col-wrap` to `globals.css` ensuring reliable styling over table defaults.
+  7. Missing density bindings in sub-views: `pay-run-dialog.tsx` and `eosb-client.tsx` lacked `useTableDensity` bindings or `DensityToggle`. Added `useTableDensity`, `data-density={density}`, and `DensityToggle` to both.
+  8. Enriched `items-client.tsx`: Added `ToolbarSelect` status filter, `ActiveFiltersRow` with chips, and active/inactive status toggle actions in dropdown menu.
+- Verification & Test Suite:
+  - Created `tests/payroll-table-standardization.test.ts` verifying CSS specificity rules, `EmployeeTable` and `PayslipTable` architecture, multi-currency formatting, and density bindings.
+  - Added new test suite to `package.json` `test` script.
+  - Ran `tsc --noEmit`: 0 type errors.
+  - Ran `npm test`: all 265 unit and regression tests passed in 43.4s with 0 failures.
+  - Ran `npm run build`: production build passed with all 160+ dynamic and static routes compiled with 0 errors or warnings.
+- Documentation:
+  - Updated `docs/THEME.md`, `docs/CURRENT_STATE.md`, and `README.md`.
+
+Stage Summary:
+- Deep review completed, all gaps resolved, 265/265 tests passing, production build 100% clean.
+
+---
 Task ID: 0
 Agent: main (Z.ai Code)
 Task: Full app analysis (4 parallel Explore agents) + analysis report delivered to user

@@ -2,6 +2,7 @@ import Link from "next/link";
 import { BookOpen, ChevronRight, SlidersHorizontal } from "lucide-react";
 import { EmptyState } from "@/components/empty-state";
 import { PageHeader } from "@/components/page-header";
+import { DensityToggle } from "@/components/density-toggle";
 import { Button } from "@/components/ui/button";
 import { requireModule } from "@/core/permissions/require-module";
 import { formatDate, formatMoney } from "@/core/format";
@@ -21,6 +22,7 @@ export default async function JournalPage({ params }: { params: Promise<{ busine
         title="Journal"
         description="Balanced entries generated only by accounting services."
       >
+        <DensityToggle businessId={businessId} />
         <Button asChild variant="secondary">
           <Link href={`/b/${businessId}/accounting/find-and-recode`}>
             <SlidersHorizontal className="size-4" /> Find & Recode

@@ -13,7 +13,7 @@ export default async function PayslipsPage({
   params: Promise<{ businessId: string }>;
 }) {
   const { businessId } = await params;
-  const { user } = await requireModule(businessId, "payroll");
+  const { user, access } = await requireModule(businessId, "payroll");
 
   const payslips = listPayslips(businessId, user.id);
   const employees = listEmployees(businessId, user.id);
@@ -28,6 +28,7 @@ export default async function PayslipsPage({
         businessId={businessId}
         payslips={payslips}
         employees={employees}
+        currency={access.business.currency}
       />
     </div>
   );

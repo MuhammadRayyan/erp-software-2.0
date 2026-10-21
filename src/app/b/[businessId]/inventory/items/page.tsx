@@ -3,6 +3,7 @@ import { ClipboardPlus, Package, Plus, SlidersHorizontal } from "lucide-react";
 import { EmptyState } from "@/components/empty-state";
 import { PageHeader } from "@/components/page-header";
 import { StatusBadge } from "@/components/status-badge";
+import { DensityToggle } from "@/components/density-toggle";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { requireModule } from "@/core/permissions/require-module";
@@ -33,6 +34,7 @@ export default async function InventoryItemsPage({
         title="Inventory Items"
         description="Posted movement-derived stock with moving weighted-average valuation."
       >
+        <DensityToggle businessId={businessId} />
         <Button asChild variant="secondary">
           <Link href={`/b/${businessId}/inventory/adjustments/new`}>
             <ClipboardPlus className="size-4" /> Adjust Stock

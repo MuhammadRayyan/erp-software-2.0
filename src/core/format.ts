@@ -115,3 +115,13 @@ export const EMPTY_CELL = "—";
 export function formatOptional(value?: string | null): string {
   return value ?? EMPTY_CELL;
 }
+
+export function formatBytes(bytes?: number | null): string {
+  if (bytes == null || Number.isNaN(bytes)) return "—";
+  if (bytes <= 0) return "0 B";
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
+  return `${(bytes / (1024 * 1024 * 1024)).toFixed(2)} GB`;
+}
+

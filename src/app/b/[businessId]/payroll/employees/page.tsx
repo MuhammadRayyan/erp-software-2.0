@@ -13,7 +13,7 @@ export default async function EmployeesPage({
   params: Promise<{ businessId: string }>;
 }) {
   const { businessId } = await params;
-  const { user } = await requireModule(businessId, "payroll");
+  const { user, access } = await requireModule(businessId, "payroll");
 
   const employees = listEmployees(businessId, user.id);
 
@@ -23,7 +23,11 @@ export default async function EmployeesPage({
         title="Employees"
         description="Master directory of workforce, job designations, and standard compensation structures."
       />
-      <EmployeesClient businessId={businessId} employees={employees} />
+      <EmployeesClient
+        businessId={businessId}
+        employees={employees}
+        currency={access.business.currency}
+      />
     </div>
   );
 }

@@ -19,7 +19,7 @@ export default async function EditPayslipPage({
   params: Promise<{ businessId: string; payslipId: string }>;
 }) {
   const { businessId, payslipId } = await params;
-  const { user } = await requireModule(businessId, "payroll");
+  const { user, access } = await requireModule(businessId, "payroll");
 
   const record = getPayslipWithLines(businessId, user.id, payslipId);
   if (!record) notFound();
@@ -44,6 +44,7 @@ export default async function EditPayslipPage({
         employees={employees}
         items={items}
         accounts={accounts.map((a) => ({ id: a.id, name: a.name, type: a.type }))}
+        currency={access.business.currency}
         initialPayslip={record.payslip}
         initialLines={record.lines}
       />

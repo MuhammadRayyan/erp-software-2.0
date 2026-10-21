@@ -214,22 +214,40 @@ or contextual variants.
 
 ## Tables
 
-Accounting tables should be dense and readable.
+Accounting tables should be dense, readable, and globally consistent across every module in the application.
 
-Required behaviors where relevant:
-- row hover
-- selected row
-- sticky header for long lists
-- right-aligned money
-- status badge
-- sortable columns
-- search
-- filter button
-- optional Columns control
-- row overflow menu
-- horizontal scroll rather than broken wrapping
+Three standardized table paradigms are enforced globally:
 
-Do not make every cell editable by default.
+### 1. Primary Entity List / Data Tables (`DataTable` Component)
+All top-level list registers (Sales, Purchases, Banking, Projects, Inventory, and **HR & Payroll**):
+- **Engine**: `@tanstack/react-table` legacy model (`useTable`, `createCoreRowModel`, `createSortedRowModel`).
+- **Container**: Wrapped in `.data-panel` (`border: 1px solid var(--border)`, `border-radius: 8px`, `background: var(--surface-raised)`).
+- **Headers**: Sticky headers (`var(--surface)`), semibold, interactive sort indicators with ascending/descending arrows.
+- **Rows**: Subtle hairline dividers (`border-top: 1px solid var(--border)`), smooth hover highlight (`var(--surface-muted)`), and selected row indicators.
+- **Data Formatting**: Right-aligned tabular money and numbers via `meta: { numeric: true }`, `.col-numeric`, and `.money`.
+- **Status Badges**: Standardized semantic tone badges via `<StatusBadge />`.
+- **Row Actions**: Context-sensitive 3-dot kebab menu (`DropdownMenu` with `MoreHorizontal` trigger) and hover-revealed navigation chevron (`ChevronRight`).
+- **Density Control**: `DensityToggle` component binding to `useTableDensity(businessId)` supporting `compact` (40px), `default` (48px), and `comfortable` (56px) via `data-density`.
+- **Column Visibility**: `useColumns` hook with dropdown selector (`columns-dropdown.tsx`) persisting user visibility preferences per business/module.
+- **Cell Text Wrapping**: Primary text and multi-line descriptions use `meta: { wrap: true }` (applied via `.col-wrap` and `.whitespace-normal`) to avoid truncation of long employee names, designations, and notes.
+- **Multi-Currency Support**: All tables receive the active business currency (fallback `"AED"`), formatting figures via `formatMoney(minor, currency)` rather than hardcoding currency codes.
+- **Summary Totals**: `TableTotalsBar` docked below the table displaying filtered count, total count, and aggregated financial totals, rendered conditionally when filtered rows exist.
+- **Empty States**: Standardized empty state card with Search icon, descriptive title, explanation subtext, and 1-click "Clear filters" action.
+
+### 2. Document Line-Item Tables (`.line-item-table`)
+Used in document creation and editing forms (Invoices, Quotes, Orders, Credit Notes, Debit Notes, and **Payslip Form**):
+- Visual styling: `border-collapse: separate`, `border-spacing: 0 6px`.
+- Rows: Floating rounded cards (`border-radius: 8px`, `border: 1px solid var(--border)`, `background: var(--surface-raised)`) with subtle hover elevation (`translateY(-1px)`).
+- Headers: Clean uppercase, letter-spaced, muted labels without borders.
+- Inputs: Consistent height (`h-8`), responsive text (`text-xs`), and right-aligned numeric inputs (`.money text-right`).
+- Actions: End-of-row ghost icon button (`Trash2`) with danger hover state.
+
+### 3. Read-Only Document Detail / Computation Tables (`.data-table`)
+Used in saved document view screens and calculation breakdowns (Invoice detail, Bill detail, **Payslip Detail**, **EOSB Calculator Statutory Breakdown**, and **Pay Run Employee Selection**):
+- Clean `.data-panel` enclosure with `.data-table`.
+- Consistent column widths, `.money text-right` alignment, and bold summary footer (`tfoot`).
+
+Do not make every cell editable by default. Use dedicated forms and modals for master record edits.
 
 ## Filters
 

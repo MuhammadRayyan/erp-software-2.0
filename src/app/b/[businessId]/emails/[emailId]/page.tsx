@@ -1,29 +1,15 @@
 import Link from "next/link";
 import { FileText, Paperclip } from "lucide-react";
 import { notFound } from "next/navigation";
-import { Badge } from "@/components/ui/badge";
+import { StatusBadge } from "@/components/status-badge";
 import { Button } from "@/components/ui/button";
 import { requireModule } from "@/core/permissions/require-module";
-import { formatDateTime } from "@/core/format";
+import { formatBytes, formatDateTime } from "@/core/format";
 import { getSentEmail } from "@/modules/email/email-service";
 import { parseMailboxes } from "@/modules/email/email-driver";
 import { BackLink } from "@/components/back-link";
 
 export const metadata = { title: "Sent Email" };
-
-const STATUS_TONES: Record<string, "success" | "danger" | "neutral" | "info"> = {
-  sent: "success",
-  delivered: "success",
-  failed: "danger",
-  queued: "info",
-};
-
-function formatSize(bytes: number | null): string {
-  if (bytes == null) return "—";
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-  return `${(bytes / 1024 / 1024).toFixed(2)} MB`;
-}
 
 function displayMailbox(mailboxes: ReturnType<typeof parseMailboxes>): string {
   if (mailboxes.length === 0) return "—";
@@ -47,9 +33,7 @@ export default async function SentEmailViewPage({ params }: { params: Promise<{ 
         <div>
           <div className="flex flex-wrap items-center gap-2">
             <h1 className="page-title">{email.subject}</h1>
-            <Badge tone={STATUS_TONES[email.status] ?? "neutral"} className="capitalize">
-              {email.status}
-            </Badge>
+            <StatusBadge status={email.status} />
           </div>
           <p className="mt-2 text-sm text-muted-foreground">Sent {formatDateTime(email.createdAt)}</p>
           {email.sentAt && email.sentAt !== email.createdAt && (
@@ -88,7 +72,7 @@ export default async function SentEmailViewPage({ params }: { params: Promise<{ 
               <dd className="mt-1 inline-flex items-center gap-1.5 text-foreground">
                 <Paperclip className="size-3.5 text-muted-foreground" />
                 {email.attachmentFilename}
-                <span className="text-xs text-muted-foreground">· {formatSize(email.attachmentSizeBytes)}</span>
+                <span className="text-xs text-muted-foreground">· {formatBytes(email.attachmentSizeBytes)}</span>
               </dd>
             </div>
           )}

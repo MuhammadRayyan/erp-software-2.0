@@ -27,6 +27,8 @@
   --color-info: var(--info);
   --color-info-foreground: var(--info-foreground);
   --color-ring: var(--ring);
+  --color-card: var(--surface-raised);
+  --color-card-foreground: var(--foreground);
 }
 
 
@@ -55,6 +57,8 @@
   --info: #2d6fbd;
   --info-foreground: #ffffff;
   --ring: #4b7fd2;
+  --card: #ffffff;
+  --card-foreground: #202936;
   color-scheme: light;
 }
 
@@ -83,6 +87,8 @@
   --info: #72a7e6;
   --info-foreground: #0d2037;
   --ring: #72a7ed;
+  --card: #222a35;
+  --card-foreground: #e7ebf1;
   color-scheme: dark;
 }
 
@@ -162,16 +168,53 @@ button, a { -webkit-tap-highlight-color: transparent; }
   border-top: 1px solid var(--border); 
   padding: 0 12px; 
 }
-/* Density overrides */
-.data-table[data-density="compact"] td, .data-table[data-density="compact"] th { height: 40px; }
-.data-table[data-density="default"] td, .data-table[data-density="default"] th,
-.data-table td, .data-table th { height: 48px; } /* default fallback */
-.data-table[data-density="comfortable"] td, .data-table[data-density="comfortable"] th { height: 56px; }
+/* Density overrides: table-level, container-level, and root-level */
+:root[data-table-density="compact"] .data-table td,
+:root[data-table-density="compact"] .data-table th,
+[data-density="compact"] .data-table td,
+[data-density="compact"] .data-table th,
+.data-table[data-density="compact"] td,
+.data-table[data-density="compact"] th {
+  height: 40px;
+}
+
+:root[data-table-density="default"] .data-table td,
+:root[data-table-density="default"] .data-table th,
+[data-density="default"] .data-table td,
+[data-density="default"] .data-table th,
+.data-table[data-density="default"] td,
+.data-table[data-density="default"] th,
+.data-table td,
+.data-table th {
+  height: 48px; /* default fallback */
+}
+
+:root[data-table-density="comfortable"] .data-table td,
+:root[data-table-density="comfortable"] .data-table th,
+[data-density="comfortable"] .data-table td,
+[data-density="comfortable"] .data-table th,
+.data-table[data-density="comfortable"] td,
+.data-table[data-density="comfortable"] th {
+  height: 56px;
+}
 
 /* Numeric and wrap utilities handled via Tailwind classes in DataTable, but adding these just in case */
-.col-numeric { font-variant-numeric: tabular-nums; text-align: right; }
-.col-wrap { white-space: normal; }
-.col-nowrap { white-space: nowrap; }
+.data-table th.col-numeric,
+.data-table td.col-numeric,
+.col-numeric {
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+.data-table th.col-wrap,
+.data-table td.col-wrap,
+.col-wrap {
+  white-space: normal;
+}
+.data-table th.col-nowrap,
+.data-table td.col-nowrap,
+.col-nowrap {
+  white-space: nowrap;
+}
 
 /* Sticky first column (seamless without harsh vertical divider) */
 .data-table th.sticky-col {

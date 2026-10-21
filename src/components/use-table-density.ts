@@ -21,7 +21,11 @@ function readStoredDensity(): TableDensity {
 }
 
 function persist(value: TableDensity) {
-  try { window.localStorage.setItem(STORAGE_KEY, value); } catch {}
+  try {
+    window.localStorage.setItem(STORAGE_KEY, value);
+    document.documentElement.setAttribute("data-table-density", value);
+    document.cookie = `ui-density=${value}; path=/; max-age=31536000; SameSite=Lax`;
+  } catch {}
 }
 
 function getSnapshot(): TableDensity {
@@ -35,6 +39,7 @@ function subscribe(listener: () => void) {
 
 if (typeof window !== "undefined") {
   currentDensity = readStoredDensity();
+  document.documentElement.setAttribute("data-table-density", currentDensity);
 }
 
 export function useTableDensity(businessId?: string) {

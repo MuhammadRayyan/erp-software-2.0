@@ -2,6 +2,7 @@ import { notFound } from "next/navigation";
 import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
 import { requireModule } from "@/core/permissions/require-module";
+import { formatMoney } from "@/core/format";
 import { getPayslipWithLines } from "@/modules/payroll/services/payroll-service";
 import { getBusinessProfile } from "@/modules/business-profile/business-profile-service";
 import { PayslipActionsBar } from "./payslip-actions-bar";
@@ -16,20 +17,17 @@ export default async function PayslipDetailPage({
   params: Promise<{ businessId: string; payslipId: string }>;
 }) {
   const { businessId, payslipId } = await params;
-  const { user } = await requireModule(businessId, "payroll");
+  const { user, access } = await requireModule(businessId, "payroll");
 
   const record = getPayslipWithLines(businessId, user.id, payslipId);
   if (!record) notFound();
 
+  const currency = access.business.currency ?? "AED";
   const { payslip, employee, lines } = record;
   const profile = getBusinessProfile(businessId, user.id);
 
   const earnings = lines.filter((l) => l.type === "earnings");
   const deductions = lines.filter((l) => l.type === "deduction");
-
-  const formatAED = (minor: number) => {
-    return `AED ${(minor / 100).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-  };
 
   return (
     <div className="page-container space-y-6 max-w-4xl">
@@ -52,7 +50,7 @@ export default async function PayslipDetailPage({
       />
 
       {/* Printable Payslip Card */}
-      <div className="rounded-lg border border-border bg-card p-6 sm:p-8 shadow-sm space-y-6">
+      <div className="rounded-lg border border-border bg-surface-raised p-6 sm:p-8 shadow-sm space-y-6 print:border-none print:shadow-none print:p-0 print:bg-white print-document-paper">
         {/* Document Header */}
         <div className="flex flex-col sm:flex-row justify-between items-start gap-4 border-b border-border pb-6">
           <div>
@@ -115,39 +113,41 @@ export default async function PayslipDetailPage({
             <h3 className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
               Earnings & Allowances
             </h3>
-            <div className="rounded-md border border-border overflow-hidden">
-              <table className="w-full text-left text-xs">
-                <thead className="bg-muted/40 border-b border-border font-semibold text-muted-foreground">
+            <div className="data-panel overflow-hidden">
+              <table className="data-table w-full">
+                <thead>
                   <tr>
-                    <th className="py-2.5 px-3">Description</th>
-                    <th className="py-2.5 px-3 text-right">Amount (AED)</th>
+                    <th>Description</th>
+                    <th className="col-numeric text-right!">Amount ({currency})</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-border">
+                <tbody>
                   {earnings.length > 0 ? (
                     earnings.map((e) => (
                       <tr key={e.id}>
-                        <td className="py-2.5 px-3 font-medium text-foreground">{e.description}</td>
-                        <td className="py-2.5 px-3 text-right font-medium text-foreground">
-                          {formatAED(e.amountMinor)}
+                        <td className="font-medium text-foreground">{e.description}</td>
+                        <td className="money text-right font-medium text-foreground">
+                          {formatMoney(e.amountMinor, currency)}
                         </td>
                       </tr>
                     ))
                   ) : (
                     <tr>
-                      <td className="py-2.5 px-3 font-medium text-foreground">Salary / Compensation</td>
-                      <td className="py-2.5 px-3 text-right font-medium text-foreground">
-                        {formatAED(payslip.grossAmountMinor)}
+                      <td className="font-medium text-foreground">Salary / Compensation</td>
+                      <td className="money text-right font-medium text-foreground">
+                        {formatMoney(payslip.grossAmountMinor, currency)}
                       </td>
                     </tr>
                   )}
-                  <tr className="bg-muted/10 font-bold border-t border-border">
-                    <td className="py-2 px-3 text-foreground">Total Gross Earnings</td>
-                    <td className="py-2 px-3 text-right text-foreground">
-                      {formatAED(payslip.grossAmountMinor)}
+                </tbody>
+                <tfoot>
+                  <tr className="border-t border-border-strong bg-surface font-bold">
+                    <td className="text-foreground">Total Gross Earnings</td>
+                    <td className="money text-right text-foreground">
+                      {formatMoney(payslip.grossAmountMinor, currency)}
                     </td>
                   </tr>
-                </tbody>
+                </tfoot>
               </table>
             </div>
           </div>
@@ -158,30 +158,32 @@ export default async function PayslipDetailPage({
               <h3 className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
                 Deductions & Recoveries
               </h3>
-              <div className="rounded-md border border-border overflow-hidden">
-                <table className="w-full text-left text-xs">
-                  <thead className="bg-muted/40 border-b border-border font-semibold text-muted-foreground">
+              <div className="data-panel overflow-hidden">
+                <table className="data-table w-full">
+                  <thead>
                     <tr>
-                      <th className="py-2.5 px-3">Description</th>
-                      <th className="py-2.5 px-3 text-right">Amount (AED)</th>
+                      <th>Description</th>
+                      <th className="col-numeric text-right!">Amount ({currency})</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-border">
+                  <tbody>
                     {deductions.map((d) => (
                       <tr key={d.id}>
-                        <td className="py-2.5 px-3 font-medium text-foreground">{d.description}</td>
-                        <td className="py-2.5 px-3 text-right font-medium text-muted-foreground">
-                          -{formatAED(d.amountMinor)}
+                        <td className="font-medium text-foreground">{d.description}</td>
+                        <td className="money text-right font-medium text-muted-foreground">
+                          -{formatMoney(d.amountMinor, currency)}
                         </td>
                       </tr>
                     ))}
-                    <tr className="bg-muted/10 font-bold border-t border-border">
-                      <td className="py-2 px-3 text-foreground">Total Deductions</td>
-                      <td className="py-2 px-3 text-right text-muted-foreground">
-                        -{formatAED(payslip.deductionsMinor)}
+                  </tbody>
+                  <tfoot>
+                    <tr className="border-t border-border-strong bg-surface font-bold">
+                      <td className="text-foreground">Total Deductions</td>
+                      <td className="money text-right text-muted-foreground">
+                        -{formatMoney(payslip.deductionsMinor, currency)}
                       </td>
                     </tr>
-                  </tbody>
+                  </tfoot>
                 </table>
               </div>
             </div>
@@ -196,8 +198,8 @@ export default async function PayslipDetailPage({
               Credited to Employee / Payroll Payable
             </div>
           </div>
-          <div className="text-2xl font-black text-primary">
-            {formatAED(payslip.netAmountMinor)}
+          <div className="text-2xl font-black text-primary tabular">
+            {formatMoney(payslip.netAmountMinor, currency)}
           </div>
         </div>
 
