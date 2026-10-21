@@ -4,7 +4,7 @@
 # ==============================================================================
 
 # Stage 1: Build & Dependencies
-FROM node:20-bookworm-slim AS builder
+FROM node:22-bookworm-slim AS builder
 WORKDIR /app
 
 ENV NEXT_TELEMETRY_DISABLED=1
@@ -28,7 +28,7 @@ ENV NODE_ENV=production
 RUN npm run build
 
 # Stage 2: Minimal Production Runner
-FROM node:20-bookworm-slim AS runner
+FROM node:22-bookworm-slim AS runner
 WORKDIR /app
 
 # Install runtime libraries for headless Chromium (PDF rendering) and SQLite
