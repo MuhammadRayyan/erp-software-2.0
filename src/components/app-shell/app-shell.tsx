@@ -3,21 +3,13 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Banknote, CircleHelp, ContactRound, FileInput, FolderKanban, HandCoins, History, Menu, Receipt, ReceiptText, Search, ShieldAlert, ShoppingCart, Truck, UserRound } from "lucide-react";
+import { Banknote, CircleHelp, ContactRound, FileInput, FolderKanban, HandCoins, History, Menu, Receipt, ReceiptText, Search, ShoppingCart, Truck, UserRound } from "lucide-react";
 import { BrandMark } from "@/components/brand-mark";
 import { CommandPalette, type CommandItem } from "@/components/command-palette";
 import { Button } from "@/components/ui/button";
 import { DialogContent, DialogDescription, DialogRoot, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
 import type { ModuleKey } from "@/core/permissions/permissions";
-import { ThemeMenu } from "@/core/theme/theme-menu";
+import { AccountMenu } from "@/components/account-menu";
 import { BusinessSwitcher } from "./business-switcher";
 import { primaryNav, settingsNav, systemHealthNav } from "./nav-items";
 import { SidebarNav } from "./sidebar-nav";
@@ -135,36 +127,7 @@ export function AppShell({ children, business, businesses, modules, user }: Shel
           <Button variant="ghost" size="icon" className="lg:hidden" aria-label="Search or jump to (Ctrl K)" onClick={() => setPaletteOpen(true)}><Search className="size-[18px]" /></Button>
           <ModuleFlowGuide />
           <Button variant="ghost" size="icon" aria-label="Help" title="Help" onClick={() => setHelpOpen(true)}><CircleHelp className="size-[18px]" /></Button>
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="ghost" className="gap-2 px-2" aria-label={`Account menu for ${user.name}`}><span className="grid size-7 place-items-center rounded-full bg-secondary text-secondary-foreground"><UserRound className="size-3.5" /></span><span className="hidden max-w-28 truncate text-[13px] sm:block">{user.name}</span></Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-56">
-              <DropdownMenuLabel><span className="block text-foreground">{user.name}</span><span className="block font-normal">{user.email}</span></DropdownMenuLabel>
-              <DropdownMenuSeparator />
-              <ThemeMenu />
-              <DropdownMenuSeparator />
-              <DropdownMenuItem asChild>
-                <Link href={`/b/${business.id}/settings/profile`} className="flex items-center gap-2">
-                  <UserRound className="size-4" /> Profile & Security
-                </Link>
-              </DropdownMenuItem>
-              <DropdownMenuItem asChild>
-                <Link href={`/b/${business.id}/settings/activity-log`} className="flex items-center gap-2">
-                  <History className="size-4" /> Activity Log
-                </Link>
-              </DropdownMenuItem>
-              {user.isSuperAdmin && (
-                <DropdownMenuItem asChild>
-                  <Link href="/admin" className="flex items-center gap-2 font-medium text-amber-700 dark:text-amber-400">
-                    <ShieldAlert className="size-4" /> Admin Control Panel
-                  </Link>
-                </DropdownMenuItem>
-              )}
-              <DropdownMenuItem asChild><Link href="/businesses">Switch business</Link></DropdownMenuItem>
-              <DropdownMenuItem asChild><Link href="/logout">Sign out</Link></DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
+          <AccountMenu user={user} businessId={business.id} />
         </div>
       </header>
       <div className="flex min-h-[calc(100dvh-3.5rem)]">

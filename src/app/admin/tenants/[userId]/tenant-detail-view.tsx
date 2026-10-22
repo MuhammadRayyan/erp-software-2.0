@@ -34,6 +34,7 @@ import {
   updateTenantQuotasAction,
 } from "../../actions";
 import { ConfirmDialog } from "../../confirm-dialog";
+import { copyToClipboard } from "../../clipboard";
 import type { TenantDetails } from "@/core/admin/tenant-service";
 
 function generateSecurePassword(): string {
@@ -63,6 +64,7 @@ export function TenantDetailView({ initialDetails }: { initialDetails: TenantDet
   const [businessConfirmTarget, setBusinessConfirmTarget] = useState<TenantDetails["businesses"][0] | null>(null);
 
   const isSuspended = details.user.status === "suspended";
+  const distinctSubUsersCount = new Set(details.subUsers.map((su) => su.userId)).size;
 
   function handleSaveQuotas(e: React.FormEvent) {
     e.preventDefault();
@@ -229,7 +231,7 @@ export function TenantDetailView({ initialDetails }: { initialDetails: TenantDet
               <span>•</span>
               <span>{details.businesses.length} Workspaces</span>
               <span>•</span>
-              <span>{details.subUsers.length} Sub-Users</span>
+              <span>{distinctSubUsersCount} Sub-User{distinctSubUsersCount === 1 ? "" : "s"} ({details.subUsers.length} assignment{details.subUsers.length === 1 ? "" : "s"})</span>
             </div>
           </div>
         </div>
@@ -314,7 +316,7 @@ export function TenantDetailView({ initialDetails }: { initialDetails: TenantDet
             <div className="flex items-center justify-between">
               <Label htmlFor="quota-users">Max Sub-Users Across Businesses</Label>
               <span className="text-[11px] text-muted-foreground">
-                Currently: <strong>{details.subUsers.length}</strong> assigned
+                Currently: <strong>{distinctSubUsersCount}</strong> assigned (limit: {details.user.maxUsers})
               </span>
             </div>
             <Input
@@ -445,7 +447,7 @@ export function TenantDetailView({ initialDetails }: { initialDetails: TenantDet
       <section className="space-y-3">
         <div className="flex items-center justify-between">
           <h2 className="text-sm font-semibold text-foreground">
-            Sub-Users & Team Permissions ({details.subUsers.length})
+            Sub-Users & Team Permissions ({distinctSubUsersCount} distinct user{distinctSubUsersCount === 1 ? "" : "s"}, {details.subUsers.length} assignment{details.subUsers.length === 1 ? "" : "s"})
           </h2>
           <span className="text-xs text-muted-foreground">
             Users invited to access businesses under this account
@@ -575,10 +577,14 @@ export function TenantDetailView({ initialDetails }: { initialDetails: TenantDet
                     <button
                       type="button"
                       onClick={async () => {
-                        await navigator.clipboard.writeText(newPassword);
-                        setCopied(true);
-                        toast.success("Password copied to clipboard.");
-                        setTimeout(() => setCopied(false), 2000);
+                        const ok = await copyToClipboard(newPassword);
+                        if (ok) {
+                          setCopied(true);
+                          toast.success("Password copied to clipboard.");
+                          setTimeout(() => setCopied(false), 2000);
+                        } else {
+                          toast.error("Could not copy to clipboard. Please copy manually from the input.");
+                        }
                       }}
                       className="flex items-center gap-1 text-[11px] font-medium text-muted-foreground hover:text-foreground"
                     >

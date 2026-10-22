@@ -122,7 +122,7 @@ export default async function AdminPage({
             {clientTenants.length}
           </div>
           <span className="text-[10px] text-muted-foreground">
-            {tenantRows.length} total users enrolled
+            {tenantRows.length} total account holders
           </span>
         </div>
 

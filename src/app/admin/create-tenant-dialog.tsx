@@ -13,6 +13,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { copyToClipboard } from "./clipboard";
 import { createTenantAction } from "./actions";
 
 function generateSecurePassword(): string {
@@ -45,13 +46,13 @@ export function CreateTenantDialog({
 
   async function handleCopyCredentials() {
     const text = `Ledgerly ERP Account\nName: ${name}\nEmail: ${email}\nPassword: ${password}`;
-    try {
-      await navigator.clipboard.writeText(text);
+    const ok = await copyToClipboard(text);
+    if (ok) {
       setCopied(true);
       toast.success("Credentials copied to clipboard.");
       setTimeout(() => setCopied(false), 2000);
-    } catch {
-      toast.error("Could not copy to clipboard.");
+    } else {
+      toast.error("Could not copy to clipboard. Please copy manually from the input.");
     }
   }
 

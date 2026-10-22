@@ -16,10 +16,19 @@ import { ThemeMenu } from "@/core/theme/theme-menu";
 export function AccountMenu({
   user,
   isInsideAdmin = false,
+  businessId,
 }: {
   user: { name: string; email: string; isSuperAdmin?: boolean };
   isInsideAdmin?: boolean;
+  businessId?: string;
 }) {
+  const profileHref = businessId ? `/b/${businessId}/settings/profile` : "/profile";
+  const activityLogHref = businessId
+    ? `/b/${businessId}/settings/activity-log`
+    : isInsideAdmin || user.isSuperAdmin
+      ? "/admin?tab=audit"
+      : "/businesses";
+
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
@@ -27,7 +36,7 @@ export function AccountMenu({
           <span className="grid size-7 place-items-center rounded-full bg-secondary text-secondary-foreground">
             <UserRound className="size-3.5" />
           </span>
-          <span className="hidden text-[13px] sm:block">{user.name}</span>
+          <span className="hidden max-w-28 truncate text-[13px] sm:block">{user.name}</span>
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-56">
@@ -44,12 +53,12 @@ export function AccountMenu({
         <ThemeMenu />
         <DropdownMenuSeparator />
         <DropdownMenuItem asChild>
-          <Link href="/profile" className="flex items-center gap-2">
+          <Link href={profileHref} className="flex items-center gap-2">
             <UserRound className="size-4" /> Profile & Security
           </Link>
         </DropdownMenuItem>
         <DropdownMenuItem asChild>
-          <Link href={isInsideAdmin ? "/admin?tab=audit" : "/businesses"} className="flex items-center gap-2">
+          <Link href={activityLogHref} className="flex items-center gap-2">
             <History className="size-4" /> Activity Log
           </Link>
         </DropdownMenuItem>

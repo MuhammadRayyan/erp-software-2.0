@@ -68,7 +68,25 @@ export function listTenantsWithStats(): TenantSummaryRow[] {
   const allBusinesses = db.select().from(businesses).all();
   const allMemberships = db.select().from(memberships).all();
 
-  return allUsers.map((u) => {
+  // Filter for Account Holders (Super-Admin, Tenant Admins, or Users who own at least one business).
+  // Sub-users / team members invited to a business without ownership or tenant admin rights are excluded.
+  const accountHolders = allUsers.filter((u) => {
+    if (u.isSuperAdmin || u.isTenantAdmin) return true;
+    const hasOwnedBusiness = allBusinesses.some(
+      (b) => b.ownerUserId === u.id && b.status !== "trash"
+    );
+    if (hasOwnedBusiness) return true;
+    const hasLegacyOwned = allBusinesses.some((b) => {
+      if (b.ownerUserId) return false;
+      const firstAdmin = allMemberships
+        .filter((m) => m.businessId === b.id && m.role === "administrator")
+        .sort((a, b) => a.createdAt.localeCompare(b.createdAt))[0];
+      return firstAdmin?.userId === u.id;
+    });
+    return hasLegacyOwned;
+  });
+
+  return accountHolders.map((u) => {
     // Find businesses owned by this user
     const ownedBusinesses = allBusinesses.filter(
       (b) => b.ownerUserId === u.id && b.status !== "trash"

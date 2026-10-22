@@ -347,7 +347,11 @@ test("Admin Control Panel, Tenant Lifecycle, Quotas & Safety Safeguards Suite", 
 
   await suite.test("9. Tenant Drill-Down & Stats Verification (getTenantDetails & listTenantsWithStats)", () => {
     const list = listTenantsWithStats();
-    assert.ok(list.length >= 2, "List must contain at least super-admin and client tenant");
+    // Must contain exactly super-admin and client tenant; sub-user Alice must NOT be listed as an account holder
+    assert.equal(list.length, 2, "List must contain exactly 2 account holders (super-admin and client tenant)");
+
+    const aliceInTenants = list.find((t) => t.email === "alice@acme.com");
+    assert.equal(aliceInTenants, undefined, "Sub-user Alice must NOT be listed in the Account Holders directory");
 
     const clientSummary = list.find((t) => t.id === testTenantId);
     assert.ok(clientSummary);
