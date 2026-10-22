@@ -1,7 +1,7 @@
 import { existsSync } from "node:fs";
 import path from "node:path";
 import { redirect } from "next/navigation";
-import { CheckCircle2, Download } from "lucide-react";
+import { AlertTriangle, CheckCircle2, Download } from "lucide-react";
 import { BrandMark } from "@/components/brand-mark";
 import { getCurrentSession } from "@/core/auth/session";
 import { isSetupComplete } from "@/core/auth/setup-service";
@@ -23,7 +23,7 @@ function sourceArchiveAvailable() {
 export default async function LoginPage({
   searchParams,
 }: {
-  searchParams?: Promise<{ setup?: string; redirect?: string }>;
+  searchParams?: Promise<{ setup?: string; redirect?: string; suspended?: string }>;
 }) {
   if (!isSetupComplete()) {
     redirect("/setup");
@@ -33,6 +33,7 @@ export default async function LoginPage({
   const redirectTo = params.redirect || "/businesses";
   if (await getCurrentSession()) redirect(redirectTo);
   const showSetupSuccess = params.setup === "success";
+  const showSuspendedNotice = params.suspended === "1";
   const showArchiveLink = sourceArchiveAvailable();
   return (
     <main className="grid min-h-dvh place-items-center p-4 sm:p-8">
@@ -64,6 +65,17 @@ export default async function LoginPage({
                   <strong className="font-semibold">Super-Admin Setup Complete</strong>
                   <p className="mt-0.5 text-muted-foreground dark:text-emerald-300/80">
                     Your platform root account is active. Sign in below using your master credentials.
+                  </p>
+                </div>
+              </div>
+            )}
+            {showSuspendedNotice && (
+              <div className="mb-6 flex items-start gap-3 rounded-lg border border-amber-500/30 bg-amber-500/10 p-3.5 text-xs text-amber-800 dark:border-amber-500/40 dark:bg-amber-500/15 dark:text-amber-300">
+                <AlertTriangle className="mt-0.5 size-4 shrink-0 text-amber-600 dark:text-amber-400" />
+                <div>
+                  <strong className="font-semibold">Account Suspended</strong>
+                  <p className="mt-0.5 text-muted-foreground dark:text-amber-300/80">
+                    This account has been suspended by the platform administrator. Access has been temporarily restricted.
                   </p>
                 </div>
               </div>

@@ -156,8 +156,8 @@ export function AppShell({ children, business, businesses, modules, user }: Shel
               </DropdownMenuItem>
               {user.isSuperAdmin && (
                 <DropdownMenuItem asChild>
-                  <Link href="/super-admin" className="flex items-center gap-2 font-medium text-amber-700 dark:text-amber-400">
-                    <ShieldAlert className="size-4" /> Super-Admin Control Plane
+                  <Link href="/admin" className="flex items-center gap-2 font-medium text-amber-700 dark:text-amber-400">
+                    <ShieldAlert className="size-4" /> Admin Control Panel
                   </Link>
                 </DropdownMenuItem>
               )}

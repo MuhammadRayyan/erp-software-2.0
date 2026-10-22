@@ -51,8 +51,8 @@ export default async function BusinessesPage() {
             </div>
           </div>
           <Button asChild size="sm" variant="primary" className="gap-1.5 shrink-0">
-            <Link href="/super-admin">
-              Launch Control Plane &rarr;
+            <Link href="/admin">
+              Admin Control Panel &rarr;
             </Link>
           </Button>
         </div>

@@ -15,6 +15,11 @@ export const users = sqliteTable("user", {
   createdAt: integer("createdAt", { mode: "timestamp_ms" }).notNull(),
   updatedAt: integer("updatedAt", { mode: "timestamp_ms" }).notNull(),
   isSuperAdmin: integer("is_super_admin", { mode: "boolean" }).notNull().default(false),
+  status: text("status", { enum: ["active", "suspended"] }).notNull().default("active"),
+  maxBusinesses: integer("max_businesses").notNull().default(3),
+  maxUsers: integer("max_users").notNull().default(5),
+  isTenantAdmin: integer("is_tenant_admin", { mode: "boolean" }).notNull().default(false),
+  createdByUserId: text("created_by_user_id"),
 });
 
 export const userSettings = sqliteTable("user_settings", {
@@ -86,6 +91,7 @@ export const businesses = sqliteTable("businesses", {
   directoryKey: text("directory_key").notNull().unique(),
   archived: integer("archived", { mode: "boolean" }).notNull().default(false),
   status: text("status", { enum: ["active", "suspended", "trash"] }).notNull().default("active"),
+  ownerUserId: text("owner_user_id"),
   createdAt: text("created_at").notNull(),
   updatedAt: text("updated_at").notNull(),
   lastOpenedAt: text("last_opened_at"),

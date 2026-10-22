@@ -1,7 +1,7 @@
 import { cache } from "react";
 import { randomUUID } from "node:crypto";
 import { rmSync } from "node:fs";
-import { and, desc, eq } from "drizzle-orm";
+import { and, desc, eq, ne } from "drizzle-orm";
 import { z } from "zod";
 import { closeBusinessConnection, getBusinessDb, openBusinessDatabase } from "@/core/db/business";
 import { getBusinessPaths } from "@/core/db/paths";
@@ -115,16 +115,36 @@ export const getBusinessForUser = cache((businessId: string, userId: string) => 
   return undefined;
 });
 
-export function createBusiness(input: BusinessInput, userId: string) {
+export function createBusiness(
+  input: BusinessInput,
+  userId: string,
+  options?: { enforceQuota?: boolean }
+) {
   const data = businessInputSchema.parse(input);
   const id = randomUUID();
   const directoryKey = randomUUID();
   const now = new Date().toISOString();
   const paths = getBusinessPaths(directoryKey);
 
+  const db = getSystemDb();
+  const creator = db.select().from(users).where(eq(users.id, userId)).get();
+  if (options?.enforceQuota && creator && !creator.isSuperAdmin) {
+    const existingCount = db
+      .select()
+      .from(businesses)
+      .where(and(eq(businesses.ownerUserId, userId), ne(businesses.status, "trash")))
+      .all().length;
+    const maxAllowed = creator.maxBusinesses ?? 3;
+    if (existingCount >= maxAllowed) {
+      throw new Error(
+        `QUOTA_EXCEEDED: You have reached your account limit of ${maxAllowed} business workspace(s). Please contact your administrator to upgrade your plan.`,
+      );
+    }
+  }
+
   try {
     const context = openBusinessDatabase(directoryKey);
-    getSystemDb().transaction((tx) => {
+    db.transaction((tx) => {
       tx.insert(businesses)
         .values({
           id,
@@ -135,6 +155,7 @@ export function createBusiness(input: BusinessInput, userId: string) {
           directoryKey,
           archived: false,
           status: "active",
+          ownerUserId: userId,
           createdAt: now,
           updatedAt: now,
           lastOpenedAt: now,
@@ -150,6 +171,9 @@ export function createBusiness(input: BusinessInput, userId: string) {
           createdAt: now,
         })
         .run();
+      if (creator && !creator.isTenantAdmin && !creator.isSuperAdmin) {
+        tx.update(users).set({ isTenantAdmin: true }).where(eq(users.id, userId)).run();
+      }
     });
     synchronizeBusinessBaseCurrency(context.sqlite, data.currency);
   } catch (error) {

@@ -51,8 +51,8 @@ export default async function SuspendedBusinessPage({
 
           {user.isSuperAdmin ? (
             <Button asChild variant="primary" className="gap-2">
-              <Link href="/super-admin">
-                <ShieldAlert className="size-4" /> Super-Admin Control Plane
+              <Link href="/admin">
+                <ShieldAlert className="size-4" /> Admin Control Panel
               </Link>
             </Button>
           ) : null}

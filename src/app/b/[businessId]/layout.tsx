@@ -60,10 +60,10 @@ export default async function BusinessLayout({ children, params }: { children: R
             </span>
           </div>
           <Link
-            href="/super-admin"
+            href="/admin"
             className="rounded px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wider text-amber-900 underline hover:text-amber-950 dark:text-amber-200 dark:hover:text-amber-100"
           >
-            Manage in Super-Admin &rarr;
+            Manage in Admin Panel &rarr;
           </Link>
         </div>
       )}

@@ -19,8 +19,15 @@ export async function createBusinessAction(input: unknown): Promise<ActionResult
   const user = await requireUser();
   const parsed = businessInputSchema.safeParse(input);
   if (!parsed.success) return { error: "Check the highlighted fields.", fieldErrors: z.flattenError(parsed.error).fieldErrors };
-  const business = createBusiness(parsed.data, user.id);
-  redirect(`/b/${business.id}/overview?notice=Business created`);
+  try {
+    const business = createBusiness(parsed.data, user.id, { enforceQuota: true });
+    redirect(`/b/${business.id}/overview?notice=Business created`);
+  } catch (err) {
+    if (err instanceof Error && (err.message.includes("NEXT_REDIRECT") || (err as any).digest?.startsWith("NEXT_REDIRECT"))) {
+      throw err;
+    }
+    return { error: err instanceof Error ? err.message : "Failed to create business." };
+  }
 }
 
 export async function renameBusinessAction(businessId: string, name: string): Promise<ActionResult> {

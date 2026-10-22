@@ -150,4 +150,37 @@ export const systemMigrations = [
       `);
     },
   },
+  {
+    version: 6,
+    name: "phase_13_tenants_and_quotas",
+    up(sqlite) {
+      sqlite.exec(`
+        ALTER TABLE "user" ADD COLUMN "status" TEXT NOT NULL DEFAULT 'active' CHECK ("status" IN ('active', 'suspended'));
+        ALTER TABLE "user" ADD COLUMN "max_businesses" INTEGER NOT NULL DEFAULT 3;
+        ALTER TABLE "user" ADD COLUMN "max_users" INTEGER NOT NULL DEFAULT 5;
+        ALTER TABLE "user" ADD COLUMN "is_tenant_admin" INTEGER NOT NULL DEFAULT 0;
+        ALTER TABLE "user" ADD COLUMN "created_by_user_id" TEXT;
+        ALTER TABLE "businesses" ADD COLUMN "owner_user_id" TEXT;
+
+        CREATE INDEX IF NOT EXISTS "businesses_owner_user_idx" ON "businesses" ("owner_user_id");
+        CREATE INDEX IF NOT EXISTS "user_created_by_user_idx" ON "user" ("created_by_user_id");
+
+        UPDATE "businesses"
+        SET "owner_user_id" = (
+          SELECT "user_id"
+          FROM "business_memberships"
+          WHERE "business_memberships"."business_id" = "businesses"."id"
+            AND "business_memberships"."role" = 'administrator'
+          ORDER BY "business_memberships"."created_at" ASC
+          LIMIT 1
+        )
+        WHERE "owner_user_id" IS NULL;
+
+        UPDATE "user"
+        SET "is_tenant_admin" = 1
+        WHERE "is_super_admin" = 0
+          AND "id" IN (SELECT DISTINCT "owner_user_id" FROM "businesses" WHERE "owner_user_id" IS NOT NULL);
+      `);
+    },
+  },
 ] satisfies readonly SqliteMigration[];

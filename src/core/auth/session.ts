@@ -9,6 +9,10 @@ export async function getCurrentSession() {
 export async function requireUser() {
   const session = await getCurrentSession();
   if (!session) redirect("/login");
+  const user = session.user as typeof session.user & { status?: string };
+  if (user.status === "suspended") {
+    redirect("/login?suspended=1");
+  }
   return session.user;
 }
 

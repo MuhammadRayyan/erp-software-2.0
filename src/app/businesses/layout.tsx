@@ -9,7 +9,12 @@ export default async function BusinessesLayout({ children }: { children: React.R
     <div className="min-h-dvh">
       <header className="flex h-14 items-center border-b border-border bg-surface px-4 sm:px-6">
         <Link href="/businesses"><BrandMark /></Link>
-        <div className="ml-auto"><AccountMenu user={{ name: user.name, email: user.email }} /></div>
+        <div className="ml-auto">
+          <AccountMenu
+            user={{ name: user.name, email: user.email, isSuperAdmin: Boolean(user.isSuperAdmin) }}
+            isInsideAdmin={false}
+          />
+        </div>
       </header>
       {children}
     </div>

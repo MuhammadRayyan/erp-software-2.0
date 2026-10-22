@@ -57,6 +57,35 @@ export const auth = betterAuth({
         defaultValue: false,
         input: false,
       },
+      status: {
+        type: "string",
+        fieldName: "status",
+        defaultValue: "active",
+        input: false,
+      },
+      isTenantAdmin: {
+        type: "boolean",
+        fieldName: "is_tenant_admin",
+        defaultValue: false,
+        input: false,
+      },
+      maxBusinesses: {
+        type: "number",
+        fieldName: "max_businesses",
+        defaultValue: 3,
+        input: false,
+      },
+      maxUsers: {
+        type: "number",
+        fieldName: "max_users",
+        defaultValue: 5,
+        input: false,
+      },
+      createdByUserId: {
+        type: "string",
+        fieldName: "created_by_user_id",
+        input: false,
+      },
     },
   },
   emailAndPassword: {
@@ -87,35 +116,59 @@ export const auth = betterAuth({
     // This is the authoritative enforcement: direct POSTs to
     // /api/auth/sign-in/email cannot bypass it.
     before: createAuthMiddleware(async (ctx) => {
-      // Enforce zero-tolerance public signup block: bots cannot hit /api/auth/sign-up/email
+      // Enforce zero-tolerance public signup block: bots cannot hit /api/auth/sign-up/email over HTTP
       if (ctx.path === "/sign-up/email" && ctx.request) {
         throw new APIError("FORBIDDEN", {
           message: "Public registration is disabled. System initialization requires the secure setup key.",
         });
       }
 
-      if (ctx.path !== "/sign-in/email" || !ctx.request) return;
-      const ip = clientIpFromRequest(ctx.request);
-      const status = checkRateLimit(ip);
-      if (!status.allowed) {
-        const minutes = Math.max(1, Math.ceil((status.resetAt - Date.now()) / 60_000));
-        throw new APIError("TOO_MANY_REQUESTS", {
-          message: `Too many failed sign-in attempts. Try again in about ${minutes} minute${minutes === 1 ? "" : "s"}.`,
-        });
+      if (ctx.path === "/sign-in/email") {
+        // 1. Check suspended user by email
+        const body = (ctx as any).body || (ctx.context as any)?.body;
+        const email = body?.email ? String(body.email).trim().toLowerCase() : null;
+        if (email) {
+          try {
+            const row = getSystemSqlite()
+              .prepare("SELECT status FROM user WHERE LOWER(email) = ?")
+              .get(email) as { status?: string } | undefined;
+            if (row?.status === "suspended") {
+              throw new APIError("FORBIDDEN", {
+                message: "Your account has been suspended by the platform administrator. Please contact support.",
+              });
+            }
+          } catch (e) {
+            if (e instanceof APIError) throw e;
+          }
+        }
+
+        // 2. Failed attempt rate limiting (when HTTP request is present)
+        if (ctx.request) {
+          const ip = clientIpFromRequest(ctx.request);
+          const status = checkRateLimit(ip);
+          if (!status.allowed) {
+            const minutes = Math.max(1, Math.ceil((status.resetAt - Date.now()) / 60_000));
+            throw new APIError("TOO_MANY_REQUESTS", {
+              message: `Too many failed sign-in attempts. Try again in about ${minutes} minute${minutes === 1 ? "" : "s"}.`,
+            });
+          }
+        }
       }
     }),
     after: createAuthMiddleware(async (ctx) => {
-      if (ctx.path !== "/sign-in/email" || !ctx.request) return;
+      if (ctx.path !== "/sign-in/email") return;
       const returned = (ctx.context as { returned?: unknown } | undefined)?.returned;
-      const ip = clientIpFromRequest(ctx.request);
-      if (returned instanceof APIError) {
-        const status = (returned as any).status || (returned as any).statusCode;
-        const code = (returned as any).body?.code || (returned as any).code;
-        if (status === 401 || code === "INVALID_EMAIL_OR_PASSWORD" || code === "USER_NOT_FOUND") {
-          recordFailedAttempt(ip);
+      if (ctx.request) {
+        const ip = clientIpFromRequest(ctx.request);
+        if (returned instanceof APIError) {
+          const status = (returned as any).status || (returned as any).statusCode;
+          const code = (returned as any).body?.code || (returned as any).code;
+          if (status === 401 || code === "INVALID_EMAIL_OR_PASSWORD" || code === "USER_NOT_FOUND") {
+            recordFailedAttempt(ip);
+          }
+        } else {
+          clearAttempts(ip);
         }
-      } else {
-        clearAttempts(ip);
       }
     }),
   },
