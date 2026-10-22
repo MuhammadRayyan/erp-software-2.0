@@ -6,6 +6,7 @@ import { requireApiAuth } from "@/core/auth/api-auth";
 import {
   saveEmailSettings,
   verifyAndSendTestEmail,
+  sanitizeEmailSettingsForClient,
 } from "./email-settings-service";
 
 const saveEmailSettingsSchema = z.object({
@@ -70,7 +71,7 @@ export async function saveEmailSettingsAction(businessId: string, input: unknown
     });
 
     revalidatePath(`/b/${businessId}/settings/email`);
-    return { ok: true, settings: updated };
+    return { ok: true, settings: sanitizeEmailSettingsForClient(updated) };
   } catch (err) {
     return {
       ok: false,
@@ -106,8 +107,8 @@ export async function sendTestEmailAction(businessId: string, input: unknown) {
 
     revalidatePath(`/b/${businessId}/settings/email`);
     return result.success
-      ? { ok: true, message: result.message || "Test email delivered successfully." }
-      : { ok: false, error: result.error || "Test email delivery failed." };
+      ? { ok: true, message: result.message || "Test email delivered successfully.", settings: result.settings }
+      : { ok: false, error: result.error || "Test email delivery failed.", settings: result.settings };
   } catch (err) {
     return {
       ok: false,

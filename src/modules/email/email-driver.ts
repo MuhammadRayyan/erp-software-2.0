@@ -81,6 +81,9 @@ export function createNodemailerTransporter(config: SmtpTransportConfig) {
             pass: config.smtpPass,
           }
         : undefined,
+    connectionTimeout: 10000,
+    greetingTimeout: 10000,
+    socketTimeout: 15000,
   });
 }
 

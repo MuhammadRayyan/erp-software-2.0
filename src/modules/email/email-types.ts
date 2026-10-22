@@ -83,6 +83,7 @@ export interface BusinessEmailSettings {
   smtpSecure: boolean;
   smtpUser: string | null;
   smtpPass: string | null;
+  hasPassword?: boolean;
   isActive: boolean;
   lastTestedAt: string | null;
   lastTestStatus: "success" | "failed" | null;

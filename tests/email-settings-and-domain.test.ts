@@ -9,6 +9,7 @@ import {
   getEmailSettings,
   saveEmailSettings,
   verifyAndSendTestEmail,
+  sanitizeEmailSettingsForClient,
 } from "../src/modules/email/email-settings-service";
 import { sendEmail, listSentEmails, getSentEmail } from "../src/modules/email/email-service";
 import {
@@ -131,6 +132,11 @@ test("Email Settings & Unified Domain Configuration Suite", async (t) => {
     assert.equal(updated.senderName, "Rapid TSS Finance");
     assert.equal(updated.smtpPass, "secret-smtp-password-123", "Existing password must be preserved");
     assert.equal(updated.senderEmail, "billing@rapidtss.com");
+
+    // 2d. Sanitization removes cleartext password for client-side delivery
+    const sanitized = sanitizeEmailSettingsForClient(updated);
+    assert.equal(sanitized.smtpPass, null, "Cleartext password must be removed for client");
+    assert.equal(sanitized.hasPassword, true, "hasPassword must indicate presence of saved credential");
   });
 
   // -------------------------------------------------------------
@@ -162,6 +168,30 @@ test("Email Settings & Unified Domain Configuration Suite", async (t) => {
     assert.equal(afterFail.lastTestStatus, "failed");
     assert.ok(afterFail.lastTestedAt);
     assert.ok(afterFail.lastTestError);
+
+    // 3d. Verify that verifyAndSendTestEmail persists test results on brand-new business before any save
+    const brandNewBiz = createBusiness(
+      {
+        name: "Brand New Email Enterprise",
+        country: "AE",
+        currency: "AED",
+        financialYearStartMonth: 1,
+      },
+      testUserId,
+    );
+    const freshBizRes = await verifyAndSendTestEmail(brandNewBiz.id, testUserId, {
+      recipient: "fresh-test@domain.com",
+      smtpHost: "127.0.0.1",
+      smtpPort: 19999,
+      smtpSecure: false,
+      smtpUser: "fresh@test.com",
+      smtpPass: "freshpass",
+    });
+    assert.equal(freshBizRes.success, false);
+    const freshSettings = getEmailSettings(brandNewBiz.id, testUserId);
+    assert.equal(freshSettings.lastTestStatus, "failed", "Test status must be saved on fresh business via UPSERT");
+    assert.ok(freshSettings.lastTestedAt);
+    assert.ok(freshSettings.lastTestError);
   });
 
   // -------------------------------------------------------------
@@ -208,7 +238,7 @@ test("Email Settings & Unified Domain Configuration Suite", async (t) => {
     });
 
     const fallbackResult = await sendEmail(testBusinessId, testUserId, {
-      from: { name: "Rapid TSS", email: "billing@rapidtss.com" },
+      from: { name: "Custom Fallback Sender", email: "fallback-sender@other-domain.org" },
       to: [{ name: "Client", email: "client2@customer.com" }],
       subject: "Quote SQ-00050",
       bodyHtml: "<p>Here is your quote.</p>",
@@ -218,6 +248,8 @@ test("Email Settings & Unified Domain Configuration Suite", async (t) => {
     const fallbackRow = getSentEmail(testBusinessId, testUserId, fallbackResult.id);
     assert.ok(fallbackRow);
     assert.equal(fallbackRow.status, "sent");
+    // Verify that input.from was NOT overridden by inactive business email settings
+    assert.equal(fallbackRow.fromAddress, "Custom Fallback Sender <fallback-sender@other-domain.org>");
 
     const allEmails = listSentEmails(testBusinessId, testUserId);
     assert.ok(allEmails.length >= 2, "Both sent emails must be returned by listSentEmails");
@@ -253,5 +285,17 @@ test("Email Settings & Unified Domain Configuration Suite", async (t) => {
     assert.ok(origins.includes("http://84.235.255.173"));
     assert.ok(origins.includes("https://84.235.255.173"));
     assert.ok(origins.includes("https://erp-portal.rapidtss.com"));
+
+    // 5d. Precedence of APP_DOMAIN over BETTER_AUTH_URL in getAppBaseUrl
+    const prevAppDomain = process.env.APP_DOMAIN;
+    const prevAuthUrl = process.env.BETTER_AUTH_URL;
+    try {
+      process.env.APP_DOMAIN = "erp-portal.rapidtss.com";
+      process.env.BETTER_AUTH_URL = "http://localhost:3000";
+      assert.equal(getAppBaseUrl(), "https://erp-portal.rapidtss.com");
+    } finally {
+      process.env.APP_DOMAIN = prevAppDomain;
+      process.env.BETTER_AUTH_URL = prevAuthUrl;
+    }
   });
 });

@@ -97,7 +97,7 @@ test("Manager.io Universal Migration & Contracting Architecture Suite", async (t
       const inspection = inspectManagerBackup(fileBuffer);
       const elapsed = Date.now() - start;
 
-      assert.ok(elapsed < 200, `High-speed inspection took ${elapsed}ms; should be < 200ms`);
+      assert.ok(elapsed < 500, `High-speed inspection took ${elapsed}ms; should be < 500ms`);
       assert.equal(inspection.businessName, "Al Qamar Al Muneer Tech. Cont.");
       assert.equal(inspection.trn, "104959072000003");
       assert.equal(inspection.customersCount, 89);

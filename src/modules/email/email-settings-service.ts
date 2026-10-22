@@ -35,12 +35,27 @@ function mapRow(row: EmailSettingsRow): BusinessEmailSettings {
     smtpSecure: Boolean(row.smtp_secure),
     smtpUser: row.smtp_user,
     smtpPass: row.smtp_pass,
+    hasPassword: Boolean(row.smtp_pass),
     isActive: Boolean(row.is_active),
     lastTestedAt: row.last_tested_at,
     lastTestStatus: (row.last_test_status as BusinessEmailSettings["lastTestStatus"]) ?? null,
     lastTestError: row.last_test_error,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
+  };
+}
+
+/**
+ * Sanitizes email settings before sending to the client browser.
+ * Removes the cleartext password and provides `hasPassword: true/false`.
+ */
+export function sanitizeEmailSettingsForClient(
+  settings: BusinessEmailSettings,
+): BusinessEmailSettings {
+  return {
+    ...settings,
+    smtpPass: null,
+    hasPassword: Boolean(settings.smtpPass || settings.hasPassword),
   };
 }
 
@@ -82,6 +97,7 @@ export function getEmailSettings(businessId: string, userId?: string): BusinessE
     smtpSecure: false,
     smtpUser: null,
     smtpPass: null,
+    hasPassword: false,
     isActive: false,
     lastTestedAt: null,
     lastTestStatus: null,
@@ -161,7 +177,7 @@ export async function verifyAndSendTestEmail(
   businessId: string,
   userId: string,
   input: TestEmailInput,
-): Promise<{ success: boolean; message?: string; error?: string }> {
+): Promise<{ success: boolean; message?: string; error?: string; settings?: BusinessEmailSettings }> {
   const { sqlite } = getBusinessDb(businessId, userId);
   const now = new Date().toISOString();
 
@@ -231,18 +247,38 @@ export async function verifyAndSendTestEmail(
       `,
     });
 
-    // Update settings test status in DB
+    // Upsert settings test status in DB (guaranteed persistence even for brand new businesses)
     sqlite
       .prepare(
-        `UPDATE email_settings
-         SET last_tested_at = ?, last_test_status = 'success', last_test_error = NULL, updated_at = ?
-         WHERE id = 'default'`,
+        `INSERT INTO email_settings (
+          id, sender_name, sender_email, reply_to_email, smtp_host, smtp_port,
+          smtp_secure, smtp_user, smtp_pass, is_active, last_tested_at,
+          last_test_status, last_test_error, created_at, updated_at
+        ) VALUES ('default', ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, 'success', NULL, ?, ?)
+        ON CONFLICT(id) DO UPDATE SET
+          last_tested_at = excluded.last_tested_at,
+          last_test_status = 'success',
+          last_test_error = NULL,
+          updated_at = excluded.updated_at`,
       )
-      .run(now, now);
+      .run(
+        senderName,
+        senderEmail,
+        existing.replyToEmail,
+        host,
+        port,
+        secure ? 1 : 0,
+        user,
+        pass,
+        now,
+        now,
+        now,
+      );
 
     return {
       success: true,
       message: `Test email successfully sent to ${recipient} via ${host}:${port}!`,
+      settings: sanitizeEmailSettingsForClient(getEmailSettings(businessId, userId)),
     };
   } catch (err) {
     const rawError = err instanceof Error ? err.message : String(err);
@@ -258,18 +294,39 @@ export async function verifyAndSendTestEmail(
       friendlyError = `Host not found: Could not resolve DNS host "${host}". Please verify the hostname.`;
     }
 
-    // Persist failure status in DB
+    // Persist failure status in DB (guaranteed persistence even for brand new businesses)
     sqlite
       .prepare(
-        `UPDATE email_settings
-         SET last_tested_at = ?, last_test_status = 'failed', last_test_error = ?, updated_at = ?
-         WHERE id = 'default'`,
+        `INSERT INTO email_settings (
+          id, sender_name, sender_email, reply_to_email, smtp_host, smtp_port,
+          smtp_secure, smtp_user, smtp_pass, is_active, last_tested_at,
+          last_test_status, last_test_error, created_at, updated_at
+        ) VALUES ('default', ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, 'failed', ?, ?, ?)
+        ON CONFLICT(id) DO UPDATE SET
+          last_tested_at = excluded.last_tested_at,
+          last_test_status = 'failed',
+          last_test_error = excluded.last_test_error,
+          updated_at = excluded.updated_at`,
       )
-      .run(now, friendlyError, now);
+      .run(
+        senderName,
+        senderEmail,
+        existing.replyToEmail,
+        host,
+        port,
+        secure ? 1 : 0,
+        user,
+        pass,
+        now,
+        friendlyError,
+        now,
+        now,
+      );
 
     return {
       success: false,
       error: friendlyError,
+      settings: sanitizeEmailSettingsForClient(getEmailSettings(businessId, userId)),
     };
   }
 }

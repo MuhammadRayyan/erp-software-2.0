@@ -107,9 +107,9 @@ export async function sendEmail(
     // If the database has not yet been migrated, continue gracefully
   }
 
-  // 2. Resolve sender identity: custom business sender takes precedence if configured
+  // 2. Resolve sender identity: custom business sender takes precedence if configured and active
   let resolvedFrom = input.from;
-  if (settingsRow?.sender_email?.trim()) {
+  if (settingsRow && Boolean(settingsRow.is_active) && settingsRow.sender_email?.trim()) {
     resolvedFrom = {
       name: settingsRow.sender_name?.trim() || input.from.name,
       email: settingsRow.sender_email.trim().toLowerCase(),
@@ -118,7 +118,9 @@ export async function sendEmail(
 
   const resolvedReplyTo =
     input.replyTo ||
-    (settingsRow?.reply_to_email?.trim() ? settingsRow.reply_to_email.trim() : undefined);
+    (settingsRow && Boolean(settingsRow.is_active) && settingsRow.reply_to_email?.trim()
+      ? settingsRow.reply_to_email.trim()
+      : undefined);
 
   const resolvedInput: SendEmailInput = {
     ...input,

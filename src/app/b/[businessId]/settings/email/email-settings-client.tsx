@@ -134,12 +134,32 @@ export function EmailSettingsClient({
       if (res.ok) {
         setTestMessage(res.message || "Test email delivered successfully!");
         setTestError(null);
+        if (res.settings) {
+          setSettings(res.settings);
+        } else {
+          setSettings((prev) => ({
+            ...prev,
+            lastTestStatus: "success",
+            lastTestedAt: new Date().toISOString(),
+            lastTestError: null,
+          }));
+        }
         toast.success("Outbound SMTP test succeeded!", {
           description: res.message,
         });
       } else {
         setTestError(res.error || "SMTP delivery test failed.");
         setTestMessage(null);
+        if (res.settings) {
+          setSettings(res.settings);
+        } else {
+          setSettings((prev) => ({
+            ...prev,
+            lastTestStatus: "failed",
+            lastTestedAt: new Date().toISOString(),
+            lastTestError: res.error || "SMTP delivery test failed.",
+          }));
+        }
         toast.error("Outbound SMTP test failed", {
           description: res.error,
         });
@@ -415,7 +435,7 @@ export function EmailSettingsClient({
 
             <div className="space-y-1.5">
               <Label htmlFor="smtp-pass" className="text-xs font-semibold text-muted-foreground">
-                SMTP Password {settings.smtpPass && "(Saved in secure storage)"}
+                SMTP Password {(settings.hasPassword || settings.smtpPass) && "(Saved in secure storage)"}
               </Label>
               <div className="relative">
                 <Input
@@ -423,7 +443,11 @@ export function EmailSettingsClient({
                   type={showPassword ? "text" : "password"}
                   value={smtpPass}
                   onChange={(e) => setSmtpPass(e.target.value)}
-                  placeholder={settings.smtpPass ? "•••••••••••••••• (Leave blank to keep existing)" : "Enter SMTP password or App key"}
+                  placeholder={
+                    settings.hasPassword || settings.smtpPass
+                      ? "•••••••••••••••• (Leave blank to keep existing)"
+                      : "Enter SMTP password or App key"
+                  }
                   className="h-10 text-sm font-mono pr-10"
                 />
                 <button

@@ -1,7 +1,7 @@
 # Caddyfile for Modern ERP
 # Automatic HTTPS via Let's Encrypt / ZeroSSL for the configured subdomain.
 # The {$APP_DOMAIN} environment variable is injected via docker-compose.
-{$APP_DOMAIN} {
+{$APP_DOMAIN:erp-portal.rapidtss.com} {
     encode gzip zstd
 
     # Security headers

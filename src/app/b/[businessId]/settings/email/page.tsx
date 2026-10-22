@@ -1,6 +1,9 @@
 import { requireModule } from "@/core/permissions/require-module";
 import { SettingsShell } from "@/components/settings-shell";
-import { getEmailSettings } from "@/modules/email/email-settings-service";
+import {
+  getEmailSettings,
+  sanitizeEmailSettingsForClient,
+} from "@/modules/email/email-settings-service";
 import { EmailSettingsClient } from "./email-settings-client";
 
 export const metadata = {
@@ -15,6 +18,7 @@ export default async function EmailSettingsPage({
   const { businessId } = await params;
   const { user } = await requireModule(businessId, "settings");
   const settings = getEmailSettings(businessId, user.id);
+  const clientSettings = sanitizeEmailSettingsForClient(settings);
 
   return (
     <SettingsShell
@@ -22,7 +26,7 @@ export default async function EmailSettingsPage({
       title="Email & SMTP Configuration"
       description="Connect your business email provider (Hostinger, Google Workspace, Outlook, Amazon SES) to send invoices, quotes, receipts, and statements with custom branding and verified deliverability."
     >
-      <EmailSettingsClient businessId={businessId} initialSettings={settings} />
+      <EmailSettingsClient businessId={businessId} initialSettings={clientSettings} />
     </SettingsShell>
   );
 }

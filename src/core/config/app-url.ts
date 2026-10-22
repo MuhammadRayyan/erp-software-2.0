@@ -38,6 +38,11 @@ export function getAppProtocol(domain: string = getAppDomain()): "http:" | "http
 }
 
 export function getAppBaseUrl(): string {
+  if (process.env.APP_DOMAIN?.trim()) {
+    const domain = sanitizeDomain(process.env.APP_DOMAIN);
+    const proto = getAppProtocol(domain);
+    return `${proto}//${domain}`;
+  }
   if (process.env.BETTER_AUTH_URL?.trim()) {
     return process.env.BETTER_AUTH_URL.trim().replace(/\/+$/, "");
   }
