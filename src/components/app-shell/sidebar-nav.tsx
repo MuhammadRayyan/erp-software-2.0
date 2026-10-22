@@ -29,7 +29,7 @@ function NavLink({ businessId, item, onNavigate }: { businessId: string; item: N
 export function SidebarNav({ businessId, modules, onNavigate }: { businessId: string; modules: ModuleKey[]; onNavigate?: () => void }) {
   return (
     <nav aria-label="Business modules" className="flex min-h-0 flex-1 flex-col px-2.5 pb-3">
-      <div className="space-y-4 overflow-y-auto py-3">
+      <div className="space-y-4 overflow-y-auto py-3 no-scrollbar">
         {primaryNav.map((group, index) => {
           const items = group.items.filter((item) => !item.module || modules.includes(item.module));
           if (!items.length) return null;

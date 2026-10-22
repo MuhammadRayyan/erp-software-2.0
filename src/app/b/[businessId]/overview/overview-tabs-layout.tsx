@@ -2,46 +2,46 @@
 
 import { useEffect, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { Layers, TrendingUp } from "lucide-react";
+import { BarChart3, TrendingUp } from "lucide-react";
 import { cn } from "@/lib/cn";
 
 type OverviewTabsLayoutProps = {
-  initialView?: "financial" | "operations";
+  initialView?: "financial" | "charts" | "operations";
   financialView: React.ReactNode;
-  operationsView: React.ReactNode;
+  chartViews: React.ReactNode;
 };
 
 export function OverviewTabsLayout({
   initialView = "financial",
   financialView,
-  operationsView,
+  chartViews,
 }: OverviewTabsLayoutProps) {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
 
-  const [activeTab, setActiveTab] = useState<"financial" | "operations">(() => {
+  const [activeTab, setActiveTab] = useState<"financial" | "charts">(() => {
     const fromUrl = searchParams.get("view");
-    if (fromUrl === "operations" || fromUrl === "financial") return fromUrl;
-    return initialView;
+    if (fromUrl === "charts" || fromUrl === "operations") return "charts";
+    return initialView === "charts" || initialView === "operations" ? "charts" : "financial";
   });
 
   useEffect(() => {
     const fromUrl = searchParams.get("view");
-    if (fromUrl === "operations" || fromUrl === "financial") {
-      setActiveTab(fromUrl);
+    if (fromUrl === "charts" || fromUrl === "operations") {
+      setActiveTab("charts");
     } else {
-      setActiveTab(initialView);
+      setActiveTab("financial");
     }
-  }, [searchParams, initialView]);
+  }, [searchParams]);
 
-  function switchTab(tab: "financial" | "operations") {
+  function switchTab(tab: "financial" | "charts") {
     setActiveTab(tab);
     const params = new URLSearchParams(searchParams.toString());
     if (tab === "financial") {
       params.delete("view");
     } else {
-      params.set("view", tab);
+      params.set("view", "charts");
     }
     const query = params.toString() ? `?${params.toString()}` : "";
     router.replace(`${pathname}${query}`, { scroll: false });
@@ -71,33 +71,33 @@ export function OverviewTabsLayout({
             role="tab"
           >
             <TrendingUp className="size-3.5 text-primary" />
-            <span>Financial Insights View</span>
+            <span>Financial Insight View</span>
           </button>
 
           <button
-            id="tab-operations"
+            id="tab-charts"
             type="button"
-            onClick={() => switchTab("operations")}
+            onClick={() => switchTab("charts")}
             className={cn(
               "flex items-center gap-2 rounded-md px-3.5 py-1.5 text-xs font-semibold transition-all cursor-pointer",
-              activeTab === "operations"
+              activeTab === "charts"
                 ? "bg-surface text-foreground shadow-xs border border-border/60"
                 : "text-muted-foreground hover:text-foreground hover:bg-surface/50",
             )}
-            aria-selected={activeTab === "operations"}
+            aria-selected={activeTab === "charts"}
             aria-controls="overview-tabpanel"
             role="tab"
           >
-            <Layers className="size-3.5 text-primary" />
-            <span>Operations Matrix View</span>
+            <BarChart3 className="size-3.5 text-primary" />
+            <span>Chart Views</span>
           </button>
         </div>
 
         <div className="text-xs text-muted-foreground">
           {activeTab === "financial" ? (
-            <span>Showing KPI metrics, cash runway, trends, and recent transactions</span>
+            <span>Showing KPI metric cards, balance sheet, profit & loss, and recent transactions</span>
           ) : (
-            <span>Showing active register matrix across all core business modules</span>
+            <span>Showing visual revenue vs expenses trend, receivables aging, and 30-day runway projection</span>
           )}
         </div>
       </div>
@@ -106,9 +106,9 @@ export function OverviewTabsLayout({
       <div
         role="tabpanel"
         id="overview-tabpanel"
-        aria-labelledby={activeTab === "financial" ? "tab-financial" : "tab-operations"}
+        aria-labelledby={activeTab === "financial" ? "tab-financial" : "tab-charts"}
       >
-        {activeTab === "financial" ? financialView : operationsView}
+        {activeTab === "financial" ? financialView : chartViews}
       </div>
     </div>
   );

@@ -21,7 +21,6 @@ import { listSentEmails } from "@/modules/email/email-service";
 import { parseMailboxes } from "@/modules/email/email-driver";
 import { KpiCards, type KpiCardData } from "./kpi-cards";
 import { OverviewControls, type ServerDateRange } from "./overview-controls";
-import { QuickActionsBar } from "./quick-actions-bar";
 import { CashFlowRunwayWidget } from "./cash-flow-runway-widget";
 import { ManagerSummary } from "./manager-summary";
 import { FinancialCharts } from "./financial-charts";
@@ -60,7 +59,7 @@ export default async function OverviewPage({
 
   const from = DATE_PATTERN.test(rawFrom ?? "") ? rawFrom : undefined;
   const to = DATE_PATTERN.test(rawTo ?? "") ? rawTo : undefined;
-  const initialView = rawView === "operations" ? "operations" : "financial";
+  const initialView = rawView === "charts" || rawView === "operations" ? "charts" : "financial";
   const currency = access.business.currency;
 
   const invoiceList = listInvoices(businessId, user.id);
@@ -70,7 +69,6 @@ export default async function OverviewPage({
   const overdue = posted.filter((invoice) => invoice.paymentStatus === "overdue").reduce((sum, invoice) => sum + invoice.baseBalanceMinor, 0);
   const canViewBanking = parseModules(access.membership.role, access.membership.modulesJson).includes("banking");
   const canViewSales = parseModules(access.membership.role, access.membership.modulesJson).includes("sales");
-  const canViewPurchases = parseModules(access.membership.role, access.membership.modulesJson).includes("purchases");
   const canViewReports = parseModules(access.membership.role, access.membership.modulesJson).includes("reports");
   const bankBalance = canViewBanking ? getBankBalance(businessId, user.id) : null;
   const periodPosted = from || to
@@ -81,16 +79,52 @@ export default async function OverviewPage({
   const periodLabel = from || to
     ? `${from ? formatDate(from, { day: "numeric", month: "short", year: "numeric" }) : "start"} – ${to ? formatDate(to, { day: "numeric", month: "short", year: "numeric" }) : "today"}`
     : "all time";
-  // Server-side preferences: the overview date-range now syncs across devices via the
-  // system DB. The URL is still the source of truth for the active render; the server
-  // snapshot is the "last saved choice" used to seed the URL on a fresh navigation.
+
   const preferences = listPreferences(businessId, user.id);
   const serverRange = decodeServerRange(preferences);
+
+  // All 4 primary cards: Posted Sales, Outstanding Receivables, Overdue, and Bank & Cash
   const cards: KpiCardData[] = [
-    { id: "posted-sales", icon: "sales", label: "Posted Sales", value: formatMoney(sales, currency), note: `${periodPosted.length} posted invoices`, caption: periodLabel, tooltip: "Total of posted sales invoices in the selected period (base currency).", href: `/b/${businessId}/sales/invoices` },
-    { id: "outstanding", icon: "receivables", label: "Outstanding Receivables", value: formatMoney(outstanding, currency), note: `${posted.filter((item) => item.balanceMinor > 0).length} open invoices`, caption: "as of today", tooltip: "Unsettled receivable balances across all posted invoices, regardless of the selected period.", href: `/b/${businessId}/sales/invoices?status=unpaid` },
-    { id: "overdue", icon: "overdue", label: "Overdue", value: formatMoney(overdue, currency), note: `${posted.filter((item) => item.paymentStatus === "overdue").length} overdue invoices`, caption: "as of today", tooltip: "Posted invoices past their due date that still have an open balance.", href: `/b/${businessId}/sales/invoices?status=overdue` },
-    ...(bankBalance === null ? [] : [{ id: "bank", icon: "bank" as const, label: "Bank & Cash", value: formatMoney(bankBalance, currency), note: "Posted receipt balance", caption: "as of today", tooltip: "Sum of posted bank and cash account balances from the general ledger.", href: `/b/${businessId}/reports/bank-transactions` }]),
+    {
+      id: "posted-sales",
+      icon: "sales",
+      label: "Posted Sales",
+      value: formatMoney(sales, currency),
+      note: `${periodPosted.length} posted invoices`,
+      caption: periodLabel,
+      tooltip: "Total of posted sales invoices in the selected period (base currency).",
+      href: `/b/${businessId}/sales/invoices`,
+    },
+    {
+      id: "outstanding",
+      icon: "receivables",
+      label: "Outstanding Receivables",
+      value: formatMoney(outstanding, currency),
+      note: `${posted.filter((item) => item.balanceMinor > 0).length} open invoices`,
+      caption: "as of today",
+      tooltip: "Unsettled receivable balances across all posted invoices, regardless of the selected period.",
+      href: `/b/${businessId}/sales/invoices?status=unpaid`,
+    },
+    {
+      id: "overdue",
+      icon: "overdue",
+      label: "Overdue",
+      value: formatMoney(overdue, currency),
+      note: `${posted.filter((item) => item.paymentStatus === "overdue").length} overdue invoices`,
+      caption: "as of today",
+      tooltip: "Posted invoices past their due date that still have an open balance.",
+      href: `/b/${businessId}/sales/invoices?status=overdue`,
+    },
+    {
+      id: "bank",
+      icon: "bank",
+      label: "Bank & Cash",
+      value: formatMoney(bankBalance ?? 0, currency),
+      note: "Posted receipt balance",
+      caption: "as of today",
+      tooltip: "Sum of posted bank and cash account balances from the general ledger.",
+      href: `/b/${businessId}/reports/bank-transactions`,
+    },
   ];
 
   // Financial trends & Receivables aging summary
@@ -109,27 +143,14 @@ export default async function OverviewPage({
           <p className="page-description">A practical accounting snapshot of {access.business.name}.</p>
         </div>
       </div>
-      <QuickActionsBar
-        businessId={businessId}
-        canViewSales={canViewSales}
-        canViewPurchases={canViewPurchases}
-        canViewBanking={canViewBanking}
-      />
+
       <OverviewTabsLayout
         initialView={initialView}
         financialView={
           <div className="space-y-5">
             <OverviewControls from={from} to={to} serverRange={serverRange} businessId={businessId} />
             <KpiCards cards={cards} businessId={businessId} serverSnapshot={decodeColumnSnapshots(preferences)["overview-cards"]} />
-            <FinancialCharts businessId={businessId} currency={currency} trend={trend} aging={aging} />
             <FinancialSummary businessId={businessId} userId={user.id} currency={currency} />
-            {canViewReports && (
-              <CashFlowRunwayWidget
-                businessId={businessId}
-                userId={user.id}
-                currency={currency}
-              />
-            )}
             <div className="grid gap-5 lg:grid-cols-3">
               <section className="data-panel lg:col-span-2">
                 <div className="flex h-12 items-center justify-between border-b border-border px-4">
@@ -222,15 +243,24 @@ export default async function OverviewPage({
             </div>
           </div>
         }
-        operationsView={
-          <ManagerSummary
-            businessId={businessId}
-            counts={counts}
-            allowedModules={parseModules(access.membership.role, access.membership.modulesJson)}
-          />
+        chartViews={
+          <div className="space-y-6">
+            <FinancialCharts businessId={businessId} currency={currency} trend={trend} aging={aging} />
+            {canViewReports && (
+              <CashFlowRunwayWidget
+                businessId={businessId}
+                userId={user.id}
+                currency={currency}
+              />
+            )}
+            <ManagerSummary
+              businessId={businessId}
+              counts={counts}
+              allowedModules={parseModules(access.membership.role, access.membership.modulesJson)}
+            />
+          </div>
         }
       />
     </div>
   );
 }
-
