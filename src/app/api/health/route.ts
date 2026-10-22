@@ -51,7 +51,7 @@ export async function GET() {
         rssMb: Math.round((memory.rss / 1024 / 1024) * 100) / 100,
       },
       environment: process.env.NODE_ENV ?? "development",
-      version: "2.6.0",
+      version: "2.6.1",
     },
     {
       status: 200,

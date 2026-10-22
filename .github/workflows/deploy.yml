@@ -36,7 +36,7 @@ jobs:
       - name: Lint
         run: npm run lint
 
-      - name: Test Suite (248 Tests)
+      - name: Test Suite (265 Tests)
         run: npm test
 
   deploy:
@@ -44,18 +44,18 @@ jobs:
     needs: verify
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
+    env:
+      SERVER_HOST: ${{ secrets.SERVER_HOST }}
+      SERVER_USER: ${{ secrets.SERVER_USER || 'ubuntu' }}
+      SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
     steps:
       - name: Deploy via SSH
-        uses: appleboy/ssh-action@v1.0.3
-        env:
-          SERVER_HOST: ${{ secrets.SERVER_HOST }}
-          SERVER_USER: ${{ secrets.SERVER_USER || 'ubuntu' }}
-          SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
         if: env.SERVER_HOST != '' && env.SSH_PRIVATE_KEY != ''
+        uses: appleboy/ssh-action@v1.0.3
         with:
-          host: ${{ secrets.SERVER_HOST }}
-          username: ${{ secrets.SERVER_USER || 'ubuntu' }}
-          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          host: ${{ env.SERVER_HOST }}
+          username: ${{ env.SERVER_USER }}
+          key: ${{ env.SSH_PRIVATE_KEY }}
           script: |
             cd /opt/modern-erp
             git fetch origin main
@@ -64,7 +64,7 @@ jobs:
             docker compose build modern-erp
             docker compose stop modern-erp
             mkdir -p /home/ubuntu/backups
-            tar -czf /home/ubuntu/backups/backup_$(date +%Y%m%d_%H%M%S).tar.gz /opt/modern-erp/data
+            tar -czf /home/ubuntu/backups/backup_$(date +%Y%m%d_%H%M%S).tar.gz -C /opt/modern-erp data
             docker compose up -d
             docker image prune -f
             sleep 8
