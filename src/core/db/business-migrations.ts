@@ -2798,6 +2798,31 @@ export const businessMigrations = [
         }
       },
     },
+    {
+      version: 35,
+      name: "email_settings",
+      up: (sqlite) => {
+        sqlite.exec(`
+          CREATE TABLE IF NOT EXISTS "email_settings" (
+            "id" TEXT PRIMARY KEY NOT NULL DEFAULT 'default',
+            "sender_name" TEXT,
+            "sender_email" TEXT,
+            "reply_to_email" TEXT,
+            "smtp_host" TEXT,
+            "smtp_port" INTEGER,
+            "smtp_secure" INTEGER NOT NULL DEFAULT 0,
+            "smtp_user" TEXT,
+            "smtp_pass" TEXT,
+            "is_active" INTEGER NOT NULL DEFAULT 0,
+            "last_tested_at" TEXT,
+            "last_test_status" TEXT,
+            "last_test_error" TEXT,
+            "created_at" TEXT NOT NULL,
+            "updated_at" TEXT NOT NULL
+          );
+        `);
+      },
+    },
   ] satisfies readonly SqliteMigration[];
 
 

@@ -1,6 +1,7 @@
 # Caddyfile for Modern ERP
-# Direct IP access mode (for initial testing without a domain):
-:80 {
+# Automatic HTTPS via Let's Encrypt / ZeroSSL for the configured subdomain.
+# The {$APP_DOMAIN} environment variable is injected via docker-compose.
+{$APP_DOMAIN} {
     encode gzip zstd
 
     # Security headers
@@ -18,6 +19,18 @@
     }
 }
 
-# NOTE: When you are ready to attach your Hostinger domain/subdomain,
-# simply change ':80' above to your domain (e.g., 'erp.yourdomain.com')
-# and Caddy will automatically provision and renew free Let's Encrypt HTTPS certificates!
+# Direct IP and localhost HTTP access (allows internal probes, health checks, and fallback):
+http://84.235.255.173, http://localhost {
+    encode gzip zstd
+
+    header {
+        X-Content-Type-Options "nosniff"
+        X-Frame-Options "SAMEORIGIN"
+        Referrer-Policy "strict-origin-when-cross-origin"
+    }
+
+    reverse_proxy modern-erp:3000 {
+        lb_try_duration 10s
+        lb_try_interval 250ms
+    }
+}

@@ -78,12 +78,60 @@ export async function sendEmail(
 
   const { sqlite } = getBusinessDb(businessId, userId);
   const id = randomUUID();
-  const toCsv = joinMailboxes(input.to);
-  const ccCsv = joinMailboxes(input.cc ?? []);
-  const from = input.from.name
-    ? `${input.from.name} <${input.from.email}>`
-    : input.from.email;
-  const attachment = input.attachments?.[0];
+
+  // 1. Fetch business-specific email settings if configured
+  type EmailSettingsSqlRow = {
+    sender_name: string | null;
+    sender_email: string | null;
+    reply_to_email: string | null;
+    smtp_host: string | null;
+    smtp_port: number | null;
+    smtp_secure: number;
+    smtp_user: string | null;
+    smtp_pass: string | null;
+    is_active: number;
+  };
+
+  let settingsRow: EmailSettingsSqlRow | undefined;
+  try {
+    settingsRow = sqlite
+      .prepare(
+        `SELECT sender_name, sender_email, reply_to_email, smtp_host, smtp_port,
+                smtp_secure, smtp_user, smtp_pass, is_active
+         FROM email_settings
+         WHERE id = 'default'
+         LIMIT 1`,
+      )
+      .get() as EmailSettingsSqlRow | undefined;
+  } catch {
+    // If the database has not yet been migrated, continue gracefully
+  }
+
+  // 2. Resolve sender identity: custom business sender takes precedence if configured
+  let resolvedFrom = input.from;
+  if (settingsRow?.sender_email?.trim()) {
+    resolvedFrom = {
+      name: settingsRow.sender_name?.trim() || input.from.name,
+      email: settingsRow.sender_email.trim().toLowerCase(),
+    };
+  }
+
+  const resolvedReplyTo =
+    input.replyTo ||
+    (settingsRow?.reply_to_email?.trim() ? settingsRow.reply_to_email.trim() : undefined);
+
+  const resolvedInput: SendEmailInput = {
+    ...input,
+    from: resolvedFrom,
+    replyTo: resolvedReplyTo,
+  };
+
+  const toCsv = joinMailboxes(resolvedInput.to);
+  const ccCsv = joinMailboxes(resolvedInput.cc ?? []);
+  const fromDisplay = resolvedFrom.name
+    ? `${resolvedFrom.name} <${resolvedFrom.email}>`
+    : resolvedFrom.email;
+  const attachment = resolvedInput.attachments?.[0];
   const createdAt = new Date().toISOString();
 
   // Insert the row with status="queued" first so the audit log captures the
@@ -101,23 +149,34 @@ export async function sendEmail(
     .run(
       id,
       id, // messageId: use the row UUID as a stand-in until the driver returns one.
-      from,
+      fromDisplay,
       toCsv,
       ccCsv,
-      input.subject.trim(),
-      input.bodyHtml,
-      input.bodyText ?? "",
-      input.relatedEntityType ?? null,
-      input.relatedEntityId ?? null,
-      input.relatedDocumentNumber ?? null,
+      resolvedInput.subject.trim(),
+      resolvedInput.bodyHtml,
+      resolvedInput.bodyText ?? "",
+      resolvedInput.relatedEntityType ?? null,
+      resolvedInput.relatedEntityId ?? null,
+      resolvedInput.relatedDocumentNumber ?? null,
       attachment?.filename ?? null,
       attachment ? attachment.data.byteLength : null,
       userId,
       createdAt,
     );
 
-  const driver = getEmailDriver();
-  const result = await driver.send(input);
+  const driver = getEmailDriver(
+    settingsRow
+      ? {
+          smtpHost: settingsRow.smtp_host,
+          smtpPort: settingsRow.smtp_port,
+          smtpSecure: Boolean(settingsRow.smtp_secure),
+          smtpUser: settingsRow.smtp_user,
+          smtpPass: settingsRow.smtp_pass,
+          isActive: Boolean(settingsRow.is_active),
+        }
+      : null,
+  );
+  const result = await driver.send(resolvedInput);
   const now = new Date().toISOString();
   if (result.ok) {
     sqlite

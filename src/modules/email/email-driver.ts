@@ -60,18 +60,75 @@ export const logDriver: EmailDriver = {
   },
 };
 
-export function getEmailDriver(): EmailDriver {
+export interface SmtpTransportConfig {
+  smtpHost?: string | null;
+  smtpPort?: number | null;
+  smtpSecure?: boolean | null;
+  smtpUser?: string | null;
+  smtpPass?: string | null;
+  isActive?: boolean | null;
+}
+
+export function createNodemailerTransporter(config: SmtpTransportConfig) {
+  return nodemailer.createTransport({
+    host: config.smtpHost || undefined,
+    port: config.smtpPort ? Number(config.smtpPort) : undefined,
+    secure: Boolean(config.smtpSecure),
+    auth:
+      config.smtpUser && config.smtpPass
+        ? {
+            user: config.smtpUser,
+            pass: config.smtpPass,
+          }
+        : undefined,
+  });
+}
+
+export function getEmailDriver(customSettings?: SmtpTransportConfig | null): EmailDriver {
+  // 1. Business custom SMTP settings (if active and host/port provided)
+  if (customSettings && customSettings.isActive && customSettings.smtpHost && customSettings.smtpPort) {
+    const transporter = createNodemailerTransporter(customSettings);
+    return {
+      name: "business-smtp",
+      async send(input: SendEmailInput) {
+        try {
+          const info = await transporter.sendMail({
+            from: formatMailbox(input.from),
+            to: joinMailboxes(input.to),
+            cc: input.cc ? joinMailboxes(input.cc) : undefined,
+            replyTo: input.replyTo
+              ? typeof input.replyTo === "string"
+                ? input.replyTo
+                : formatMailbox(input.replyTo)
+              : undefined,
+            subject: input.subject,
+            text: input.bodyText,
+            html: input.bodyHtml,
+            attachments: input.attachments?.map((att) => ({
+              filename: att.filename,
+              content: Buffer.from(att.data),
+              contentType: att.contentType,
+            })),
+          });
+          return { ok: true, messageId: (info as any).messageId || randomUUID() };
+        } catch (error) {
+          console.error("[Business SMTP] send error:", error);
+          return { ok: false, error: error instanceof Error ? error.message : "Unknown SMTP error" };
+        }
+      },
+    };
+  }
+
+  // 2. Global environment SMTP settings fallback
   if (process.env.SMTP_HOST && process.env.SMTP_PORT) {
-    const transporter = nodemailer.createTransport({
-      host: process.env.SMTP_HOST,
-      port: Number(process.env.SMTP_PORT),
-      secure: process.env.SMTP_SECURE === "true",
-      auth: process.env.SMTP_USER && process.env.SMTP_PASS ? {
-        user: process.env.SMTP_USER,
-        pass: process.env.SMTP_PASS,
-      } : undefined,
+    const transporter = createNodemailerTransporter({
+      smtpHost: process.env.SMTP_HOST,
+      smtpPort: Number(process.env.SMTP_PORT),
+      smtpSecure: process.env.SMTP_SECURE === "true",
+      smtpUser: process.env.SMTP_USER,
+      smtpPass: process.env.SMTP_PASS,
     });
-    
+
     return {
       name: "smtp",
       async send(input: SendEmailInput) {
@@ -80,10 +137,15 @@ export function getEmailDriver(): EmailDriver {
             from: formatMailbox(input.from),
             to: joinMailboxes(input.to),
             cc: input.cc ? joinMailboxes(input.cc) : undefined,
+            replyTo: input.replyTo
+              ? typeof input.replyTo === "string"
+                ? input.replyTo
+                : formatMailbox(input.replyTo)
+              : undefined,
             subject: input.subject,
             text: input.bodyText,
             html: input.bodyHtml,
-            attachments: input.attachments?.map(att => ({
+            attachments: input.attachments?.map((att) => ({
               filename: att.filename,
               content: Buffer.from(att.data),
               contentType: att.contentType,
@@ -94,8 +156,9 @@ export function getEmailDriver(): EmailDriver {
           console.error("SMTP send error:", error);
           return { ok: false, error: error instanceof Error ? error.message : "Unknown SMTP error" };
         }
-      }
+      },
     };
   }
+
   return logDriver;
 }

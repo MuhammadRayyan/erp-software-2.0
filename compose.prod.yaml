@@ -7,7 +7,8 @@ services:
     command: pnpm dev
     environment:
       BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET:-phase-zero-development-secret-change-me}
-      BETTER_AUTH_URL: http://localhost:3000
+      APP_DOMAIN: ${APP_DOMAIN:-localhost:3000}
+      BETTER_AUTH_URL: ${BETTER_AUTH_URL:-http://localhost:3000}
       ERP_DATA_DIR: /app/data
       NEXT_TELEMETRY_DISABLED: "1"
       NODE_OPTIONS: --max-old-space-size=6144

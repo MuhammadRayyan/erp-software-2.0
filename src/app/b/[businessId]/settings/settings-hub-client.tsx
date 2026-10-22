@@ -137,6 +137,13 @@ export function SettingsHubClient({
             keywords: "units of measure uom pcs kg hours boxes packaging",
           },
           {
+            title: "Email & SMTP Configuration",
+            description: "Connect your business email provider (Hostinger, Google Workspace, Outlook, Amazon SES) and verify outbound message deliverability.",
+            href: `/b/${businessId}/settings/email`,
+            icon: Mail,
+            keywords: "email smtp mail hostinger gmail outlook send server credentials outbound dispatch",
+          },
+          {
             title: "Email Dispatch Templates",
             description: "Customize dispatch email bodies and subject lines with dynamic tokens (customer name, document number, total, balance).",
             href: `/b/${businessId}/settings/email-templates`,

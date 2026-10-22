@@ -1722,6 +1722,26 @@ export const sentEmails = sqliteTable(
   ],
 );
 
+export const emailSettings = sqliteTable("email_settings", {
+  id: text("id").primaryKey(),
+  senderName: text("sender_name"),
+  senderEmail: text("sender_email"),
+  replyToEmail: text("reply_to_email"),
+  smtpHost: text("smtp_host"),
+  smtpPort: integer("smtp_port"),
+  smtpSecure: integer("smtp_secure", { mode: "boolean" }).notNull().default(false),
+  smtpUser: text("smtp_user"),
+  smtpPass: text("smtp_pass"),
+  isActive: integer("is_active", { mode: "boolean" }).notNull().default(false),
+  lastTestedAt: text("last_tested_at"),
+  lastTestStatus: text("last_test_status"),
+  lastTestError: text("last_test_error"),
+  createdAt: text("created_at").notNull(),
+  updatedAt: text("updated_at").notNull(),
+});
+
+export type EmailSettingsRow = typeof emailSettings.$inferSelect;
+export type InsertEmailSettings = typeof emailSettings.$inferInsert;
 
 export const salesQuotes = sqliteTable(
   "sales_quotes",

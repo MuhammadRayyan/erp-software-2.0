@@ -4,6 +4,7 @@ import { nextCookies } from "better-auth/next-js";
 import { getSystemSqlite } from "@/core/db/system";
 import { resolveBetterAuthSecret } from "./auth-config";
 import { checkRateLimit, recordFailedAttempt, clearAttempts } from "./rate-limiter";
+import { getAppBaseUrl, getTrustedOrigins } from "@/core/config/app-url";
 
 /**
  * Resolve the client IP for the strict failed-login limiter.
@@ -25,30 +26,8 @@ export const auth = betterAuth({
   appName: "Ledgerly ERP",
   database: getSystemSqlite(),
   secret: resolveBetterAuthSecret(),
-  baseURL: process.env.BETTER_AUTH_URL ?? "http://localhost:3000",
-  trustedOrigins: (request) => {
-    const origins = [
-      "http://localhost:3000",
-      "http://localhost",
-      "http://84.235.255.173",
-      "https://84.235.255.173",
-    ];
-    if (request) {
-      const host = request.headers.get("x-forwarded-host") || request.headers.get("host");
-      const proto = request.headers.get("x-forwarded-proto") || "http";
-      if (host) {
-        origins.push(`${proto}://${host}`, `http://${host}`, `https://${host}`);
-      }
-      const originHeader = request.headers.get("origin");
-      if (originHeader) {
-        origins.push(originHeader);
-      }
-    }
-    if (process.env.BETTER_AUTH_TRUSTED_ORIGINS) {
-      origins.push(...process.env.BETTER_AUTH_TRUSTED_ORIGINS.split(",").map((s) => s.trim()));
-    }
-    return origins;
-  },
+  baseURL: getAppBaseUrl(),
+  trustedOrigins: (request) => getTrustedOrigins(request),
   user: {
     additionalFields: {
       isSuperAdmin: {

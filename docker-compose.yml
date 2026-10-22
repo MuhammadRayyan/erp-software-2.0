@@ -12,8 +12,9 @@ services:
       - HOSTNAME=0.0.0.0
       - ERP_DATA_DIR=/app/data
       - BETTER_AUTH_SECRET=${BETTER_AUTH_SECRET:-ledgerly-secret-change-in-production-random-key-64chars}
-      - BETTER_AUTH_URL=${BETTER_AUTH_URL:-http://84.235.255.173}
-      - BETTER_AUTH_TRUSTED_ORIGINS=http://84.235.255.173,http://localhost:3000,http://localhost
+      - APP_DOMAIN=${APP_DOMAIN:-erp-portal.rapidtss.com}
+      - BETTER_AUTH_URL=${BETTER_AUTH_URL:-https://${APP_DOMAIN:-erp-portal.rapidtss.com}}
+      - BETTER_AUTH_TRUSTED_ORIGINS=${BETTER_AUTH_TRUSTED_ORIGINS:-https://erp-portal.rapidtss.com,http://erp-portal.rapidtss.com,http://84.235.255.173,https://84.235.255.173,http://localhost:3000,http://localhost}
       - SETUP_KEY=${SETUP_KEY}
     volumes:
       - /opt/modern-erp/data:/app/data
@@ -24,6 +25,8 @@ services:
     image: caddy:2-alpine
     container_name: erp-caddy
     restart: unless-stopped
+    environment:
+      - APP_DOMAIN=${APP_DOMAIN:-erp-portal.rapidtss.com}
     ports:
       - "80:80"
       - "443:443"

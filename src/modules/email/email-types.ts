@@ -31,6 +31,8 @@ export interface SendEmailInput {
   bodyHtml: string;
   /** Plain-text fallback body (optional). */
   bodyText?: string;
+  /** Reply-to address (optional). */
+  replyTo?: EmailRecipient | string;
   /** File attachments (optional). */
   attachments?: EmailAttachment[];
   /** Related entity (optional) for audit-log linking. */
@@ -71,6 +73,47 @@ export interface SentEmailRow {
   createdAt: string;
 }
 
+export interface BusinessEmailSettings {
+  id: string;
+  senderName: string | null;
+  senderEmail: string | null;
+  replyToEmail: string | null;
+  smtpHost: string | null;
+  smtpPort: number | null;
+  smtpSecure: boolean;
+  smtpUser: string | null;
+  smtpPass: string | null;
+  isActive: boolean;
+  lastTestedAt: string | null;
+  lastTestStatus: "success" | "failed" | null;
+  lastTestError: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface SaveEmailSettingsInput {
+  senderName?: string | null;
+  senderEmail?: string | null;
+  replyToEmail?: string | null;
+  smtpHost?: string | null;
+  smtpPort?: number | null;
+  smtpSecure?: boolean;
+  smtpUser?: string | null;
+  smtpPass?: string | null;
+  isActive?: boolean;
+}
+
+export interface TestEmailInput {
+  recipient: string;
+  senderName?: string | null;
+  senderEmail?: string | null;
+  smtpHost?: string | null;
+  smtpPort?: number | null;
+  smtpSecure?: boolean;
+  smtpUser?: string | null;
+  smtpPass?: string | null;
+}
+
 /**
  * Driver interface — pluggable so production deployments can swap in a real
  * SMTP/Nodemailer driver without touching the service layer. The default
@@ -81,3 +124,4 @@ export interface EmailDriver {
   readonly name: string;
   send(input: SendEmailInput): Promise<{ ok: true; messageId: string } | { ok: false; error: string }>;
 }
+
