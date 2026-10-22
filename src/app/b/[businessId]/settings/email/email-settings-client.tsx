@@ -364,7 +364,7 @@ export function EmailSettingsClient({
                   id="smtp-host"
                   value={smtpHost}
                   onChange={(e) => setSmtpHost(e.target.value)}
-                  placeholder="smtp.hostinger.com"
+                  placeholder="smtp.example.com"
                   className="h-10 text-sm font-mono"
                 />
               </div>

@@ -120,10 +120,19 @@ export function createCustomer(
   getCurrency(context.sqlite, defaultCurrencyCode, true);
   const now = new Date().toISOString();
   const id = randomUUID();
+  const trnValue = data.taxReference?.trim() || data.trn?.trim() || null;
   const insertCustomer = () =>
     context.db
       .insert(customers)
-      .values({ id, ...data, defaultCurrencyCode, createdAt: now, updatedAt: now })
+      .values({
+        id,
+        ...data,
+        taxReference: trnValue,
+        trn: trnValue,
+        defaultCurrencyCode,
+        createdAt: now,
+        updatedAt: now,
+      })
       .run();
   if (!customFieldValues) {
     insertCustomer();
@@ -162,10 +171,21 @@ export function updateCustomer(
   getCurrency(context.sqlite, defaultCurrencyCode, true);
   const current = getCustomer(businessId, userId, customerId);
   if (!current) throw new Error("CUSTOMER_NOT_FOUND");
+  const trnValue = data.taxReference !== undefined && data.taxReference !== ""
+    ? data.taxReference.trim()
+    : data.trn !== undefined && data.trn !== ""
+      ? data.trn.trim()
+      : null;
   const updateCustomerRow = () =>
     context.db
       .update(customers)
-      .set({ ...data, defaultCurrencyCode, updatedAt: new Date().toISOString() })
+      .set({
+        ...data,
+        taxReference: trnValue,
+        trn: trnValue,
+        defaultCurrencyCode,
+        updatedAt: new Date().toISOString(),
+      })
       .where(eq(customers.id, customerId))
       .run();
   if (!customFieldValues) {

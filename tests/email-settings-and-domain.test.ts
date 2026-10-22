@@ -39,7 +39,7 @@ test("Email Settings & Unified Domain Configuration Suite", async (t) => {
 
   const business = createBusiness(
     {
-      name: "Rapid TSS Test Enterprise",
+      name: "Acme Corp Test Enterprise",
       country: "AE",
       currency: "AED",
       financialYearStartMonth: 1,

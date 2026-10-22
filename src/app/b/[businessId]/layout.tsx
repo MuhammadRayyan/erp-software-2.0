@@ -3,7 +3,7 @@ import { headers } from "next/headers";
 import Link from "next/link";
 import { AppShell } from "@/components/app-shell/app-shell";
 import { requireUser } from "@/core/auth/session";
-import { listBusinessesForUser, touchBusiness } from "@/core/businesses/business-service";
+import { touchBusiness } from "@/core/businesses/business-service";
 import { getBusinessAccess } from "@/core/permissions/permissions";
 import { moduleForBusinessPath } from "@/core/permissions/module-access";
 
@@ -43,11 +43,9 @@ export default async function BusinessLayout({ children, params }: { children: R
   // touchBusiness has its own in-memory throttle to prevent DB thrashing
   touchBusiness(businessId, user.id);
 
-  const businessList = listBusinessesForUser(user.id).map(({ business }) => ({ id: business.id, name: business.name }));
   return (
     <AppShell
       business={{ id: access.business.id, name: access.business.name }}
-      businesses={businessList}
       modules={access.modules}
       user={{ name: user.name, email: user.email, isSuperAdmin: isSuper }}
     >

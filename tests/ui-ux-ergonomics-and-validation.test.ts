@@ -16,6 +16,10 @@ const { customerInputSchema } = await import("../src/modules/customers/customer-
 const { supplierInputSchema } = await import("../src/modules/suppliers/supplier-input");
 const { getCashFlowForecast } = await import("../src/modules/reports/cash-flow-forecast-service");
 const { getTrialBalance } = await import("../src/modules/reports/report-service");
+const { createCustomer, updateCustomer, getCustomer } = await import("../src/modules/customers/customer-service");
+const { getBusinessDb } = await import("../src/core/db/business");
+const { customers } = await import("../src/core/db/business-schema");
+const { eq } = await import("drizzle-orm");
 
 test("UI/UX & Validation Suite", async (t) => {
   const seed = await seedDemoData();
@@ -143,4 +147,69 @@ test("UI/UX & Validation Suite", async (t) => {
     assert.equal(nameMatches.length, 1);
     assert.equal(nameMatches[0].sku, "ACC-010");
   });
+
+  await t.test("Customer creation with TRN synchronizes both taxReference and trn columns", () => {
+    const custId = createCustomer(business.id, userId, {
+      name: "Al Habtoor Contracting LLC",
+      taxReference: "100123456789003",
+      defaultCurrencyCode: "AED",
+    });
+
+    const saved = getCustomer(business.id, userId, custId);
+    assert.ok(saved);
+    assert.equal(saved.taxReference, "100123456789003", "taxReference must be populated");
+    assert.equal(saved.trn, "100123456789003", "trn column must be synchronized with taxReference");
+  });
+
+  await t.test("Customer update with new TRN synchronizes columns without stale legacy TRN shadowing", () => {
+    // 1. Create a customer with a legacy TRN directly in the DB
+    const custId = createCustomer(business.id, userId, {
+      name: "Legacy UAE Client LLC",
+      defaultCurrencyCode: "AED",
+    });
+
+    const bDb = getBusinessDb(business.id, userId);
+    bDb.db
+      .update(customers)
+      .set({ trn: "100111111111111", taxReference: null })
+      .where(eq(customers.id, custId))
+      .run();
+
+    const legacy = getCustomer(business.id, userId, custId);
+    assert.equal(legacy?.trn, "100111111111111");
+    assert.equal(legacy?.taxReference, null);
+
+    // 2. Update via updateCustomer with a new TRN in taxReference
+    updateCustomer(business.id, userId, custId, {
+      name: "Legacy UAE Client LLC (Updated)",
+      taxReference: "100999999999999",
+      defaultCurrencyCode: "AED",
+    });
+
+    const updated = getCustomer(business.id, userId, custId);
+    assert.ok(updated);
+    assert.equal(updated.name, "Legacy UAE Client LLC (Updated)");
+    assert.equal(updated.taxReference, "100999999999999", "Updated taxReference must be persisted");
+    assert.equal(updated.trn, "100999999999999", "trn must be updated so obsolete TRN does not shadow on invoices");
+  });
+
+  await t.test("Customer update with cleared TRN clears both columns", () => {
+    const custId = createCustomer(business.id, userId, {
+      name: "Tax Exempt Entity",
+      taxReference: "100555555555003",
+      defaultCurrencyCode: "AED",
+    });
+
+    updateCustomer(business.id, userId, custId, {
+      name: "Tax Exempt Entity",
+      taxReference: "",
+      defaultCurrencyCode: "AED",
+    });
+
+    const cleared = getCustomer(business.id, userId, custId);
+    assert.ok(cleared);
+    assert.equal(cleared.taxReference, null);
+    assert.equal(cleared.trn, null);
+  });
 });
+

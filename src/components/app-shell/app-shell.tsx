@@ -17,7 +17,7 @@ import { ModuleFlowGuide } from "@/components/module-flow-guide";
 type ShellProps = {
   children: React.ReactNode;
   business: { id: string; name: string };
-  businesses: { id: string; name: string }[];
+  businesses?: { id: string; name: string }[];
   modules: ModuleKey[];
   user: { name: string; email: string; isSuperAdmin?: boolean };
 };

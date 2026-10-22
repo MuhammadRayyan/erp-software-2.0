@@ -133,7 +133,7 @@ export function buildDocumentTemplateData(
         .filter(Boolean)
         .join(", ") ||
       undefined;
-    partyTrn = record.customer.trn || record.customer.taxReference || undefined;
+    partyTrn = record.customer.taxReference || record.customer.trn || undefined;
     partyEmail = record.customer.email || undefined;
     partyPhone = record.customer.phone || undefined;
     docNotes = record.invoice.notes || undefined;
@@ -256,7 +256,7 @@ export function buildDocumentTemplateData(
         .filter(Boolean)
         .join(", ") ||
       undefined;
-    partyTrn = record.customer.trn || record.customer.taxReference || undefined;
+    partyTrn = record.customer.taxReference || record.customer.trn || undefined;
     partyEmail = record.customer.email || undefined;
     partyPhone = record.customer.phone || undefined;
     docNotes = (record.note as any).notes || undefined;
@@ -332,7 +332,7 @@ export function buildDocumentTemplateData(
         .filter(Boolean)
         .join(", ") ||
       undefined;
-    partyTrn = record.customer.trn || record.customer.taxReference || undefined;
+    partyTrn = record.customer.taxReference || record.customer.trn || undefined;
     partyEmail = record.customer.email || undefined;
     partyPhone = record.customer.phone || undefined;
     docNotes = (record.quote as any).notes || undefined;
@@ -375,7 +375,7 @@ export function buildDocumentTemplateData(
         .filter(Boolean)
         .join(", ") ||
       undefined;
-    partyTrn = record.customer.trn || record.customer.taxReference || undefined;
+    partyTrn = record.customer.taxReference || record.customer.trn || undefined;
     partyEmail = record.customer.email || undefined;
     partyPhone = record.customer.phone || undefined;
     docNotes = (record.order as any).notes || undefined;
