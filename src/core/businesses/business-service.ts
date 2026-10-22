@@ -5,13 +5,51 @@ import { and, desc, eq } from "drizzle-orm";
 import { z } from "zod";
 import { closeBusinessConnection, getBusinessDb, openBusinessDatabase } from "@/core/db/business";
 import { getBusinessPaths } from "@/core/db/paths";
-import { businesses, memberships, userBusinessPreferences } from "@/core/db/system-schema";
+import { businesses, memberships, userBusinessPreferences, users } from "@/core/db/system-schema";
 import { getSystemDb } from "@/core/db/system";
+import { moduleKeys } from "@/core/permissions/module-access";
 import { businessInputSchema, type BusinessInput } from "./business-input";
 import { synchronizeBusinessBaseCurrency } from "@/modules/currency/exchange-rate";
 import { listInvoices } from "@/modules/sales-invoices/invoice-service";
 
 export function listBusinessesForUser(userId: string, includeArchived = false) {
+  const user = getSystemDb().select().from(users).where(eq(users.id, userId)).get();
+  const isSuper = Boolean(user?.isSuperAdmin);
+
+  if (isSuper) {
+    const businessConditions = includeArchived ? [] : [eq(businesses.archived, false)];
+    const allBusinesses = getSystemDb()
+      .select()
+      .from(businesses)
+      .where(businessConditions.length > 0 ? and(...businessConditions) : undefined)
+      .orderBy(desc(businesses.lastOpenedAt), businesses.name)
+      .all();
+
+    const existingMemberships = getSystemDb()
+      .select()
+      .from(memberships)
+      .where(eq(memberships.userId, userId))
+      .all();
+    const membershipMap = new Map(existingMemberships.map((m) => [m.businessId, m]));
+
+    return allBusinesses.map((b) => {
+      const existing = membershipMap.get(b.id);
+      return {
+        business: b,
+        membership: existing
+          ? { ...existing, role: "administrator" as const }
+          : {
+              id: `super-admin-${userId}-${b.id}`,
+              businessId: b.id,
+              userId,
+              role: "administrator" as const,
+              modulesJson: JSON.stringify([...moduleKeys]),
+              createdAt: b.createdAt,
+            },
+      };
+    });
+  }
+
   const conditions = [eq(memberships.userId, userId)];
   if (!includeArchived) conditions.push(eq(businesses.archived, false));
   return getSystemDb()
@@ -24,7 +62,7 @@ export function listBusinessesForUser(userId: string, includeArchived = false) {
 }
 
 export const getBusinessForUser = cache((businessId: string, userId: string) => {
-  return getSystemDb()
+  const row = getSystemDb()
     .select({ business: businesses, membership: memberships })
     .from(businesses)
     .innerJoin(
@@ -35,6 +73,46 @@ export const getBusinessForUser = cache((businessId: string, userId: string) => 
     // Without this, touchBusiness (and any other caller) could interact with an archived business.
     .where(and(eq(businesses.id, businessId), eq(businesses.archived, false)))
     .get();
+
+  const user = getSystemDb().select().from(users).where(eq(users.id, userId)).get();
+  const isSuper = Boolean(user?.isSuperAdmin);
+
+  if (row) {
+    if (isSuper) {
+      return {
+        ...row,
+        membership: {
+          ...row.membership,
+          role: "administrator" as const,
+        },
+      };
+    }
+    return row;
+  }
+
+  if (isSuper) {
+    const business = getSystemDb()
+      .select()
+      .from(businesses)
+      .where(and(eq(businesses.id, businessId), eq(businesses.archived, false)))
+      .get();
+
+    if (business) {
+      return {
+        business,
+        membership: {
+          id: `super-admin-${userId}-${businessId}`,
+          businessId,
+          userId,
+          role: "administrator" as const,
+          modulesJson: JSON.stringify([...moduleKeys]),
+          createdAt: business.createdAt,
+        },
+      };
+    }
+  }
+
+  return undefined;
 });
 
 export function createBusiness(input: BusinessInput, userId: string) {

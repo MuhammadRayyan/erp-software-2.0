@@ -19,7 +19,8 @@ const { getSystemSqlite } = await import("../src/core/db/system");
 const { isSetupComplete, createRootSuperAdmin, verifySetupKey, resolveSetupKey } = await import("../src/core/auth/setup-service");
 const { getBusinessDb } = await import("../src/core/db/business");
 const { getBusinessAccess } = await import("../src/core/permissions/permissions");
-const { createBusiness } = await import("../src/core/businesses/business-service");
+const { moduleKeys } = await import("../src/core/permissions/module-access");
+const { createBusiness, getBusinessForUser, listBusinessesForUser, touchBusiness } = await import("../src/core/businesses/business-service");
 const { auth } = await import("../src/core/auth/auth");
 
 test("Super-Admin Lifecycle, Resilience, Trigger Deletion Shield & Workspace Suspension Suite", async (suite) => {
@@ -131,6 +132,18 @@ test("Super-Admin Lifecycle, Resilience, Trigger Deletion Shield & Workspace Sus
 
     // Verify isSetupComplete is now permanently true
     assert.equal(isSetupComplete(), true, "isSetupComplete must be true after super-admin is initialized");
+
+    // Verify super-admin can sign in via better-auth with initialized credentials
+    const loginResult = await auth.api.signInEmail({
+      body: {
+        email: "superadmin@platform.local",
+        password: "MasterSecurePassword2026!",
+      },
+    });
+    assert.ok(loginResult, "Sign-in should succeed for created super-admin");
+    assert.equal(loginResult.user.email, "superadmin@platform.local");
+    assert.equal(Boolean(loginResult.user.isSuperAdmin), true, "Session user must have isSuperAdmin = true");
+    assert.ok(loginResult.token, "Auth session token must be generated");
 
     // Verify subsequent setup attempts are strictly blocked
     await assert.rejects(
@@ -247,7 +260,47 @@ test("Super-Admin Lifecycle, Resilience, Trigger Deletion Shield & Workspace Sus
     });
   });
 
-  await suite.test("6. Auth Hardening: Public HTTP Sign-up is Blocked", async () => {
+  await suite.test("7. Super-Admin Full Platform Live View & Workspace Inspection", () => {
+    const superAdmin = sqlite.prepare("SELECT id FROM user WHERE is_super_admin = 1 LIMIT 1").get() as { id: string };
+    const business = sqlite.prepare("SELECT id FROM businesses LIMIT 1").get() as { id: string };
+
+    // Verify Super-Admin full access via getBusinessForUser, listBusinessesForUser, and touchBusiness
+    // Even without an explicit row in business_memberships:
+    const superAdminBusinessAccess = getBusinessForUser(business.id, superAdmin.id);
+    assert.ok(superAdminBusinessAccess, "getBusinessForUser must return valid business entry for super-admin");
+    assert.equal(superAdminBusinessAccess.membership.role, "administrator");
+    assert.equal(superAdminBusinessAccess.business.id, business.id);
+
+    // touchBusiness must succeed for super-admin on any tenant business
+    assert.doesNotThrow(() => {
+      touchBusiness(business.id, superAdmin.id);
+    }, "touchBusiness must succeed for super-admin on tenant workspace");
+
+    // listBusinessesForUser must return all tenant businesses for super-admin
+    const superAdminList = listBusinessesForUser(superAdmin.id);
+    const foundInList = superAdminList.find((b) => b.business.id === business.id);
+    assert.ok(foundInList, "listBusinessesForUser must include tenant business for super-admin");
+    assert.equal(foundInList.membership.role, "administrator");
+
+    // If super-admin is explicitly added with standard role, their effective role must still be administrator
+    sqlite.prepare(`
+      INSERT INTO business_memberships (id, business_id, user_id, role, modules_json, created_at)
+      VALUES ('custom-standard-membership', ?, ?, 'standard', '["sales"]', ?)
+    `).run(business.id, superAdmin.id, new Date().toISOString());
+
+    const elevatedAccess = getBusinessAccess(business.id, superAdmin.id);
+    assert.ok(elevatedAccess);
+    assert.equal(elevatedAccess.membership.role, "administrator", "Super-admin role must always be administrator");
+    assert.deepEqual(elevatedAccess.modules, [...moduleKeys], "Super-admin must always have all module access");
+
+    const elevatedDb = getBusinessDb(business.id, superAdmin.id);
+    assert.equal(elevatedDb.membership.role, "administrator");
+  });
+
+  await suite.test("6. Auth Hardening: Public HTTP Sign-up is Blocked and disableSignUp is enforced", async () => {
+    // Check auth configuration options
+    assert.equal(auth.options.emailAndPassword?.disableSignUp, process.env.NODE_ENV === "production");
+
     // Attempting to call the HTTP sign-up route directly via auth middleware or handler
     const mockRequest = new Request("http://localhost:3000/api/auth/sign-up/email", {
       method: "POST",

@@ -39,6 +39,7 @@ export const auth = betterAuth({
   emailAndPassword: {
     enabled: true,
     minPasswordLength: 8,
+    disableSignUp: process.env.NODE_ENV === "production",
   },
   advanced: {
     ipAddress: {

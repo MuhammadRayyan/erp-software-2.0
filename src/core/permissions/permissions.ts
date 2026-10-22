@@ -23,8 +23,9 @@ export const getBusinessAccess = cache((businessId: string, userId: string) => {
   if (row) {
     return {
       ...row,
+      membership: isSuper ? { ...row.membership, role: "administrator" as const } : row.membership,
       isSuperAdmin: isSuper,
-      modules: parseModules(row.membership.role, row.membership.modulesJson),
+      modules: isSuper ? [...moduleKeys] : parseModules(row.membership.role, row.membership.modulesJson),
     };
   }
 

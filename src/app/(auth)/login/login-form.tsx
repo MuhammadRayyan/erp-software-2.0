@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 
-export function LoginForm() {
+export function LoginForm({ redirectTo = "/businesses" }: { redirectTo?: string }) {
   const router = useRouter();
   const [error, setError] = useState("");
   const [pending, setPending] = useState(false);
@@ -37,7 +37,7 @@ export function LoginForm() {
     }
 
     // Use router.push + refresh so Next.js re-fetches server state cleanly.
-    router.push("/businesses");
+    router.push(redirectTo);
     router.refresh();
   }
 

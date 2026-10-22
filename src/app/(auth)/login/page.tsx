@@ -23,14 +23,15 @@ function sourceArchiveAvailable() {
 export default async function LoginPage({
   searchParams,
 }: {
-  searchParams?: Promise<{ setup?: string }>;
+  searchParams?: Promise<{ setup?: string; redirect?: string }>;
 }) {
   if (!isSetupComplete()) {
     redirect("/setup");
   }
 
-  if (await getCurrentSession()) redirect("/businesses");
   const params = searchParams ? await searchParams : {};
+  const redirectTo = params.redirect || "/businesses";
+  if (await getCurrentSession()) redirect(redirectTo);
   const showSetupSuccess = params.setup === "success";
   const showArchiveLink = sourceArchiveAvailable();
   return (
@@ -67,7 +68,7 @@ export default async function LoginPage({
                 </div>
               </div>
             )}
-            <LoginForm />
+            <LoginForm redirectTo={redirectTo} />
             <p className="mt-7 text-center text-xs leading-5 text-muted-foreground">
               Ledgerly ERP · Local accounting build · Your business files stay isolated.
             </p>

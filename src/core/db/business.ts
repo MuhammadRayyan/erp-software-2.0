@@ -6,6 +6,7 @@ import { businesses, memberships, users } from "./system-schema";
 import { getBusinessPaths } from "./paths";
 import { getSystemDb } from "./system";
 import { migrateBusinessDatabase } from "./business-migrations";
+import { moduleKeys } from "@/core/permissions/module-access";
 import * as schema from "./business-schema";
 
 const MAX_CONNECTIONS = 50;
@@ -120,7 +121,7 @@ export function getBusinessDb(businessId: string, userId?: string) {
               businessId,
               userId,
               role: "administrator" as const,
-              modulesJson: "[]",
+              modulesJson: JSON.stringify([...moduleKeys]),
               createdAt: b.createdAt,
             },
           };
@@ -133,7 +134,17 @@ export function getBusinessDb(businessId: string, userId?: string) {
       throw new Error("BUSINESS_SUSPENDED");
     }
 
-    return { ...openBusinessDatabase(row.business.directoryKey), ...row };
+    return {
+      ...openBusinessDatabase(row.business.directoryKey),
+      ...row,
+      membership: isSuper
+        ? {
+            ...row.membership,
+            role: "administrator" as const,
+            modulesJson: JSON.stringify([...moduleKeys]),
+          }
+        : row.membership,
+    };
   }
 
   const b = getSystemDb()

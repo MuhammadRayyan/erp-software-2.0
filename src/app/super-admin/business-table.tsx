@@ -15,6 +15,7 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { toast } from "sonner";
 import { toggleBusinessSuspensionAction } from "./actions";
 
 export type SuperAdminBusinessRow = {
@@ -73,7 +74,16 @@ export function BusinessTable({ initialBusinesses }: { initialBusinesses: SuperA
           setBusinesses((prev) =>
             prev.map((b) => (b.id === businessId ? { ...b, status: res.newStatus! } : b)),
           );
+          toast.success(
+            res.newStatus === "suspended"
+              ? "Business workspace suspended successfully."
+              : "Business workspace reactivated successfully.",
+          );
+        } else if (res.error) {
+          toast.error(res.error);
         }
+      } catch (err) {
+        toast.error(err instanceof Error ? err.message : "Failed to toggle suspension.");
       } finally {
         setPendingId(null);
       }
