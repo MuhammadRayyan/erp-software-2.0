@@ -36,7 +36,7 @@ jobs:
       - name: Lint
         run: npm run lint
 
-      - name: Test Suite (265 Tests)
+      - name: Test Suite (272 Tests)
         run: npm test
 
   deploy:

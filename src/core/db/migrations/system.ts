@@ -133,4 +133,21 @@ export const systemMigrations = [
       `);
     },
   },
+  {
+    version: 5,
+    name: "phase_12_super_admin_and_business_status",
+    up(sqlite) {
+      sqlite.exec(`
+        ALTER TABLE "user" ADD COLUMN "is_super_admin" INTEGER NOT NULL DEFAULT 0;
+        CREATE TRIGGER IF NOT EXISTS "prevent_superadmin_deletion"
+        BEFORE DELETE ON "user"
+        FOR EACH ROW
+        WHEN OLD.is_super_admin = 1
+        BEGIN
+          SELECT RAISE(ABORT, 'IMMUTABLE_ROOT_ACCOUNT: Super-admin cannot be deleted.');
+        END;
+        ALTER TABLE "businesses" ADD COLUMN "status" TEXT NOT NULL DEFAULT 'active' CHECK ("status" IN ('active', 'suspended', 'trash'));
+      `);
+    },
+  },
 ] satisfies readonly SqliteMigration[];

@@ -1,9 +1,10 @@
 import { existsSync } from "node:fs";
 import path from "node:path";
 import { redirect } from "next/navigation";
-import { Download } from "lucide-react";
+import { CheckCircle2, Download } from "lucide-react";
 import { BrandMark } from "@/components/brand-mark";
 import { getCurrentSession } from "@/core/auth/session";
+import { isSetupComplete } from "@/core/auth/setup-service";
 import { LoginForm } from "./login-form";
 
 export const metadata = { title: "Sign in" };
@@ -19,8 +20,18 @@ function sourceArchiveAvailable() {
   }
 }
 
-export default async function LoginPage() {
+export default async function LoginPage({
+  searchParams,
+}: {
+  searchParams?: Promise<{ setup?: string }>;
+}) {
+  if (!isSetupComplete()) {
+    redirect("/setup");
+  }
+
   if (await getCurrentSession()) redirect("/businesses");
+  const params = searchParams ? await searchParams : {};
+  const showSetupSuccess = params.setup === "success";
   const showArchiveLink = sourceArchiveAvailable();
   return (
     <main className="grid min-h-dvh place-items-center p-4 sm:p-8">
@@ -45,9 +56,20 @@ export default async function LoginPage() {
         <section className="flex min-h-[540px] items-center px-6 py-10 sm:px-12 md:min-h-[570px]">
           <div className="mx-auto w-full max-w-sm">
             <BrandMark className="mb-10 md:hidden" />
+            {showSetupSuccess && (
+              <div className="mb-6 flex items-start gap-3 rounded-lg border border-emerald-500/20 bg-emerald-500/10 p-3.5 text-xs text-emerald-800 dark:border-emerald-500/30 dark:bg-emerald-500/15 dark:text-emerald-300">
+                <CheckCircle2 className="mt-0.5 size-4 shrink-0 text-emerald-600 dark:text-emerald-400" />
+                <div>
+                  <strong className="font-semibold">Super-Admin Setup Complete</strong>
+                  <p className="mt-0.5 text-muted-foreground dark:text-emerald-300/80">
+                    Your platform root account is active. Sign in below using your master credentials.
+                  </p>
+                </div>
+              </div>
+            )}
             <LoginForm />
             <p className="mt-7 text-center text-xs leading-5 text-muted-foreground">
-              Ledgerly ERP v2.1.1 · Local accounting build · Your business files stay isolated.
+              Ledgerly ERP · Local accounting build · Your business files stay isolated.
             </p>
             {showArchiveLink ? (
               <a

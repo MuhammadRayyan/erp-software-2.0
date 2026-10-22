@@ -2,7 +2,7 @@ import { mkdirSync } from "node:fs";
 import Database from "better-sqlite3";
 import { and, eq } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/better-sqlite3";
-import { businesses, memberships } from "./system-schema";
+import { businesses, memberships, users } from "./system-schema";
 import { getBusinessPaths } from "./paths";
 import { getSystemDb } from "./system";
 import { migrateBusinessDatabase } from "./business-migrations";
@@ -101,7 +101,38 @@ export function getBusinessDb(businessId: string, userId?: string) {
       .where(and(eq(businesses.id, businessId), eq(businesses.archived, false)))
       .get();
 
-    if (!row) throw new Error("BUSINESS_ACCESS_DENIED");
+    const user = getSystemDb().select().from(users).where(eq(users.id, userId)).get();
+    const isSuper = Boolean(user?.isSuperAdmin);
+
+    if (!row) {
+      if (isSuper) {
+        const b = getSystemDb()
+          .select()
+          .from(businesses)
+          .where(and(eq(businesses.id, businessId), eq(businesses.archived, false)))
+          .get();
+        if (b) {
+          return {
+            ...openBusinessDatabase(b.directoryKey),
+            business: b,
+            membership: {
+              id: `super-admin-${userId}-${businessId}`,
+              businessId,
+              userId,
+              role: "administrator" as const,
+              modulesJson: "[]",
+              createdAt: b.createdAt,
+            },
+          };
+        }
+      }
+      throw new Error("BUSINESS_ACCESS_DENIED");
+    }
+
+    if (row.business.status === "suspended" && !isSuper) {
+      throw new Error("BUSINESS_SUSPENDED");
+    }
+
     return { ...openBusinessDatabase(row.business.directoryKey), ...row };
   }
 

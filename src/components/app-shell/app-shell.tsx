@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Banknote, CircleHelp, ContactRound, FileInput, FolderKanban, HandCoins, History, Menu, Receipt, ReceiptText, Search, ShoppingCart, Truck, UserRound } from "lucide-react";
+import { Banknote, CircleHelp, ContactRound, FileInput, FolderKanban, HandCoins, History, Menu, Receipt, ReceiptText, Search, ShieldAlert, ShoppingCart, Truck, UserRound } from "lucide-react";
 import { BrandMark } from "@/components/brand-mark";
 import { CommandPalette, type CommandItem } from "@/components/command-palette";
 import { Button } from "@/components/ui/button";
@@ -28,7 +28,7 @@ type ShellProps = {
   business: { id: string; name: string };
   businesses: { id: string; name: string }[];
   modules: ModuleKey[];
-  user: { name: string; email: string };
+  user: { name: string; email: string; isSuperAdmin?: boolean };
 };
 
 function buildCommands(businessId: string, modules: ModuleKey[], push: (path: string) => void): CommandItem[] {
@@ -154,6 +154,13 @@ export function AppShell({ children, business, businesses, modules, user }: Shel
                   <History className="size-4" /> Activity Log
                 </Link>
               </DropdownMenuItem>
+              {user.isSuperAdmin && (
+                <DropdownMenuItem asChild>
+                  <Link href="/super-admin" className="flex items-center gap-2 font-medium text-amber-700 dark:text-amber-400">
+                    <ShieldAlert className="size-4" /> Super-Admin Control Plane
+                  </Link>
+                </DropdownMenuItem>
+              )}
               <DropdownMenuItem asChild><Link href="/businesses">Switch business</Link></DropdownMenuItem>
               <DropdownMenuItem asChild><Link href="/logout">Sign out</Link></DropdownMenuItem>
             </DropdownMenuContent>

@@ -11,3 +11,11 @@ export async function requireUser() {
   if (!session) redirect("/login");
   return session.user;
 }
+
+export async function requireSuperAdmin() {
+  const user = await requireUser();
+  if (!user.isSuperAdmin) {
+    redirect("/businesses");
+  }
+  return user;
+}

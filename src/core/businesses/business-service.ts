@@ -56,6 +56,7 @@ export function createBusiness(input: BusinessInput, userId: string) {
           financialYearStartMonth: data.financialYearStartMonth,
           directoryKey,
           archived: false,
+          status: "active",
           createdAt: now,
           updatedAt: now,
           lastOpenedAt: now,

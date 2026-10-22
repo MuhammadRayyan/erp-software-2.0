@@ -14,6 +14,7 @@ export const users = sqliteTable("user", {
   image: text("image"),
   createdAt: integer("createdAt", { mode: "timestamp_ms" }).notNull(),
   updatedAt: integer("updatedAt", { mode: "timestamp_ms" }).notNull(),
+  isSuperAdmin: integer("is_super_admin", { mode: "boolean" }).notNull().default(false),
 });
 
 export const userSettings = sqliteTable("user_settings", {
@@ -84,6 +85,7 @@ export const businesses = sqliteTable("businesses", {
   financialYearStartMonth: integer("financial_year_start_month").notNull(),
   directoryKey: text("directory_key").notNull().unique(),
   archived: integer("archived", { mode: "boolean" }).notNull().default(false),
+  status: text("status", { enum: ["active", "suspended", "trash"] }).notNull().default("active"),
   createdAt: text("created_at").notNull(),
   updatedAt: text("updated_at").notNull(),
   lastOpenedAt: text("last_opened_at"),

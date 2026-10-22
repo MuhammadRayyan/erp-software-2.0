@@ -26,6 +26,16 @@ export const auth = betterAuth({
   database: getSystemSqlite(),
   secret: resolveBetterAuthSecret(),
   baseURL: process.env.BETTER_AUTH_URL ?? "http://localhost:3000",
+  user: {
+    additionalFields: {
+      isSuperAdmin: {
+        type: "boolean",
+        fieldName: "is_super_admin",
+        defaultValue: false,
+        input: false,
+      },
+    },
+  },
   emailAndPassword: {
     enabled: true,
     minPasswordLength: 8,
@@ -53,6 +63,13 @@ export const auth = betterAuth({
     // This is the authoritative enforcement: direct POSTs to
     // /api/auth/sign-in/email cannot bypass it.
     before: createAuthMiddleware(async (ctx) => {
+      // Enforce zero-tolerance public signup block: bots cannot hit /api/auth/sign-up/email
+      if (ctx.path === "/sign-up/email" && ctx.request) {
+        throw new APIError("FORBIDDEN", {
+          message: "Public registration is disabled. System initialization requires the secure setup key.",
+        });
+      }
+
       if (ctx.path !== "/sign-in/email" || !ctx.request) return;
       const ip = clientIpFromRequest(ctx.request);
       const status = checkRateLimit(ip);
