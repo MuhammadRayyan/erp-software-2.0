@@ -102,36 +102,36 @@ test("Email Settings & Unified Domain Configuration Suite", async (t) => {
 
     // 2b. Save custom settings
     const saved = saveEmailSettings(testBusinessId, testUserId, {
-      senderName: "Rapid TSS Accounts",
-      senderEmail: "billing@rapidtss.com",
-      replyToEmail: "support@rapidtss.com",
-      smtpHost: "smtp.hostinger.com",
+      senderName: "Acme Corp Accounts",
+      senderEmail: "billing@example.com",
+      replyToEmail: "support@example.com",
+      smtpHost: "smtp.example.com",
       smtpPort: 465,
       smtpSecure: true,
-      smtpUser: "billing@rapidtss.com",
+      smtpUser: "billing@example.com",
       smtpPass: "secret-smtp-password-123",
       isActive: true,
     });
 
-    assert.equal(saved.senderName, "Rapid TSS Accounts");
-    assert.equal(saved.senderEmail, "billing@rapidtss.com");
-    assert.equal(saved.replyToEmail, "support@rapidtss.com");
-    assert.equal(saved.smtpHost, "smtp.hostinger.com");
+    assert.equal(saved.senderName, "Acme Corp Accounts");
+    assert.equal(saved.senderEmail, "billing@example.com");
+    assert.equal(saved.replyToEmail, "support@example.com");
+    assert.equal(saved.smtpHost, "smtp.example.com");
     assert.equal(saved.smtpPort, 465);
     assert.equal(saved.smtpSecure, true);
-    assert.equal(saved.smtpUser, "billing@rapidtss.com");
+    assert.equal(saved.smtpUser, "billing@example.com");
     assert.equal(saved.smtpPass, "secret-smtp-password-123");
     assert.equal(saved.isActive, true);
 
     // 2c. Save without re-supplying password should preserve existing password
     const updated = saveEmailSettings(testBusinessId, testUserId, {
-      senderName: "Rapid TSS Finance",
+      senderName: "Acme Corp Finance",
       smtpPass: "", // Empty means keep existing
     });
 
-    assert.equal(updated.senderName, "Rapid TSS Finance");
+    assert.equal(updated.senderName, "Acme Corp Finance");
     assert.equal(updated.smtpPass, "secret-smtp-password-123", "Existing password must be preserved");
-    assert.equal(updated.senderEmail, "billing@rapidtss.com");
+    assert.equal(updated.senderEmail, "billing@example.com");
 
     // 2d. Sanitization removes cleartext password for client-side delivery
     const sanitized = sanitizeEmailSettingsForClient(updated);
@@ -200,13 +200,13 @@ test("Email Settings & Unified Domain Configuration Suite", async (t) => {
   await t.test("4. sendEmail uses business sender and records failures cleanly", async () => {
     // 4a. Configure settings with dummy host that will fail
     saveEmailSettings(testBusinessId, testUserId, {
-      senderName: "Rapid TSS Billing",
-      senderEmail: "billing@rapidtss.com",
-      replyToEmail: "replies@rapidtss.com",
+      senderName: "Acme Corp Billing",
+      senderEmail: "billing@example.com",
+      replyToEmail: "replies@example.com",
       smtpHost: "127.0.0.1",
       smtpPort: 19999,
       smtpSecure: false,
-      smtpUser: "billing@rapidtss.com",
+      smtpUser: "billing@example.com",
       smtpPass: "badpass",
       isActive: true,
     });
@@ -230,7 +230,7 @@ test("Email Settings & Unified Domain Configuration Suite", async (t) => {
     assert.equal(emailRow.status, "failed");
     assert.ok(emailRow.errorMessage);
     // Verified sender override
-    assert.equal(emailRow.fromAddress, "Rapid TSS Billing <billing@rapidtss.com>");
+    assert.equal(emailRow.fromAddress, "Acme Corp Billing <billing@example.com>");
 
     // 4b. When custom SMTP is disabled (isActive = false), falls back to logDriver (simulated success)
     saveEmailSettings(testBusinessId, testUserId, {

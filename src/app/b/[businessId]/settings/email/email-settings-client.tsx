@@ -298,7 +298,7 @@ export function EmailSettingsClient({
                 id="sender-name"
                 value={senderName}
                 onChange={(e) => setSenderName(e.target.value)}
-                placeholder="e.g. Rapid Tech Solutions - Billing"
+                placeholder="e.g. Acme Corporation - Billing"
                 className="h-10 text-sm"
               />
               <p className="text-[11px] text-muted-foreground">
@@ -315,7 +315,7 @@ export function EmailSettingsClient({
                 type="email"
                 value={senderEmail}
                 onChange={(e) => setSenderEmail(e.target.value)}
-                placeholder="e.g. billing@rapidtss.com"
+                placeholder="e.g. billing@example.com"
                 className="h-10 text-sm"
               />
               <p className="text-[11px] text-muted-foreground">
@@ -332,7 +332,7 @@ export function EmailSettingsClient({
                 type="email"
                 value={replyToEmail}
                 onChange={(e) => setReplyToEmail(e.target.value)}
-                placeholder="e.g. support@rapidtss.com"
+                placeholder="e.g. support@example.com"
                 className="h-10 text-sm"
               />
               <p className="text-[11px] text-muted-foreground">
@@ -428,7 +428,7 @@ export function EmailSettingsClient({
                 id="smtp-user"
                 value={smtpUser}
                 onChange={(e) => setSmtpUser(e.target.value)}
-                placeholder="billing@rapidtss.com"
+                placeholder="billing@example.com"
                 className="h-10 text-sm font-mono"
               />
             </div>

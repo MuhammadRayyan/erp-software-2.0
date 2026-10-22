@@ -17,19 +17,56 @@ import { customerInputSchema, type CustomerInput } from "./customer-input";
 
 type Values = CustomerInput;
 
-export function CustomerForm({ businessId, customerId, currencies, initial, customFields = [], customFieldValues }: { businessId: string; customerId?: string; currencies: { code: string; name: string }[]; initial?: Values; customFields?: CustomFieldInputDefinition[]; customFieldValues?: Record<string, string> }) {
+export function CustomerForm({
+  businessId,
+  customerId,
+  currencies,
+  initial,
+  customFields = [],
+  customFieldValues,
+}: {
+  businessId: string;
+  customerId?: string;
+  currencies: { code: string; name: string }[];
+  initial?: Values;
+  customFields?: CustomFieldInputDefinition[];
+  customFieldValues?: Record<string, string>;
+}) {
   const [serverError, setServerError] = useState("");
-  const { register, handleSubmit, setError, control, setValue, formState: { errors, isSubmitting } } = useForm<Values>({
+  const {
+    register,
+    handleSubmit,
+    setError,
+    control,
+    setValue,
+    formState: { errors, isSubmitting },
+  } = useForm<Values>({
     resolver: zodResolver(customerInputSchema),
     mode: "onTouched",
     defaultValues: initial ?? {
-      name: "", email: "", phone: "", taxReference: "", legalName: "", trn: "",
-      legalRegistrationIdentifier: "", electronicAddress: "", electronicAddressScheme: "",
-      addressLine1: "", city: "", countrySubdivision: "", countryCode: "AE", buyerReference: "", defaultCurrencyCode: currencies[0]?.code ?? "AED",
-      paymentTermsDays: 0, creditLimitMinor: "", billingAddress: "", deliveryAddress: "", isActive: true,
+      name: "",
+      email: "",
+      phone: "",
+      taxReference: "",
+      legalName: "",
+      trn: "",
+      legalRegistrationIdentifier: "",
+      electronicAddress: "",
+      electronicAddressScheme: "",
+      addressLine1: "",
+      city: "",
+      countrySubdivision: "",
+      countryCode: "AE",
+      buyerReference: "",
+      defaultCurrencyCode: currencies[0]?.code ?? "AED",
+      paymentTermsDays: 0,
+      creditLimitMinor: "",
+      billingAddress: "",
+      deliveryAddress: "",
+      isActive: true,
     },
   });
-  
+
   const [sameAsBilling, setSameAsBilling] = useState(() => {
     if (!initial) return true;
     return (initial.billingAddress || "") === (initial.deliveryAddress || "");
@@ -40,8 +77,8 @@ export function CustomerForm({ businessId, customerId, currencies, initial, cust
   const [customValues, setCustomValues] = useState<Record<string, string>>(() => {
     const initialCustomValues: Record<string, string> = {};
     for (const definition of customFields) {
-      initialCustomValues[definition.id] = customFieldValues?.[definition.id]
-        ?? (definition.fieldType === "checkbox" ? "false" : "");
+      initialCustomValues[definition.id] =
+        customFieldValues?.[definition.id] ?? (definition.fieldType === "checkbox" ? "false" : "");
     }
     return initialCustomValues;
   });
@@ -51,6 +88,7 @@ export function CustomerForm({ businessId, customerId, currencies, initial, cust
       setValue("deliveryAddress", billingAddress || "");
     }
   }, [sameAsBilling, billingAddress, setValue]);
+
   async function submit(values: Values) {
     setServerError("");
     const missingCustomField = firstMissingRequiredCustomField(customFields, customValues);
@@ -58,108 +96,165 @@ export function CustomerForm({ businessId, customerId, currencies, initial, cust
       setServerError(`"${missingCustomField}" is required.`);
       return;
     }
-    const result = customerId ? await updateCustomerAction(businessId, customerId, values, customValues) : await createCustomerAction(businessId, values, customValues);
-    if (result.fieldErrors) for (const [field, messages] of Object.entries(result.fieldErrors)) setError(field as keyof Values, { message: messages[0] });
+    const result = customerId
+      ? await updateCustomerAction(businessId, customerId, values, customValues)
+      : await createCustomerAction(businessId, values, customValues);
+    if (result.fieldErrors) {
+      for (const [field, messages] of Object.entries(result.fieldErrors)) {
+        setError(field as keyof Values, { message: messages[0] });
+      }
+    }
     if (result.error) setServerError(result.error);
   }
+
   const cancelHref = customerId ? `/b/${businessId}/customers/${customerId}` : `/b/${businessId}/customers`;
+
   return (
     <form onSubmit={handleSubmit(submit)} className="space-y-7 max-w-4xl" noValidate>
       {serverError && <FormError message={serverError} />}
-      <section className="border-b border-border pb-7"><h2 className="text-base font-semibold">Contact information</h2><p className="mt-1 text-sm text-muted-foreground">Keep the core identity clear; more addresses and custom fields come later.</p><div className="mt-5 grid gap-5 sm:grid-cols-2">
-        <div className="space-y-1.5 sm:col-span-2"><Label htmlFor="name">Customer name</Label><Input id="name" autoFocus {...register("name")} aria-invalid={!!errors.name} />{errors.name && <p className="field-error">{errors.name.message}</p>}</div>
-        <div className="space-y-1.5"><Label htmlFor="email">Email</Label><Input id="email" type="email" {...register("email")} aria-invalid={!!errors.email} />{errors.email && <p className="field-error">{errors.email.message}</p>}</div>
-        <div className="space-y-1.5"><Label htmlFor="phone">Phone</Label><Input id="phone" type="tel" {...register("phone")} aria-invalid={!!errors.phone} />{errors.phone && <p className="field-error">{errors.phone.message}</p>}</div>
-        <div className="space-y-1.5"><Label htmlFor="taxReference">TRN / reference <span className="font-normal text-muted-foreground">(optional)</span></Label><Input id="taxReference" {...register("taxReference")} /></div>
-                  <div className="space-y-1.5"><Label htmlFor="defaultCurrencyCode">Default document currency</Label><select id="defaultCurrencyCode" className="h-9 w-full rounded-[6px] border border-border-strong bg-surface-raised px-3 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-ring/25" {...register("defaultCurrencyCode")}>{currencies.map((currency) => <option key={currency.code} value={currency.code}>{currency.code} — {currency.name}</option>)}</select></div>
-          <div className="space-y-1.5"><Label htmlFor="paymentTermsDays">Payment terms (days)</Label><Input id="paymentTermsDays" type="number" min="0" max="365" {...register("paymentTermsDays")} aria-invalid={!!errors.paymentTermsDays} />{errors.paymentTermsDays && <p className="field-error">{errors.paymentTermsDays.message}</p>}</div>
-          <div className="space-y-1.5"><Label htmlFor="creditLimitMinor">Credit limit</Label><Input id="creditLimitMinor" type="number" min="0" placeholder="No limit" {...register("creditLimitMinor")} aria-invalid={!!errors.creditLimitMinor} />{errors.creditLimitMinor && <p className="field-error">{errors.creditLimitMinor.message}</p>}</div>
-        
-        <div className="space-y-1.5 sm:col-span-2">
-          <Label htmlFor="billingAddress">Billing Address</Label>
-          <Textarea id="billingAddress" {...register("billingAddress")} aria-invalid={!!errors.billingAddress} />
-          {errors.billingAddress && <p className="field-error">{errors.billingAddress.message}</p>}
-        </div>
-        
-        <div className="space-y-1.5 sm:col-span-2">
-          <label className="flex items-center gap-2 text-sm font-medium leading-none">
-            <input type="checkbox" className="size-4 rounded-[4px] border-border-strong accent-primary" checked={sameAsBilling} onChange={(e) => setSameAsBilling(e.target.checked)} />
-            Delivery address same as billing address
-          </label>
-        </div>
 
-        {!sameAsBilling && (
-          <div className="space-y-1.5 sm:col-span-2 animate-in fade-in slide-in-from-top-1">
-            <Label htmlFor="deliveryAddress">Delivery Address</Label>
-            <Textarea id="deliveryAddress" {...register("deliveryAddress")} aria-invalid={!!errors.deliveryAddress} />
-            {errors.deliveryAddress && <p className="field-error">{errors.deliveryAddress.message}</p>}
+      {/* Primary Section: Contact & Billing Information */}
+      <section className="border-b border-border pb-7">
+        <h2 className="text-base font-semibold">Primary details</h2>
+        <p className="mt-1 text-sm text-muted-foreground">Basic contact information and billing address for invoices and receipts.</p>
+        <div className="mt-5 grid gap-5 sm:grid-cols-2">
+          <div className="space-y-1.5 sm:col-span-2">
+            <Label htmlFor="name">
+              Customer name <span className="text-destructive">*</span>
+            </Label>
+            <Input id="name" autoFocus placeholder="e.g. Al Futtaim Trading LLC" {...register("name")} aria-invalid={!!errors.name} />
+            {errors.name && <p className="field-error">{errors.name.message}</p>}
           </div>
-        )}
 
-        <div className="space-y-1.5 sm:col-span-2">
-          <label className="flex items-center gap-2 text-sm font-medium leading-none">
-            <input type="checkbox" className="size-4 rounded-[4px] border-border-strong accent-primary" {...register("isActive")} />
-            Active customer
-          </label>
-          <p className="text-[13px] text-muted-foreground ml-6">Inactive customers are hidden from standard lists and cannot be used for new invoices.</p>
-        </div>
-      </div></section>
-      <details className="rounded-lg border border-border bg-surface-raised">
-        <summary className="cursor-pointer px-4 py-3 text-sm font-semibold">Legal identity details</summary>
-        <div className="grid gap-5 border-t border-border p-4 sm:grid-cols-2">
-          <p className="text-sm text-muted-foreground sm:col-span-2">Optional legal-name and tax-identifier details. UAE scheme 0235 electronic addresses are 10 digits beginning with 1.</p>
+          <div className="space-y-1.5">
+            <Label htmlFor="email">Email <span className="font-normal text-muted-foreground">(optional)</span></Label>
+            <Input id="email" type="email" placeholder="e.g. accounts@client.ae" {...register("email")} aria-invalid={!!errors.email} />
+            {errors.email && <p className="field-error">{errors.email.message}</p>}
+          </div>
+
+          <div className="space-y-1.5">
+            <Label htmlFor="phone">Phone <span className="font-normal text-muted-foreground">(optional)</span></Label>
+            <Input id="phone" type="tel" placeholder="e.g. +971 4 123 4567" {...register("phone")} aria-invalid={!!errors.phone} />
+            {errors.phone && <p className="field-error">{errors.phone.message}</p>}
+          </div>
+
           <div className="space-y-1.5 sm:col-span-2">
-            <Label htmlFor="legalName">Legal name</Label>
-            <Input id="legalName" {...register("legalName")} aria-invalid={!!errors.legalName} />
-            {errors.legalName && <p className="field-error">{errors.legalName.message}</p>}
+            <Label htmlFor="billingAddress">Billing Address <span className="font-normal text-muted-foreground">(optional)</span></Label>
+            <Textarea
+              id="billingAddress"
+              rows={3}
+              placeholder="Building, street, area, city, P.O. Box..."
+              {...register("billingAddress")}
+              aria-invalid={!!errors.billingAddress}
+            />
+            {errors.billingAddress && <p className="field-error">{errors.billingAddress.message}</p>}
+
+            {/* Mini currency selector positioned cleanly right below billing address */}
+            <div className="mt-2.5 flex flex-wrap items-center gap-2 pt-1 text-xs">
+              <Label htmlFor="defaultCurrencyCode" className="text-xs font-medium text-muted-foreground">
+                Document Currency:
+              </Label>
+              <select
+                id="defaultCurrencyCode"
+                className="h-8 rounded-md border border-border-strong bg-surface-raised px-2.5 text-xs font-semibold text-foreground outline-none transition-colors hover:border-primary focus:border-primary focus:ring-1 focus:ring-ring"
+                {...register("defaultCurrencyCode")}
+              >
+                {currencies.map((currency) => (
+                  <option key={currency.code} value={currency.code}>
+                    {currency.code} — {currency.name}
+                  </option>
+                ))}
+              </select>
+              <span className="text-[11px] text-muted-foreground">Default currency applied to new sales documents</span>
+            </div>
           </div>
-          <div className="space-y-1.5">
-            <Label htmlFor="trn">TRN</Label>
-            <Input id="trn" inputMode="numeric" {...register("trn")} aria-invalid={!!errors.trn} />
-            {errors.trn && <p className="field-error">{errors.trn.message}</p>}
-          </div>
-          <div className="space-y-1.5">
-            <Label htmlFor="legalRegistrationIdentifier">Trade-license identifier</Label>
-            <Input id="legalRegistrationIdentifier" {...register("legalRegistrationIdentifier")} aria-invalid={!!errors.legalRegistrationIdentifier} />
-            {errors.legalRegistrationIdentifier && <p className="field-error">{errors.legalRegistrationIdentifier.message}</p>}
-          </div>
-          <div className="space-y-1.5">
-            <Label htmlFor="electronicAddress">Electronic address</Label>
-            <Input id="electronicAddress" inputMode="numeric" {...register("electronicAddress")} aria-invalid={!!errors.electronicAddress} />
-            {errors.electronicAddress && <p className="field-error">{errors.electronicAddress.message}</p>}
-          </div>
-          <div className="space-y-1.5">
-            <Label htmlFor="electronicAddressScheme">Electronic address scheme</Label>
-            <Input id="electronicAddressScheme" placeholder="0235" {...register("electronicAddressScheme")} aria-invalid={!!errors.electronicAddressScheme} />
-            {errors.electronicAddressScheme && <p className="field-error">{errors.electronicAddressScheme.message}</p>}
-          </div>
+
           <div className="space-y-1.5 sm:col-span-2">
-            <Label htmlFor="addressLine1">Street address</Label>
-            <Input id="addressLine1" {...register("addressLine1")} aria-invalid={!!errors.addressLine1} />
-            {errors.addressLine1 && <p className="field-error">{errors.addressLine1.message}</p>}
+            <label className="flex items-center gap-2 text-sm font-medium leading-none cursor-pointer">
+              <input
+                type="checkbox"
+                className="size-4 rounded-[4px] border-border-strong accent-primary cursor-pointer"
+                checked={sameAsBilling}
+                onChange={(e) => setSameAsBilling(e.target.checked)}
+              />
+              Delivery address same as billing address
+            </label>
           </div>
+
+          {!sameAsBilling && (
+            <div className="space-y-1.5 sm:col-span-2 animate-in fade-in slide-in-from-top-1">
+              <Label htmlFor="deliveryAddress">Delivery Address</Label>
+              <Textarea
+                id="deliveryAddress"
+                rows={3}
+                placeholder="Warehouse or delivery destination..."
+                {...register("deliveryAddress")}
+                aria-invalid={!!errors.deliveryAddress}
+              />
+              {errors.deliveryAddress && <p className="field-error">{errors.deliveryAddress.message}</p>}
+            </div>
+          )}
+        </div>
+      </section>
+
+      {/* Additional Options Section */}
+      <section className="border-b border-border pb-7">
+        <h2 className="text-base font-semibold">Additional options</h2>
+        <p className="mt-1 text-sm text-muted-foreground">Optional commercial terms, tax registration, and customer status.</p>
+        <div className="mt-5 grid gap-5 sm:grid-cols-2">
           <div className="space-y-1.5">
-            <Label htmlFor="city">City</Label>
-            <Input id="city" {...register("city")} aria-invalid={!!errors.city} />
-            {errors.city && <p className="field-error">{errors.city.message}</p>}
+            <Label htmlFor="taxReference">TRN <span className="font-normal text-muted-foreground">(optional)</span></Label>
+            <Input
+              id="taxReference"
+              placeholder="e.g. 100xxxxxxxxxxxx"
+              {...register("taxReference")}
+              aria-invalid={!!errors.taxReference}
+            />
+            {errors.taxReference && <p className="field-error">{errors.taxReference.message}</p>}
           </div>
+
           <div className="space-y-1.5">
-            <Label htmlFor="countrySubdivision">Emirate code</Label>
-            <Input id="countrySubdivision" placeholder="DXB" {...register("countrySubdivision")} aria-invalid={!!errors.countrySubdivision} />
-            {errors.countrySubdivision && <p className="field-error">{errors.countrySubdivision.message}</p>}
+            <Label htmlFor="paymentTermsDays">Payment terms (days) <span className="font-normal text-muted-foreground">(optional)</span></Label>
+            <Input
+              id="paymentTermsDays"
+              type="number"
+              min="0"
+              max="365"
+              placeholder="0 (Due on receipt)"
+              {...register("paymentTermsDays")}
+              aria-invalid={!!errors.paymentTermsDays}
+            />
+            {errors.paymentTermsDays && <p className="field-error">{errors.paymentTermsDays.message}</p>}
           </div>
+
           <div className="space-y-1.5">
-            <Label htmlFor="countryCode">Country code</Label>
-            <Input id="countryCode" placeholder="AE" {...register("countryCode")} aria-invalid={!!errors.countryCode} />
-            {errors.countryCode && <p className="field-error">{errors.countryCode.message}</p>}
+            <Label htmlFor="creditLimitMinor">Credit limit <span className="font-normal text-muted-foreground">(optional)</span></Label>
+            <Input
+              id="creditLimitMinor"
+              type="number"
+              min="0"
+              placeholder="No limit"
+              {...register("creditLimitMinor")}
+              aria-invalid={!!errors.creditLimitMinor}
+            />
+            {errors.creditLimitMinor && <p className="field-error">{errors.creditLimitMinor.message}</p>}
           </div>
-          <div className="space-y-1.5">
-            <Label htmlFor="buyerReference">Buyer reference <span className="font-normal text-muted-foreground">(optional)</span></Label>
-            <Input id="buyerReference" {...register("buyerReference")} aria-invalid={!!errors.buyerReference} />
-            {errors.buyerReference && <p className="field-error">{errors.buyerReference.message}</p>}
+
+          <div className="space-y-1.5 sm:col-span-2 pt-2">
+            <label className="flex items-center gap-2 text-sm font-medium leading-none cursor-pointer">
+              <input
+                type="checkbox"
+                className="size-4 rounded-[4px] border-border-strong accent-primary cursor-pointer"
+                {...register("isActive")}
+              />
+              Active customer
+            </label>
+            <p className="text-[13px] text-muted-foreground ml-6">Inactive customers are hidden from standard lists and cannot be used for new invoices.</p>
           </div>
         </div>
-      </details>
+      </section>
+
+      {/* Custom Fields Section */}
       {customFields.length > 0 && (
         <section className="border-b border-border pb-7">
           <h2 className="text-base font-semibold">Custom Fields</h2>
@@ -173,7 +268,14 @@ export function CustomerForm({ businessId, customerId, currencies, initial, cust
           />
         </section>
       )}
-      <div className="flex justify-end gap-2"><Button asChild variant="ghost"><Link href={cancelHref}>Cancel</Link></Button><Button type="submit" disabled={isSubmitting}>{isSubmitting && <LoaderCircle className="size-4 animate-spin" />} {customerId ? "Save changes" : "Save customer"}</Button></div>
+
+      <div className="flex justify-end gap-2">
+        <Button asChild variant="ghost"><Link href={cancelHref}>Cancel</Link></Button>
+        <Button type="submit" disabled={isSubmitting}>
+          {isSubmitting && <LoaderCircle className="size-4 animate-spin" />}
+          {customerId ? "Save changes" : "Save customer"}
+        </Button>
+      </div>
     </form>
   );
 }

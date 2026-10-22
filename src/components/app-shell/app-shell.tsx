@@ -10,7 +10,6 @@ import { Button } from "@/components/ui/button";
 import { DialogContent, DialogDescription, DialogRoot, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import type { ModuleKey } from "@/core/permissions/permissions";
 import { AccountMenu } from "@/components/account-menu";
-import { BusinessSwitcher } from "./business-switcher";
 import { primaryNav, settingsNav, systemHealthNav } from "./nav-items";
 import { SidebarNav } from "./sidebar-nav";
 import { ModuleFlowGuide } from "@/components/module-flow-guide";
@@ -76,7 +75,7 @@ function buildCommands(businessId: string, modules: ModuleKey[], push: (path: st
   return [...navigation, ...actions];
 }
 
-export function AppShell({ children, business, businesses, modules, user }: ShellProps) {
+export function AppShell({ children, business, modules, user }: ShellProps) {
   const router = useRouter();
   const [mobileOpen, setMobileOpen] = useState(false);
   const [paletteOpen, setPaletteOpen] = useState(false);
@@ -106,7 +105,10 @@ export function AppShell({ children, business, businesses, modules, user }: Shel
               <DialogTitle className="sr-only">Navigation</DialogTitle>
               <div className="flex h-full flex-col pt-4">
                 <div className="px-4 pb-3"><BrandMark /></div>
-                <div className="mx-2 border-y border-border py-1"><BusinessSwitcher current={business} businesses={businesses} /></div>
+                <div className="border-y border-border px-4 py-2.5">
+                  <p className="truncate text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground/80">Business</p>
+                  <p className="truncate text-xs font-semibold text-foreground">{business.name}</p>
+                </div>
                 <SidebarNav businessId={business.id} modules={modules} onNavigate={() => setMobileOpen(false)} />
               </div>
             </DialogContent>
@@ -132,7 +134,10 @@ export function AppShell({ children, business, businesses, modules, user }: Shel
       </header>
       <div className="flex min-h-[calc(100dvh-3.5rem)]">
         <aside className="sticky top-14 hidden h-[calc(100dvh-3.5rem)] w-60 shrink-0 flex-col border-r border-border bg-surface lg:flex">
-          <div className="m-2 border-b border-border pb-2"><BusinessSwitcher current={business} businesses={businesses} /></div>
+          <div className="border-b border-border px-3.5 py-2.5">
+            <p className="truncate text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground/80">Business</p>
+            <p className="truncate text-xs font-semibold text-foreground">{business.name}</p>
+          </div>
           <SidebarNav businessId={business.id} modules={modules} />
         </aside>
         <main className="min-w-0 flex-1 overflow-x-clip">{children}</main>

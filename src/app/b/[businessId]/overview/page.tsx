@@ -10,7 +10,6 @@ import { listPreferences } from "@/modules/preferences/preference-service";
 import { decodeColumnSnapshots } from "@/modules/preferences/snapshot-codec";
 import {
   getBankBalance,
-  getDashboardCounts,
   getMonthlyFinancialTrend,
   getReceivablesAgingSummary,
 } from "@/modules/reports/report-service";
@@ -22,7 +21,6 @@ import { parseMailboxes } from "@/modules/email/email-driver";
 import { KpiCards, type KpiCardData } from "./kpi-cards";
 import { OverviewControls, type ServerDateRange } from "./overview-controls";
 import { CashFlowRunwayWidget } from "./cash-flow-runway-widget";
-import { ManagerSummary } from "./manager-summary";
 import { FinancialCharts } from "./financial-charts";
 import { OverviewTabsLayout } from "./overview-tabs-layout";
 
@@ -131,8 +129,6 @@ export default async function OverviewPage({
   const trend = getMonthlyFinancialTrend(businessId, user.id, 6);
   const aging = getReceivablesAgingSummary(businessId, user.id);
 
-  // Operations Matrix counts
-  const counts = getDashboardCounts(businessId, user.id);
 
   return (
     <div className="page-container">
@@ -253,11 +249,6 @@ export default async function OverviewPage({
                 currency={currency}
               />
             )}
-            <ManagerSummary
-              businessId={businessId}
-              counts={counts}
-              allowedModules={parseModules(access.membership.role, access.membership.modulesJson)}
-            />
           </div>
         }
       />

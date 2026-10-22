@@ -14,6 +14,7 @@ function NavLink({ businessId, item, onNavigate }: { businessId: string; item: N
   return (
     <Link
       href={href}
+      prefetch={true}
       onClick={onNavigate}
       className={cn(
         "flex h-8.5 items-center gap-2.5 rounded-[6px] px-2.5 text-[13px] text-muted-foreground outline-none transition-colors hover:bg-surface-muted hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring",
