@@ -26,6 +26,29 @@ export const auth = betterAuth({
   database: getSystemSqlite(),
   secret: resolveBetterAuthSecret(),
   baseURL: process.env.BETTER_AUTH_URL ?? "http://localhost:3000",
+  trustedOrigins: (request) => {
+    const origins = [
+      "http://localhost:3000",
+      "http://localhost",
+      "http://84.235.255.173",
+      "https://84.235.255.173",
+    ];
+    if (request) {
+      const host = request.headers.get("x-forwarded-host") || request.headers.get("host");
+      const proto = request.headers.get("x-forwarded-proto") || "http";
+      if (host) {
+        origins.push(`${proto}://${host}`, `http://${host}`, `https://${host}`);
+      }
+      const originHeader = request.headers.get("origin");
+      if (originHeader) {
+        origins.push(originHeader);
+      }
+    }
+    if (process.env.BETTER_AUTH_TRUSTED_ORIGINS) {
+      origins.push(...process.env.BETTER_AUTH_TRUSTED_ORIGINS.split(",").map((s) => s.trim()));
+    }
+    return origins;
+  },
   user: {
     additionalFields: {
       isSuperAdmin: {
@@ -86,7 +109,11 @@ export const auth = betterAuth({
       const returned = (ctx.context as { returned?: unknown } | undefined)?.returned;
       const ip = clientIpFromRequest(ctx.request);
       if (returned instanceof APIError) {
-        recordFailedAttempt(ip);
+        const status = (returned as any).status || (returned as any).statusCode;
+        const code = (returned as any).body?.code || (returned as any).code;
+        if (status === 401 || code === "INVALID_EMAIL_OR_PASSWORD" || code === "USER_NOT_FOUND") {
+          recordFailedAttempt(ip);
+        }
       } else {
         clearAttempts(ip);
       }

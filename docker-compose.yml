@@ -12,7 +12,8 @@ services:
       - HOSTNAME=0.0.0.0
       - ERP_DATA_DIR=/app/data
       - BETTER_AUTH_SECRET=${BETTER_AUTH_SECRET:-ledgerly-secret-change-in-production-random-key-64chars}
-      - BETTER_AUTH_URL=${BETTER_AUTH_URL:-http://localhost}
+      - BETTER_AUTH_URL=${BETTER_AUTH_URL:-http://84.235.255.173}
+      - BETTER_AUTH_TRUSTED_ORIGINS=http://84.235.255.173,http://localhost:3000,http://localhost
       - SETUP_KEY=${SETUP_KEY}
     volumes:
       - /opt/modern-erp/data:/app/data
