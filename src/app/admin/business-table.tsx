@@ -125,11 +125,11 @@ export function BusinessTable({ initialBusinesses }: { initialBusinesses: AdminB
     <div className="space-y-4">
       {/* Controls & Search */}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex items-center gap-1.5 rounded-lg border border-border bg-surface p-1 text-xs">
+        <div className="flex items-center gap-1.5 rounded-lg border border-border bg-surface-raised p-1 text-sm">
           <button
             type="button"
             onClick={() => setStatusFilter("all")}
-            className={`rounded-md px-3 py-1.5 font-medium transition-colors ${
+            className={`rounded-md px-3.5 py-1.5 font-medium transition-colors ${
               statusFilter === "all"
                 ? "bg-primary text-primary-foreground shadow-xs"
                 : "text-muted-foreground hover:text-foreground"
@@ -140,43 +140,43 @@ export function BusinessTable({ initialBusinesses }: { initialBusinesses: AdminB
           <button
             type="button"
             onClick={() => setStatusFilter("active")}
-            className={`flex items-center gap-1.5 rounded-md px-3 py-1.5 font-medium transition-colors ${
+            className={`flex items-center gap-1.5 rounded-md px-3.5 py-1.5 font-medium transition-colors ${
               statusFilter === "active"
                 ? "bg-emerald-600 text-white shadow-xs"
                 : "text-muted-foreground hover:text-foreground"
             }`}
           >
-            <CheckCircle className="size-3.5" /> Active ({counts.active})
+            <CheckCircle className="size-4" /> Active ({counts.active})
           </button>
           <button
             type="button"
             onClick={() => setStatusFilter("suspended")}
-            className={`flex items-center gap-1.5 rounded-md px-3 py-1.5 font-medium transition-colors ${
+            className={`flex items-center gap-1.5 rounded-md px-3.5 py-1.5 font-medium transition-colors ${
               statusFilter === "suspended"
                 ? "bg-amber-600 text-white shadow-xs"
                 : "text-muted-foreground hover:text-foreground"
             }`}
           >
-            <PauseCircle className="size-3.5" /> Suspended ({counts.suspended})
+            <PauseCircle className="size-4" /> Suspended ({counts.suspended})
           </button>
         </div>
 
-        <div className="relative w-full sm:w-72">
+        <div className="relative w-full sm:w-80">
           <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
           <Input
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Search workspaces or account holders..."
-            className="pl-9 text-xs"
+            className="pl-9 h-9 text-sm"
           />
         </div>
       </div>
 
       {/* Businesses Table */}
-      <div className="overflow-hidden rounded-xl border border-border bg-surface shadow-xs">
+      <div className="overflow-hidden rounded-xl border border-border bg-surface-raised shadow-xs">
         <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs">
-            <thead className="border-b border-border bg-surface-muted/60 text-muted-foreground">
+          <table className="w-full text-left text-sm">
+            <thead className="border-b border-border bg-surface text-muted-foreground">
               <tr>
                 <th className="px-4 py-3.5 font-semibold">Workspace</th>
                 <th className="px-4 py-3.5 font-semibold">Account Holder (Owner)</th>
@@ -207,7 +207,7 @@ export function BusinessTable({ initialBusinesses }: { initialBusinesses: AdminB
                       {/* Name & Metadata */}
                       <td className="px-4 py-3.5">
                         <div className="font-semibold text-foreground">{b.name}</div>
-                        <div className="mt-0.5 flex items-center gap-2 text-[11px] text-muted-foreground">
+                        <div className="mt-0.5 flex items-center gap-2 text-xs text-muted-foreground">
                           <span>{b.country}</span>
                           <span>•</span>
                           <span className="font-mono">{b.currency}</span>
@@ -221,7 +221,7 @@ export function BusinessTable({ initialBusinesses }: { initialBusinesses: AdminB
                         {b.ownerName ? (
                           <div className="space-y-0.5">
                             <div className="flex items-center gap-1.5 font-medium text-foreground">
-                              <UserRound className="size-3 text-muted-foreground" />
+                              <UserRound className="size-3.5 text-muted-foreground" />
                               {b.ownerUserId ? (
                                 <Link
                                   href={`/admin/tenants/${b.ownerUserId}`}
@@ -234,7 +234,7 @@ export function BusinessTable({ initialBusinesses }: { initialBusinesses: AdminB
                               )}
                             </div>
                             {b.ownerEmail && (
-                              <div className="text-[11px] text-muted-foreground font-mono">
+                              <div className="text-xs text-muted-foreground font-mono">
                                 {b.ownerEmail}
                               </div>
                             )}
@@ -242,7 +242,7 @@ export function BusinessTable({ initialBusinesses }: { initialBusinesses: AdminB
                         ) : b.admins.length > 0 ? (
                           <div className="space-y-0.5">
                             <div className="font-medium text-foreground">{b.admins[0].name}</div>
-                            <div className="text-[11px] text-muted-foreground font-mono">
+                            <div className="text-xs text-muted-foreground font-mono">
                               {b.admins[0].email}
                             </div>
                           </div>
@@ -254,12 +254,12 @@ export function BusinessTable({ initialBusinesses }: { initialBusinesses: AdminB
                       {/* Status Badge */}
                       <td className="px-4 py-3.5">
                         {isSuspended ? (
-                          <span className="inline-flex items-center gap-1.5 rounded-full border border-amber-500/30 bg-amber-500/10 px-2.5 py-1 text-[11px] font-semibold text-amber-700 dark:border-amber-500/40 dark:bg-amber-500/20 dark:text-amber-300">
-                            <AlertTriangle className="size-3" /> Suspended
+                          <span className="inline-flex items-center gap-1.5 rounded-full border border-amber-500/30 bg-amber-500/10 px-2.5 py-0.5 text-xs font-semibold text-amber-700 dark:border-amber-500/40 dark:bg-amber-500/20 dark:text-amber-300">
+                            <AlertTriangle className="size-3.5" /> Suspended
                           </span>
                         ) : (
-                          <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2.5 py-1 text-[11px] font-semibold text-emerald-700 dark:border-emerald-500/40 dark:bg-emerald-500/20 dark:text-emerald-300">
-                            <CheckCircle className="size-3" /> Active
+                          <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2.5 py-0.5 text-xs font-semibold text-emerald-700 dark:border-emerald-500/40 dark:bg-emerald-500/20 dark:text-emerald-300">
+                            <CheckCircle className="size-3.5" /> Active
                           </span>
                         )}
                       </td>
@@ -267,15 +267,15 @@ export function BusinessTable({ initialBusinesses }: { initialBusinesses: AdminB
                       {/* Members */}
                       <td className="px-4 py-3.5">
                         <div className="flex items-center gap-1.5 text-foreground">
-                          <Users className="size-3.5 text-muted-foreground" />
+                          <Users className="size-4 text-muted-foreground" />
                           <span>{b.memberCount}</span>
                         </div>
                       </td>
 
                       {/* Storage */}
                       <td className="px-4 py-3.5">
-                        <div className="flex items-center gap-1.5 font-mono text-[11px] text-foreground">
-                          <Database className="size-3.5 text-muted-foreground" />
+                        <div className="flex items-center gap-1.5 font-mono text-xs text-foreground">
+                          <Database className="size-4 text-muted-foreground" />
                           <span>{b.storageFormatted}</span>
                         </div>
                       </td>
@@ -284,9 +284,9 @@ export function BusinessTable({ initialBusinesses }: { initialBusinesses: AdminB
                       <td className="px-4 py-3.5 text-right">
                         <div className="flex items-center justify-end gap-2">
                           {/* Live View Button */}
-                          <Button asChild size="sm" variant="ghost" className="h-8 gap-1 text-xs">
+                          <Button asChild size="sm" variant="ghost" className="h-8 gap-1.5 text-xs font-medium">
                             <Link href={`/b/${b.id}/overview`}>
-                              Live View <ArrowUpRight className="size-3.5" />
+                              Live View <ArrowUpRight className="size-4" />
                             </Link>
                           </Button>
 

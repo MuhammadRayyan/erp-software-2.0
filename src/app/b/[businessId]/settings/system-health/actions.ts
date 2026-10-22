@@ -47,6 +47,9 @@ export async function emitDiagnosticTrace(
 
 export async function triggerDiagnosticTraceAction(businessId: string) {
   const { user } = await requireModule(businessId, "settings");
+  if (!user.isSuperAdmin) {
+    throw new Error("Only Platform Super-Administrators can trigger diagnostic traces.");
+  }
   return emitDiagnosticTrace(businessId, user);
 }
 

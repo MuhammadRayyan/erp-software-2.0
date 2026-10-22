@@ -186,7 +186,7 @@ export function TenantDetailView({ initialDetails }: { initialDetails: TenantDet
   return (
     <div className="space-y-6">
       {/* Top Breadcrumb Navigation */}
-      <div className="flex items-center gap-2 text-xs text-muted-foreground">
+      <div className="flex items-center gap-2 text-sm text-muted-foreground">
         <Link href="/admin" className="hover:text-foreground">
           Admin Control Panel
         </Link>
@@ -210,22 +210,22 @@ export function TenantDetailView({ initialDetails }: { initialDetails: TenantDet
                 {details.user.name}
               </h1>
               {details.user.isSuperAdmin ? (
-                <span className="inline-flex items-center gap-1 rounded-full border border-amber-500/30 bg-amber-500/10 px-2 py-0.5 text-xs font-semibold text-amber-700 dark:border-amber-500/40 dark:bg-amber-500/20 dark:text-amber-300">
-                  <ShieldCheck className="size-3" /> Platform Root Super-Admin
+                <span className="inline-flex items-center gap-1.5 rounded-full border border-amber-500/30 bg-amber-500/10 px-2.5 py-0.5 text-xs font-semibold text-amber-700 dark:border-amber-500/40 dark:bg-amber-500/20 dark:text-amber-300">
+                  <ShieldCheck className="size-3.5" /> Platform Root Super-Admin
                 </span>
               ) : isSuspended ? (
                 <span className="inline-flex items-center gap-1.5 rounded-full border border-amber-500/30 bg-amber-500/10 px-2.5 py-0.5 text-xs font-semibold text-amber-700 dark:border-amber-500/40 dark:bg-amber-500/20 dark:text-amber-300">
-                  <AlertTriangle className="size-3" /> Account Suspended
+                  <AlertTriangle className="size-3.5" /> Account Suspended
                 </span>
               ) : (
                 <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2.5 py-0.5 text-xs font-semibold text-emerald-700 dark:border-emerald-500/40 dark:bg-emerald-500/20 dark:text-emerald-300">
-                  <CheckCircle className="size-3" /> Active Account
+                  <CheckCircle className="size-3.5" /> Active Account
                 </span>
               )}
             </div>
 
-            <div className="mt-1 flex flex-wrap items-center gap-3 text-xs text-muted-foreground font-mono">
-              <span>{details.user.email}</span>
+            <div className="mt-1 flex flex-wrap items-center gap-3 text-sm text-muted-foreground">
+              <span className="font-mono">{details.user.email}</span>
               <span>•</span>
               <span>Enrolled {new Date(details.user.createdAt).toLocaleDateString()}</span>
               <span>•</span>
@@ -241,10 +241,10 @@ export function TenantDetailView({ initialDetails }: { initialDetails: TenantDet
           <Button
             size="sm"
             variant="secondary"
-            className="gap-1.5 text-xs"
+            className="gap-2 text-sm"
             onClick={() => setResetModalOpen(true)}
           >
-            <KeyRound className="size-3.5" /> Reset Password
+            <KeyRound className="size-4" /> Reset Password
           </Button>
 
           {!details.user.isSuperAdmin && (
@@ -253,21 +253,21 @@ export function TenantDetailView({ initialDetails }: { initialDetails: TenantDet
                 <Button
                   size="sm"
                   variant="secondary"
-                  className="gap-1.5 border-emerald-600/40 text-emerald-700 hover:bg-emerald-500/10 dark:text-emerald-400 text-xs"
+                  className="gap-2 border-emerald-600/40 text-emerald-700 hover:bg-emerald-500/10 dark:text-emerald-400 text-sm"
                   disabled={isPending}
                   onClick={handleReactivate}
                 >
-                  <PlayCircle className="size-3.5 text-emerald-600" /> Reactivate Account
+                  <PlayCircle className="size-4 text-emerald-600" /> Reactivate Account
                 </Button>
               ) : (
                 <Button
                   size="sm"
                   variant="secondary"
-                  className="gap-1.5 border-amber-600/40 text-amber-700 hover:bg-amber-500/10 dark:text-amber-400 text-xs"
+                  className="gap-2 border-amber-600/40 text-amber-700 hover:bg-amber-500/10 dark:text-amber-400 text-sm"
                   disabled={isPending}
                   onClick={() => setSuspendModalOpen(true)}
                 >
-                  <PauseCircle className="size-3.5 text-amber-600" /> Suspend Account
+                  <PauseCircle className="size-4 text-amber-600" /> Suspend Account
                 </Button>
               )}
             </>
@@ -279,10 +279,10 @@ export function TenantDetailView({ initialDetails }: { initialDetails: TenantDet
       <div className="rounded-xl border border-border bg-surface p-6 shadow-xs">
         <div className="flex items-center justify-between border-b border-border pb-3">
           <div>
-            <h2 className="text-sm font-semibold text-foreground">
+            <h2 className="text-base font-semibold text-foreground">
               Allocation Quotas & Capacity Limits
             </h2>
-            <p className="mt-0.5 text-xs text-muted-foreground">
+            <p className="mt-0.5 text-sm text-muted-foreground">
               Set how many business workspaces and team members this account holder is authorized to create.
             </p>
           </div>
@@ -296,7 +296,7 @@ export function TenantDetailView({ initialDetails }: { initialDetails: TenantDet
           <div className="space-y-1.5">
             <div className="flex items-center justify-between">
               <Label htmlFor="quota-businesses">Max Business Workspaces</Label>
-              <span className="text-[11px] text-muted-foreground">
+              <span className="text-xs text-muted-foreground">
                 Currently: <strong>{details.businesses.length}</strong> created
               </span>
             </div>
@@ -307,7 +307,7 @@ export function TenantDetailView({ initialDetails }: { initialDetails: TenantDet
               max="1000"
               value={maxBusinesses}
               onChange={(e) => setMaxBusinesses(e.target.value)}
-              className="text-xs font-mono"
+              className="text-sm font-mono"
             />
           </div>
 
@@ -315,7 +315,7 @@ export function TenantDetailView({ initialDetails }: { initialDetails: TenantDet
           <div className="space-y-1.5">
             <div className="flex items-center justify-between">
               <Label htmlFor="quota-users">Max Sub-Users Across Businesses</Label>
-              <span className="text-[11px] text-muted-foreground">
+              <span className="text-xs text-muted-foreground">
                 Currently: <strong>{distinctSubUsersCount}</strong> assigned (limit: {details.user.maxUsers})
               </span>
             </div>
@@ -326,13 +326,13 @@ export function TenantDetailView({ initialDetails }: { initialDetails: TenantDet
               max="10000"
               value={maxUsers}
               onChange={(e) => setMaxUsers(e.target.value)}
-              className="text-xs font-mono"
+              className="text-sm font-mono"
             />
           </div>
 
           <div className="flex items-end">
-            <Button type="submit" size="sm" variant="primary" disabled={isPending} className="gap-1.5 text-xs">
-              {isPending ? <LoaderCircle className="size-3.5 animate-spin" /> : <Save className="size-3.5" />}
+            <Button type="submit" size="sm" variant="primary" disabled={isPending} className="gap-2 text-sm">
+              {isPending ? <LoaderCircle className="size-4 animate-spin" /> : <Save className="size-4" />}
               Save Allocation Limits
             </Button>
           </div>
@@ -342,17 +342,17 @@ export function TenantDetailView({ initialDetails }: { initialDetails: TenantDet
       {/* Businesses Owned By This Account Holder */}
       <section className="space-y-3">
         <div className="flex items-center justify-between">
-          <h2 className="text-sm font-semibold text-foreground">
+          <h2 className="text-base font-semibold text-foreground">
             Workspaces Created By This Account ({details.businesses.length})
           </h2>
-          <span className="text-xs text-muted-foreground">
+          <span className="text-sm text-muted-foreground">
             Isolated databases with independent accounting ledgers
           </span>
         </div>
 
         <div className="overflow-hidden rounded-xl border border-border bg-surface shadow-xs">
           <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs">
+            <table className="w-full text-left text-sm">
               <thead className="border-b border-border bg-surface-muted/60 text-muted-foreground">
                 <tr>
                   <th className="px-4 py-3 font-semibold">Workspace Name</th>
@@ -366,7 +366,7 @@ export function TenantDetailView({ initialDetails }: { initialDetails: TenantDet
               <tbody className="divide-y divide-border">
                 {details.businesses.length === 0 ? (
                   <tr>
-                    <td colSpan={6} className="py-8 text-center text-xs text-muted-foreground">
+                    <td colSpan={6} className="py-8 text-center text-sm text-muted-foreground">
                       This account holder has not created any businesses yet.
                     </td>
                   </tr>
@@ -377,38 +377,38 @@ export function TenantDetailView({ initialDetails }: { initialDetails: TenantDet
                       <tr key={b.id} className="transition-colors hover:bg-surface-muted/30">
                         <td className="px-4 py-3">
                           <div className="font-semibold text-foreground">{b.name}</div>
-                          <div className="text-[11px] text-muted-foreground">
+                          <div className="text-xs text-muted-foreground">
                             Created {new Date(b.createdAt).toLocaleDateString()}
                           </div>
                         </td>
 
                         <td className="px-4 py-3">
                           {isBusinessSuspended ? (
-                            <span className="inline-flex items-center gap-1 rounded bg-amber-500/10 px-2 py-0.5 text-[10px] font-semibold text-amber-700 dark:text-amber-300">
+                            <span className="inline-flex items-center gap-1 rounded bg-amber-500/10 px-2.5 py-0.5 text-xs font-semibold text-amber-700 dark:text-amber-300">
                               Suspended
                             </span>
                           ) : (
-                            <span className="inline-flex items-center gap-1 rounded bg-emerald-500/10 px-2 py-0.5 text-[10px] font-semibold text-emerald-700 dark:text-emerald-300">
+                            <span className="inline-flex items-center gap-1 rounded bg-emerald-500/10 px-2.5 py-0.5 text-xs font-semibold text-emerald-700 dark:text-emerald-300">
                               Active
                             </span>
                           )}
                         </td>
 
-                        <td className="px-4 py-3 font-mono text-[11px] text-muted-foreground">
+                        <td className="px-4 py-3 font-mono text-xs text-muted-foreground">
                           {b.country} · {b.currency}
                         </td>
 
                         <td className="px-4 py-3 text-foreground">{b.memberCount}</td>
 
-                        <td className="px-4 py-3 font-mono text-[11px] text-muted-foreground">
+                        <td className="px-4 py-3 font-mono text-xs text-muted-foreground">
                           {b.storageFormatted}
                         </td>
 
                         <td className="px-4 py-3 text-right">
                           <div className="flex items-center justify-end gap-2">
-                            <Button asChild size="sm" variant="ghost" className="h-7 gap-1 text-xs">
+                            <Button asChild size="sm" variant="ghost" className="h-8 gap-1.5 text-sm">
                               <Link href={`/b/${b.id}/overview`}>
-                                Live View <ArrowUpRight className="size-3" />
+                                Live View <ArrowUpRight className="size-4" />
                               </Link>
                             </Button>
 
@@ -416,7 +416,7 @@ export function TenantDetailView({ initialDetails }: { initialDetails: TenantDet
                               <Button
                                 size="sm"
                                 variant="secondary"
-                                className="h-7 text-xs border-emerald-600/40 text-emerald-700"
+                                className="h-8 text-sm border-emerald-600/40 text-emerald-700"
                                 onClick={() => handleReactivateBusiness(b)}
                               >
                                 Reactivate
@@ -425,7 +425,7 @@ export function TenantDetailView({ initialDetails }: { initialDetails: TenantDet
                               <Button
                                 size="sm"
                                 variant="secondary"
-                                className="h-7 text-xs border-amber-600/40 text-amber-700"
+                                className="h-8 text-sm border-amber-600/40 text-amber-700"
                                 onClick={() => setBusinessConfirmTarget(b)}
                               >
                                 Suspend
@@ -446,17 +446,17 @@ export function TenantDetailView({ initialDetails }: { initialDetails: TenantDet
       {/* Sub-Users & Permissions Across Businesses */}
       <section className="space-y-3">
         <div className="flex items-center justify-between">
-          <h2 className="text-sm font-semibold text-foreground">
+          <h2 className="text-base font-semibold text-foreground">
             Sub-Users & Team Permissions ({distinctSubUsersCount} distinct user{distinctSubUsersCount === 1 ? "" : "s"}, {details.subUsers.length} assignment{details.subUsers.length === 1 ? "" : "s"})
           </h2>
-          <span className="text-xs text-muted-foreground">
+          <span className="text-sm text-muted-foreground">
             Users invited to access businesses under this account
           </span>
         </div>
 
         <div className="overflow-hidden rounded-xl border border-border bg-surface shadow-xs">
           <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs">
+            <table className="w-full text-left text-sm">
               <thead className="border-b border-border bg-surface-muted/60 text-muted-foreground">
                 <tr>
                   <th className="px-4 py-3 font-semibold">User</th>
@@ -469,7 +469,7 @@ export function TenantDetailView({ initialDetails }: { initialDetails: TenantDet
               <tbody className="divide-y divide-border">
                 {details.subUsers.length === 0 ? (
                   <tr>
-                    <td colSpan={5} className="py-8 text-center text-xs text-muted-foreground">
+                    <td colSpan={5} className="py-8 text-center text-sm text-muted-foreground">
                       No sub-users have been added under this account holder yet.
                     </td>
                   </tr>
@@ -478,13 +478,13 @@ export function TenantDetailView({ initialDetails }: { initialDetails: TenantDet
                     <tr key={idx} className="transition-colors hover:bg-surface-muted/30">
                       <td className="px-4 py-3">
                         <div className="font-semibold text-foreground">{su.name}</div>
-                        <div className="text-[11px] text-muted-foreground font-mono">{su.email}</div>
+                        <div className="text-xs text-muted-foreground font-mono">{su.email}</div>
                       </td>
 
                       <td className="px-4 py-3 font-medium text-foreground">{su.businessName}</td>
 
                       <td className="px-4 py-3">
-                        <span className="rounded bg-secondary px-2 py-0.5 text-[10px] font-semibold text-secondary-foreground uppercase tracking-wide">
+                        <span className="rounded bg-secondary px-2 py-0.5 text-xs font-semibold text-secondary-foreground uppercase tracking-wide">
                           {su.role}
                         </span>
                       </td>
@@ -494,7 +494,7 @@ export function TenantDetailView({ initialDetails }: { initialDetails: TenantDet
                           {su.modules.map((m) => (
                             <span
                               key={m}
-                              className="rounded border border-border bg-surface px-1.5 py-0.5 text-[10px] text-muted-foreground capitalize"
+                              className="rounded border border-border bg-surface px-1.5 py-0.5 text-xs text-muted-foreground capitalize"
                             >
                               {m}
                             </span>
@@ -504,9 +504,9 @@ export function TenantDetailView({ initialDetails }: { initialDetails: TenantDet
 
                       <td className="px-4 py-3">
                         {su.status === "suspended" ? (
-                          <span className="text-[11px] font-medium text-amber-600">Suspended</span>
+                          <span className="text-xs font-medium text-amber-600">Suspended</span>
                         ) : (
-                          <span className="text-[11px] font-medium text-emerald-600">Active</span>
+                          <span className="text-xs font-medium text-emerald-600">Active</span>
                         )}
                       </td>
                     </tr>
@@ -555,13 +555,13 @@ export function TenantDetailView({ initialDetails }: { initialDetails: TenantDet
               <DialogTitle className="text-base font-semibold text-foreground">
                 Reset Tenant Password
               </DialogTitle>
-              <DialogDescription className="mt-1 text-xs text-muted-foreground">
+              <DialogDescription className="mt-1 text-sm text-muted-foreground">
                 Assign a new password for {details.user.name} ({details.user.email}). All active sessions will be terminated immediately.
               </DialogDescription>
             </div>
           </div>
 
-          <form onSubmit={handleResetPasswordSubmit} className="mt-5 space-y-4 text-xs">
+          <form onSubmit={handleResetPasswordSubmit} className="mt-5 space-y-4 text-sm">
             <div className="space-y-1.5">
               <div className="flex items-center justify-between">
                 <Label htmlFor="reset-new-password">New Temporary Password</Label>
@@ -569,9 +569,9 @@ export function TenantDetailView({ initialDetails }: { initialDetails: TenantDet
                   <button
                     type="button"
                     onClick={() => setNewPassword(generateSecurePassword())}
-                    className="flex items-center gap-1 text-[11px] font-medium text-primary hover:underline"
+                    className="flex items-center gap-1.5 text-xs font-medium text-primary hover:underline"
                   >
-                    <Sparkles className="size-3" /> Auto-Generate
+                    <Sparkles className="size-3.5" /> Auto-Generate
                   </button>
                   {newPassword && (
                     <button
@@ -586,9 +586,9 @@ export function TenantDetailView({ initialDetails }: { initialDetails: TenantDet
                           toast.error("Could not copy to clipboard. Please copy manually from the input.");
                         }
                       }}
-                      className="flex items-center gap-1 text-[11px] font-medium text-muted-foreground hover:text-foreground"
+                      className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground hover:text-foreground"
                     >
-                      {copied ? <Check className="size-3 text-emerald-600" /> : <Copy className="size-3" />}
+                      {copied ? <Check className="size-3.5 text-emerald-600" /> : <Copy className="size-3.5" />}
                       {copied ? "Copied" : "Copy"}
                     </button>
                   )}
@@ -601,7 +601,7 @@ export function TenantDetailView({ initialDetails }: { initialDetails: TenantDet
                 value={newPassword}
                 onChange={(e) => setNewPassword(e.target.value)}
                 required
-                className="font-mono text-xs"
+                className="font-mono text-sm"
               />
             </div>
 
@@ -610,13 +610,14 @@ export function TenantDetailView({ initialDetails }: { initialDetails: TenantDet
                 type="button"
                 variant="secondary"
                 size="sm"
+                className="text-sm"
                 disabled={isPending}
                 onClick={() => setResetModalOpen(false)}
               >
                 Cancel
               </Button>
-              <Button type="submit" variant="primary" size="sm" disabled={isPending}>
-                {isPending && <LoaderCircle className="size-3.5 animate-spin" />}
+              <Button type="submit" variant="primary" size="sm" className="text-sm" disabled={isPending}>
+                {isPending && <LoaderCircle className="size-4 animate-spin" />}
                 Confirm Password Reset
               </Button>
             </div>

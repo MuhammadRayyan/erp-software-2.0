@@ -12,11 +12,15 @@ import { businessInputSchema, type BusinessInput } from "./business-input";
 import { synchronizeBusinessBaseCurrency } from "@/modules/currency/exchange-rate";
 import { listInvoices } from "@/modules/sales-invoices/invoice-service";
 
-export function listBusinessesForUser(userId: string, includeArchived = false) {
+export function listBusinessesForUser(
+  userId: string,
+  includeArchived = false,
+  options?: { isolateForSuperAdmin?: boolean }
+) {
   const user = getSystemDb().select().from(users).where(eq(users.id, userId)).get();
   const isSuper = Boolean(user?.isSuperAdmin);
 
-  if (isSuper) {
+  if (isSuper && !options?.isolateForSuperAdmin) {
     const businessConditions = includeArchived ? [] : [eq(businesses.archived, false)];
     const allBusinesses = getSystemDb()
       .select()

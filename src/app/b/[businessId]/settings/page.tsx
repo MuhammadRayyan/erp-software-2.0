@@ -25,6 +25,7 @@ export default async function SettingsPage({ params }: { params: Promise<{ busin
         businessId={businessId}
         profile={profile}
         vatRegistered={tax.vatRegistered}
+        isSuperAdmin={Boolean(user.isSuperAdmin)}
       />
     </div>
   );

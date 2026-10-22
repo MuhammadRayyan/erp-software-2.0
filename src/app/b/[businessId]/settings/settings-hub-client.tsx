@@ -54,10 +54,12 @@ export function SettingsHubClient({
   businessId,
   profile,
   vatRegistered,
+  isSuperAdmin = false,
 }: {
   businessId: string;
   profile: ResolvedBusinessProfile;
   vatRegistered: boolean;
+  isSuperAdmin?: boolean;
 }) {
   const [query, setQuery] = useState("");
   const [activeTab, setActiveTab] = useState<string>("all");
@@ -245,18 +247,22 @@ export function SettingsHubClient({
             icon: LayoutGrid,
             keywords: "preferences columns kpi cards reset ui view display sync",
           },
-          {
-            title: "System Health & Diagnostics",
-            description: "Database WAL metrics, system memory, uptime status, correlated trace logs, and telemetry health.",
-            href: `/b/${businessId}/settings/system-health`,
-            icon: Activity,
-            keywords: "system health diagnostics logs traces sentry memory database wal uptime",
-            badge: "Operational",
-          },
+          ...(isSuperAdmin
+            ? [
+                {
+                  title: "System Health & Diagnostics",
+                  description: "Database WAL metrics, system memory, uptime status, correlated trace logs, and telemetry health.",
+                  href: `/b/${businessId}/settings/system-health`,
+                  icon: Activity,
+                  keywords: "system health diagnostics logs traces sentry memory database wal uptime",
+                  badge: "Operational",
+                },
+              ]
+            : []),
         ],
       },
     ],
-    [businessId, profile, vatRegistered],
+    [businessId, profile, vatRegistered, isSuperAdmin],
   );
 
   const tabs = useMemo(

@@ -22,7 +22,7 @@ type ShellProps = {
   user: { name: string; email: string; isSuperAdmin?: boolean };
 };
 
-function buildCommands(businessId: string, modules: ModuleKey[], push: (path: string) => void): CommandItem[] {
+function buildCommands(businessId: string, modules: ModuleKey[], isSuperAdmin: boolean, push: (path: string) => void): CommandItem[] {
   const go = (path: string) => () => push(`/b/${businessId}${path}`);
   const navigation: CommandItem[] = [];
   for (const group of primaryNav) {
@@ -40,8 +40,12 @@ function buildCommands(businessId: string, modules: ModuleKey[], push: (path: st
   if (modules.includes("settings")) {
     navigation.push(
       { label: settingsNav.label, hint: "Go to", icon: settingsNav.icon, keywords: "settings preferences configuration", onSelect: go(settingsNav.path) },
-      { label: systemHealthNav.label, hint: "Go to", icon: systemHealthNav.icon, keywords: "system health diagnostics logs traces sentry metrics wal", onSelect: go(systemHealthNav.path) },
     );
+    if (isSuperAdmin) {
+      navigation.push(
+        { label: systemHealthNav.label, hint: "Go to", icon: systemHealthNav.icon, keywords: "system health diagnostics logs traces sentry metrics wal", onSelect: go(systemHealthNav.path) },
+      );
+    }
   }
   navigation.push(
     { label: "My Profile & Security", hint: "Go to", icon: UserRound, keywords: "profile user account password change security name credentials", onSelect: go("/settings/profile") },
@@ -80,7 +84,8 @@ export function AppShell({ children, business, modules, user }: ShellProps) {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [helpOpen, setHelpOpen] = useState(false);
-  const commands = useMemo(() => buildCommands(business.id, modules, (path) => router.push(path)), [business.id, modules, router]);
+  const isSuperAdmin = Boolean(user.isSuperAdmin);
+  const commands = useMemo(() => buildCommands(business.id, modules, isSuperAdmin, (path) => router.push(path)), [business.id, modules, isSuperAdmin, router]);
 
   useEffect(() => {
     function onKeyDown(event: KeyboardEvent) {
@@ -109,7 +114,7 @@ export function AppShell({ children, business, modules, user }: ShellProps) {
                   <p className="truncate text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground/80">Business</p>
                   <p className="truncate text-xs font-semibold text-foreground">{business.name}</p>
                 </div>
-                <SidebarNav businessId={business.id} modules={modules} onNavigate={() => setMobileOpen(false)} />
+                <SidebarNav businessId={business.id} modules={modules} isSuperAdmin={isSuperAdmin} onNavigate={() => setMobileOpen(false)} />
               </div>
             </DialogContent>
           </DialogRoot>
@@ -138,7 +143,7 @@ export function AppShell({ children, business, modules, user }: ShellProps) {
             <p className="truncate text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground/80">Business</p>
             <p className="truncate text-xs font-semibold text-foreground">{business.name}</p>
           </div>
-          <SidebarNav businessId={business.id} modules={modules} />
+          <SidebarNav businessId={business.id} modules={modules} isSuperAdmin={isSuperAdmin} />
         </aside>
         <main className="min-w-0 flex-1 overflow-x-clip">{children}</main>
       </div>

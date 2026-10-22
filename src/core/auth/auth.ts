@@ -72,6 +72,14 @@ export const auth = betterAuth({
     minPasswordLength: 8,
     disableSignUp: process.env.NODE_ENV === "production",
   },
+  session: {
+    expiresIn: 30 * 24 * 60 * 60, // 30 days for persistent session
+    updateAge: 24 * 60 * 60, // Refresh session expiration daily
+    cookieCache: {
+      enabled: true,
+      maxAge: 5 * 60,
+    },
+  },
   advanced: {
     ipAddress: {
       // Resolve client IPs for rate limiting/session tracking through the
@@ -137,6 +145,8 @@ export const auth = betterAuth({
     after: createAuthMiddleware(async (ctx) => {
       if (ctx.path !== "/sign-in/email") return;
       const returned = (ctx.context as { returned?: unknown } | undefined)?.returned;
+      const body = (ctx as any).body || (ctx.context as any)?.body;
+
       if (ctx.request) {
         const ip = clientIpFromRequest(ctx.request);
         if (returned instanceof APIError) {
@@ -147,6 +157,21 @@ export const auth = betterAuth({
           }
         } else {
           clearAttempts(ip);
+        }
+      }
+
+      // If user selected "Remember me", clear any obsolete dont_remember token
+      if (!(returned instanceof APIError) && body?.rememberMe !== false) {
+        try {
+          const cookie = (ctx.context as any)?.authCookies?.dontRememberToken;
+          if (cookie && typeof (ctx as any).setCookie === "function") {
+            (ctx as any).setCookie(cookie.name, "", {
+              ...cookie.attributes,
+              maxAge: 0,
+            });
+          }
+        } catch {
+          // ignore cookie cleanup error
         }
       }
     }),

@@ -36,6 +36,9 @@ export async function savePurchaseQuoteAction(
   } catch (error) {
     return { error: error instanceof Error ? error.message : "The purchase quote could not be saved." };
   }
+  revalidatePath(`/b/${businessId}/purchases/quotes`);
+  if (quoteId) revalidatePath(`/b/${businessId}/purchases/quotes/${quoteId}`);
+  revalidatePath(`/b/${businessId}/purchases/quotes/${id}`);
   redirect(`/b/${businessId}/purchases/quotes/${id}?notice=${intent === "issue" ? "Purchase quote issued" : "Draft saved"}`);
 }
 
@@ -115,6 +118,10 @@ export async function convertPurchaseQuoteToOrderAction(businessId: string, quot
         .run();
     }
 
+    revalidatePath(`/b/${businessId}/purchases/quotes`);
+    revalidatePath(`/b/${businessId}/purchases/quotes/${quoteId}`);
+    revalidatePath(`/b/${businessId}/purchases/orders`);
+    revalidatePath(`/b/${businessId}/purchases/orders/${orderId}`);
     return { orderId };
   } catch (error) {
     return { error: error instanceof Error ? error.message : "Failed to convert purchase quote." };
@@ -128,6 +135,7 @@ export async function createPurchaseQuoteRevisionAction(businessId: string, quot
     const newQuoteId = createPurchaseQuoteRevision(businessId, user.id, quoteId);
     revalidatePath(`/b/${businessId}/purchases/quotes`);
     revalidatePath(`/b/${businessId}/purchases/quotes/${quoteId}`);
+    revalidatePath(`/b/${businessId}/purchases/quotes/${newQuoteId}`);
     return { quoteId: newQuoteId };
   } catch (error) {
     return { error: error instanceof Error ? error.message : "Failed to create quote revision." };

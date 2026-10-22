@@ -17,6 +17,9 @@ export async function saveSalesQuoteAction(businessId: string, quoteId: string |
   let id: string;
   try { id = saveSalesQuote(businessId, user.id, parsed.data, intent, quoteId ?? undefined); }
   catch (error) { return { error: error instanceof Error ? error.message : "The sales quote could not be saved." }; }
+  revalidatePath(`/b/${businessId}/sales/quotes`);
+  if (quoteId) revalidatePath(`/b/${businessId}/sales/quotes/${quoteId}`);
+  revalidatePath(`/b/${businessId}/sales/quotes/${id}`);
   redirect(`/b/${businessId}/sales/quotes/${id}?notice=${intent === "issue" ? "Sales quote issued" : "Draft saved"}`);
 }
 
@@ -98,6 +101,10 @@ export async function convertSalesQuoteToOrderAction(businessId: string, quoteId
         .run();
     }
     
+    revalidatePath(`/b/${businessId}/sales/quotes`);
+    revalidatePath(`/b/${businessId}/sales/quotes/${quoteId}`);
+    revalidatePath(`/b/${businessId}/sales/orders`);
+    revalidatePath(`/b/${businessId}/sales/orders/${orderId}`);
     return { orderId };
   } catch (error) {
     return { error: error instanceof Error ? error.message : "Failed to convert quote." };
@@ -111,6 +118,7 @@ export async function createSalesQuoteRevisionAction(businessId: string, quoteId
     const newQuoteId = createSalesQuoteRevision(businessId, user.id, quoteId);
     revalidatePath(`/b/${businessId}/sales/quotes`);
     revalidatePath(`/b/${businessId}/sales/quotes/${quoteId}`);
+    revalidatePath(`/b/${businessId}/sales/quotes/${newQuoteId}`);
     return { quoteId: newQuoteId };
   } catch (error) {
     return { error: error instanceof Error ? error.message : "Failed to create quote revision." };

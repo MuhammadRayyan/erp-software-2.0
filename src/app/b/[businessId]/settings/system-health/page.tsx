@@ -20,6 +20,9 @@ export default async function SystemHealthPage({
 }) {
   const { businessId } = await params;
   const { user } = await requireModule(businessId, "settings");
+  if (!user.isSuperAdmin) {
+    notFound();
+  }
 
   const businessEntry = getBusinessForUser(businessId, user.id);
   if (!businessEntry) {

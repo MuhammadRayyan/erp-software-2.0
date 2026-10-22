@@ -88,129 +88,136 @@ export default async function AdminPage({
   const auditLogs = listSystemAuditLogs(100);
 
   return (
-    <main className="mx-auto max-w-7xl p-4 sm:p-8 space-y-6">
+    <main className="page-container max-w-7xl py-6 space-y-6">
       {/* Platform Title & Actions */}
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-2xl font-bold tracking-tight text-foreground">
             Platform Administration & Tenant Management
           </h1>
-          <p className="mt-1 text-xs text-muted-foreground">
+          <p className="mt-1 text-sm text-muted-foreground">
             Provision account holders, allocate business & user quotas, isolate tenant data, and audit platform security.
           </p>
         </div>
 
-        <div className="flex items-center gap-2.5">
+        <div className="flex items-center gap-3">
           <CreateTenantDialog />
-          <Button asChild size="sm" variant="secondary" className="gap-1.5 text-xs">
-            <Link href="/api/health" target="_blank">
-              <Activity className="size-3.5" /> Engine Health
+          <Button asChild variant="secondary" className="gap-2 text-sm font-medium">
+            <Link href="/admin/engine-health">
+              <Activity className="size-4 text-emerald-600 dark:text-emerald-400" /> Engine Health
             </Link>
           </Button>
         </div>
       </div>
 
       {/* Domain-Aligned Platform KPIs */}
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
+      <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-6">
         {/* Account Holders (Main Tenants) */}
-        <div className="rounded-xl border border-border bg-surface p-4 shadow-xs">
+        <div className="rounded-xl border border-border bg-surface-raised p-4.5 shadow-xs">
           <div className="flex items-center justify-between text-muted-foreground">
-            <span className="text-xs font-medium">Account Holders</span>
-            <UserCheck className="size-4 text-primary" />
+            <span className="text-sm font-medium">Account Holders</span>
+            <UserCheck className="size-5 text-primary" />
           </div>
           <div className="mt-2 text-2xl font-bold text-foreground">
             {clientTenants.length}
           </div>
-          <span className="text-[10px] text-muted-foreground">
+          <span className="text-xs text-muted-foreground">
             {tenantRows.length} total account holders
           </span>
         </div>
 
         {/* Total Businesses */}
-        <div className="rounded-xl border border-border bg-surface p-4 shadow-xs">
+        <div className="rounded-xl border border-border bg-surface-raised p-4.5 shadow-xs">
           <div className="flex items-center justify-between text-muted-foreground">
-            <span className="text-xs font-medium">Total Businesses</span>
-            <Building2 className="size-4 text-primary" />
+            <span className="text-sm font-medium">Total Businesses</span>
+            <Building2 className="size-5 text-primary" />
           </div>
           <div className="mt-2 text-2xl font-bold text-foreground">{businessRows.length}</div>
-          <span className="text-[10px] text-muted-foreground">Isolated ledgers</span>
+          <span className="text-xs text-muted-foreground">Isolated ledgers</span>
         </div>
 
         {/* Platform Users */}
-        <div className="rounded-xl border border-border bg-surface p-4 shadow-xs">
+        <div className="rounded-xl border border-border bg-surface-raised p-4.5 shadow-xs">
           <div className="flex items-center justify-between text-muted-foreground">
-            <span className="text-xs font-medium">Platform Users</span>
-            <Users className="size-4 text-primary" />
+            <span className="text-sm font-medium">Platform Users</span>
+            <Users className="size-5 text-primary" />
           </div>
           <div className="mt-2 text-2xl font-bold text-foreground">{allUsers.length}</div>
-          <span className="text-[10px] text-muted-foreground">Tenants + team members</span>
+          <span className="text-xs text-muted-foreground">Tenants + team members</span>
         </div>
 
         {/* Active Accounts */}
-        <div className="rounded-xl border border-border bg-surface p-4 shadow-xs">
+        <div className="rounded-xl border border-border bg-surface-raised p-4.5 shadow-xs">
           <div className="flex items-center justify-between text-muted-foreground">
-            <span className="text-xs font-medium">Active Accounts</span>
-            <Shield className="size-4 text-emerald-600" />
+            <span className="text-sm font-medium">Active Accounts</span>
+            <Shield className="size-5 text-emerald-600" />
           </div>
           <div className="mt-2 text-2xl font-bold text-emerald-600">{activeTenantsCount}</div>
-          <span className="text-[10px] text-muted-foreground">In good standing</span>
+          <span className="text-xs text-muted-foreground">In good standing</span>
         </div>
 
         {/* Suspended Accounts */}
-        <div className="rounded-xl border border-border bg-surface p-4 shadow-xs">
+        <div className="rounded-xl border border-border bg-surface-raised p-4.5 shadow-xs">
           <div className="flex items-center justify-between text-muted-foreground">
-            <span className="text-xs font-medium">Suspended</span>
-            <PauseCircle className="size-4 text-amber-600" />
+            <span className="text-sm font-medium">Suspended</span>
+            <PauseCircle className="size-5 text-amber-600" />
           </div>
           <div className="mt-2 text-2xl font-bold text-amber-600">{suspendedTenantsCount}</div>
-          <span className="text-[10px] text-muted-foreground">Access revoked</span>
+          <span className="text-xs text-muted-foreground">Access revoked</span>
         </div>
 
         {/* Storage Utilized */}
-        <div className="rounded-xl border border-border bg-surface p-4 shadow-xs">
+        <div className="rounded-xl border border-border bg-surface-raised p-4.5 shadow-xs">
           <div className="flex items-center justify-between text-muted-foreground">
-            <span className="text-xs font-medium">Storage Utilized</span>
-            <HardDrive className="size-4 text-primary" />
+            <span className="text-sm font-medium">Storage Utilized</span>
+            <HardDrive className="size-5 text-primary" />
           </div>
           <div className="mt-2 text-2xl font-bold font-mono text-foreground">
             {formatBytes(totalStorageBytes)}
           </div>
-          <span className="text-[10px] text-muted-foreground">Across all SQLite DBs</span>
+          <span className="text-xs text-muted-foreground">Across all SQLite DBs</span>
         </div>
       </div>
 
       {/* Navigation View Tabs */}
       <div className="border-b border-border">
-        <div className="flex gap-4 text-xs font-medium">
+        <div className="flex gap-6 text-sm font-medium">
           <Link
             href="/admin?tab=tenants"
-            className={`border-b-2 pb-2.5 transition-colors ${
+            className={`pb-3 -mb-px transition-colors ${
               currentTab === "tenants"
-                ? "border-primary text-foreground font-semibold"
-                : "border-transparent text-muted-foreground hover:text-foreground"
+                ? "border-b-2 border-primary text-foreground font-semibold"
+                : "border-b-2 border-transparent text-muted-foreground hover:text-foreground"
             }`}
           >
             Account Holders (Tenants) ({tenantRows.length})
           </Link>
           <Link
             href="/admin?tab=businesses"
-            className={`border-b-2 pb-2.5 transition-colors ${
+            className={`pb-3 -mb-px transition-colors ${
               currentTab === "businesses"
-                ? "border-primary text-foreground font-semibold"
-                : "border-transparent text-muted-foreground hover:text-foreground"
+                ? "border-b-2 border-primary text-foreground font-semibold"
+                : "border-b-2 border-transparent text-muted-foreground hover:text-foreground"
             }`}
           >
             All Workspaces ({businessRows.length})
           </Link>
           <Link
             href="/admin?tab=audit"
-            className={`border-b-2 pb-2.5 transition-colors ${
+            className={`pb-3 -mb-px transition-colors ${
               currentTab === "audit"
-                ? "border-primary text-foreground font-semibold"
-                : "border-transparent text-muted-foreground hover:text-foreground"
+                ? "border-b-2 border-primary text-foreground font-semibold"
+                : "border-b-2 border-transparent text-muted-foreground hover:text-foreground"
             }`}
           >
             Platform Audit Log ({auditLogs.length})
+          </Link>
+          <Link
+            href="/admin/engine-health"
+            className="pb-3 -mb-px border-b-2 border-transparent text-muted-foreground hover:text-foreground transition-colors flex items-center gap-1.5"
+          >
+            <Activity className="size-4 text-emerald-600 dark:text-emerald-400" />
+            Engine Health
           </Link>
         </div>
       </div>

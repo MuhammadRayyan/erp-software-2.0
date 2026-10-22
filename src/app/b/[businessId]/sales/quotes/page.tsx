@@ -12,6 +12,7 @@ import { SalesQuoteTable } from "@/modules/sales-quotes/quote-table";
 import { listSalesQuotes } from "@/modules/sales-quotes/quote-service";
 
 export const metadata = { title: "Sales Quotes" };
+export const dynamic = "force-dynamic";
 
 export default async function QuoteListPage({
   params,

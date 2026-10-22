@@ -21,7 +21,7 @@ export default async function TenantDetailPage({
   }
 
   return (
-    <main className="mx-auto max-w-7xl p-4 sm:p-8">
+    <main className="page-container max-w-7xl py-6 space-y-6">
       <TenantDetailView initialDetails={details} />
     </main>
   );

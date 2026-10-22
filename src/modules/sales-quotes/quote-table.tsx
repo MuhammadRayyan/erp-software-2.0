@@ -22,6 +22,7 @@ import { useTableDensity } from "@/components/use-table-density";
 import { TableTotalsBar, renderMultiCurrencyString } from "@/components/table-totals-bar";
 import { BatchActionBar } from "@/components/batch-action-bar";
 import { exportCsv } from "@/lib/export-csv";
+import { useLiveRefresh } from "@/components/use-live-refresh";
 
 type Row = {
   id: string;
@@ -57,6 +58,7 @@ export function SalesQuoteTable({
   serverSnapshot?: import("@/components/use-column-visibility").ColumnVisibility;
 }) {
   const { density } = useTableDensity(businessId);
+  useLiveRefresh({ intervalMs: 12000, refreshOnMount: true });
 
   const [query, setQuery] = useState("");
   const [status, setStatus] = useState("");

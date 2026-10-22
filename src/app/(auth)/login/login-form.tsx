@@ -1,7 +1,7 @@
 "use client";
 import { FormError } from "@/components/form-error";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { ArrowRight, Eye, EyeOff, LoaderCircle } from "lucide-react";
 import { authClient } from "@/core/auth/auth-client";
@@ -16,18 +16,35 @@ export function LoginForm({ redirectTo = "/businesses" }: { redirectTo?: string 
   const [showPassword, setShowPassword] = useState(false);
   const [rememberMe, setRememberMe] = useState(true);
 
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem("ledgerly_remember_me");
+      if (saved !== null) {
+        setRememberMe(saved === "true");
+      }
+    } catch {
+      // LocalStorage unavailable
+    }
+  }, []);
+
   async function submit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setPending(true);
     setError("");
     const form = new FormData(event.currentTarget);
 
+    try {
+      localStorage.setItem("ledgerly_remember_me", String(rememberMe));
+    } catch {
+      // LocalStorage write ignored
+    }
+
     // Rate limiting is enforced server-side by the auth handler
     // (better-auth hooks + built-in rate limits); error messages surface here.
     const result = await authClient.signIn.email({
       email: String(form.get("email")),
       password: String(form.get("password")),
-      rememberMe,
+      rememberMe: Boolean(rememberMe),
     });
 
     if (result.error) {

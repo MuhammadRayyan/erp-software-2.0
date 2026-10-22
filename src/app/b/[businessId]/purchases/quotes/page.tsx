@@ -12,6 +12,7 @@ import { listPurchaseQuotes } from "@/modules/purchase-quotes/purchase-quote-ser
 import { PurchaseQuoteTable } from "@/modules/purchase-quotes/purchase-quote-table";
 
 export const metadata = { title: "Purchase Quotes" };
+export const dynamic = "force-dynamic";
 
 export default async function PurchaseQuotesPage({
   params,
