@@ -120,7 +120,7 @@ test("Inline Customer Credit & Supplier Prepayment Drawdown on Document Creation
       {
         customerId,
         invoiceDate: "2026-10-06",
-        dueDate: "2026-10-21",
+        dueDate: "2028-10-21",
         reference: "INV-INLINE-02",
         applyAvailableCredit: true,
         lines: [

@@ -3,11 +3,10 @@ name: CI/CD Pipeline
 on:
   push:
     branches:
-      - main
-      - pdf-view-update
+      - '**'
   pull_request:
     branches:
-      - main
+      - '**'
 
 jobs:
   verify:
@@ -43,7 +42,7 @@ jobs:
   deploy:
     name: Deploy to Oracle Cloud VM
     needs: verify
-    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/pdf-view-update')
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     steps:
       - name: Deploy via SSH
@@ -59,10 +58,23 @@ jobs:
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           script: |
             cd /opt/modern-erp
-            git pull origin ${{ github.ref_name }}
+            git fetch origin main
+            git checkout main
+            git reset --hard origin/main
             docker compose build modern-erp
+            docker compose stop modern-erp
+            mkdir -p /home/ubuntu/backups
+            tar -czf /home/ubuntu/backups/backup_$(date +%Y%m%d_%H%M%S).tar.gz /opt/modern-erp/data
             docker compose up -d
             docker image prune -f
-            sleep 5
-            curl -f http://localhost:3000/api/health || exit 1
+            sleep 8
+            for i in 1 2 3 4 5 6; do
+              if curl -f -s http://localhost/api/health; then
+                echo "Healthcheck passed on attempt $i"
+                break
+              fi
+              echo "Waiting for healthcheck to pass... ($i/6)"
+              sleep 4
+            done
+            curl -f http://localhost/api/health || exit 1
             echo "==> Modern ERP successfully deployed and verified!"
