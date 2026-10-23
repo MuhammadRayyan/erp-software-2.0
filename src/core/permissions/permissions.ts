@@ -2,9 +2,35 @@ import { cache } from "react";
 import { and, eq } from "drizzle-orm";
 import { businesses, memberships, users } from "@/core/db/system-schema";
 import { getSystemDb } from "@/core/db/system";
-import { moduleKeys, parseModules, type ModuleKey } from "./module-access";
+import {
+  moduleKeys,
+  parseModules,
+  parseCapabilities,
+  hasPermission,
+  getFullCapabilities,
+  type ModuleKey,
+  type ActionKey,
+} from "./module-access";
 
-export { moduleKeys, parseModules, type ModuleKey } from "./module-access";
+export {
+  moduleKeys,
+  parseModules,
+  parseCapabilities,
+  hasPermission,
+  getFullCapabilities,
+  getEmptyCapabilities,
+  getAvailableActionsForModule,
+  getModuleDefinition,
+  getAllModuleDefinitions,
+  STANDARD_ACTIONS,
+  MODULE_DEFINITIONS,
+  type ModuleKey,
+  type ActionKey,
+  type StandardAction,
+  type ModuleDefinition,
+  type ModuleCapabilities,
+  type ModuleCapabilitiesInput,
+} from "./module-access";
 
 export const getBusinessAccess = cache((businessId: string, userId: string) => {
   const row = getSystemDb()
@@ -21,11 +47,24 @@ export const getBusinessAccess = cache((businessId: string, userId: string) => {
   const isSuper = Boolean(user?.isSuperAdmin);
 
   if (row) {
+    const isOwner = row.business.ownerUserId === userId;
+    const isAdmin = isSuper || isOwner || row.membership.role === "administrator";
+    const effectiveRole = isAdmin ? ("administrator" as const) : row.membership.role;
+    const capabilities = isAdmin
+      ? getFullCapabilities()
+      : parseCapabilities(effectiveRole, row.membership.modulesJson);
+    const modules = isAdmin
+      ? [...moduleKeys]
+      : parseModules(effectiveRole, row.membership.modulesJson);
+
     return {
       ...row,
-      membership: isSuper ? { ...row.membership, role: "administrator" as const } : row.membership,
+      user,
+      membership: isAdmin ? { ...row.membership, role: "administrator" as const } : row.membership,
       isSuperAdmin: isSuper,
-      modules: isSuper ? [...moduleKeys] : parseModules(row.membership.role, row.membership.modulesJson),
+      isOwner,
+      modules,
+      capabilities,
     };
   }
 
@@ -39,6 +78,7 @@ export const getBusinessAccess = cache((businessId: string, userId: string) => {
     if (business) {
       return {
         business,
+        user,
         membership: {
           id: `super-admin-${userId}-${businessId}`,
           businessId,
@@ -48,7 +88,9 @@ export const getBusinessAccess = cache((businessId: string, userId: string) => {
           createdAt: business.createdAt,
         },
         isSuperAdmin: true,
+        isOwner: business.ownerUserId === userId,
         modules: [...moduleKeys],
+        capabilities: getFullCapabilities(),
       };
     }
   }
@@ -56,6 +98,35 @@ export const getBusinessAccess = cache((businessId: string, userId: string) => {
   return null;
 });
 
-export function canAccessModule(businessId: string, userId: string, module: ModuleKey) {
+export type BusinessAccess = NonNullable<ReturnType<typeof getBusinessAccess>>;
+
+export function canAccessModule(businessId: string, userId: string, module: ModuleKey): boolean {
   return getBusinessAccess(businessId, userId)?.modules.includes(module) ?? false;
+}
+
+export function hasModuleAccess(businessId: string, userId: string, module: ModuleKey): boolean {
+  return canAccessModule(businessId, userId, module);
+}
+
+export function hasActionPermission(
+  businessId: string,
+  userId: string,
+  module: ModuleKey,
+  action: ActionKey
+): boolean {
+  const access = getBusinessAccess(businessId, userId);
+  if (!access) return false;
+  if (access.isSuperAdmin || access.isOwner || access.membership.role === "administrator") {
+    return true;
+  }
+  return hasPermission(access.capabilities, module, action);
+}
+
+export function canUserPerformAction(
+  businessId: string,
+  userId: string,
+  module: ModuleKey,
+  action: ActionKey
+): boolean {
+  return hasActionPermission(businessId, userId, module, action);
 }

@@ -1,7 +1,6 @@
 import { SettingsShell } from "@/components/settings-shell";
 import { requireModule } from "@/core/permissions/require-module";
 import { listBusinessUsers } from "@/core/permissions/membership-service";
-import { parseModules } from "@/core/permissions/permissions";
 import { UserAccessList } from "@/modules/permissions/user-access-list";
 
 export const metadata = {
@@ -24,17 +23,20 @@ export default async function UsersPage({
     );
   }
 
-  const rows = listBusinessUsers(businessId, user.id).map(({ user: member, membership, invitationStatus, isOwner }) => ({
-    membershipId: membership.id,
-    userId: member.id,
-    name: member.name,
-    email: member.email,
-    role: membership.role,
-    modules: parseModules(membership.role, membership.modulesJson),
-    current: member.id === user.id,
-    status: invitationStatus,
-    isOwner: Boolean(isOwner),
-  }));
+  const rows = listBusinessUsers(businessId, user.id).map(
+    ({ user: member, membership, invitationStatus, isOwner, modules, capabilities }) => ({
+      membershipId: membership.id,
+      userId: member.id,
+      name: member.name,
+      email: member.email,
+      role: membership.role,
+      modules,
+      capabilities,
+      current: member.id === user.id,
+      status: invitationStatus,
+      isOwner: Boolean(isOwner),
+    })
+  );
 
 
   return (

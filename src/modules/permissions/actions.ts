@@ -22,10 +22,10 @@ export async function inviteBusinessUserAction(
     email: string;
     role?: "administrator" | "standard";
     modules?: string[];
+    capabilities?: Record<string, string[]>;
     sendEmail?: boolean;
   }
 ) {
-
   const { user, access } = await requireModule(businessId, "settings");
   if (access.membership.role !== "administrator") return { error: "Administrator access is required." };
 
@@ -38,6 +38,7 @@ export async function inviteBusinessUserAction(
       email: input.email,
       role: input.role,
       modules: safeModules,
+      capabilities: input.capabilities,
       sendEmail: input.sendEmail,
     });
 
@@ -138,17 +139,22 @@ export async function updateMembershipAction(
   businessId: string,
   membershipId: string,
   role: "administrator" | "standard",
-  modules: string[]
+  modules: string[],
+  capabilities?: Record<string, string[]>
 ) {
   const { user, access } = await requireModule(businessId, "settings");
   if (access.membership.role !== "administrator") return { error: "Administrator access is required." };
   try {
+    const payload =
+      capabilities ??
+      (moduleKeys.filter((module) => modules.includes(module)) as ModuleKey[]);
+
     updateMembership(
       businessId,
       user.id,
       membershipId,
       role,
-      moduleKeys.filter((module) => modules.includes(module)) as ModuleKey[]
+      payload
     );
     revalidatePath(`/b/${businessId}/settings/users`);
     return { success: true };

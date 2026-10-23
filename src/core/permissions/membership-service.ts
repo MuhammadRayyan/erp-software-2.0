@@ -2,7 +2,14 @@ import crypto, { randomUUID } from "node:crypto";
 import { and, eq, inArray, like, ne } from "drizzle-orm";
 import { z } from "zod";
 import { hashPassword } from "better-auth/crypto";
-import { getBusinessAccess, moduleKeys, type ModuleKey } from "./permissions";
+import {
+  getBusinessAccess,
+  moduleKeys,
+  parseModules,
+  parseCapabilities,
+  type ModuleKey,
+  type ModuleCapabilitiesInput,
+} from "./permissions";
 import {
   authAccounts,
   businesses,
@@ -92,6 +99,8 @@ export function listBusinessUsers(businessId: string, adminUserId: string) {
       membership,
       invitationStatus,
       isOwner: user.id === ownerUserId,
+      modules: parseModules(membership.role, membership.modulesJson),
+      capabilities: parseCapabilities(membership.role, membership.modulesJson),
     };
   });
 }
@@ -138,6 +147,7 @@ export async function inviteBusinessUser(
     email: string;
     role?: "administrator" | "standard";
     modules?: ModuleKey[];
+    capabilities?: ModuleCapabilitiesInput;
     sendEmail?: boolean;
   }
 ) {
@@ -147,8 +157,18 @@ export async function inviteBusinessUser(
   const normalized = z.email().parse(input.email.trim().toLowerCase());
   const db = getSystemDb();
   const role = input.role || "standard";
-  const modules = input.modules || ["sales"];
-  const safeModules = moduleKeys.filter((m) => modules.includes(m));
+  let modulesJson: string;
+  let safeModules: ModuleKey[];
+
+  if (input.capabilities && typeof input.capabilities === "object" && !Array.isArray(input.capabilities)) {
+    const normalizedCaps = parseCapabilities(role, input.capabilities);
+    modulesJson = JSON.stringify(normalizedCaps);
+    safeModules = moduleKeys.filter((m) => normalizedCaps[m] && normalizedCaps[m].length > 0);
+  } else {
+    const modules = input.modules || ["sales"];
+    safeModules = moduleKeys.filter((m) => modules.includes(m));
+    modulesJson = JSON.stringify(safeModules);
+  }
   const shouldSendEmail = input.sendEmail !== false;
 
   let user = db.select().from(users).where(eq(users.email, normalized)).get();
@@ -219,7 +239,7 @@ export async function inviteBusinessUser(
       businessId,
       userId: user.id,
       role,
-      modulesJson: JSON.stringify(safeModules),
+      modulesJson,
       createdAt: new Date().toISOString(),
     })
     .run();
@@ -597,7 +617,7 @@ export function updateMembership(
   adminUserId: string,
   membershipId: string,
   role: "administrator" | "standard",
-  modules: ModuleKey[]
+  modulesOrCapabilities: ModuleKey[] | ModuleCapabilitiesInput
 ) {
   const access = getBusinessAccess(businessId, adminUserId);
   if (!access || access.membership.role !== "administrator") throw new Error("BUSINESS_ACCESS_DENIED");
@@ -616,11 +636,24 @@ export function updateMembership(
     throw new Error("The business workspace owner must remain an administrator with full access.");
   }
 
+  let modulesJson: string;
+  let safeModules: ModuleKey[];
 
-  const safeModules = moduleKeys.filter((module) => modules.includes(module));
+  if (Array.isArray(modulesOrCapabilities)) {
+    safeModules = moduleKeys.filter((module) => modulesOrCapabilities.includes(module));
+    modulesJson = JSON.stringify(safeModules);
+  } else if (typeof modulesOrCapabilities === "object" && modulesOrCapabilities !== null) {
+    const normalizedCaps = parseCapabilities(role, modulesOrCapabilities);
+    modulesJson = JSON.stringify(normalizedCaps);
+    safeModules = moduleKeys.filter((m) => normalizedCaps[m] && normalizedCaps[m].length > 0);
+  } else {
+    safeModules = ["sales"];
+    modulesJson = JSON.stringify(safeModules);
+  }
+
   getSystemDb()
     .update(memberships)
-    .set({ role, modulesJson: JSON.stringify(safeModules) })
+    .set({ role, modulesJson })
     .where(eq(memberships.id, membershipId))
     .run();
 
@@ -632,7 +665,15 @@ export function updateMembership(
     entityId: target.userId,
     entityNumber: targetUser?.name || target.userId,
     summary: `Updated access role to '${role}' for ${targetUser?.name || "user"} (${targetUser?.email || "email"})`,
-    details: { targetUserId: target.userId, role, modules: safeModules },
+    details: {
+      targetUserId: target.userId,
+      role,
+      modules: safeModules,
+      capabilities:
+        typeof modulesOrCapabilities === "object" && !Array.isArray(modulesOrCapabilities)
+          ? modulesOrCapabilities
+          : undefined,
+    },
   });
 }
 
@@ -648,6 +689,7 @@ export async function createAndAddBusinessUser(
     password?: string;
     role?: "administrator" | "standard";
     modules?: ModuleKey[];
+    capabilities?: ModuleCapabilitiesInput;
   }
 ) {
   const access = getBusinessAccess(businessId, adminUserId);
@@ -721,8 +763,18 @@ export async function createAndAddBusinessUser(
   if (existing) throw new Error("That user already has access to this business.");
 
   const role = input.role || "standard";
-  const modules = input.modules || ["sales"];
-  const safeModules = moduleKeys.filter((m) => modules.includes(m));
+  let modulesJson: string;
+  let safeModules: ModuleKey[];
+
+  if (input.capabilities && typeof input.capabilities === "object" && !Array.isArray(input.capabilities)) {
+    const normalizedCaps = parseCapabilities(role, input.capabilities);
+    modulesJson = JSON.stringify(normalizedCaps);
+    safeModules = moduleKeys.filter((m) => normalizedCaps[m] && normalizedCaps[m].length > 0);
+  } else {
+    const modules = input.modules || ["sales"];
+    safeModules = moduleKeys.filter((m) => modules.includes(m));
+    modulesJson = JSON.stringify(safeModules);
+  }
 
   db.insert(memberships)
     .values({
@@ -730,7 +782,7 @@ export async function createAndAddBusinessUser(
       businessId,
       userId: user.id,
       role,
-      modulesJson: JSON.stringify(safeModules),
+      modulesJson,
       createdAt: new Date().toISOString(),
     })
     .run();

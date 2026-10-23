@@ -6,6 +6,8 @@ import {
   Ban,
   Check,
   CheckCircle2,
+  ChevronDown,
+  ChevronUp,
   Copy,
   KeyRound,
   Mail,
@@ -13,10 +15,10 @@ import {
   Send,
   Shield,
   ShieldCheck,
+  SlidersHorizontal,
   Trash2,
   UserCheck,
   UserPlus,
-
 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -30,7 +32,14 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
-import { moduleKeys, type ModuleKey } from "@/core/permissions/module-access";
+import {
+  moduleKeys,
+  getAvailableActionsForModule,
+  parseCapabilities,
+  type ModuleKey,
+  type ActionKey,
+  type ModuleCapabilities,
+} from "@/core/permissions/module-access";
 import {
   createInvitationLinkAction,
   createPasswordResetLinkAction,
@@ -52,6 +61,7 @@ export type UserAccess = {
   email: string;
   role: "administrator" | "standard";
   modules: ModuleKey[];
+  capabilities?: ModuleCapabilities;
   current: boolean;
   status: "registered" | "invited" | "suspended";
   isOwner?: boolean;
@@ -67,6 +77,16 @@ const MODULE_LABELS: Record<ModuleKey, string> = {
   reports: "Financial Reports & VAT",
   payroll: "HR & Payroll",
   settings: "Settings",
+};
+
+const ACTION_LABELS: Record<string, { label: string; desc: string }> = {
+  view: { label: "View", desc: "Read and browse records" },
+  create: { label: "Create", desc: "Create new records & drafts" },
+  edit: { label: "Edit", desc: "Modify existing records" },
+  delete: { label: "Delete", desc: "Void, delete, or cancel records" },
+  post: { label: "Post", desc: "Post to general ledger or lock entries" },
+  approve: { label: "Approve", desc: "Authorize transactions & quotes" },
+  export: { label: "Export", desc: "Download PDF batches, CSV & reports" },
 };
 
 function StatusBadge({ status }: { status: UserAccess["status"] }) {
@@ -102,34 +122,78 @@ function AccessRow({
 }) {
   const router = useRouter();
   const [role, setRole] = useState(entry.role);
-  const [modules, setModules] = useState<ModuleKey[]>(entry.modules);
+  const [capabilities, setCapabilities] = useState<ModuleCapabilities>(() => {
+    if (entry.capabilities) return entry.capabilities;
+    return parseCapabilities(entry.role, JSON.stringify(entry.modules));
+  });
+  const [expandedModule, setExpandedModule] = useState<ModuleKey | null>(null);
   const [status, setStatus] = useState<UserAccess["status"]>(entry.status);
   const [pending, setPending] = useState(false);
   const [actionPending, setActionPending] = useState(false);
 
   useEffect(() => {
     setRole(entry.role);
-    setModules(entry.modules);
-    setStatus(entry.status);
-  }, [entry.role, entry.modules, entry.status]);
-
-  function toggle(module: ModuleKey) {
-    setModules((current) =>
-      current.includes(module) ? current.filter((item) => item !== module) : [...current, module]
+    setCapabilities(
+      entry.capabilities ?? parseCapabilities(entry.role, JSON.stringify(entry.modules))
     );
+    setStatus(entry.status);
+  }, [entry.role, entry.modules, entry.capabilities, entry.status]);
+
+  const activeModules = moduleKeys.filter((m) => (capabilities[m]?.length ?? 0) > 0);
+
+  function toggleModule(module: ModuleKey) {
+    const isCurrentlyActive = (capabilities[module]?.length ?? 0) > 0;
+    setCapabilities((prev) => ({
+      ...prev,
+      [module]: isCurrentlyActive ? [] : [...getAvailableActionsForModule(module)],
+    }));
+  }
+
+  function toggleAction(module: ModuleKey, action: ActionKey) {
+    setCapabilities((prev) => {
+      const currentActions = prev[module] || [];
+      const hasAction = currentActions.includes(action);
+      let nextActions: ActionKey[];
+      if (hasAction) {
+        nextActions = currentActions.filter((a) => a !== action);
+      } else {
+        nextActions = [...currentActions, action];
+        if (!nextActions.includes("view")) {
+          nextActions.unshift("view");
+        }
+      }
+      return {
+        ...prev,
+        [module]: nextActions,
+      };
+    });
   }
 
   function selectAllModules() {
-    setModules([...moduleKeys]);
+    const all = {} as ModuleCapabilities;
+    for (const m of moduleKeys) {
+      all[m] = [...getAvailableActionsForModule(m)];
+    }
+    setCapabilities(all);
   }
 
   function deselectAllModules() {
-    setModules(["sales"]);
+    const reset = {} as ModuleCapabilities;
+    for (const m of moduleKeys) {
+      reset[m] = m === "sales" ? [...getAvailableActionsForModule("sales")] : [];
+    }
+    setCapabilities(reset);
   }
 
   async function save() {
     setPending(true);
-    const result = await updateMembershipAction(businessId, entry.membershipId, role, modules);
+    const result = await updateMembershipAction(
+      businessId,
+      entry.membershipId,
+      role,
+      activeModules,
+      capabilities
+    );
     setPending(false);
     if (result.error) toast.error(result.error);
     else {
@@ -220,7 +284,12 @@ function AccessRow({
     if (result.error) {
       toast.error(result.error);
     } else {
-      const resolvedStatus = nextStatus === "suspended" ? "suspended" : (entry.status === "invited" ? "invited" : "registered");
+      const resolvedStatus =
+        nextStatus === "suspended"
+          ? "suspended"
+          : entry.status === "invited"
+            ? "invited"
+            : "registered";
       setStatus(resolvedStatus);
       toast.success(
         nextStatus === "suspended"
@@ -232,7 +301,11 @@ function AccessRow({
   }
 
   async function handleRemoveUser() {
-    if (!confirm(`Are you sure you want to remove ${entry.name} (${entry.email}) from this business workspace?`)) {
+    if (
+      !confirm(
+        `Are you sure you want to remove ${entry.name} (${entry.email}) from this business workspace?`
+      )
+    ) {
       return;
     }
     setActionPending(true);
@@ -246,7 +319,6 @@ function AccessRow({
       router.refresh();
     }
   }
-
 
   return (
     <article className="rounded-lg border border-border bg-surface-raised p-4 transition-colors">
@@ -334,7 +406,6 @@ function AccessRow({
                     <RotateCcw className="size-3.5" />
                     Resend Email
                   </Button>
-
                 </>
               ) : (
                 <>
@@ -405,13 +476,17 @@ function AccessRow({
         </div>
       </div>
 
-
       {role === "standard" && (
         <fieldset className="mt-4 border-t border-border pt-4">
           <div className="flex items-center justify-between">
-            <legend className="px-1 text-xs font-medium text-muted-foreground">
-              Visible Modules & Access
-            </legend>
+            <div>
+              <legend className="px-1 text-xs font-semibold text-foreground">
+                Assigned Modules & Granular Capabilities
+              </legend>
+              <p className="px-1 text-[11px] text-muted-foreground">
+                Grant full module access or click &quot;Customize&quot; to tune action permissions.
+              </p>
+            </div>
             {!entry.current && (
               <div className="flex gap-2 text-xs">
                 <button
@@ -432,22 +507,141 @@ function AccessRow({
               </div>
             )}
           </div>
-          <div className="mt-2.5 grid grid-cols-2 sm:grid-cols-3 gap-x-4 gap-y-2.5">
-            {moduleKeys.map((module) => (
-              <label
-                key={module}
-                className="flex items-center gap-2 text-[13px] text-foreground cursor-pointer select-none"
-              >
-                <input
-                  type="checkbox"
-                  checked={modules.includes(module)}
-                  disabled={entry.current}
-                  onChange={() => toggle(module)}
-                  className="size-4 rounded border-border accent-primary focus:ring-primary/20"
-                />
-                <span>{MODULE_LABELS[module] || module}</span>
-              </label>
-            ))}
+
+          <div className="mt-3 space-y-2">
+            {moduleKeys.map((mod) => {
+              const availableActions = getAvailableActionsForModule(mod);
+              const modActions = capabilities[mod] || [];
+              const isEnabled = modActions.length > 0;
+              const isFullAccess = availableActions.every((a) => modActions.includes(a));
+              const isExpanded = expandedModule === mod;
+
+              return (
+                <div
+                  key={mod}
+                  className={`rounded-md border transition-colors ${
+                    isEnabled
+                      ? "border-border bg-surface"
+                      : "border-border/60 bg-surface/40 opacity-75"
+                  }`}
+                >
+                  <div className="flex items-center justify-between p-2.5">
+                    <label className="flex items-center gap-2.5 text-[13px] text-foreground cursor-pointer select-none font-medium">
+                      <input
+                        type="checkbox"
+                        checked={isEnabled}
+                        disabled={entry.current}
+                        onChange={() => toggleModule(mod)}
+                        className="size-4 rounded border-border accent-primary focus:ring-primary/20"
+                      />
+                      <span>{MODULE_LABELS[mod] || mod}</span>
+                      {isEnabled && (
+                        <span className="text-[11px] font-normal text-muted-foreground">
+                          {isFullAccess ? (
+                            <Badge tone="success" className="text-[10px] py-0 px-1 font-normal">
+                              Full access
+                            </Badge>
+                          ) : modActions.length === 1 && modActions[0] === "view" ? (
+                            <Badge tone="info" className="text-[10px] py-0 px-1 font-normal">
+                              View only
+                            </Badge>
+                          ) : (
+                            <Badge tone="neutral" className="text-[10px] py-0 px-1 font-normal">
+                              {modActions.length} of {availableActions.length} actions
+                            </Badge>
+                          )}
+                        </span>
+                      )}
+                    </label>
+
+                    {isEnabled && !entry.current && (
+                      <button
+                        type="button"
+                        onClick={() => setExpandedModule(isExpanded ? null : mod)}
+                        className="flex items-center gap-1 text-[11px] text-muted-foreground hover:text-foreground cursor-pointer px-1.5 py-0.5 rounded hover:bg-surface-raised"
+                      >
+                        <SlidersHorizontal className="size-3" />
+                        <span>{isExpanded ? "Hide actions" : "Customize"}</span>
+                        {isExpanded ? (
+                          <ChevronUp className="size-3" />
+                        ) : (
+                          <ChevronDown className="size-3" />
+                        )}
+                      </button>
+                    )}
+                  </div>
+
+                  {isExpanded && isEnabled && (
+                    <div className="border-t border-border/80 bg-surface-raised/50 p-3 pt-2">
+                      <div className="mb-1.5 flex items-center justify-between">
+                        <span className="text-[11px] font-medium text-muted-foreground">
+                          Sub-permissions for {MODULE_LABELS[mod]}:
+                        </span>
+                        <div className="flex gap-2 text-[11px]">
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setCapabilities((prev) => ({
+                                ...prev,
+                                [mod]: [...availableActions],
+                              }))
+                            }
+                            className="text-primary hover:underline cursor-pointer"
+                          >
+                            All actions
+                          </button>
+                          <span className="text-muted-foreground">·</span>
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setCapabilities((prev) => ({
+                                ...prev,
+                                [mod]: ["view"],
+                              }))
+                            }
+                            className="text-muted-foreground hover:underline cursor-pointer"
+                          >
+                            View only
+                          </button>
+                        </div>
+                      </div>
+                      <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                        {availableActions.map((action) => {
+                          const actionMeta = ACTION_LABELS[action] || {
+                            label: action,
+                            desc: "",
+                          };
+                          const isActionChecked = modActions.includes(action);
+
+                          return (
+                            <label
+                              key={action}
+                              className="flex items-start gap-2 text-xs text-foreground cursor-pointer select-none rounded p-1 hover:bg-surface"
+                            >
+                              <input
+                                type="checkbox"
+                                checked={isActionChecked}
+                                disabled={entry.current}
+                                onChange={() => toggleAction(mod, action)}
+                                className="mt-0.5 size-3.5 rounded border-border accent-primary focus:ring-primary/20"
+                              />
+                              <div>
+                                <span className="font-medium">{actionMeta.label}</span>
+                                {actionMeta.desc && (
+                                  <p className="text-[10px] text-muted-foreground leading-tight">
+                                    {actionMeta.desc}
+                                  </p>
+                                )}
+                              </div>
+                            </label>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
           </div>
         </fieldset>
       )}
@@ -466,6 +660,10 @@ export function UserAccessList({ businessId, users }: { businessId: string; user
     "purchases",
     "inventory",
   ]);
+  const [inviteCapabilities, setInviteCapabilities] = useState<ModuleCapabilities>(() => {
+    return parseCapabilities("standard", ["sales", "purchases", "inventory"]);
+  });
+  const [expandedInviteModule, setExpandedInviteModule] = useState<ModuleKey | null>(null);
   const [error, setError] = useState("");
   const [pending, setPending] = useState(false);
   const [createdInviteUrl, setCreatedInviteUrl] = useState<string | null>(null);
@@ -476,9 +674,30 @@ export function UserAccessList({ businessId, users }: { businessId: string; user
   }, [users]);
 
   function toggleInviteModule(module: ModuleKey) {
+    const isCurrentlyActive = (inviteCapabilities[module]?.length ?? 0) > 0;
+    const nextActions = isCurrentlyActive ? [] : [...getAvailableActionsForModule(module)];
+    setInviteCapabilities((prev) => ({
+      ...prev,
+      [module]: nextActions,
+    }));
     setSelectedModules((curr) =>
-      curr.includes(module) ? curr.filter((m) => m !== module) : [...curr, module]
+      isCurrentlyActive ? curr.filter((m) => m !== module) : [...curr, module]
     );
+  }
+
+  function toggleInviteAction(module: ModuleKey, action: ActionKey) {
+    setInviteCapabilities((prev) => {
+      const current = prev[module] || [];
+      const hasAction = current.includes(action);
+      let next: ActionKey[];
+      if (hasAction) {
+        next = current.filter((a) => a !== action);
+      } else {
+        next = [...current, action];
+        if (!next.includes("view")) next.unshift("view");
+      }
+      return { ...prev, [module]: next };
+    });
   }
 
   async function handleInvite(sendEmail: boolean = true) {
@@ -497,7 +716,8 @@ export function UserAccessList({ businessId, users }: { businessId: string; user
       const result = await inviteBusinessUserAction(businessId, {
         email: cleanEmail,
         role,
-        modules: role === "standard" ? selectedModules : moduleKeys as unknown as string[],
+        modules: role === "standard" ? selectedModules : (moduleKeys as unknown as string[]),
+        capabilities: role === "standard" ? inviteCapabilities : undefined,
         sendEmail,
       });
 
@@ -573,11 +793,11 @@ export function UserAccessList({ businessId, users }: { businessId: string; user
               <UserPlus className="size-4" /> Add Team Member
             </Button>
           </DialogTrigger>
-          <DialogContent className="max-w-md">
+          <DialogContent className="max-w-md max-h-[85vh] overflow-y-auto">
             <DialogTitle>Invite Team Member</DialogTitle>
             <DialogDescription>
-              Enter the colleague&apos;s email address and assign their role. You can send a setup link
-              by email or generate a direct setup link to copy and share.
+              Enter the colleague&apos;s email address and assign their role. You can send a setup
+              link by email or generate a direct setup link to copy and share.
             </DialogDescription>
 
             {createdInviteUrl ? (
@@ -588,7 +808,8 @@ export function UserAccessList({ businessId, users }: { businessId: string; user
                     Invitation Link Ready
                   </div>
                   <p className="mt-1 text-muted-foreground dark:text-emerald-300/80">
-                    The registration setup link is ready. You can copy and share it with your colleague:
+                    The registration setup link is ready. You can copy and share it with your
+                    colleague:
                   </p>
                   <div className="mt-3 flex items-center gap-2">
                     <Input
@@ -650,30 +871,79 @@ export function UserAccessList({ businessId, users }: { businessId: string; user
                   {role === "standard" && (
                     <div className="space-y-2 border-t border-border pt-3">
                       <div className="flex items-center justify-between">
-                        <Label>Initial Visible Modules</Label>
+                        <Label>Initial Visible Modules & Actions</Label>
                         <button
                           type="button"
-                          onClick={() => setSelectedModules([...moduleKeys])}
+                          onClick={() => {
+                            setSelectedModules([...moduleKeys]);
+                            const all = {} as ModuleCapabilities;
+                            for (const m of moduleKeys) all[m] = [...getAvailableActionsForModule(m)];
+                            setInviteCapabilities(all);
+                          }}
                           className="text-[11px] text-primary hover:underline cursor-pointer"
                         >
                           Select all
                         </button>
                       </div>
-                      <div className="grid grid-cols-2 gap-2 text-[12px]">
-                        {moduleKeys.map((mod) => (
-                          <label
-                            key={mod}
-                            className="flex items-center gap-2 cursor-pointer select-none text-muted-foreground hover:text-foreground"
-                          >
-                            <input
-                              type="checkbox"
-                              checked={selectedModules.includes(mod)}
-                              onChange={() => toggleInviteModule(mod)}
-                              className="size-3.5 rounded border-border accent-primary"
-                            />
-                            <span>{MODULE_LABELS[mod]}</span>
-                          </label>
-                        ))}
+                      <div className="space-y-1.5 max-h-56 overflow-y-auto pr-1">
+                        {moduleKeys.map((mod) => {
+                          const availableActions = getAvailableActionsForModule(mod);
+                          const modActions = inviteCapabilities[mod] || [];
+                          const isEnabled = modActions.length > 0;
+                          const isExpanded = expandedInviteModule === mod;
+
+                          return (
+                            <div
+                              key={mod}
+                              className="rounded border border-border/70 p-2 bg-surface text-[12px]"
+                            >
+                              <div className="flex items-center justify-between">
+                                <label className="flex items-center gap-2 cursor-pointer select-none text-muted-foreground hover:text-foreground">
+                                  <input
+                                    type="checkbox"
+                                    checked={isEnabled}
+                                    onChange={() => toggleInviteModule(mod)}
+                                    className="size-3.5 rounded border-border accent-primary"
+                                  />
+                                  <span className="font-medium text-foreground">
+                                    {MODULE_LABELS[mod]}
+                                  </span>
+                                </label>
+
+                                {isEnabled && (
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      setExpandedInviteModule(isExpanded ? null : mod)
+                                    }
+                                    className="text-[10px] text-primary hover:underline"
+                                  >
+                                    {isExpanded ? "Done" : "Customize"}
+                                  </button>
+                                )}
+                              </div>
+
+                              {isExpanded && isEnabled && (
+                                <div className="mt-2 pt-2 border-t border-border/60 grid grid-cols-2 gap-1.5 pl-5">
+                                  {availableActions.map((action) => (
+                                    <label
+                                      key={action}
+                                      className="flex items-center gap-1.5 text-[11px] cursor-pointer"
+                                    >
+                                      <input
+                                        type="checkbox"
+                                        checked={modActions.includes(action)}
+                                        onChange={() => toggleInviteAction(mod, action)}
+                                        className="size-3 rounded border-border accent-primary"
+                                      />
+                                      <span>{ACTION_LABELS[action]?.label || action}</span>
+                                    </label>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })}
                       </div>
                     </div>
                   )}
@@ -712,7 +982,6 @@ export function UserAccessList({ businessId, users }: { businessId: string; user
                 </div>
               </>
             )}
-
           </DialogContent>
         </DialogRoot>
       </div>
@@ -733,11 +1002,13 @@ export function UserAccessList({ businessId, users }: { businessId: string; user
       <div className="mt-6 flex items-start gap-3 rounded-lg border border-info/20 bg-info/5 p-4 text-sm">
         <ShieldCheck className="mt-0.5 size-4 shrink-0 text-info" />
         <div className="text-muted-foreground text-xs leading-relaxed space-y-1">
-          <p className="font-medium text-foreground">Selective Module & Access Enforcement</p>
+          <p className="font-medium text-foreground">
+            Selective Module & Action-Level Permission Enforcement
+          </p>
           <p>
-            When a standard user is assigned specific modules, hidden modules are automatically removed
-            from their navigation sidebar. Route permissions are validated on the server for every page
-            and action, preventing unauthorized access.
+            When a standard user is assigned specific modules or fine-grained capabilities (View, Create,
+            Edit, Delete, Post/Approve, Export), unauthorized modules and operational actions are
+            strictly enforced both on the client navigation and by server-side guards.
           </p>
         </div>
       </div>
