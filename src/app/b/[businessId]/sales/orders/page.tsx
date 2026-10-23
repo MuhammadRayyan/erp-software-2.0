@@ -10,8 +10,10 @@ import { listPreferences } from "@/modules/preferences/preference-service";
 import { decodeColumnSnapshots } from "@/modules/preferences/snapshot-codec";
 import { SalesOrderTable } from "@/modules/sales-orders/sales-order-table";
 import { listSalesOrders } from "@/modules/sales-orders/sales-order-service";
+import { LiveRefresh } from "@/components/live-refresh";
 
 export const metadata = { title: "Sales Orders" };
+export const dynamic = "force-dynamic";
 
 export default async function OrderListPage({
   params,
@@ -32,6 +34,7 @@ export default async function OrderListPage({
 
   return (
     <div className="page-container">
+      <LiveRefresh />
       <PageHeader title="Sales Orders" description="Draft, issue, and track customer orders.">
         <Button asChild>
           <Link href={`/b/${businessId}/sales/orders/new`}>

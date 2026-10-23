@@ -32,10 +32,22 @@ export async function savePurchaseInvoiceAction(businessId: string, invoiceId: s
         ? "Purchase invoice posted & prepayment applied"
         : "Purchase invoice posted"
       : "Draft saved";
+  revalidatePath(`/b/${businessId}/purchases/invoices`);
+  revalidatePath(`/b/${businessId}/purchases/invoices/${id}`);
   redirect(`/b/${businessId}/purchases/invoices/${id}?notice=${encodeURIComponent(notice)}`);
 }
 
-export async function duplicatePurchaseInvoiceAction(businessId: string, invoiceId: string) { const { user } = await requireModule(businessId, "purchases"); try { const id = duplicatePurchaseInvoice(businessId, user.id, invoiceId); redirect(`/b/${businessId}/purchases/invoices/${id}?notice=Purchase invoice duplicated as draft`); } catch (error) { return { error: error instanceof Error ? error.message : "The purchase invoice could not be duplicated." }; } }
+export async function duplicatePurchaseInvoiceAction(businessId: string, invoiceId: string) {
+  const { user } = await requireModule(businessId, "purchases");
+  try {
+    const id = duplicatePurchaseInvoice(businessId, user.id, invoiceId);
+    revalidatePath(`/b/${businessId}/purchases/invoices`);
+    revalidatePath(`/b/${businessId}/purchases/invoices/${id}`);
+    redirect(`/b/${businessId}/purchases/invoices/${id}?notice=Purchase invoice duplicated as draft`);
+  } catch (error) {
+    return { error: error instanceof Error ? error.message : "The purchase invoice could not be duplicated." };
+  }
+}
 export async function deletePurchaseInvoiceAction(businessId: string, invoiceId: string) { const { user } = await requireModule(businessId, "purchases"); try { deletePurchaseInvoice(businessId, user.id, invoiceId); revalidatePath(`/b/${businessId}/purchases/invoices`); return {}; } catch (error) { return { error: error instanceof Error ? error.message : "The purchase invoice could not be deleted." }; } }
 export async function voidPurchaseInvoiceAction(businessId: string, invoiceId: string) { const { user } = await requireModule(businessId, "purchases"); try { voidPurchaseInvoice(businessId, user.id, invoiceId); revalidatePath(`/b/${businessId}/purchases/invoices/${invoiceId}`); return {}; } catch (error) { return { error: error instanceof Error ? error.message : "The purchase invoice could not be voided." }; } }
 

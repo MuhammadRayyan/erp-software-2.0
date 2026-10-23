@@ -222,7 +222,7 @@ export function TenantsTable({ initialTenants }: { initialTenants: TenantSummary
                             / {t.isSuperAdmin ? "Unlimited" : `${t.maxBusinesses} max`}
                           </span>
                           {businessQuotaReached && (
-                            <span className="rounded bg-amber-500/15 px-1.5 py-0.5 text-[11px] font-medium text-amber-700 dark:text-amber-300">
+                            <span className="rounded bg-amber-500/15 px-1.5 py-0.5 text-xs font-medium text-amber-700 dark:text-amber-300">
                               Quota Met
                             </span>
                           )}
@@ -238,7 +238,7 @@ export function TenantsTable({ initialTenants }: { initialTenants: TenantSummary
                             / {t.isSuperAdmin ? "Unlimited" : `${t.maxUsers} max`}
                           </span>
                           {usersQuotaReached && (
-                            <span className="rounded bg-amber-500/15 px-1.5 py-0.5 text-[11px] font-medium text-amber-700 dark:text-amber-300">
+                            <span className="rounded bg-amber-500/15 px-1.5 py-0.5 text-xs font-medium text-amber-700 dark:text-amber-300">
                               Quota Met
                             </span>
                           )}

@@ -113,7 +113,7 @@ export default async function AdminPage({
       {/* Domain-Aligned Platform KPIs */}
       <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-6">
         {/* Account Holders (Main Tenants) */}
-        <div className="rounded-xl border border-border bg-surface-raised p-4.5 shadow-xs">
+        <div className="rounded-xl border border-border bg-surface-raised p-4 shadow-xs">
           <div className="flex items-center justify-between text-muted-foreground">
             <span className="text-sm font-medium">Account Holders</span>
             <UserCheck className="size-5 text-primary" />
@@ -127,7 +127,7 @@ export default async function AdminPage({
         </div>
 
         {/* Total Businesses */}
-        <div className="rounded-xl border border-border bg-surface-raised p-4.5 shadow-xs">
+        <div className="rounded-xl border border-border bg-surface-raised p-4 shadow-xs">
           <div className="flex items-center justify-between text-muted-foreground">
             <span className="text-sm font-medium">Total Businesses</span>
             <Building2 className="size-5 text-primary" />
@@ -137,7 +137,7 @@ export default async function AdminPage({
         </div>
 
         {/* Platform Users */}
-        <div className="rounded-xl border border-border bg-surface-raised p-4.5 shadow-xs">
+        <div className="rounded-xl border border-border bg-surface-raised p-4 shadow-xs">
           <div className="flex items-center justify-between text-muted-foreground">
             <span className="text-sm font-medium">Platform Users</span>
             <Users className="size-5 text-primary" />
@@ -147,7 +147,7 @@ export default async function AdminPage({
         </div>
 
         {/* Active Accounts */}
-        <div className="rounded-xl border border-border bg-surface-raised p-4.5 shadow-xs">
+        <div className="rounded-xl border border-border bg-surface-raised p-4 shadow-xs">
           <div className="flex items-center justify-between text-muted-foreground">
             <span className="text-sm font-medium">Active Accounts</span>
             <Shield className="size-5 text-emerald-600" />
@@ -157,7 +157,7 @@ export default async function AdminPage({
         </div>
 
         {/* Suspended Accounts */}
-        <div className="rounded-xl border border-border bg-surface-raised p-4.5 shadow-xs">
+        <div className="rounded-xl border border-border bg-surface-raised p-4 shadow-xs">
           <div className="flex items-center justify-between text-muted-foreground">
             <span className="text-sm font-medium">Suspended</span>
             <PauseCircle className="size-5 text-amber-600" />
@@ -167,7 +167,7 @@ export default async function AdminPage({
         </div>
 
         {/* Storage Utilized */}
-        <div className="rounded-xl border border-border bg-surface-raised p-4.5 shadow-xs">
+        <div className="rounded-xl border border-border bg-surface-raised p-4 shadow-xs">
           <div className="flex items-center justify-between text-muted-foreground">
             <span className="text-sm font-medium">Storage Utilized</span>
             <HardDrive className="size-5 text-primary" />

@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { ArrowRight, Plus, ShieldAlert } from "lucide-react";
+import { Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { requireUser } from "@/core/auth/session";
 import { listBusinessesForUser } from "@/core/businesses/business-service";
@@ -36,21 +36,6 @@ export default async function BusinessesPage() {
           </Button>
         </div>
       </div>
-      {user.isSuperAdmin && (
-        <div className="mb-6 flex flex-col gap-2 rounded-xl border border-amber-500/30 bg-amber-500/10 p-4 text-xs sm:flex-row sm:items-center sm:justify-between dark:border-amber-500/40 dark:bg-amber-500/15">
-          <div className="flex items-center gap-2.5 text-amber-900 dark:text-amber-200">
-            <ShieldAlert className="size-4 shrink-0 text-amber-600 dark:text-amber-400" />
-            <span>
-              <strong>Platform Super-Admin:</strong> Showing only your own personal workspaces here. To view and manage all tenant workspaces across the platform, open the Admin Control Panel.
-            </span>
-          </div>
-          <Button asChild size="sm" variant="secondary" className="h-8 shrink-0 gap-1.5 border-amber-500/40 bg-background text-xs font-semibold text-amber-800 hover:bg-amber-50 dark:text-amber-200 dark:hover:bg-amber-950/50">
-            <Link href="/admin?tab=businesses">
-              All Platform Workspaces <ArrowRight className="size-3.5" />
-            </Link>
-          </Button>
-        </div>
-      )}
       <BusinessList businesses={rows} />
     </main>
   );

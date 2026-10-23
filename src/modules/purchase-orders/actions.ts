@@ -16,6 +16,9 @@ export async function savePurchaseOrderAction(businessId: string, orderId: strin
   let id: string;
   try { id = savePurchaseOrder(businessId, user.id, parsed.data, intent, orderId ?? undefined); }
   catch (error) { return { error: error instanceof Error ? error.message : "The purchase order could not be saved." }; }
+  revalidatePath(`/b/${businessId}/purchases/orders`);
+  if (orderId) revalidatePath(`/b/${businessId}/purchases/orders/${orderId}`);
+  revalidatePath(`/b/${businessId}/purchases/orders/${id}`);
   redirect(`/b/${businessId}/purchases/orders/${id}?notice=${intent === "issue" ? "Purchase order issued" : "Draft saved"}`);
 }
 
@@ -101,6 +104,10 @@ export async function convertPurchaseOrderToInvoiceAction(businessId: string, or
         .run();
     }
 
+    revalidatePath(`/b/${businessId}/purchases/orders`);
+    revalidatePath(`/b/${businessId}/purchases/orders/${orderId}`);
+    revalidatePath(`/b/${businessId}/purchases/invoices`);
+    revalidatePath(`/b/${businessId}/purchases/invoices/${invoiceId}`);
     return { invoiceId };
   } catch (error) {
     return { error: error instanceof Error ? error.message : "Failed to convert purchase order." };

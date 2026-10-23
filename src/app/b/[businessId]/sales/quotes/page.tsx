@@ -8,6 +8,7 @@ import { requireModule } from "@/core/permissions/require-module";
 import { buildDateSearchParams, DATE_PATTERN } from "@/lib/params";
 import { listPreferences } from "@/modules/preferences/preference-service";
 import { decodeColumnSnapshots } from "@/modules/preferences/snapshot-codec";
+import { LiveRefresh } from "@/components/live-refresh";
 import { SalesQuoteTable } from "@/modules/sales-quotes/quote-table";
 import { listSalesQuotes } from "@/modules/sales-quotes/quote-service";
 
@@ -33,6 +34,7 @@ export default async function QuoteListPage({
 
   return (
     <div className="page-container">
+      <LiveRefresh />
       <PageHeader title="Sales Quotes" description="Draft, send, and track customer quotes.">
         <Button asChild>
           <Link href={`/b/${businessId}/sales/quotes/new`}>

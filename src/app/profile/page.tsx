@@ -8,7 +8,7 @@ export const metadata = {
 
 export default async function ProfileRedirectPage() {
   const user = await requireUser();
-  const businesses = listBusinessesForUser(user.id);
+  const businesses = listBusinessesForUser(user.id, false, { isolateForSuperAdmin: true });
   if (businesses.length > 0) {
     redirect(`/b/${businesses[0].business.id}/settings/profile`);
   }

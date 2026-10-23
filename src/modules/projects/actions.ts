@@ -18,6 +18,8 @@ export async function createProjectAction(businessId: string, input: unknown): P
   let projectId: string;
   try { projectId = createProject(businessId, user.id, parsed.data); }
   catch (error) { return { error: error instanceof Error ? error.message : "The project could not be created. Your entries are still here." }; }
+  revalidatePath(`/b/${businessId}/projects`);
+  revalidatePath(`/b/${businessId}/projects/${projectId}`);
   redirect(`/b/${businessId}/projects/${projectId}?notice=${encodeURIComponent("Project created")}`);
 }
 
@@ -27,6 +29,8 @@ export async function updateProjectAction(businessId: string, projectId: string,
   if (!parsed.success) return { error: "Check the project fields.", fieldErrors: z.flattenError(parsed.error).fieldErrors };
   try { updateProject(businessId, user.id, projectId, parsed.data); }
   catch (error) { return { error: error instanceof Error ? error.message : "The project could not be updated. Your entries are still here." }; }
+  revalidatePath(`/b/${businessId}/projects`);
+  revalidatePath(`/b/${businessId}/projects/${projectId}`);
   redirect(`/b/${businessId}/projects/${projectId}?notice=${encodeURIComponent("Project updated")}`);
 }
 

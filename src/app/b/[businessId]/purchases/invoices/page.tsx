@@ -16,8 +16,10 @@ import { listPreferences } from "@/modules/preferences/preference-service";
 import { decodeColumnSnapshots } from "@/modules/preferences/snapshot-codec";
 import { listPurchaseInvoicesPaginated } from "@/modules/purchase-invoices/purchase-invoice-service";
 import { PurchaseInvoiceTable } from "@/modules/purchase-invoices/purchase-invoice-table";
+import { LiveRefresh } from "@/components/live-refresh";
 
 export const metadata = { title: "Purchase Invoices" };
+export const dynamic = "force-dynamic";
 
 export default async function PurchaseInvoicesPage({
   params,
@@ -46,6 +48,7 @@ export default async function PurchaseInvoicesPage({
 
   return (
     <div className="page-container">
+      <LiveRefresh />
       <PageHeader
         title="Purchase Invoices"
         description="Draft, post, pay, and inspect supplier bills."

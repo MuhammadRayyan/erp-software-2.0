@@ -15,7 +15,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
   return (
     <div className="min-h-dvh bg-background">
       <header className="sticky top-0 z-40 flex h-14 items-center border-b border-border bg-surface/95 px-4 backdrop-blur-sm sm:px-6">
-        <div className="flex w-full items-center justify-between">
+        <div className="mx-auto flex w-full max-w-7xl items-center justify-between">
           <div className="flex items-center gap-3">
             <Link href="/businesses" className="flex items-center gap-2.5">
               <BrandMark />

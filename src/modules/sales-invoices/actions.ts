@@ -47,6 +47,8 @@ export async function createInvoiceAction(
         ? "Invoice posted & advance credit applied"
         : "Invoice posted"
       : "Draft saved";
+  revalidatePath(`/b/${businessId}/sales/invoices`);
+  revalidatePath(`/b/${businessId}/sales/invoices/${invoiceId}`);
   redirect(`/b/${businessId}/sales/invoices/${invoiceId}?notice=${encodeURIComponent(notice)}`);
 }
 
@@ -69,6 +71,8 @@ export async function updateInvoiceAction(
   } catch (error) {
     return { error: error instanceof Error ? error.message : "The invoice could not be updated. Your entries are still here." };
   }
+  revalidatePath(`/b/${businessId}/sales/invoices`);
+  revalidatePath(`/b/${businessId}/sales/invoices/${invoiceId}`);
   redirect(`/b/${businessId}/sales/invoices/${invoiceId}?notice=${encodeURIComponent(intent === "post" ? "Invoice posting updated" : "Draft updated")}`);
 }
 
@@ -91,6 +95,8 @@ export async function duplicateInvoiceAction(businessId: string, invoiceId: stri
   } catch (error) {
     return { error: error instanceof Error ? error.message : "The invoice could not be duplicated." };
   }
+  revalidatePath(`/b/${businessId}/sales/invoices`);
+  revalidatePath(`/b/${businessId}/sales/invoices/${duplicateId}`);
   redirect(`/b/${businessId}/sales/invoices/${duplicateId}?notice=${encodeURIComponent("Invoice duplicated as draft")}`);
 }
 

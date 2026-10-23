@@ -30,6 +30,9 @@ export async function saveDebitNoteAction(
       error: error instanceof Error ? error.message : "The debit note could not be saved.",
     };
   }
+  revalidatePath(`/b/${businessId}/purchases/debit-notes`);
+  if (noteId) revalidatePath(`/b/${businessId}/purchases/debit-notes/${noteId}`);
+  revalidatePath(`/b/${businessId}/purchases/debit-notes/${id}`);
   redirect(
     `/b/${businessId}/purchases/debit-notes/${id}?notice=${
       intent === "post" ? "Debit note posted" : "Draft saved"
@@ -39,14 +42,17 @@ export async function saveDebitNoteAction(
 
 export async function duplicateDebitNoteAction(businessId: string, noteId: string) {
   const { user } = await requireModule(businessId, "purchases");
+  let id: string;
   try {
-    const id = duplicateDebitNote(businessId, user.id, noteId);
-    redirect(`/b/${businessId}/purchases/debit-notes/${id}?notice=Debit note duplicated as draft`);
+    id = duplicateDebitNote(businessId, user.id, noteId);
   } catch (error) {
     return {
       error: error instanceof Error ? error.message : "The debit note could not be duplicated.",
     };
   }
+  revalidatePath(`/b/${businessId}/purchases/debit-notes`);
+  revalidatePath(`/b/${businessId}/purchases/debit-notes/${id}`);
+  redirect(`/b/${businessId}/purchases/debit-notes/${id}?notice=Debit note duplicated as draft`);
 }
 
 export async function deleteDebitNoteAction(businessId: string, noteId: string) {
@@ -66,6 +72,7 @@ export async function voidDebitNoteAction(businessId: string, noteId: string) {
   const { user } = await requireModule(businessId, "purchases");
   try {
     voidDebitNote(businessId, user.id, noteId);
+    revalidatePath(`/b/${businessId}/purchases/debit-notes`);
     revalidatePath(`/b/${businessId}/purchases/debit-notes/${noteId}`);
     return {};
   } catch (error) {

@@ -15,6 +15,7 @@ import {
 import type { PurchaseQuoteStatus } from "./purchase-quote-service";
 import { DocumentViewActions } from "@/components/document-view-actions";
 import { DocumentEmailDialog, type DocumentEmailDefaults } from "@/modules/email/email-compose-dialog";
+import { broadcastLiveRefresh } from "@/components/use-live-refresh";
 
 export function PurchaseQuoteViewActions({
   businessId,
@@ -40,6 +41,7 @@ export function PurchaseQuoteViewActions({
     try {
       const result = await convertPurchaseQuoteToOrderAction(businessId, quoteId);
       if (result.error) throw new Error(result.error);
+      broadcastLiveRefresh();
       toast.success("Purchase order created from quote.");
       router.push(`/b/${businessId}/purchases/orders/${result.orderId}`);
     } catch (err: any) {
@@ -53,6 +55,7 @@ export function PurchaseQuoteViewActions({
     try {
       const result = await createPurchaseQuoteRevisionAction(businessId, quoteId);
       if (result.error) throw new Error(result.error);
+      broadcastLiveRefresh();
       toast.success("New purchase quote revision created.");
       router.push(`/b/${businessId}/purchases/quotes/${result.quoteId}`);
     } catch (err: any) {
@@ -89,6 +92,7 @@ export function PurchaseQuoteViewActions({
                 action: async () => {
                   const result = await closePurchaseQuoteAction(businessId, quoteId);
                   if (result.error) throw new Error(result.error);
+                  broadcastLiveRefresh();
                   toast.success("Purchase quote accepted.");
                   router.refresh();
                 },
@@ -103,6 +107,7 @@ export function PurchaseQuoteViewActions({
                 action: async () => {
                   const result = await cancelPurchaseQuoteAction(businessId, quoteId);
                   if (result.error) throw new Error(result.error);
+                  broadcastLiveRefresh();
                   toast.success("Purchase quote cancelled.");
                   router.refresh();
                 },
@@ -117,8 +122,10 @@ export function PurchaseQuoteViewActions({
                 action: async () => {
                   const result = await deletePurchaseQuoteAction(businessId, quoteId);
                   if (result.error) throw new Error(result.error);
+                  broadcastLiveRefresh();
                   toast.success("Draft purchase quote deleted.");
                   router.push(`/b/${businessId}/purchases/quotes`);
+                  router.refresh();
                 },
               }
             : undefined

@@ -188,28 +188,28 @@ export function EngineHealthView({ initialData }: { initialData: EngineDiagnosti
               <p className="mt-1.5 text-lg font-bold font-mono text-foreground">
                 {formatBytes(data.database.systemDbSizeBytes)}
               </p>
-              <p className="text-[11px] text-muted-foreground">ledgerly-system.db</p>
+              <p className="text-xs text-muted-foreground">ledgerly-system.db</p>
             </div>
             <div className="rounded-lg border border-border bg-surface/60 p-3.5">
               <p className="text-xs font-medium text-muted-foreground">WAL Journal File</p>
               <p className="mt-1.5 text-lg font-bold font-mono text-foreground">
                 {formatBytes(data.database.systemWalSizeBytes)}
               </p>
-              <p className="text-[11px] text-muted-foreground">Write-ahead log buffer</p>
+              <p className="text-xs text-muted-foreground">Write-ahead log buffer</p>
             </div>
             <div className="rounded-lg border border-border bg-surface/60 p-3.5">
               <p className="text-xs font-medium text-muted-foreground">SHM Shared Index</p>
               <p className="mt-1.5 text-lg font-bold font-mono text-foreground">
                 {formatBytes(data.database.systemShmSizeBytes)}
               </p>
-              <p className="text-[11px] text-muted-foreground">Shared memory index</p>
+              <p className="text-xs text-muted-foreground">Shared memory index</p>
             </div>
             <div className="rounded-lg border border-border bg-surface/60 p-3.5">
               <p className="text-xs font-medium text-muted-foreground">Combined System Storage</p>
               <p className="mt-1.5 text-lg font-bold font-mono text-foreground">
                 {formatBytes(data.database.totalSizeBytes)}
               </p>
-              <p className="text-[11px] text-muted-foreground">Total system disk usage</p>
+              <p className="text-xs text-muted-foreground">Total system disk usage</p>
             </div>
           </div>
 
@@ -275,28 +275,28 @@ export function EngineHealthView({ initialData }: { initialData: EngineDiagnosti
               <p className="mt-1.5 text-lg font-bold font-mono text-foreground">
                 {data.processInfo.freeSystemMemoryMb} MB
               </p>
-              <p className="text-[11px] text-muted-foreground">of {data.processInfo.totalSystemMemoryMb} MB Host RAM</p>
+              <p className="text-xs text-muted-foreground">of {data.processInfo.totalSystemMemoryMb} MB Host RAM</p>
             </div>
             <div className="rounded-lg border border-border bg-surface/60 p-3.5">
               <p className="text-xs font-medium text-muted-foreground">Node & App Version</p>
               <p className="mt-1.5 text-lg font-bold font-mono text-foreground">
                 {data.processInfo.nodeVersion}
               </p>
-              <p className="text-[11px] text-muted-foreground">Ledgerly v{data.processInfo.version}</p>
+              <p className="text-xs text-muted-foreground">Ledgerly v{data.processInfo.version}</p>
             </div>
             <div className="rounded-lg border border-border bg-surface/60 p-3.5">
               <p className="text-xs font-medium text-muted-foreground">Host Architecture</p>
               <p className="mt-1.5 text-lg font-bold font-mono text-foreground">
                 {data.processInfo.platform}-{data.processInfo.arch}
               </p>
-              <p className="text-[11px] text-muted-foreground">{data.processInfo.cpuCores} CPU Cores active</p>
+              <p className="text-xs text-muted-foreground">{data.processInfo.cpuCores} CPU Cores active</p>
             </div>
             <div className="rounded-lg border border-border bg-surface/60 p-3.5">
               <p className="text-xs font-medium text-muted-foreground">Environment</p>
               <p className="mt-1.5 text-lg font-bold font-mono text-foreground uppercase">
                 {data.processInfo.environment}
               </p>
-              <p className="text-[11px] text-muted-foreground">Server execution mode</p>
+              <p className="text-xs text-muted-foreground">Server execution mode</p>
             </div>
           </div>
 

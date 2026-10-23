@@ -120,7 +120,7 @@ export function CreateTenantDialog({
           </div>
         </div>
 
-        <form onSubmit={handleSubmit} className="mt-5 space-y-4 text-xs">
+        <form onSubmit={handleSubmit} className="mt-5 space-y-4 text-sm">
           {/* Full Name */}
           <div className="space-y-1.5">
             <Label htmlFor="tenant-name">Full Name</Label>
@@ -130,7 +130,7 @@ export function CreateTenantDialog({
               value={name}
               onChange={(e) => setName(e.target.value)}
               required
-              className="text-xs"
+              className="text-sm"
             />
           </div>
 
@@ -144,7 +144,7 @@ export function CreateTenantDialog({
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               required
-              className="text-xs"
+              className="text-sm"
             />
           </div>
 
@@ -156,24 +156,24 @@ export function CreateTenantDialog({
                 <button
                   type="button"
                   onClick={handleGeneratePassword}
-                  className="flex items-center gap-1 text-[11px] font-medium text-primary hover:underline"
+                  className="flex items-center gap-1 text-xs font-medium text-primary hover:underline"
                 >
-                  <Sparkles className="size-3" /> Auto-Generate
+                  <Sparkles className="size-3.5" /> Auto-Generate
                 </button>
                 {password && (
                   <button
                     type="button"
                     onClick={handleCopyCredentials}
-                    className="flex items-center gap-1 text-[11px] font-medium text-muted-foreground hover:text-foreground"
+                    className="flex items-center gap-1 text-xs font-medium text-muted-foreground hover:text-foreground"
                   >
-                    {copied ? <Check className="size-3 text-emerald-600" /> : <Copy className="size-3" />}
+                    {copied ? <Check className="size-3.5 text-emerald-600" /> : <Copy className="size-3.5" />}
                     {copied ? "Copied" : "Copy"}
                   </button>
                 )}
               </div>
             </div>
             <div className="relative">
-              <KeyRound className="absolute left-3 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
+              <KeyRound className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
               <Input
                 id="tenant-password"
                 type="text"
@@ -181,7 +181,7 @@ export function CreateTenantDialog({
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 required
-                className="pl-9 font-mono text-xs"
+                className="pl-9 font-mono text-sm"
               />
             </div>
           </div>
@@ -198,9 +198,9 @@ export function CreateTenantDialog({
                 value={maxBusinesses}
                 onChange={(e) => setMaxBusinesses(e.target.value)}
                 required
-                className="text-xs"
+                className="text-sm"
               />
-              <span className="text-[10px] text-muted-foreground">Workspaces they can create</span>
+              <span className="text-xs text-muted-foreground">Workspaces they can create</span>
             </div>
 
             <div className="space-y-1.5">
@@ -213,9 +213,9 @@ export function CreateTenantDialog({
                 value={maxUsers}
                 onChange={(e) => setMaxUsers(e.target.value)}
                 required
-                className="text-xs"
+                className="text-sm"
               />
-              <span className="text-[10px] text-muted-foreground">Team members across businesses</span>
+              <span className="text-xs text-muted-foreground">Team members across businesses</span>
             </div>
           </div>
 

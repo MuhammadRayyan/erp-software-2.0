@@ -11,8 +11,10 @@ import { decodeColumnSnapshots } from "@/modules/preferences/snapshot-codec";
 import { listSuppliersPaginated } from "@/modules/suppliers/supplier-service";
 import { SupplierTable } from "@/modules/suppliers/supplier-table";
 import { parsePageParam, parsePageSizeParam } from "@/lib/params";
+import { LiveRefresh } from "@/components/live-refresh";
 
 export const metadata = { title: "Suppliers" };
+export const dynamic = "force-dynamic";
 
 export default async function SuppliersPage({
   params,
@@ -47,6 +49,7 @@ export default async function SuppliersPage({
 
   return (
     <div className="page-container">
+      <LiveRefresh />
       <PageHeader
         title="Suppliers"
         description="Supplier records, payable balances, and purchase activity."

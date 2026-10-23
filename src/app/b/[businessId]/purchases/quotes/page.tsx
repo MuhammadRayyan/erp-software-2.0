@@ -10,6 +10,7 @@ import { listPreferences } from "@/modules/preferences/preference-service";
 import { decodeColumnSnapshots } from "@/modules/preferences/snapshot-codec";
 import { listPurchaseQuotes } from "@/modules/purchase-quotes/purchase-quote-service";
 import { PurchaseQuoteTable } from "@/modules/purchase-quotes/purchase-quote-table";
+import { LiveRefresh } from "@/components/live-refresh";
 
 export const metadata = { title: "Purchase Quotes" };
 export const dynamic = "force-dynamic";
@@ -33,6 +34,7 @@ export default async function PurchaseQuotesPage({
 
   return (
     <div className="page-container">
+      <LiveRefresh />
       <PageHeader
         title="Purchase Quotes"
         description="Draft, receive, and track supplier quotes and RFQs."

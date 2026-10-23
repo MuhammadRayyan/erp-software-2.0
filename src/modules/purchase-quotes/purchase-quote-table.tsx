@@ -20,7 +20,6 @@ import type { PurchaseQuoteStatus } from "./purchase-quote-service";
 import { DensityToggle } from "@/components/density-toggle";
 import { useTableDensity } from "@/components/use-table-density";
 import { TableTotalsBar, renderMultiCurrencyString } from "@/components/table-totals-bar";
-import { useLiveRefresh } from "@/components/use-live-refresh";
 
 type Row = {
   id: string;
@@ -56,7 +55,6 @@ export function PurchaseQuoteTable({
   serverSnapshot?: import("@/components/use-column-visibility").ColumnVisibility;
 }) {
   const { density } = useTableDensity(businessId);
-  useLiveRefresh({ intervalMs: 12000, refreshOnMount: true });
 
   const [query, setQuery] = useState("");
   const [status, setStatus] = useState("");

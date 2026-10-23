@@ -11,8 +11,10 @@ import { decodeColumnSnapshots } from "@/modules/preferences/snapshot-codec";
 import { listCustomersPaginated } from "@/modules/customers/customer-service";
 import { CustomerTable } from "@/modules/customers/customer-table";
 import { parsePageParam, parsePageSizeParam } from "@/lib/params";
+import { LiveRefresh } from "@/components/live-refresh";
 
 export const metadata = { title: "Customers" };
+export const dynamic = "force-dynamic";
 
 export default async function CustomersPage({
   params,
@@ -50,6 +52,7 @@ export default async function CustomersPage({
 
   return (
     <div className="page-container">
+      <LiveRefresh />
       <PageHeader
         title="Customers"
         description="Contacts stored only in this business database."

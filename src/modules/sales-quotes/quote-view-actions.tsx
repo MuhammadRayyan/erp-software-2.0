@@ -9,6 +9,7 @@ import type { SalesQuoteStatus } from "./quote-service";
 import { DocumentViewActions } from "@/components/document-view-actions";
 import { useState } from "react";
 import { DocumentEmailDialog, type DocumentEmailDefaults } from "@/modules/email/email-compose-dialog";
+import { broadcastLiveRefresh } from "@/components/use-live-refresh";
 
 export function SalesQuoteViewActions({
   businessId, quoteId, quoteNumber, documentStatus, emailDefaults
@@ -26,6 +27,7 @@ export function SalesQuoteViewActions({
     try {
       const result = await convertSalesQuoteToOrderAction(businessId, quoteId);
       if (result.error) throw new Error(result.error);
+      broadcastLiveRefresh();
       toast.success("Sales order created.");
       router.push(`/b/${businessId}/sales/orders/${result.orderId}`);
     } catch (err: any) {
@@ -39,6 +41,7 @@ export function SalesQuoteViewActions({
     try {
       const result = await createSalesQuoteRevisionAction(businessId, quoteId);
       if (result.error) throw new Error(result.error);
+      broadcastLiveRefresh();
       toast.success("New quote revision created.");
       router.push(`/b/${businessId}/sales/quotes/${result.quoteId}`);
     } catch (err: any) {
@@ -83,6 +86,7 @@ export function SalesQuoteViewActions({
           action: async () => {
             const result = await cancelSalesQuoteAction(businessId, quoteId);
             if (result.error) throw new Error(result.error);
+            broadcastLiveRefresh();
             toast.success("Sales quote cancelled.");
             router.refresh();
           }
@@ -93,8 +97,10 @@ export function SalesQuoteViewActions({
           action: async () => {
             const result = await deleteSalesQuoteAction(businessId, quoteId);
             if (result.error) throw new Error(result.error);
+            broadcastLiveRefresh();
             toast.success("Draft sales quote deleted.");
             router.push(`/b/${businessId}/sales/quotes`);
+            router.refresh();
           }
         } : undefined}
         extraPrimaryActions={

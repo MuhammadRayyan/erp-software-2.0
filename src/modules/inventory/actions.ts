@@ -19,6 +19,9 @@ export async function saveInventoryItemAction(businessId: string, itemId: string
   let id: string;
   try { id = saveInventoryItem(businessId, user.id, parsed.data, itemId ?? undefined); }
   catch (error) { return { error: inventoryErrorMessage(error, "The inventory item could not be saved.") }; }
+  revalidatePath(`/b/${businessId}/inventory/items`);
+  if (itemId) revalidatePath(`/b/${businessId}/inventory/items/${itemId}`);
+  revalidatePath(`/b/${businessId}/inventory/items/${id}`);
   redirect(`/b/${businessId}/inventory/items/${id}?notice=${itemId ? "Item updated" : "Item created"}`);
 }
 
@@ -30,5 +33,7 @@ export async function saveInventoryLocationAction(businessId: string, locationId
   try { id = saveInventoryLocation(businessId, user.id, parsed.data, locationId ?? undefined); }
   catch (error) { return { error: inventoryErrorMessage(error, "The inventory location could not be saved.") }; }
   revalidatePath(`/b/${businessId}/inventory/locations`);
+  if (locationId) revalidatePath(`/b/${businessId}/inventory/locations/${locationId}`);
+  revalidatePath(`/b/${businessId}/inventory/locations/${id}`);
   redirect(`/b/${businessId}/inventory/locations/${id}?notice=${locationId ? "Location updated" : "Location created"}`);
 }

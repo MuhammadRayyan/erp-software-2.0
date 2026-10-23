@@ -17,6 +17,7 @@ import { DocumentCurrencyFields, type DocumentCurrencyOption, type DocumentRateO
 import { DocumentFormFooter } from "@/components/document-form-footer";
 import { SelectNative } from "@/components/ui/select-native";
 import { DocumentLineTable, useDocumentTotals } from "@/components/documents";
+import { broadcastLiveRefresh } from "@/components/use-live-refresh";
 
 type Option = { id: string; name: string; defaultCurrencyCode: string | null };
 type AccountOption = { id: string; name: string };
@@ -84,6 +85,7 @@ export function SalesQuoteForm({ businessId, quoteId, status = "draft", customer
     const result = await saveSalesQuoteAction(businessId, quoteId ?? null, values, intent);
     if (result.fieldErrors) for (const [field, messages] of Object.entries(result.fieldErrors)) setError(field as keyof SalesQuoteInput, { message: messages[0] });
     if (result.error) setServerError(result.error);
+    if (!result.error && !result.fieldErrors) broadcastLiveRefresh();
   }
 
   const cancelHref = quoteId ? `/b/${businessId}/sales/quotes/${quoteId}` : `/b/${businessId}/sales/quotes`;

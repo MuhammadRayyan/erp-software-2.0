@@ -8,8 +8,10 @@ import { requireModule } from "@/core/permissions/require-module";
 import { buildDateSearchParams, DATE_PATTERN } from "@/lib/params";
 import { listPurchaseOrders } from "@/modules/purchase-orders/purchase-order-service";
 import { PurchaseOrderTable } from "@/modules/purchase-orders/purchase-order-table";
+import { LiveRefresh } from "@/components/live-refresh";
 
 export const metadata = { title: "Purchase Orders" };
+export const dynamic = "force-dynamic";
 
 export default async function PurchaseOrdersPage({
   params,
@@ -29,6 +31,7 @@ export default async function PurchaseOrdersPage({
 
   return (
     <div className="page-container">
+      <LiveRefresh />
       <PageHeader
         title="Purchase Orders"
         description="Operational orders with no ledger, AP, or Input VAT effect."

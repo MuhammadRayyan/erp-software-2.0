@@ -12,8 +12,10 @@ import { listPreferences } from "@/modules/preferences/preference-service";
 import { decodeColumnSnapshots } from "@/modules/preferences/snapshot-codec";
 import { InvoiceTable } from "@/modules/sales-invoices/invoice-table";
 import { listInvoicesPaginated } from "@/modules/sales-invoices/invoice-service";
+import { LiveRefresh } from "@/components/live-refresh";
 
 export const metadata = { title: "Sales Invoices" };
+export const dynamic = "force-dynamic";
 
 export default async function InvoiceListPage({
   params,
@@ -49,6 +51,7 @@ export default async function InvoiceListPage({
 
   return (
     <div className="page-container">
+      <LiveRefresh />
       <PageHeader title="Sales Invoices" description="Draft, post, collect, and inspect customer invoices.">
         <Button asChild variant="secondary">
           <Link href={`/b/${businessId}/sales/receipts`}>Receipts</Link>

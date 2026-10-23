@@ -1,5 +1,6 @@
 "use server";
 
+import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
 import { requireModule } from "@/core/permissions/require-module";
@@ -26,6 +27,8 @@ export async function createSupplierAction(
   let supplierId: string;
   try { supplierId = createSupplier(businessId, user.id, parsed.data, parsedCustomFields.data); }
   catch (error) { return { error: error instanceof Error ? error.message : "The supplier could not be created." }; }
+  revalidatePath(`/b/${businessId}/suppliers`);
+  revalidatePath(`/b/${businessId}/suppliers/${supplierId}`);
   redirect(`/b/${businessId}/suppliers/${supplierId}?notice=Supplier created`);
 }
 
@@ -42,5 +45,7 @@ export async function updateSupplierAction(
   if (!parsedCustomFields.success) return { error: "Check the supplier fields." };
   try { updateSupplier(businessId, user.id, supplierId, parsed.data, parsedCustomFields.data); }
   catch (error) { return { error: error instanceof Error ? error.message : "The supplier could not be updated." }; }
+  revalidatePath(`/b/${businessId}/suppliers`);
+  revalidatePath(`/b/${businessId}/suppliers/${supplierId}`);
   redirect(`/b/${businessId}/suppliers/${supplierId}?notice=Supplier updated`);
 }

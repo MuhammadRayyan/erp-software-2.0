@@ -17,6 +17,9 @@ export async function saveSalesOrderAction(businessId: string, orderId: string |
   let id: string;
   try { id = saveSalesOrder(businessId, user.id, parsed.data, intent, orderId ?? undefined); }
   catch (error) { return { error: error instanceof Error ? error.message : "The sales order could not be saved." }; }
+  revalidatePath(`/b/${businessId}/sales/orders`);
+  if (orderId) revalidatePath(`/b/${businessId}/sales/orders/${orderId}`);
+  revalidatePath(`/b/${businessId}/sales/orders/${id}`);
   redirect(`/b/${businessId}/sales/orders/${id}?notice=${intent === "issue" ? "Sales order issued" : "Draft saved"}`);
 }
 
@@ -98,7 +101,10 @@ export async function convertSalesOrderToInvoiceAction(businessId: string, order
         .where(eq(salesOrders.id, orderId))
         .run();
     }
-
+    revalidatePath(`/b/${businessId}/sales/orders`);
+    revalidatePath(`/b/${businessId}/sales/orders/${orderId}`);
+    revalidatePath(`/b/${businessId}/sales/invoices`);
+    revalidatePath(`/b/${businessId}/sales/invoices/${invoiceId}`);
     return { invoiceId };
   } catch (error) {
     return { error: error instanceof Error ? error.message : "Failed to convert order to invoice." };

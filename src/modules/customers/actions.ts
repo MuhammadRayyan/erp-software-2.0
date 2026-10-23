@@ -1,5 +1,6 @@
 "use server";
 
+import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
 import { requireModule } from "@/core/permissions/require-module";
@@ -29,6 +30,8 @@ export async function createCustomerAction(
   } catch {
     return { error: "The customer could not be saved. Your entries are still here." };
   }
+  revalidatePath(`/b/${businessId}/customers`);
+  revalidatePath(`/b/${businessId}/customers/${customerId}`);
   redirect(`/b/${businessId}/customers/${customerId}?notice=Customer saved`);
 }
 
@@ -48,5 +51,7 @@ export async function updateCustomerAction(
   } catch {
     return { error: "The customer could not be updated. Your entries are still here." };
   }
+  revalidatePath(`/b/${businessId}/customers`);
+  revalidatePath(`/b/${businessId}/customers/${customerId}`);
   redirect(`/b/${businessId}/customers/${customerId}?notice=Customer updated`);
 }
