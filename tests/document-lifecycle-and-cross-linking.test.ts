@@ -38,6 +38,7 @@ const {
   createInvoice,
   getInvoice,
   postInvoice,
+  updateInvoice,
 } = await import("../src/modules/sales-invoices/invoice-service");
 const {
   savePurchaseInvoice,
@@ -368,5 +369,243 @@ test("Document Lifecycle & Cross-Referencing Verification", async (suite) => {
     const posted = getPurchaseInvoice(businessId, adminId, billId);
     assert.equal(posted?.invoice.documentStatus, "posted");
     assert.ok(posted?.journal);
+  });
+
+  await suite.test("7. Sales Order: Smart reference auto-linking and unlinking", () => {
+    const quoteId = saveSalesQuote(
+      businessId,
+      adminId,
+      {
+        customerId,
+        date: "2026-10-04",
+        expectedDate: "2026-10-25",
+        amountsIncludeTax: false,
+        lines: [
+          {
+            description: "Network Infrastructure",
+            quantity: "1",
+            unitPrice: "12000.00",
+            salesAccountId: salesAccount,
+            taxCodeId: vatCode,
+          },
+        ],
+      },
+      "draft",
+    );
+    const quote = getSalesQuote(businessId, adminId, quoteId)!;
+
+    // Create order with reference string containing quoteNumber, but salesQuoteId not passed
+    const orderId = saveSalesOrder(
+      businessId,
+      adminId,
+      {
+        customerId,
+        date: "2026-10-04",
+        reference: `As per agreement in quote ${quote.quote.quoteNumber}`,
+        amountsIncludeTax: false,
+        lines: [
+          {
+            description: "Network Infrastructure",
+            quantity: "1",
+            unitPrice: "12000.00",
+            salesAccountId: salesAccount,
+            taxCodeId: vatCode,
+          },
+        ],
+      },
+      "draft",
+    );
+
+    const createdOrder = getSalesOrder(businessId, adminId, orderId);
+    assert.equal(createdOrder?.order.salesQuoteId, quoteId, "salesQuoteId should auto-resolve from reference string");
+    assert.equal(createdOrder?.linkedQuote?.id, quoteId);
+
+    // Now edit order, clear reference and pass empty salesQuoteId -> should unlink
+    saveSalesOrder(
+      businessId,
+      adminId,
+      {
+        customerId,
+        salesQuoteId: "",
+        reference: "Independent contract agreement",
+        date: "2026-10-04",
+        amountsIncludeTax: false,
+        lines: [
+          {
+            description: "Network Infrastructure",
+            quantity: "1",
+            unitPrice: "12000.00",
+            salesAccountId: salesAccount,
+            taxCodeId: vatCode,
+          },
+        ],
+      },
+      "draft",
+      orderId,
+    );
+
+    const unlinkedOrder = getSalesOrder(businessId, adminId, orderId);
+    assert.equal(unlinkedOrder?.order.salesQuoteId, null, "salesQuoteId should be unlinked when cleared");
+    assert.equal(unlinkedOrder?.linkedQuote, undefined);
+  });
+
+  await suite.test("8. Sales Invoice: Smart reference auto-linking and unlinking for order and quote", () => {
+    const orderId = saveSalesOrder(
+      businessId,
+      adminId,
+      {
+        customerId,
+        date: "2026-10-05",
+        amountsIncludeTax: false,
+        lines: [
+          {
+            description: "Cloud Migration Phase 1",
+            quantity: "1",
+            unitPrice: "6500.00",
+            salesAccountId: salesAccount,
+            taxCodeId: vatCode,
+          },
+        ],
+      },
+      "issue",
+    );
+    const order = getSalesOrder(businessId, adminId, orderId)!;
+
+    // Create invoice with reference referencing orderNumber without salesOrderId
+    const invoiceId = createInvoice(
+      businessId,
+      adminId,
+      {
+        customerId,
+        invoiceDate: "2026-10-05",
+        taxDate: "2026-10-05",
+        dueDate: "2026-10-19",
+        reference: `Ref: ${order.order.orderNumber} milestone completion`,
+        amountsIncludeTax: false,
+        lines: [
+          {
+            description: "Cloud Migration Phase 1",
+            quantity: "1",
+            unitPrice: "6500.00",
+            salesAccountId: salesAccount,
+            taxCodeId: vatCode,
+          },
+        ],
+      },
+      "draft",
+    );
+
+    const createdInv = getInvoice(businessId, adminId, invoiceId);
+    assert.equal(createdInv?.invoice.salesOrderId, orderId, "salesOrderId should auto-resolve from reference");
+    assert.equal(createdInv?.linkedOrder?.id, orderId);
+
+    // Edit invoice: clear reference and salesOrderId -> should unlink
+    updateInvoice(
+      businessId,
+      adminId,
+      invoiceId,
+      {
+        customerId,
+        salesOrderId: "",
+        reference: "Direct consulting without order link",
+        invoiceDate: "2026-10-05",
+        taxDate: "2026-10-05",
+        dueDate: "2026-10-19",
+        amountsIncludeTax: false,
+        lines: [
+          {
+            description: "Cloud Migration Phase 1",
+            quantity: "1",
+            unitPrice: "6500.00",
+            salesAccountId: salesAccount,
+            taxCodeId: vatCode,
+          },
+        ],
+      },
+      "draft",
+    );
+
+    const unlinkedInv = getInvoice(businessId, adminId, invoiceId);
+    assert.equal(unlinkedInv?.invoice.salesOrderId, null, "salesOrderId should unlink when cleared");
+    assert.equal(unlinkedInv?.linkedOrder, undefined);
+  });
+
+  await suite.test("9. Purchase Order & Bill: Smart reference auto-linking", () => {
+    const quoteId = savePurchaseQuote(
+      businessId,
+      adminId,
+      {
+        supplierId,
+        date: "2026-10-05",
+        expiryDate: "2026-10-25",
+        amountsIncludeTax: false,
+        lines: [
+          {
+            description: "Fiber Optic Cables",
+            quantity: "10",
+            unitPrice: "100.00",
+            expenseAccountId: expenseAccount,
+            taxCodeId: vatCode,
+          },
+        ],
+      },
+      "draft",
+    );
+    const quote = getPurchaseQuote(businessId, adminId, quoteId)!;
+
+    // PO auto-resolving from quoteNumber in reference
+    const poId = savePurchaseOrder(
+      businessId,
+      adminId,
+      {
+        supplierId,
+        date: "2026-10-05",
+        reference: `Ref quote ${quote.quote.quoteNumber}`,
+        amountsIncludeTax: false,
+        lines: [
+          {
+            description: "Fiber Optic Cables",
+            quantity: "10",
+            unitPrice: "100.00",
+            expenseAccountId: expenseAccount,
+            taxCodeId: vatCode,
+          },
+        ],
+      },
+      "draft",
+    );
+
+    const po = getPurchaseOrder(businessId, adminId, poId);
+    assert.equal(po?.order.purchaseQuoteId, quoteId, "purchaseQuoteId should auto-resolve from reference");
+    assert.equal(po?.linkedQuote?.id, quoteId);
+
+    // Bill auto-resolving from orderNumber in reference
+    const billId = savePurchaseInvoice(
+      businessId,
+      adminId,
+      {
+        supplierId,
+        supplierInvoiceNumber: "SUPP-AUTOLINK-01",
+        invoiceDate: "2026-10-05",
+        taxDate: "2026-10-05",
+        dueDate: "2026-10-20",
+        reference: `Supplier inv matching ${po?.order.orderNumber}`,
+        amountsIncludeTax: false,
+        lines: [
+          {
+            description: "Fiber Optic Cables",
+            quantity: "10",
+            unitPrice: "100.00",
+            expenseAccountId: expenseAccount,
+            taxCodeId: vatCode,
+          },
+        ],
+      },
+      "draft",
+    );
+
+    const bill = getPurchaseInvoice(businessId, adminId, billId);
+    assert.equal(bill?.invoice.purchaseOrderId, poId, "purchaseOrderId should auto-resolve from reference");
+    assert.equal(bill?.order?.id, poId);
   });
 });

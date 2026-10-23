@@ -115,6 +115,19 @@ export function getSalesOrder(businessId: string, userId: string, orderId: strin
   return { ...header, project: header.order.projectId ? projectById.get(header.order.projectId) ?? null : null, lines: lines.map((line) => ({ ...line, item: line.itemId ? itemById.get(line.itemId) ?? null : null, receivedMicros: receivedByLine.get(line.id) ?? 0, remainingMicros: Math.max(0, line.quantityMicros - (receivedByLine.get(line.id) ?? 0)), salesAccount: line.salesAccountId ? accountById.get(line.salesAccountId) ?? null : null, taxCode: taxById.get(line.taxCodeId) ?? null, project: effectiveProjectId(line.projectId, header.order.projectId) ? projectById.get(effectiveProjectId(line.projectId, header.order.projectId)!) ?? null : null })), relatedInvoices, goodsReceipts, linkedQuote };
 }
 
+function resolveQuoteIdFromReference(sqlite: any, reference?: string | null, customerId?: string | null): string | null {
+  if (!reference) return null;
+  const trimmed = reference.trim();
+  const directMatch = sqlite.prepare("SELECT id FROM sales_quotes WHERE quote_number = ? AND (? IS NULL OR customer_id = ?) LIMIT 1").get(trimmed, customerId ?? null, customerId ?? null) as { id: string } | undefined;
+  if (directMatch) return directMatch.id;
+  const match = trimmed.match(/\b([A-Za-z]{1,5}-\d+)\b/);
+  if (match) {
+    const codeMatch = sqlite.prepare("SELECT id FROM sales_quotes WHERE quote_number = ? AND (? IS NULL OR customer_id = ?) LIMIT 1").get(match[1], customerId ?? null, customerId ?? null) as { id: string } | undefined;
+    if (codeMatch) return codeMatch.id;
+  }
+  return null;
+}
+
 export function saveSalesOrder(businessId: string, userId: string, input: SalesOrderInput, intent: SalesOrderIntent, orderId?: string) {
   const data = salesOrderInputSchema.parse(input);
   const context = getBusinessDb(businessId, userId);
@@ -135,6 +148,7 @@ export function saveSalesOrder(businessId: string, userId: string, input: SalesO
   const now = new Date().toISOString();
   const id = orderId ?? randomUUID();
   let recordedOrderNumber = "";
+  const resolvedQuoteId = data.salesQuoteId || resolveQuoteIdFromReference(context.sqlite, data.reference, data.customerId);
   context.sqlite.transaction(() => {
     if (orderId) {
       const current = context.db.select().from(salesOrders).where(eq(salesOrders.id, orderId)).get();
@@ -143,7 +157,7 @@ export function saveSalesOrder(businessId: string, userId: string, input: SalesO
       
       recordedOrderNumber = current.orderNumber;
       const nextStatus = current.documentStatus === "active" || intent === "issue" ? "active" : "draft";
-      const effectiveSalesQuoteId = data.salesQuoteId || current.salesQuoteId || null;
+      const effectiveSalesQuoteId = resolvedQuoteId || ("salesQuoteId" in input ? null : current.salesQuoteId) || null;
       context.sqlite.prepare(`UPDATE sales_orders SET customer_id = ?, project_id = ?, sales_quote_id = ?, order_date = ?, delivery_date = ?, reference = ?, document_status = ?, amounts_include_tax = ?, subtotal_minor = ?, tax_minor = ?, total_minor = ?, currency_code = ?, exchange_rate_to_base = ?, exchange_rate_date = ?, exchange_rate_source = ?, base_subtotal_minor = ?, base_tax_minor = ?, base_total_minor = ?, notes = ?, terms = ?, updated_at = ? WHERE id = ?`)
         .run(data.customerId, data.projectId || null, effectiveSalesQuoteId, data.date, data.expectedDate || "", data.reference || null, nextStatus, data.amountsIncludeTax ? 1 : 0, amounts.subtotalMinor, amounts.taxMinor, amounts.totalMinor, rate.currencyCode, rate.exchangeRateToBase, rate.exchangeRateDate, rate.exchangeRateSource, base.baseSubtotalMinor, base.baseTaxMinor, base.baseTotalMinor, data.notes || null, data.terms || null, now, orderId);
       context.sqlite.prepare("DELETE FROM sales_order_lines WHERE order_id = ?").run(orderId);
@@ -152,7 +166,7 @@ export function saveSalesOrder(businessId: string, userId: string, input: SalesO
       recordedOrderNumber = orderNumber;
       const status = intent === "issue" ? "active" : "draft";
       context.sqlite.prepare(`INSERT INTO sales_orders (id, order_number, customer_id, project_id, sales_quote_id, order_date, delivery_date, reference, document_status, amounts_include_tax, subtotal_minor, tax_minor, total_minor, currency_code, exchange_rate_to_base, exchange_rate_date, exchange_rate_source, base_subtotal_minor, base_tax_minor, base_total_minor, notes, terms, created_by, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
-        .run(id, orderNumber, data.customerId, data.projectId || null, data.salesQuoteId || null, data.date, data.expectedDate || "", data.reference || null, status, data.amountsIncludeTax ? 1 : 0, amounts.subtotalMinor, amounts.taxMinor, amounts.totalMinor, rate.currencyCode, rate.exchangeRateToBase, rate.exchangeRateDate, rate.exchangeRateSource, base.baseSubtotalMinor, base.baseTaxMinor, base.baseTotalMinor, data.notes || null, data.terms || null, userId, now, now);
+        .run(id, orderNumber, data.customerId, data.projectId || null, resolvedQuoteId || null, data.date, data.expectedDate || "", data.reference || null, status, data.amountsIncludeTax ? 1 : 0, amounts.subtotalMinor, amounts.taxMinor, amounts.totalMinor, rate.currencyCode, rate.exchangeRateToBase, rate.exchangeRateDate, rate.exchangeRateSource, base.baseSubtotalMinor, base.baseTaxMinor, base.baseTotalMinor, data.notes || null, data.terms || null, userId, now, now);
     }
     insertLines(context.db, id, lines);
   }).immediate();

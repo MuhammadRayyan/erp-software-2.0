@@ -113,6 +113,19 @@ export function getPurchaseOrder(businessId: string, userId: string, orderId: st
   return { ...header, project: header.order.projectId ? projectById.get(header.order.projectId) ?? null : null, lines: lines.map((line) => ({ ...line, item: line.itemId ? itemById.get(line.itemId) ?? null : null, receivedMicros: receivedByLine.get(line.id) ?? 0, remainingMicros: Math.max(0, line.quantityMicros - (receivedByLine.get(line.id) ?? 0)), expenseAccount: line.expenseAccountId ? accountById.get(line.expenseAccountId) ?? null : null, taxCode: taxById.get(line.taxCodeId) ?? null, project: effectiveProjectId(line.projectId, header.order.projectId) ? projectById.get(effectiveProjectId(line.projectId, header.order.projectId)!) ?? null : null })), relatedInvoices, goodsReceipts, linkedQuote };
 }
 
+function resolvePurchaseQuoteIdFromReference(sqlite: any, reference?: string | null, supplierId?: string | null): string | null {
+  if (!reference) return null;
+  const trimmed = reference.trim();
+  const directMatch = sqlite.prepare("SELECT id FROM purchase_quotes WHERE quote_number = ? AND (? IS NULL OR supplier_id = ?) LIMIT 1").get(trimmed, supplierId ?? null, supplierId ?? null) as { id: string } | undefined;
+  if (directMatch) return directMatch.id;
+  const match = trimmed.match(/\b([A-Za-z]{1,5}-\d+)\b/);
+  if (match) {
+    const codeMatch = sqlite.prepare("SELECT id FROM purchase_quotes WHERE quote_number = ? AND (? IS NULL OR supplier_id = ?) LIMIT 1").get(match[1], supplierId ?? null, supplierId ?? null) as { id: string } | undefined;
+    if (codeMatch) return codeMatch.id;
+  }
+  return null;
+}
+
 export function savePurchaseOrder(businessId: string, userId: string, input: PurchaseOrderInput, intent: PurchaseOrderIntent, orderId?: string) {
   const data = purchaseOrderInputSchema.parse(input);
   const context = getBusinessDb(businessId, userId);
@@ -133,6 +146,7 @@ export function savePurchaseOrder(businessId: string, userId: string, input: Pur
   const now = new Date().toISOString();
   const id = orderId ?? randomUUID();
   let recordedOrderNumber = "";
+  const resolvedQuoteId = data.purchaseQuoteId || resolvePurchaseQuoteIdFromReference(context.sqlite, data.reference, data.supplierId);
   context.sqlite.transaction(() => {
     if (orderId) {
       const current = context.db.select().from(purchaseOrders).where(eq(purchaseOrders.id, orderId)).get();
@@ -141,7 +155,7 @@ export function savePurchaseOrder(businessId: string, userId: string, input: Pur
       if (context.sqlite.prepare("SELECT 1 FROM goods_receipts WHERE purchase_order_id = ? LIMIT 1").get(orderId)) throw new Error("A Purchase Order cannot be edited after a Goods Receipt has been created.");
       recordedOrderNumber = current.orderNumber;
       const nextStatus = current.status === "issued" || intent === "issue" ? "issued" : "draft";
-      const effectivePurchaseQuoteId = data.purchaseQuoteId || current.purchaseQuoteId || null;
+      const effectivePurchaseQuoteId = resolvedQuoteId || ("purchaseQuoteId" in input ? null : current.purchaseQuoteId) || null;
       context.sqlite.prepare(`UPDATE purchase_orders SET supplier_id = ?, project_id = ?, purchase_quote_id = ?, date = ?, expected_date = ?, reference = ?, notes = ?, terms = ?, status = ?, subtotal_minor = ?, tax_minor = ?, total_minor = ?, currency_code = ?, exchange_rate_to_base = ?, exchange_rate_date = ?, exchange_rate_source = ?, base_subtotal_minor = ?, base_tax_minor = ?, base_total_minor = ?, updated_at = ?, issued_at = CASE WHEN ? = 'issued' THEN COALESCE(issued_at, ?) ELSE issued_at END WHERE id = ?`)
         .run(data.supplierId, data.projectId || null, effectivePurchaseQuoteId, data.date, data.expectedDate || null, data.reference || null, data.notes || null, data.terms || null, nextStatus, amounts.subtotalMinor, amounts.taxMinor, amounts.totalMinor, rate.currencyCode, rate.exchangeRateToBase, rate.exchangeRateDate, rate.exchangeRateSource, base.baseSubtotalMinor, base.baseTaxMinor, base.baseTotalMinor, now, nextStatus, now, orderId);
       context.sqlite.prepare("DELETE FROM purchase_order_lines WHERE purchase_order_id = ?").run(orderId);
@@ -150,7 +164,7 @@ export function savePurchaseOrder(businessId: string, userId: string, input: Pur
       recordedOrderNumber = orderNumber;
       const status = intent === "issue" ? "issued" : "draft";
       context.sqlite.prepare(`INSERT INTO purchase_orders (id, order_number, supplier_id, project_id, purchase_quote_id, date, expected_date, reference, notes, terms, status, subtotal_minor, tax_minor, total_minor, currency_code, exchange_rate_to_base, exchange_rate_date, exchange_rate_source, base_subtotal_minor, base_tax_minor, base_total_minor, created_by, created_at, updated_at, issued_at, closed_at, cancelled_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL)`)
-        .run(id, orderNumber, data.supplierId, data.projectId || null, data.purchaseQuoteId || null, data.date, data.expectedDate || null, data.reference || null, data.notes || null, data.terms || null, status, amounts.subtotalMinor, amounts.taxMinor, amounts.totalMinor, rate.currencyCode, rate.exchangeRateToBase, rate.exchangeRateDate, rate.exchangeRateSource, base.baseSubtotalMinor, base.baseTaxMinor, base.baseTotalMinor, userId, now, now, status === "issued" ? now : null);
+        .run(id, orderNumber, data.supplierId, data.projectId || null, resolvedQuoteId || null, data.date, data.expectedDate || null, data.reference || null, data.notes || null, data.terms || null, status, amounts.subtotalMinor, amounts.taxMinor, amounts.totalMinor, rate.currencyCode, rate.exchangeRateToBase, rate.exchangeRateDate, rate.exchangeRateSource, base.baseSubtotalMinor, base.baseTaxMinor, base.baseTotalMinor, userId, now, now, status === "issued" ? now : null);
     }
     insertLines(context.db, id, lines);
   }).immediate();

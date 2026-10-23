@@ -91,7 +91,15 @@ export function SalesQuoteForm({ businessId, quoteId, status = "draft", customer
   const cancelHref = quoteId ? `/b/${businessId}/sales/quotes/${quoteId}` : `/b/${businessId}/sales/quotes`;
   return <form className="space-y-5 max-w-none" noValidate>
     {serverError && <FormError message={serverError} />}
-    <section className="form-section"><h2 className="text-base font-semibold">Quote details</h2><p className="mt-1 text-sm text-muted-foreground">Sales quotes are operational documents and never post to the ledger.</p><div className="mt-5 grid gap-5 md:grid-cols-3">
+    <section className="form-section">
+      <div className="flex items-center justify-between">
+        <h2 className="text-base font-semibold">Quote details</h2>
+        <span className="text-xs text-muted-foreground font-medium bg-muted/60 px-2 py-0.5 rounded border border-border/50">
+          Quote # Auto-allocated on save
+        </span>
+      </div>
+      <p className="mt-1 text-sm text-muted-foreground">Sales quotes are operational documents and never post to the ledger.</p>
+      <div className="mt-5 grid gap-5 md:grid-cols-3">
       <div className="space-y-1.5"><Label htmlFor="customerId">Customer</Label><SelectNative id="customerId"  {...register("customerId", { onChange: (event) => { if (status === "draft") { const code = customers.find((customer) => customer.id === event.target.value)?.defaultCurrencyCode ?? currency; setValue("currencyCode", code); setValue("exchangeRateToBase", code === currency ? "1" : ""); setValue("exchangeRateDate", code === currency ? quoteDate : ""); setValue("exchangeRateSource", code === currency ? "Base" : ""); } } })} aria-invalid={!!errors.customerId}><option value="">Choose a customer…</option>{customers.map((customer) => <option key={customer.id} value={customer.id}>{customer.name}</option>)}</SelectNative>{errors.customerId && <p className="field-error">{errors.customerId.message}</p>}</div>
       <div className="space-y-1.5"><Label htmlFor="date">Quote date</Label><Input id="date" type="date" {...register("date")} aria-invalid={!!errors.date} />{errors.date && <p className="field-error">{errors.date.message}</p>}</div>
       <div className="space-y-1.5"><Label htmlFor="expectedDate">Expected date <span className="font-normal text-muted-foreground">(optional)</span></Label><Input id="expectedDate" type="date" {...register("expectedDate")} /></div>
@@ -184,17 +192,12 @@ export function SalesQuoteForm({ businessId, quoteId, status = "draft", customer
     >
       {status === "sent" ? (
         <Button type="button" disabled={isSubmitting} onClick={handleSubmit((values) => save(values, "issue"))}>
-          {isSubmitting && <LoaderCircle className="size-4 animate-spin" />} Update Issued Quote
+          {isSubmitting && <LoaderCircle className="size-4 animate-spin" />} Save Changes
         </Button>
       ) : (
-        <div className="flex gap-2">
-          <Button type="button" variant="secondary" disabled={isSubmitting} onClick={handleSubmit((values) => save(values, "draft"))}>
-            Save Draft
-          </Button>
-          <Button type="button" disabled={isSubmitting} onClick={handleSubmit((values) => save(values, "issue"))}>
-            {isSubmitting && <LoaderCircle className="size-4 animate-spin" />} Issue Quote
-          </Button>
-        </div>
+        <Button type="button" disabled={isSubmitting} onClick={handleSubmit((values) => save(values, "draft"))}>
+          {isSubmitting && <LoaderCircle className="size-4 animate-spin" />} {quoteId ? "Save Draft" : "Save Draft Quote"}
+        </Button>
       )}
     </DocumentFormFooter>
     </form>;

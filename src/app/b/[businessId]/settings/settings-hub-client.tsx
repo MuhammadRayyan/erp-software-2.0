@@ -58,15 +58,19 @@ export function SettingsHubClient({
   vatRegistered,
   isSuperAdmin = false,
   isAdmin = true,
+  initialTab,
+  initialQuery,
 }: {
   businessId: string;
   profile: ResolvedBusinessProfile;
   vatRegistered: boolean;
   isSuperAdmin?: boolean;
   isAdmin?: boolean;
+  initialTab?: string;
+  initialQuery?: string;
 }) {
-  const [query, setQuery] = useState("");
-  const [activeTab, setActiveTab] = useState<string>("all");
+  const [query, setQuery] = useState(initialQuery ?? "");
+  const [activeTab, setActiveTab] = useState<string>(initialTab || "all");
 
   const groups: SettingGroup[] = useMemo(
     () => [
@@ -413,7 +417,18 @@ export function SettingsHubClient({
                 type="button"
                 role="tab"
                 aria-selected={isActive}
-                onClick={() => setActiveTab(tab.id)}
+                onClick={() => {
+                  setActiveTab(tab.id);
+                  if (typeof window !== "undefined") {
+                    const url = new URL(window.location.href);
+                    if (tab.id === "all") {
+                      url.searchParams.delete("tab");
+                    } else {
+                      url.searchParams.set("tab", tab.id);
+                    }
+                    window.history.replaceState(null, "", url.toString());
+                  }
+                }}
                 className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold transition-all ${
                   isActive
                     ? "bg-primary text-primary-foreground shadow-xs"
@@ -424,7 +439,7 @@ export function SettingsHubClient({
                 <span>{tab.label}</span>
                 {tab.count !== undefined && (
                   <span
-                    className={`ml-0.5 px-1 py-0.2 rounded-full text-[10px] font-bold ${
+                    className={`ml-0.5 px-1.5 py-0.5 rounded-full text-[10px] font-bold ${
                       isActive
                         ? "bg-primary-foreground/20 text-primary-foreground"
                         : "bg-muted text-muted-foreground"
@@ -449,6 +464,12 @@ export function SettingsHubClient({
             onClick={() => {
               setQuery("");
               setActiveTab("all");
+              if (typeof window !== "undefined") {
+                const url = new URL(window.location.href);
+                url.searchParams.delete("tab");
+                url.searchParams.delete("q");
+                window.history.replaceState(null, "", url.toString());
+              }
             }}
             className="mt-3 text-xs font-semibold text-primary hover:underline"
           >
@@ -456,7 +477,7 @@ export function SettingsHubClient({
           </button>
         </div>
       ) : (
-        <div className="space-y-6">
+        <div className="space-y-5">
           {query.trim() && (
             <p className="text-xs font-medium text-muted-foreground">
               Showing {totalResults} setting{totalResults === 1 ? "" : "s"} matching &ldquo;{query}&rdquo;
@@ -466,10 +487,10 @@ export function SettingsHubClient({
           {visibleGroups.map((group) => (
             <section
               key={group.id}
-              className="rounded-xl border border-border bg-surface-raised shadow-xs p-4 sm:p-5 space-y-3.5"
+              className="rounded-xl border border-border bg-surface-raised shadow-xs p-4 sm:p-5 space-y-3"
             >
               {/* Category Header */}
-              <div className="flex items-center justify-between border-b border-border/60 pb-2.5">
+              <div className="flex items-center justify-between border-b border-border/60 pb-2">
                 <div className="flex items-center gap-2.5">
                   <div className="flex size-7 items-center justify-center rounded-md bg-primary/10 text-primary shrink-0">
                     <group.icon className="size-4" />
@@ -485,15 +506,15 @@ export function SettingsHubClient({
               </div>
 
               {/* Compact Manager.io Grid */}
-              <div className="grid gap-2.5 sm:grid-cols-2 lg:grid-cols-3">
+              <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
                 {group.items.map((item) => (
                   <Link
                     key={item.title}
                     href={item.href}
-                    className="group relative flex items-center justify-between rounded-lg border border-border/70 bg-surface px-3.5 py-2.5 transition-all duration-150 hover:border-primary/50 hover:bg-surface-muted/50 hover:shadow-2xs"
+                    className="group relative flex items-center justify-between rounded-lg border border-border/70 bg-surface px-3 py-2.5 transition-all duration-150 hover:border-primary/50 hover:bg-surface-muted/50 hover:shadow-xs"
                   >
-                    <div className="flex items-center gap-3 min-w-0">
-                      <div className="flex size-7.5 shrink-0 items-center justify-center rounded-md bg-surface-muted border border-border/50 text-foreground transition-colors group-hover:bg-primary/15 group-hover:text-primary">
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      <div className="flex size-7 shrink-0 items-center justify-center rounded-md bg-surface-muted border border-border/50 text-foreground transition-colors group-hover:bg-primary/15 group-hover:text-primary">
                         <item.icon className="size-4" />
                       </div>
                       <div className="min-w-0 pr-1">

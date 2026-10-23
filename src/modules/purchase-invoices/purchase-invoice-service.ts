@@ -313,6 +313,19 @@ export function getPurchaseInvoice(businessId: string, userId: string, invoiceId
   };
 }
 
+function resolvePurchaseOrderIdFromReference(sqlite: any, reference?: string | null, supplierId?: string | null): string | null {
+  if (!reference) return null;
+  const trimmed = reference.trim();
+  const directMatch = sqlite.prepare("SELECT id FROM purchase_orders WHERE order_number = ? AND (? IS NULL OR supplier_id = ?) LIMIT 1").get(trimmed, supplierId ?? null, supplierId ?? null) as { id: string } | undefined;
+  if (directMatch) return directMatch.id;
+  const match = trimmed.match(/\b([A-Za-z]{1,5}-\d+)\b/);
+  if (match) {
+    const codeMatch = sqlite.prepare("SELECT id FROM purchase_orders WHERE order_number = ? AND (? IS NULL OR supplier_id = ?) LIMIT 1").get(match[1], supplierId ?? null, supplierId ?? null) as { id: string } | undefined;
+    if (codeMatch) return codeMatch.id;
+  }
+  return null;
+}
+
 export function savePurchaseInvoice(
   businessId: string,
   userId: string,
@@ -379,7 +392,8 @@ export function savePurchaseInvoice(
       shouldPost = current.documentStatus === "posted" || intent === "post";
       replace = current.documentStatus === "posted";
       assertSupplierInvoiceNumberAvailable(context.sqlite, data.supplierId, data.supplierInvoiceNumber, invoiceId);
-      const effectivePurchaseOrderId = data.purchaseOrderId || current.purchaseOrderId || null;
+      const resolvedOrderId = data.purchaseOrderId || resolvePurchaseOrderIdFromReference(context.sqlite, data.reference, data.supplierId);
+      const effectivePurchaseOrderId = resolvedOrderId || ("purchaseOrderId" in input ? null : current.purchaseOrderId) || null;
       context.sqlite.prepare(`
         UPDATE purchase_invoices SET supplier_id = ?, project_id = ?, supplier_invoice_number = ?,
           invoice_date = ?, tax_date = ?, due_date = ?, reference = ?, purchase_order_id = ?, subtotal_minor = ?,
@@ -392,6 +406,7 @@ export function savePurchaseInvoice(
       internalNumber = allocateNumber(context.sqlite, "purchaseInvoice");
       recordedNumber = internalNumber;
       assertSupplierInvoiceNumberAvailable(context.sqlite, data.supplierId, data.supplierInvoiceNumber);
+      const resolvedOrderId = data.purchaseOrderId || resolvePurchaseOrderIdFromReference(context.sqlite, data.reference, data.supplierId);
       context.sqlite.prepare(`
         INSERT INTO purchase_invoices (
           id, internal_number, supplier_id, project_id, supplier_invoice_number, invoice_date, tax_date,
@@ -400,7 +415,7 @@ export function savePurchaseInvoice(
           currency_code, exchange_rate_to_base, exchange_rate_date,
           exchange_rate_source, base_subtotal_minor, base_tax_minor, base_total_minor, notes, terms
         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'draft', ?, ?, ?, ?, ?, ?, NULL, NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-      `).run(id, internalNumber, data.supplierId, data.projectId || null, data.supplierInvoiceNumber, data.invoiceDate, taxDate, data.dueDate, data.reference || null, data.purchaseOrderId || null, amounts.subtotalMinor, amounts.taxMinor, amounts.totalMinor, userId, now, now, rate.currencyCode, rate.exchangeRateToBase, rate.exchangeRateDate, rate.exchangeRateSource, base.baseSubtotalMinor, base.baseTaxMinor, base.baseTotalMinor, data.notes || null, data.terms || null);
+      `).run(id, internalNumber, data.supplierId, data.projectId || null, data.supplierInvoiceNumber, data.invoiceDate, taxDate, data.dueDate, data.reference || null, resolvedOrderId || null, amounts.subtotalMinor, amounts.taxMinor, amounts.totalMinor, userId, now, now, rate.currencyCode, rate.exchangeRateToBase, rate.exchangeRateDate, rate.exchangeRateSource, base.baseSubtotalMinor, base.baseTaxMinor, base.baseTotalMinor, data.notes || null, data.terms || null);
     }
     insertLines(context.db, id, lines);
     if (shouldPost) {

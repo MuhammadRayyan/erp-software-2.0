@@ -85,9 +85,17 @@ export function PurchaseOrderForm({ businessId, orderId, status = "draft", suppl
   const cancelHref = orderId ? `/b/${businessId}/purchases/orders/${orderId}` : `/b/${businessId}/purchases/orders`;
   return <form className="space-y-5 max-w-none" noValidate>
     {serverError && <FormError message={serverError} />}
-    <section className="form-section"><h2 className="text-base font-semibold">Order details</h2><p className="mt-1 text-sm text-muted-foreground">Purchase orders are operational documents and never post to the ledger.</p><div className="mt-5 grid gap-5 md:grid-cols-3">
-      <div className="space-y-1.5"><Label htmlFor="supplierId">Supplier</Label><SelectNative id="supplierId"  {...register("supplierId", { onChange: (event) => { if (status === "draft") { const code = suppliers.find((supplier) => supplier.id === event.target.value)?.defaultCurrencyCode ?? currency; setValue("currencyCode", code); setValue("exchangeRateToBase", code === currency ? "1" : ""); setValue("exchangeRateDate", code === currency ? orderDate : ""); setValue("exchangeRateSource", code === currency ? "Base" : ""); } } })} aria-invalid={!!errors.supplierId}><option value="">Choose a supplier…</option>{suppliers.map((supplier) => <option key={supplier.id} value={supplier.id}>{supplier.name}</option>)}</SelectNative>{errors.supplierId && <p className="field-error">{errors.supplierId.message}</p>}</div>
-      <div className="space-y-1.5"><Label htmlFor="purchaseQuoteId">Purchase quote <span className="font-normal text-muted-foreground">(optional)</span></Label><SelectNative id="purchaseQuoteId" {...register("purchaseQuoteId", { onChange: (e) => { const q = quotes?.find((item) => item.id === e.target.value); if (q && !form.getValues("reference")) { form.setValue("reference", `Quote ${q.quoteNumber}`); } } })}><option value="">No linked quote</option>{availableQuotes.map((q) => <option key={q.id} value={q.id}>{q.quoteNumber}{q.date ? ` — ${q.date}` : ""}</option>)}</SelectNative></div>
+    <section className="form-section">
+      <div className="flex items-center justify-between">
+        <h2 className="text-base font-semibold">Order details</h2>
+        <span className="text-xs text-muted-foreground font-medium bg-muted/60 px-2 py-0.5 rounded border border-border/50">
+          Order # Auto-allocated on save
+        </span>
+      </div>
+      <p className="mt-1 text-sm text-muted-foreground">Purchase orders are operational documents and never post to the ledger.</p>
+      <div className="mt-5 grid gap-5 md:grid-cols-3">
+        <div className="space-y-1.5"><Label htmlFor="supplierId">Supplier</Label><SelectNative id="supplierId"  {...register("supplierId", { onChange: (event) => { if (status === "draft") { const code = suppliers.find((supplier) => supplier.id === event.target.value)?.defaultCurrencyCode ?? currency; setValue("currencyCode", code); setValue("exchangeRateToBase", code === currency ? "1" : ""); setValue("exchangeRateDate", code === currency ? orderDate : ""); setValue("exchangeRateSource", code === currency ? "Base" : ""); } } })} aria-invalid={!!errors.supplierId}><option value="">Choose a supplier…</option>{suppliers.map((supplier) => <option key={supplier.id} value={supplier.id}>{supplier.name}</option>)}</SelectNative>{errors.supplierId && <p className="field-error">{errors.supplierId.message}</p>}</div>
+        <div className="space-y-1.5"><Label htmlFor="purchaseQuoteId">Purchase quote <span className="font-normal text-muted-foreground">(optional)</span></Label><SelectNative id="purchaseQuoteId" {...register("purchaseQuoteId", { onChange: (e) => { const q = quotes?.find((item) => item.id === e.target.value); if (q) { if (!form.getValues("supplierId")) { form.setValue("supplierId", q.supplierId); } if (!form.getValues("reference")) { form.setValue("reference", `Quote ${q.quoteNumber}`); } } } })}><option value="">No linked quote</option>{availableQuotes.map((q) => <option key={q.id} value={q.id}>{q.quoteNumber}{q.date ? ` — ${q.date}` : ""}</option>)}</SelectNative></div>
       <div className="space-y-1.5"><Label htmlFor="date">Order date</Label><Input id="date" type="date" {...register("date")} aria-invalid={!!errors.date} />{errors.date && <p className="field-error">{errors.date.message}</p>}</div>
       <div className="space-y-1.5"><Label htmlFor="expectedDate">Expected date <span className="font-normal text-muted-foreground">(optional)</span></Label><Input id="expectedDate" type="date" {...register("expectedDate")} /></div>
       <div className="space-y-1.5"><Label htmlFor="projectId">Project <span className="font-normal text-muted-foreground">(optional)</span></Label><SelectNative id="projectId"  {...register("projectId")}><option value="">No project</option>{projects.map((project) => <option key={project.id} value={project.id}>{project.code} — {project.name}</option>)}</SelectNative></div>
@@ -166,6 +174,16 @@ export function PurchaseOrderForm({ businessId, orderId, status = "draft", suppl
         taxMinor={totals.taxMinor}
       />
     </section>
-    <DocumentFormFooter onCancel={() => router.push(cancelHref)}>{status === "issued" ? <Button type="button" disabled={isSubmitting} onClick={handleSubmit((values) => save(values, "issue"))}>{isSubmitting && <LoaderCircle className="size-4 animate-spin" />} Update Issued Order</Button> : <div className="flex gap-2"><Button type="button" variant="secondary" disabled={isSubmitting} onClick={handleSubmit((values) => save(values, "draft"))}>Save Draft</Button><Button type="button" disabled={isSubmitting} onClick={handleSubmit((values) => save(values, "issue"))}>{isSubmitting && <LoaderCircle className="size-4 animate-spin" />} Issue Order</Button></div>}</DocumentFormFooter>
+    <DocumentFormFooter onCancel={() => router.push(cancelHref)}>
+      {status === "issued" ? (
+        <Button type="button" disabled={isSubmitting} onClick={handleSubmit((values) => save(values, "issue"))}>
+          {isSubmitting && <LoaderCircle className="size-4 animate-spin" />} Save Changes
+        </Button>
+      ) : (
+        <Button type="button" disabled={isSubmitting} onClick={handleSubmit((values) => save(values, "draft"))}>
+          {isSubmitting && <LoaderCircle className="size-4 animate-spin" />} {orderId ? "Save Draft" : "Save Draft Order"}
+        </Button>
+      )}
+    </DocumentFormFooter>
     </form>;
 }

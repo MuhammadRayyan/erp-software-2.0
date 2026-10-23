@@ -474,6 +474,34 @@ export function getInvoice(businessId: string, userId: string, invoiceId: string
   };
 }
 
+function resolveOrderAndQuoteFromReference(sqlite: any, reference?: string | null, customerId?: string | null): { orderId: string | null; quoteId: string | null } {
+  if (!reference) return { orderId: null, quoteId: null };
+  const trimmed = reference.trim();
+  let orderId: string | null = null;
+  let quoteId: string | null = null;
+
+  const directOrder = sqlite.prepare("SELECT id FROM sales_orders WHERE order_number = ? AND (? IS NULL OR customer_id = ?) LIMIT 1").get(trimmed, customerId ?? null, customerId ?? null) as { id: string } | undefined;
+  if (directOrder) orderId = directOrder.id;
+
+  const directQuote = sqlite.prepare("SELECT id FROM sales_quotes WHERE quote_number = ? AND (? IS NULL OR customer_id = ?) LIMIT 1").get(trimmed, customerId ?? null, customerId ?? null) as { id: string } | undefined;
+  if (directQuote) quoteId = directQuote.id;
+
+  const matches = trimmed.match(/\b([A-Za-z]{1,5}-\d+)\b/g);
+  if (matches) {
+    for (const code of matches) {
+      if (!orderId) {
+        const foundOrder = sqlite.prepare("SELECT id FROM sales_orders WHERE order_number = ? AND (? IS NULL OR customer_id = ?) LIMIT 1").get(code, customerId ?? null, customerId ?? null) as { id: string } | undefined;
+        if (foundOrder) orderId = foundOrder.id;
+      }
+      if (!quoteId) {
+        const foundQuote = sqlite.prepare("SELECT id FROM sales_quotes WHERE quote_number = ? AND (? IS NULL OR customer_id = ?) LIMIT 1").get(code, customerId ?? null, customerId ?? null) as { id: string } | undefined;
+        if (foundQuote) quoteId = foundQuote.id;
+      }
+    }
+  }
+  return { orderId, quoteId };
+}
+
 export function createInvoice(
   businessId: string,
   userId: string,
@@ -502,6 +530,9 @@ export function createInvoice(
   const id = randomUUID();
   const now = new Date().toISOString();
   let recordedInvoiceNumber = "";
+  const autoRefs = (!data.salesOrderId || !data.quoteId) ? resolveOrderAndQuoteFromReference(context.sqlite, data.reference, data.customerId) : { orderId: null, quoteId: null };
+  const effectiveSalesOrderId = data.salesOrderId || autoRefs.orderId || null;
+  const effectiveQuoteId = data.quoteId || autoRefs.quoteId || null;
 
   context.sqlite.transaction(() => {
     if (intent === "post") assertVatDateUnlocked(context.sqlite, taxDate, lines.map((line) => line.taxCodeId));
@@ -540,8 +571,8 @@ export function createInvoice(
         base.baseTotalMinor,
         data.notes || null,
         data.terms || null,
-        data.salesOrderId || null,
-        data.quoteId || null,
+        effectiveSalesOrderId,
+        effectiveQuoteId,
         data.amountsIncludeTax ? 1 : 0,
         userId,
         now,
@@ -691,8 +722,9 @@ export function updateInvoice(
       assertDateNotLocked(context.sqlite, data.invoiceDate, "Sales invoice");
       assertVatDateUnlocked(context.sqlite, taxDate, lines.map((line) => line.taxCodeId));
     }
-    const effectiveSalesOrderId = data.salesOrderId || current.salesOrderId || null;
-    const effectiveQuoteId = data.quoteId || current.quoteId || null;
+    const autoRefs = (!data.salesOrderId || !data.quoteId) ? resolveOrderAndQuoteFromReference(context.sqlite, data.reference, data.customerId) : { orderId: null, quoteId: null };
+    const effectiveSalesOrderId = data.salesOrderId || autoRefs.orderId || ("salesOrderId" in input ? null : current.salesOrderId) || null;
+    const effectiveQuoteId = data.quoteId || autoRefs.quoteId || ("quoteId" in input ? null : current.quoteId) || null;
     context.sqlite
       .prepare(`
         UPDATE sales_invoices

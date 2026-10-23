@@ -170,7 +170,12 @@ export function InvoiceForm({
     <form className="space-y-5 max-w-none" noValidate>
       {serverError && <FormError message={serverError} />}
       <section className="form-section">
-        <h2 className="text-base font-semibold">Invoice details</h2>
+        <div className="flex items-center justify-between">
+          <h2 className="text-base font-semibold">Invoice details</h2>
+          <span className="text-xs text-muted-foreground font-medium bg-muted/60 px-2 py-0.5 rounded border border-border/50">
+            Invoice # Auto-allocated on save
+          </span>
+        </div>
         <div className="mt-5 grid gap-5 md:grid-cols-3">
           <div className="space-y-1.5">
             <Label htmlFor="customerId">Customer</Label>
@@ -216,8 +221,13 @@ export function InvoiceForm({
               {...register("salesOrderId", {
                 onChange: (e) => {
                   const ord = orders?.find((item) => item.id === e.target.value);
-                  if (ord && !form.getValues("reference")) {
-                    form.setValue("reference", `Order ${ord.orderNumber}`);
+                  if (ord) {
+                    if (!form.getValues("customerId")) {
+                      form.setValue("customerId", ord.customerId);
+                    }
+                    if (!form.getValues("reference")) {
+                      form.setValue("reference", `Order ${ord.orderNumber}`);
+                    }
                   }
                 }
               })}
@@ -236,8 +246,13 @@ export function InvoiceForm({
               {...register("quoteId", {
                 onChange: (e) => {
                   const q = quotes?.find((item) => item.id === e.target.value);
-                  if (q && !form.getValues("reference")) {
-                    form.setValue("reference", `Quote ${q.quoteNumber}`);
+                  if (q) {
+                    if (!form.getValues("customerId")) {
+                      form.setValue("customerId", q.customerId);
+                    }
+                    if (!form.getValues("reference")) {
+                      form.setValue("reference", `Quote ${q.quoteNumber}`);
+                    }
                   }
                 }
               })}
@@ -373,7 +388,15 @@ export function InvoiceForm({
           minorUnit,
         }}
       >
-        {documentStatus === "posted" ? <Button type="button" disabled={isSubmitting} onClick={handleSubmit((values) => save(values, "post"))}>{isSubmitting && <LoaderCircle className="size-4 animate-spin" />} Update Posted Invoice</Button> : <div className="flex gap-2"><Button type="button" variant="secondary" disabled={isSubmitting} onClick={handleSubmit((values) => save(values, "draft"))}>Save Draft</Button><Button type="button" disabled={isSubmitting} onClick={handleSubmit((values) => save(values, "post"))}>{isSubmitting && <LoaderCircle className="size-4 animate-spin" />} Post Invoice</Button></div>}
+        {documentStatus === "posted" ? (
+          <Button type="button" disabled={isSubmitting} onClick={handleSubmit((values) => save(values, "post"))}>
+            {isSubmitting && <LoaderCircle className="size-4 animate-spin" />} Save Changes
+          </Button>
+        ) : (
+          <Button type="button" disabled={isSubmitting} onClick={handleSubmit((values) => save(values, "draft"))}>
+            {isSubmitting && <LoaderCircle className="size-4 animate-spin" />} {invoiceId ? "Save Draft" : "Save Draft Invoice"}
+          </Button>
+        )}
       </DocumentFormFooter>
     </form>
   );
