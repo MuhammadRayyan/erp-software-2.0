@@ -23,7 +23,7 @@ function sourceArchiveAvailable() {
 export default async function LoginPage({
   searchParams,
 }: {
-  searchParams?: Promise<{ setup?: string; redirect?: string; suspended?: string }>;
+  searchParams?: Promise<{ setup?: string; redirect?: string; suspended?: string; reset?: string; registered?: string; email?: string }>;
 }) {
   if (!isSetupComplete()) {
     redirect("/setup");
@@ -34,6 +34,8 @@ export default async function LoginPage({
   if (await getCurrentSession()) redirect(redirectTo);
   const showSetupSuccess = params.setup === "success";
   const showSuspendedNotice = params.suspended === "1";
+  const showResetSuccess = params.reset === "1";
+  const showRegisteredSuccess = params.registered === "1";
   const showArchiveLink = sourceArchiveAvailable();
   return (
     <main className="grid min-h-dvh place-items-center p-4 sm:p-8">
@@ -69,6 +71,28 @@ export default async function LoginPage({
                 </div>
               </div>
             )}
+            {showResetSuccess && (
+              <div className="mb-6 flex items-start gap-3 rounded-lg border border-emerald-500/20 bg-emerald-500/10 p-3.5 text-xs text-emerald-800 dark:border-emerald-500/30 dark:bg-emerald-500/15 dark:text-emerald-300">
+                <CheckCircle2 className="mt-0.5 size-4 shrink-0 text-emerald-600 dark:text-emerald-400" />
+                <div>
+                  <strong className="font-semibold">Password Reset Successful</strong>
+                  <p className="mt-0.5 text-muted-foreground dark:text-emerald-300/80">
+                    Your new password has been set. Please sign in with your updated credentials.
+                  </p>
+                </div>
+              </div>
+            )}
+            {showRegisteredSuccess && (
+              <div className="mb-6 flex items-start gap-3 rounded-lg border border-emerald-500/20 bg-emerald-500/10 p-3.5 text-xs text-emerald-800 dark:border-emerald-500/30 dark:bg-emerald-500/15 dark:text-emerald-300">
+                <CheckCircle2 className="mt-0.5 size-4 shrink-0 text-emerald-600 dark:text-emerald-400" />
+                <div>
+                  <strong className="font-semibold">Account Setup Complete</strong>
+                  <p className="mt-0.5 text-muted-foreground dark:text-emerald-300/80">
+                    Your account registration is verified. Sign in below to enter your workspace.
+                  </p>
+                </div>
+              </div>
+            )}
             {showSuspendedNotice && (
               <div className="mb-6 flex items-start gap-3 rounded-lg border border-amber-500/30 bg-amber-500/10 p-3.5 text-xs text-amber-800 dark:border-amber-500/40 dark:bg-amber-500/15 dark:text-amber-300">
                 <AlertTriangle className="mt-0.5 size-4 shrink-0 text-amber-600 dark:text-amber-400" />
@@ -80,7 +104,7 @@ export default async function LoginPage({
                 </div>
               </div>
             )}
-            <LoginForm redirectTo={redirectTo} />
+            <LoginForm redirectTo={redirectTo} initialEmail={params.email || ""} />
             <p className="mt-7 text-center text-xs leading-5 text-muted-foreground">
               Ledgerly ERP · Local accounting build · Your business files stay isolated.
             </p>

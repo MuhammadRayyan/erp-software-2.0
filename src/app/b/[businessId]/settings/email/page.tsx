@@ -16,7 +16,16 @@ export default async function EmailSettingsPage({
   params: Promise<{ businessId: string }>;
 }) {
   const { businessId } = await params;
-  const { user } = await requireModule(businessId, "settings");
+  const { user, access } = await requireModule(businessId, "settings");
+
+  if (access.membership.role !== "administrator") {
+    return (
+      <div className="page-container">
+        <p className="text-muted-foreground text-sm">Administrator access is required to configure email settings.</p>
+      </div>
+    );
+  }
+
   const settings = getEmailSettings(businessId, user.id);
   const clientSettings = sanitizeEmailSettingsForClient(settings);
 

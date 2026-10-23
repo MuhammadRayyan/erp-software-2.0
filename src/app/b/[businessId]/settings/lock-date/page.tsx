@@ -13,7 +13,16 @@ export default async function FinancialLockDatePage({
   params: Promise<{ businessId: string }>;
 }) {
   const { businessId } = await params;
-  const { user } = await requireModule(businessId, "settings");
+  const { user, access } = await requireModule(businessId, "settings");
+
+  if (access.membership.role !== "administrator") {
+    return (
+      <div className="page-container">
+        <p className="text-muted-foreground text-sm">Administrator access is required to modify financial lock dates.</p>
+      </div>
+    );
+  }
+
   const lockDate = getFinancialLockDate(businessId, user.id);
 
   return (

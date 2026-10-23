@@ -9,7 +9,15 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 
-export function LoginForm({ redirectTo = "/businesses" }: { redirectTo?: string }) {
+import Link from "next/link";
+
+export function LoginForm({
+  redirectTo = "/businesses",
+  initialEmail = "",
+}: {
+  redirectTo?: string;
+  initialEmail?: string;
+}) {
   const router = useRouter();
   const [error, setError] = useState("");
   const [pending, setPending] = useState(false);
@@ -74,16 +82,24 @@ export function LoginForm({ redirectTo = "/businesses" }: { redirectTo?: string 
           name="email"
           type="email"
           autoComplete="email"
-          defaultValue={process.env.NODE_ENV === "development" ? "admin@demo.local" : ""}
+          defaultValue={initialEmail || (process.env.NODE_ENV === "development" ? "admin@demo.local" : "")}
           required
         />
       </div>
       <div className="space-y-1.5">
         <div className="flex items-center justify-between">
           <Label htmlFor="password">Password</Label>
-          {process.env.NODE_ENV === "development" && (
-            <span className="text-xs text-muted-foreground">Demo: demo12345</span>
-          )}
+          <div className="flex items-center gap-2">
+            <Link
+              href="/forgot-password"
+              className="text-xs text-muted-foreground hover:text-foreground transition-colors hover:underline"
+            >
+              Forgot password?
+            </Link>
+            {process.env.NODE_ENV === "development" && (
+              <span className="text-xs text-muted-foreground">· Demo: demo12345</span>
+            )}
+          </div>
         </div>
         <div className="relative">
           <Input

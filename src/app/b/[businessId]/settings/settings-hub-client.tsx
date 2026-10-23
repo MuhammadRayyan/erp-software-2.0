@@ -55,11 +55,13 @@ export function SettingsHubClient({
   profile,
   vatRegistered,
   isSuperAdmin = false,
+  isAdmin = true,
 }: {
   businessId: string;
   profile: ResolvedBusinessProfile;
   vatRegistered: boolean;
   isSuperAdmin?: boolean;
+  isAdmin?: boolean;
 }) {
   const [query, setQuery] = useState("");
   const [activeTab, setActiveTab] = useState<string>("all");
@@ -226,13 +228,17 @@ export function SettingsHubClient({
             icon: UserRound,
             keywords: "profile user account password change security name credentials",
           },
-          {
-            title: "Users & Access Control",
-            description: "Assign team members, administrator/standard roles, and module access permissions.",
-            href: `/b/${businessId}/settings/users`,
-            icon: ShieldCheck,
-            keywords: "users members access roles permissions admin security",
-          },
+          ...(isAdmin
+            ? [
+                {
+                  title: "Users & Access Control",
+                  description: "Assign team members, administrator/standard roles, and module access permissions.",
+                  href: `/b/${businessId}/settings/users`,
+                  icon: ShieldCheck,
+                  keywords: "users members access roles permissions admin security",
+                },
+              ]
+            : []),
           {
             title: "Activity & Audit Log",
             description: "Track user actions, operations, invoice postings, and system audit trail across the workspace.",
@@ -262,7 +268,7 @@ export function SettingsHubClient({
         ],
       },
     ],
-    [businessId, profile, vatRegistered, isSuperAdmin],
+    [businessId, profile, vatRegistered, isSuperAdmin, isAdmin],
   );
 
   const tabs = useMemo(

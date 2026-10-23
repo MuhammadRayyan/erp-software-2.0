@@ -9,7 +9,7 @@ export const metadata = {
 
 export default async function SettingsPage({ params }: { params: Promise<{ businessId: string }> }) {
   const { businessId } = await params;
-  const { user } = await requireModule(businessId, "settings");
+  const { user, access } = await requireModule(businessId, "settings");
   const profile = getBusinessProfile(businessId, user.id);
   const tax = getTaxSettings(businessId, user.id);
 
@@ -26,6 +26,7 @@ export default async function SettingsPage({ params }: { params: Promise<{ busin
         profile={profile}
         vatRegistered={tax.vatRegistered}
         isSuperAdmin={Boolean(user.isSuperAdmin)}
+        isAdmin={access.membership.role === "administrator"}
       />
     </div>
   );

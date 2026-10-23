@@ -50,7 +50,7 @@ export async function saveEmailSettingsAction(businessId: string, input: unknown
     businessId,
     module: "settings",
   });
-  if (authError || !session || !access) {
+  if (authError || !session || !access || access.membership.role !== "administrator") {
     return { ok: false, error: "Unauthorized: Administrator permissions required." };
   }
 
@@ -86,7 +86,7 @@ export async function sendTestEmailAction(businessId: string, input: unknown) {
     businessId,
     module: "settings",
   });
-  if (authError || !session || !access) {
+  if (authError || !session || !access || access.membership.role !== "administrator") {
     return { ok: false, error: "Unauthorized: Administrator permissions required." };
   }
 

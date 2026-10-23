@@ -4,6 +4,10 @@ import { listBusinessUsers } from "@/core/permissions/membership-service";
 import { parseModules } from "@/core/permissions/permissions";
 import { UserAccessList } from "@/modules/permissions/user-access-list";
 
+export const metadata = {
+  title: "Users & Access Control",
+};
+
 export default async function UsersPage({
   params,
 }: {
@@ -15,12 +19,12 @@ export default async function UsersPage({
   if (access.membership.role !== "administrator") {
     return (
       <div className="page-container">
-        <p>Administrator access is required.</p>
+        <p className="text-muted-foreground text-sm">Administrator access is required.</p>
       </div>
     );
   }
 
-  const rows = listBusinessUsers(businessId, user.id).map(({ user: member, membership }) => ({
+  const rows = listBusinessUsers(businessId, user.id).map(({ user: member, membership, invitationStatus }) => ({
     membershipId: membership.id,
     userId: member.id,
     name: member.name,
@@ -28,13 +32,14 @@ export default async function UsersPage({
     role: membership.role,
     modules: parseModules(membership.role, membership.modulesJson),
     current: member.id === user.id,
+    status: invitationStatus,
   }));
 
   return (
     <SettingsShell
       businessId={businessId}
       title="Users & Access Control"
-      description="Assign team members, administrator/standard roles, and module access permissions."
+      description="Invite team members, assign administrator or standard roles, configure visible modules, and manage account security."
     >
       <UserAccessList businessId={businessId} users={rows} />
     </SettingsShell>
