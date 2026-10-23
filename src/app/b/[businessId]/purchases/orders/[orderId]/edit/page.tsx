@@ -5,6 +5,7 @@ import { getExpenseAccountOptions } from "@/modules/accounting/services/account-
 import { getActiveTaxCodes } from "@/modules/accounting/services/tax-code-service";
 import { PurchaseOrderForm } from "@/modules/purchase-orders/purchase-order-form";
 import { getPurchaseOrder } from "@/modules/purchase-orders/purchase-order-service";
+import { listPurchaseQuotes } from "@/modules/purchase-quotes/purchase-quote-service";
 import { listActiveSuppliers } from "@/modules/suppliers/supplier-service";
 import { listProjectOptions } from "@/modules/projects/project-service";
 import { listInventoryItemOptions } from "@/modules/inventory/inventory-item-service";
@@ -39,6 +40,7 @@ export default async function EditPurchaseOrderPage({ params }: { params: Promis
   const taxes = getActiveTaxCodes(businessId, user.id).filter((tax) => ["purchases", "both"].includes(tax.direction) && tax.vatCategory);
   const projects = listProjectOptions(businessId, user.id);
   const items = listInventoryItemOptions(businessId, user.id);
+  const quotes = listPurchaseQuotes(businessId, user.id, { onlyLatest: true });
   const currencySettings = getCurrencySettings(businessId, user.id);
   const minorUnit = currencySettings.currencies.find((currency) => currency.code === record.order.currencyCode)?.minor_unit ?? 2;
   return (
@@ -57,6 +59,7 @@ export default async function EditPurchaseOrderPage({ params }: { params: Promis
         taxCodes={taxes.map(({ id, name, rateBasisPoints }) => ({ id, name, rateBasisPoints }))}
         projects={projects}
         items={items.map(({ id, sku, name, purchasePriceMinor, inventoryAssetAccountId }) => ({ id, sku, name, purchasePriceMinor, inventoryAssetAccountId }))}
+        quotes={quotes.map((q) => ({ id: q.id, quoteNumber: q.quote_number, supplierId: q.supplier_id, date: q.date }))}
         currency={access.business.currency}
         currencies={currencySettings.currencies.filter((currency) => currency.is_active || currency.code === record.order.currencyCode).map((currency) => ({ code: currency.code, name: currency.name, minorUnit: currency.minor_unit }))}
         rates={currencySettings.rates.map((rate) => ({ id: rate.id, currencyCode: rate.currency_code, rateDate: rate.rate_date, rateToBase: rate.rate_to_base, source: rate.source, sourceReference: rate.source_reference }))}

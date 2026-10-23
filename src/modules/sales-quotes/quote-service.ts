@@ -176,6 +176,30 @@ export function saveSalesQuote(businessId: string, userId: string, input: SalesQ
   return id;
 }
 
+export function issueSalesQuote(businessId: string, userId: string, quoteId: string) {
+  const context = getBusinessDb(businessId, userId);
+  const quote = context.db.select().from(salesQuotes).where(eq(salesQuotes.id, quoteId)).get();
+  if (!quote) throw new Error("Sales quote not found.");
+  if (quote.documentStatus !== "draft") throw new Error("Only a draft sales quote can be issued.");
+  const now = new Date().toISOString();
+  context.db.update(salesQuotes).set({ documentStatus: "sent", updatedAt: now }).where(eq(salesQuotes.id, quoteId)).run();
+
+  try {
+    recordActivity(businessId, {
+      userId,
+      action: "posted",
+      entityType: "sales_quote",
+      entityId: quoteId,
+      entityNumber: quote.quoteNumber,
+      summary: `Issued sales quote ${quote.quoteNumber}`,
+      details: { quoteNumber: quote.quoteNumber, previousStatus: "draft", newStatus: "sent" },
+      sqlite: context.sqlite,
+    });
+  } catch (e) {
+    console.error("[ActivityLog] sales_quote issue failed:", e);
+  }
+}
+
 export function closeSalesQuote(businessId: string, userId: string, quoteId: string) {
   const context = getBusinessDb(businessId, userId);
   const quote = context.db.select().from(salesQuotes).where(eq(salesQuotes.id, quoteId)).get();

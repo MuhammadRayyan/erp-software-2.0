@@ -173,6 +173,30 @@ export function savePurchaseOrder(businessId: string, userId: string, input: Pur
   return id;
 }
 
+export function issuePurchaseOrder(businessId: string, userId: string, orderId: string) {
+  const context = getBusinessDb(businessId, userId);
+  const order = context.db.select().from(purchaseOrders).where(eq(purchaseOrders.id, orderId)).get();
+  if (!order) throw new Error("Purchase order not found.");
+  if (order.status !== "draft") throw new Error("Only a draft purchase order can be issued.");
+  const now = new Date().toISOString();
+  context.db.update(purchaseOrders).set({ status: "issued", issuedAt: now, updatedAt: now }).where(eq(purchaseOrders.id, orderId)).run();
+
+  try {
+    recordActivity(businessId, {
+      userId,
+      action: "posted",
+      entityType: "purchase_order",
+      entityId: orderId,
+      entityNumber: order.orderNumber,
+      summary: `Issued purchase order ${order.orderNumber}`,
+      details: { orderNumber: order.orderNumber, previousStatus: "draft", newStatus: "issued" },
+      sqlite: context.sqlite,
+    });
+  } catch (e) {
+    console.error("[ActivityLog] purchase_order issue failed:", e);
+  }
+}
+
 export function closePurchaseOrder(businessId: string, userId: string, orderId: string) {
   const context = getBusinessDb(businessId, userId);
   const order = context.db.select().from(purchaseOrders).where(eq(purchaseOrders.id, orderId)).get();

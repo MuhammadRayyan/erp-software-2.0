@@ -7,7 +7,7 @@ import { listInventoryItemOptions } from "@/modules/inventory/inventory-item-ser
 import { getCurrencySettings } from "@/modules/currency/exchange-rate";
 import { quantityMicrosToInput } from "@/modules/accounting/calculations/money";
 import { minorToCurrencyInput } from "@/modules/currency/conversion";
-import { getSalesQuote } from "@/modules/sales-quotes/quote-service";
+import { getSalesQuote, listSalesQuotes } from "@/modules/sales-quotes/quote-service";
 import { SalesOrderForm } from "@/modules/sales-orders/sales-order-form";
 import { Breadcrumbs } from "@/components/breadcrumbs";
 
@@ -23,6 +23,7 @@ export default async function NewOrderPage({
   const { user, access } = await requireModule(businessId, "sales");
 
   const sourceQuote = query.quoteId ? getSalesQuote(businessId, user.id, query.quoteId) : null;
+  const quotes = listSalesQuotes(businessId, user.id, { onlyLatest: true });
   const customers = listCustomers(businessId, user.id);
   const accounts = getSalesAccountOptions(businessId, user.id);
   const taxes = getActiveTaxCodes(businessId, user.id).filter(
@@ -96,6 +97,7 @@ export default async function NewOrderPage({
           salesPriceMinor,
           salesAccountId,
         }))}
+        quotes={quotes.map((q) => ({ id: q.id, quoteNumber: q.quote_number, customerId: q.customer_id, date: q.date }))}
         currency={access.business.currency}
         currencies={currencySettings.currencies
           .filter((currency) => currency.is_active)

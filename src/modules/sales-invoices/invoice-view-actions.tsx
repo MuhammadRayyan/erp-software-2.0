@@ -2,15 +2,16 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { BookOpenText, CircleDollarSign, FileMinus2, PackageCheck } from "lucide-react";
+import { BookOpenText, CheckCircle2, CircleDollarSign, FileMinus2, PackageCheck } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { DropdownMenuItem } from "@/components/ui/dropdown-menu";
-import { deleteInvoiceAction, duplicateInvoiceAction, voidInvoiceAction } from "./actions";
+import { deleteInvoiceAction, duplicateInvoiceAction, postInvoiceAction, voidInvoiceAction } from "./actions";
 import type { DocumentStatus } from "./invoice-service";
 import { DocumentViewActions } from "@/components/document-view-actions";
 import { DocumentEmailDialog, type DocumentEmailDefaults } from "@/modules/email/email-compose-dialog";
+import { broadcastLiveRefresh } from "@/components/use-live-refresh";
 
 export function InvoiceViewActions({
   businessId,
@@ -41,9 +42,25 @@ export function InvoiceViewActions({
 }) {
   const router = useRouter();
   const [emailOpen, setEmailOpen] = useState(false);
+  const [posting, setPosting] = useState(false);
   const canReceive = documentStatus === "posted" && balanceMinor > 0;
   const canEdit = documentStatus !== "void" && !hasDeliveryNotes;
   const canVoid = documentStatus === "posted" && (totalMinor === undefined || balanceMinor === totalMinor);
+
+  const handlePost = async () => {
+    setPosting(true);
+    try {
+      const result = await postInvoiceAction(businessId, invoiceId);
+      if (result.error) throw new Error(result.error);
+      broadcastLiveRefresh();
+      toast.success("Invoice posted to ledger.");
+      router.refresh();
+    } catch (err: any) {
+      toast.error(err.message);
+    } finally {
+      setPosting(false);
+    }
+  };
 
   return (
     <>
@@ -100,6 +117,12 @@ export function InvoiceViewActions({
         } : undefined}
         extraPrimaryActions={
           <>
+            {documentStatus === "draft" && (
+              <Button onClick={handlePost} disabled={posting} className="gap-1.5">
+                <CheckCircle2 className={`size-4 ${posting ? "animate-spin" : ""}`} />
+                Post Invoice
+              </Button>
+            )}
             {inventoryEnabled && hasDeliverableItems && documentStatus === "posted" && (
               <Button asChild variant="secondary">
                 <Link href={`/b/${businessId}/sales/delivery-notes/new?invoiceId=${invoiceId}`}><PackageCheck className="mr-1.5 size-3.5" /> Create Delivery Note</Link>

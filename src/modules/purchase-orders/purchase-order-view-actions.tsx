@@ -1,15 +1,16 @@
 "use client";
 
 import Link from "next/link";
-import { PackagePlus, RefreshCw, GitBranch, ReceiptText, ArrowDownToLine } from "lucide-react";
+import { PackagePlus, RefreshCw, GitBranch, ReceiptText, ArrowDownToLine, Send } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
-import { cancelPurchaseOrderAction, closePurchaseOrderAction, deletePurchaseOrderAction, convertPurchaseOrderToInvoiceAction, createPurchaseOrderRevisionAction } from "./actions";
+import { cancelPurchaseOrderAction, closePurchaseOrderAction, deletePurchaseOrderAction, convertPurchaseOrderToInvoiceAction, createPurchaseOrderRevisionAction, issuePurchaseOrderAction } from "./actions";
 import type { PurchaseOrderStatus } from "./purchase-order-service";
 import { DocumentViewActions } from "@/components/document-view-actions";
 import { useState } from "react";
 import { DocumentEmailDialog, type DocumentEmailDefaults } from "@/modules/email/email-compose-dialog";
+import { broadcastLiveRefresh } from "@/components/use-live-refresh";
 
 export function PurchaseOrderViewActions({
   businessId, orderId, orderNumber, status, inventoryEnabled, hasReceivableItems, emailDefaults
@@ -18,9 +19,25 @@ export function PurchaseOrderViewActions({
 }) {
   const router = useRouter();
   const editable = status === "draft" || status === "issued";
+  const [issuing, setIssuing] = useState(false);
   const [converting, setConverting] = useState(false);
   const [revising, setRevising] = useState(false);
   const [emailOpen, setEmailOpen] = useState(false);
+
+  const handleIssue = async () => {
+    setIssuing(true);
+    try {
+      const result = await issuePurchaseOrderAction(businessId, orderId);
+      if (result.error) throw new Error(result.error);
+      broadcastLiveRefresh();
+      toast.success("Purchase order issued.");
+      router.refresh();
+    } catch (err: any) {
+      toast.error(err.message);
+    } finally {
+      setIssuing(false);
+    }
+  };
 
   const handleRevise = async () => {
     setRevising(true);
@@ -103,6 +120,12 @@ export function PurchaseOrderViewActions({
         } : undefined}
         extraPrimaryActions={
           <>
+            {status === "draft" && (
+              <Button onClick={handleIssue} disabled={issuing} className="gap-1.5">
+                <Send className={`size-4 ${issuing ? "animate-spin" : ""}`} /> 
+                Issue Order
+              </Button>
+            )}
             {status !== "cancelled" && status !== "superseded" && (
               <Button variant="secondary" onClick={handleRevise} disabled={revising}>
                 <GitBranch className={`size-4 ${revising ? "animate-spin" : ""}`} /> 

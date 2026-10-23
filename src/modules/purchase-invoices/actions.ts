@@ -8,6 +8,7 @@ import { purchaseInvoiceInputSchema } from "./purchase-invoice-input";
 import {
   deletePurchaseInvoice,
   duplicatePurchaseInvoice,
+  postPurchaseInvoiceDoc,
   savePurchaseInvoice,
   voidPurchaseInvoice,
   batchPostPurchaseInvoices,
@@ -50,6 +51,18 @@ export async function duplicatePurchaseInvoiceAction(businessId: string, invoice
 }
 export async function deletePurchaseInvoiceAction(businessId: string, invoiceId: string) { const { user } = await requireModule(businessId, "purchases"); try { deletePurchaseInvoice(businessId, user.id, invoiceId); revalidatePath(`/b/${businessId}/purchases/invoices`); return {}; } catch (error) { return { error: error instanceof Error ? error.message : "The purchase invoice could not be deleted." }; } }
 export async function voidPurchaseInvoiceAction(businessId: string, invoiceId: string) { const { user } = await requireModule(businessId, "purchases"); try { voidPurchaseInvoice(businessId, user.id, invoiceId); revalidatePath(`/b/${businessId}/purchases/invoices/${invoiceId}`); return {}; } catch (error) { return { error: error instanceof Error ? error.message : "The purchase invoice could not be voided." }; } }
+
+export async function postPurchaseInvoiceAction(businessId: string, invoiceId: string) {
+  const { user } = await requireModule(businessId, "purchases");
+  try {
+    postPurchaseInvoiceDoc(businessId, user.id, invoiceId);
+    revalidatePath(`/b/${businessId}/purchases/invoices`);
+    revalidatePath(`/b/${businessId}/purchases/invoices/${invoiceId}`);
+    return {};
+  } catch (error) {
+    return { error: error instanceof Error ? error.message : "The purchase bill could not be posted." };
+  }
+}
 
 export async function batchPostPurchaseInvoicesAction(businessId: string, invoiceIds: string[]): Promise<BatchPurchaseActionResult> {
   const { user } = await requireModule(businessId, "purchases");

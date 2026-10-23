@@ -175,6 +175,30 @@ export function saveSalesOrder(businessId: string, userId: string, input: SalesO
   return id;
 }
 
+export function issueSalesOrder(businessId: string, userId: string, orderId: string) {
+  const context = getBusinessDb(businessId, userId);
+  const order = context.db.select().from(salesOrders).where(eq(salesOrders.id, orderId)).get();
+  if (!order) throw new Error("Sales order not found.");
+  if (order.documentStatus !== "draft") throw new Error("Only a draft sales order can be activated.");
+  const now = new Date().toISOString();
+  context.db.update(salesOrders).set({ documentStatus: "active", updatedAt: now }).where(eq(salesOrders.id, orderId)).run();
+
+  try {
+    recordActivity(businessId, {
+      userId,
+      action: "posted",
+      entityType: "sales_order",
+      entityId: orderId,
+      entityNumber: order.orderNumber,
+      summary: `Activated sales order ${order.orderNumber}`,
+      details: { orderNumber: order.orderNumber, previousStatus: "draft", newStatus: "active" },
+      sqlite: context.sqlite,
+    });
+  } catch (e) {
+    console.error("[ActivityLog] sales_order issue failed:", e);
+  }
+}
+
 export function closeSalesOrder(businessId: string, userId: string, orderId: string) {
   const context = getBusinessDb(businessId, userId);
   const order = context.db.select().from(salesOrders).where(eq(salesOrders.id, orderId)).get();

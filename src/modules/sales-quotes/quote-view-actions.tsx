@@ -1,10 +1,10 @@
 "use client";
 
-import { GitBranch, ReceiptText, RefreshCw, ShoppingCart } from "lucide-react";
+import { GitBranch, ReceiptText, RefreshCw, Send, ShoppingCart } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
-import { cancelSalesQuoteAction, closeSalesQuoteAction, deleteSalesQuoteAction, convertSalesQuoteToOrderAction, createSalesQuoteRevisionAction } from "./actions";
+import { cancelSalesQuoteAction, closeSalesQuoteAction, deleteSalesQuoteAction, convertSalesQuoteToOrderAction, createSalesQuoteRevisionAction, issueSalesQuoteAction } from "./actions";
 import type { SalesQuoteStatus } from "./quote-service";
 import { DocumentViewActions } from "@/components/document-view-actions";
 import { useState } from "react";
@@ -18,9 +18,25 @@ export function SalesQuoteViewActions({
 }) {
   const router = useRouter();
   const editable = documentStatus === "draft" || documentStatus === "sent";
+  const [issuing, setIssuing] = useState(false);
   const [converting, setConverting] = useState(false);
   const [revising, setRevising] = useState(false);
   const [emailOpen, setEmailOpen] = useState(false);
+
+  const handleIssue = async () => {
+    setIssuing(true);
+    try {
+      const result = await issueSalesQuoteAction(businessId, quoteId);
+      if (result.error) throw new Error(result.error);
+      broadcastLiveRefresh();
+      toast.success("Sales quote issued.");
+      router.refresh();
+    } catch (err: any) {
+      toast.error(err.message);
+    } finally {
+      setIssuing(false);
+    }
+  };
 
   const handleConvert = async () => {
     setConverting(true);
@@ -105,6 +121,12 @@ export function SalesQuoteViewActions({
         } : undefined}
         extraPrimaryActions={
           <>
+            {documentStatus === "draft" && (
+              <Button onClick={handleIssue} disabled={issuing} className="gap-1.5">
+                <Send className={`size-4 ${issuing ? "animate-spin" : ""}`} />
+                Issue Quote
+              </Button>
+            )}
             {documentStatus !== "cancelled" && documentStatus !== "superseded" && (
               <Button variant="secondary" onClick={handleRevise} disabled={revising}>
                 <GitBranch className={`size-4 ${revising ? "animate-spin" : ""}`} /> 

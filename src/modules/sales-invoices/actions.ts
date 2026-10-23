@@ -9,6 +9,7 @@ import {
   createInvoice,
   deleteInvoice,
   duplicateInvoice,
+  postInvoice,
   updateInvoice,
   voidInvoice,
   batchPostInvoices,
@@ -74,6 +75,18 @@ export async function updateInvoiceAction(
   revalidatePath(`/b/${businessId}/sales/invoices`);
   revalidatePath(`/b/${businessId}/sales/invoices/${invoiceId}`);
   redirect(`/b/${businessId}/sales/invoices/${invoiceId}?notice=${encodeURIComponent(intent === "post" ? "Invoice posting updated" : "Draft updated")}`);
+}
+
+export async function postInvoiceAction(businessId: string, invoiceId: string): Promise<InvoiceActionResult> {
+  const { user } = await requireModule(businessId, "sales");
+  try {
+    postInvoice(businessId, user.id, invoiceId);
+    revalidatePath(`/b/${businessId}/sales/invoices`);
+    revalidatePath(`/b/${businessId}/sales/invoices/${invoiceId}`);
+    return {};
+  } catch (error) {
+    return { error: error instanceof Error ? error.message : "The invoice could not be posted." };
+  }
 }
 
 export async function deleteInvoiceAction(businessId: string, invoiceId: string) {

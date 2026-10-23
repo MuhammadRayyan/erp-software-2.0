@@ -5,7 +5,7 @@ import { redirect } from "next/navigation";
 import { z } from "zod";
 import { requireModule } from "@/core/permissions/require-module";
 import { salesQuoteInputSchema } from "./quote-input";
-import { cancelSalesQuote, closeSalesQuote, deleteSalesQuote, getSalesQuote, saveSalesQuote, type SalesQuoteIntent } from "./quote-service";
+import { cancelSalesQuote, closeSalesQuote, deleteSalesQuote, getSalesQuote, issueSalesQuote, saveSalesQuote, type SalesQuoteIntent } from "./quote-service";
 import { saveSalesOrder } from "@/modules/sales-orders/sales-order-service";
 
 export type SalesQuoteActionResult = { error?: string; fieldErrors?: Record<string, string[]> };
@@ -33,6 +33,18 @@ async function runStatusAction(businessId: string, quoteId: string, action: "clo
     revalidatePath(`/b/${businessId}/sales/quotes/${quoteId}`);
     return {};
   } catch (error) { return { error: error instanceof Error ? error.message : "The sales quote could not be updated." }; }
+}
+
+export async function issueSalesQuoteAction(businessId: string, quoteId: string) {
+  const { user } = await requireModule(businessId, "sales");
+  try {
+    issueSalesQuote(businessId, user.id, quoteId);
+    revalidatePath(`/b/${businessId}/sales/quotes`);
+    revalidatePath(`/b/${businessId}/sales/quotes/${quoteId}`);
+    return {};
+  } catch (error) {
+    return { error: error instanceof Error ? error.message : "The sales quote could not be issued." };
+  }
 }
 
 export async function closeSalesQuoteAction(businessId: string, quoteId: string) {

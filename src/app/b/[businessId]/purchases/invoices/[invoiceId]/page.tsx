@@ -227,6 +227,26 @@ export default async function PurchaseInvoiceViewPage({
             <dd className="text-right">{formatDate(invoice.taxDate)}</dd>
             <dt className="text-muted-foreground">Due date</dt>
             <dd className="text-right">{formatDate(invoice.dueDate)}</dd>
+            {record.order && (
+              <>
+                <dt className="text-muted-foreground">Purchase order</dt>
+                <dd className="text-right">
+                  <Link href={`/b/${businessId}/purchases/orders/${record.order.id}`} className="font-medium text-primary hover:underline">
+                    {record.order.orderNumber}
+                  </Link>
+                </dd>
+              </>
+            )}
+            {record.linkedQuote && (
+              <>
+                <dt className="text-muted-foreground">Purchase quote</dt>
+                <dd className="text-right">
+                  <Link href={`/b/${businessId}/purchases/quotes/${record.linkedQuote.id}`} className="font-medium text-primary hover:underline">
+                    {record.linkedQuote.quote_number}
+                  </Link>
+                </dd>
+              </>
+            )}
             <dt className="text-muted-foreground">Reference</dt>
             <dd className="text-right">{invoice.reference || "—"}</dd>
             <dt className="text-muted-foreground">Project</dt>

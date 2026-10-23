@@ -5,7 +5,7 @@ import { redirect } from "next/navigation";
 import { z } from "zod";
 import { requireModule } from "@/core/permissions/require-module";
 import { purchaseOrderInputSchema } from "./purchase-order-input";
-import { cancelPurchaseOrder, closePurchaseOrder, deletePurchaseOrder, savePurchaseOrder, type PurchaseOrderIntent } from "./purchase-order-service";
+import { cancelPurchaseOrder, closePurchaseOrder, deletePurchaseOrder, issuePurchaseOrder, savePurchaseOrder, type PurchaseOrderIntent } from "./purchase-order-service";
 
 export type PurchaseOrderActionResult = { error?: string; fieldErrors?: Record<string, string[]> };
 
@@ -32,6 +32,18 @@ async function runStatusAction(businessId: string, orderId: string, action: "clo
     revalidatePath(`/b/${businessId}/purchases/orders/${orderId}`);
     return {};
   } catch (error) { return { error: error instanceof Error ? error.message : "The purchase order could not be updated." }; }
+}
+
+export async function issuePurchaseOrderAction(businessId: string, orderId: string) {
+  const { user } = await requireModule(businessId, "purchases");
+  try {
+    issuePurchaseOrder(businessId, user.id, orderId);
+    revalidatePath(`/b/${businessId}/purchases/orders`);
+    revalidatePath(`/b/${businessId}/purchases/orders/${orderId}`);
+    return {};
+  } catch (error) {
+    return { error: error instanceof Error ? error.message : "The purchase order could not be issued." };
+  }
 }
 
 export async function closePurchaseOrderAction(businessId: string, orderId: string) {

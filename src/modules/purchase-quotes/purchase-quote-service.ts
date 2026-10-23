@@ -254,6 +254,30 @@ export function savePurchaseQuote(businessId: string, userId: string, input: Pur
   return id;
 }
 
+export function issuePurchaseQuote(businessId: string, userId: string, quoteId: string) {
+  const context = getBusinessDb(businessId, userId);
+  const quote = context.db.select().from(purchaseQuotes).where(eq(purchaseQuotes.id, quoteId)).get();
+  if (!quote) throw new Error("Purchase quote not found.");
+  if (quote.documentStatus !== "draft") throw new Error("Only a draft purchase quote can be issued.");
+  const now = new Date().toISOString();
+  context.db.update(purchaseQuotes).set({ documentStatus: "sent", updatedAt: now }).where(eq(purchaseQuotes.id, quoteId)).run();
+
+  try {
+    recordActivity(businessId, {
+      userId,
+      action: "posted",
+      entityType: "purchase_quote",
+      entityId: quoteId,
+      entityNumber: quote.quoteNumber,
+      summary: `Issued purchase quote ${quote.quoteNumber}`,
+      details: { quoteNumber: quote.quoteNumber, previousStatus: "draft", newStatus: "sent" },
+      sqlite: context.sqlite,
+    });
+  } catch (e) {
+    console.error("[ActivityLog] purchase_quote issue failed:", e);
+  }
+}
+
 export function closePurchaseQuote(businessId: string, userId: string, quoteId: string) {
   const context = getBusinessDb(businessId, userId);
   const quote = context.db.select().from(purchaseQuotes).where(eq(purchaseQuotes.id, quoteId)).get();

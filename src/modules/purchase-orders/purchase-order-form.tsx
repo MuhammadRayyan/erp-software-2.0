@@ -23,8 +23,9 @@ type AccountOption = { id: string; name: string };
 type TaxOption = { id: string; name: string; rateBasisPoints: number };
 type ProjectOption = { id: string; code: string; name: string };
 type ItemOption = { id: string; sku: string | null; name: string; purchasePriceMinor: number | null; inventoryAssetAccountId: string };
+type QuoteOption = { id: string; quoteNumber: string; supplierId: string; date?: string };
 
-export function PurchaseOrderForm({ businessId, orderId, status = "draft", suppliers, expenseAccounts, taxCodes, projects, items, currency, currencies, rates, initial }: { businessId: string; orderId?: string; status?: PurchaseOrderStatus; suppliers: Option[]; expenseAccounts: AccountOption[]; taxCodes: TaxOption[]; projects: ProjectOption[]; items: ItemOption[]; currency: string; currencies: DocumentCurrencyOption[]; rates: DocumentRateOption[]; initial: PurchaseOrderInput }) {
+export function PurchaseOrderForm({ businessId, orderId, status = "draft", suppliers, expenseAccounts, taxCodes, projects, items, quotes, currency, currencies, rates, initial }: { businessId: string; orderId?: string; status?: PurchaseOrderStatus; suppliers: Option[]; expenseAccounts: AccountOption[]; taxCodes: TaxOption[]; projects: ProjectOption[]; items: ItemOption[]; quotes?: QuoteOption[]; currency: string; currencies: DocumentCurrencyOption[]; rates: DocumentRateOption[]; initial: PurchaseOrderInput }) {
   const router = useRouter();
   const [serverError, setServerError] = useState("");
   const [globalTaxCodeId, setGlobalTaxCodeId] = useState(() => initial.lines[0]?.taxCodeId || taxCodes.find((taxCode) => taxCode.rateBasisPoints === 500)?.id || taxCodes[0]?.id || "");
@@ -46,6 +47,8 @@ export function PurchaseOrderForm({ businessId, orderId, status = "draft", suppl
     if (index < fields.length - 1) move(index, index + 1);
   }
   const lines = useWatch({ control, name: "lines" }) ?? [];
+  const supplierId = useWatch({ control, name: "supplierId" });
+  const availableQuotes = (quotes ?? []).filter((q) => !supplierId || q.supplierId === supplierId);
   const currencyCode = useWatch({ control, name: "currencyCode" }) || currency; const exchangeRateToBase = useWatch({ control, name: "exchangeRateToBase" }) || ""; const exchangeRateDate = useWatch({ control, name: "exchangeRateDate" }) || ""; const exchangeRateSource = useWatch({ control, name: "exchangeRateSource" }) || ""; const orderDate = useWatch({ control, name: "date" }) || "";
   const minorUnit = currencies.find((entry) => entry.code === currencyCode)?.minorUnit ?? 2;
   const totals = useDocumentTotals<PurchaseOrderInput>({
@@ -81,10 +84,10 @@ export function PurchaseOrderForm({ businessId, orderId, status = "draft", suppl
   }
   const cancelHref = orderId ? `/b/${businessId}/purchases/orders/${orderId}` : `/b/${businessId}/purchases/orders`;
   return <form className="space-y-5 max-w-none" noValidate>
-    <input type="hidden" {...register("purchaseQuoteId")} />
     {serverError && <FormError message={serverError} />}
     <section className="form-section"><h2 className="text-base font-semibold">Order details</h2><p className="mt-1 text-sm text-muted-foreground">Purchase orders are operational documents and never post to the ledger.</p><div className="mt-5 grid gap-5 md:grid-cols-3">
       <div className="space-y-1.5"><Label htmlFor="supplierId">Supplier</Label><SelectNative id="supplierId"  {...register("supplierId", { onChange: (event) => { if (status === "draft") { const code = suppliers.find((supplier) => supplier.id === event.target.value)?.defaultCurrencyCode ?? currency; setValue("currencyCode", code); setValue("exchangeRateToBase", code === currency ? "1" : ""); setValue("exchangeRateDate", code === currency ? orderDate : ""); setValue("exchangeRateSource", code === currency ? "Base" : ""); } } })} aria-invalid={!!errors.supplierId}><option value="">Choose a supplier…</option>{suppliers.map((supplier) => <option key={supplier.id} value={supplier.id}>{supplier.name}</option>)}</SelectNative>{errors.supplierId && <p className="field-error">{errors.supplierId.message}</p>}</div>
+      <div className="space-y-1.5"><Label htmlFor="purchaseQuoteId">Purchase quote <span className="font-normal text-muted-foreground">(optional)</span></Label><SelectNative id="purchaseQuoteId" {...register("purchaseQuoteId", { onChange: (e) => { const q = quotes?.find((item) => item.id === e.target.value); if (q && !form.getValues("reference")) { form.setValue("reference", `Quote ${q.quoteNumber}`); } } })}><option value="">No linked quote</option>{availableQuotes.map((q) => <option key={q.id} value={q.id}>{q.quoteNumber}{q.date ? ` — ${q.date}` : ""}</option>)}</SelectNative></div>
       <div className="space-y-1.5"><Label htmlFor="date">Order date</Label><Input id="date" type="date" {...register("date")} aria-invalid={!!errors.date} />{errors.date && <p className="field-error">{errors.date.message}</p>}</div>
       <div className="space-y-1.5"><Label htmlFor="expectedDate">Expected date <span className="font-normal text-muted-foreground">(optional)</span></Label><Input id="expectedDate" type="date" {...register("expectedDate")} /></div>
       <div className="space-y-1.5"><Label htmlFor="projectId">Project <span className="font-normal text-muted-foreground">(optional)</span></Label><SelectNative id="projectId"  {...register("projectId")}><option value="">No project</option>{projects.map((project) => <option key={project.id} value={project.id}>{project.code} — {project.name}</option>)}</SelectNative></div>

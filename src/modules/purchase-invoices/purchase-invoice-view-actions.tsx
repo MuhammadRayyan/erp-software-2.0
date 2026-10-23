@@ -1,14 +1,16 @@
 "use client";
 
+import { useState } from "react";
 import Link from "next/link";
-import { BookOpenText, CircleDollarSign, ArrowDownToLine, PackagePlus } from "lucide-react";
+import { BookOpenText, CheckCircle2, CircleDollarSign, ArrowDownToLine, PackagePlus } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { DropdownMenuItem } from "@/components/ui/dropdown-menu";
-import { deletePurchaseInvoiceAction, duplicatePurchaseInvoiceAction, voidPurchaseInvoiceAction } from "./actions";
+import { deletePurchaseInvoiceAction, duplicatePurchaseInvoiceAction, postPurchaseInvoiceAction, voidPurchaseInvoiceAction } from "./actions";
 import type { PurchaseInvoiceStatus } from "./purchase-invoice-service";
 import { DocumentViewActions } from "@/components/document-view-actions";
+import { broadcastLiveRefresh } from "@/components/use-live-refresh";
 
 export function PurchaseInvoiceViewActions({
   businessId, invoiceId, internalNumber, documentStatus, balanceMinor, totalMinor, journalEntryId, reversalJournalEntryId, inventoryEnabled, hasInventoryLines, hasGoodsReceipts = false
@@ -16,9 +18,25 @@ export function PurchaseInvoiceViewActions({
   businessId: string; invoiceId: string; internalNumber: string; documentStatus: PurchaseInvoiceStatus; balanceMinor: number; totalMinor?: number; journalEntryId: string | null; reversalJournalEntryId?: string | null; inventoryEnabled: boolean; hasInventoryLines: boolean; hasGoodsReceipts?: boolean;
 }) {
   const router = useRouter();
+  const [posting, setPosting] = useState(false);
 
   const canEdit = documentStatus !== "void" && !hasGoodsReceipts && (documentStatus === "draft" || totalMinor === undefined || balanceMinor === totalMinor);
   const canVoid = documentStatus === "posted" && (totalMinor === undefined || balanceMinor === totalMinor);
+
+  const handlePost = async () => {
+    setPosting(true);
+    try {
+      const result = await postPurchaseInvoiceAction(businessId, invoiceId);
+      if (result.error) throw new Error(result.error);
+      broadcastLiveRefresh();
+      toast.success("Purchase bill posted to ledger.");
+      router.refresh();
+    } catch (err: any) {
+      toast.error(err.message);
+    } finally {
+      setPosting(false);
+    }
+  };
 
   return (
     <DocumentViewActions
@@ -34,7 +52,7 @@ export function PurchaseInvoiceViewActions({
             icon: CircleDollarSign,
           },
         ] : []),
-        ...(inventoryEnabled && hasInventoryLines ? [
+        ...(inventoryEnabled && hasInventoryLines && documentStatus === "posted" ? [
           {
             label: "Goods Receipt",
             href: `/b/${businessId}/purchases/goods-receipts/new?invoiceId=${invoiceId}`,
@@ -75,7 +93,13 @@ export function PurchaseInvoiceViewActions({
       } : undefined}
       extraPrimaryActions={
         <>
-          {inventoryEnabled && hasInventoryLines && documentStatus !== "void" && (
+          {documentStatus === "draft" && (
+            <Button onClick={handlePost} disabled={posting} className="gap-1.5">
+              <CheckCircle2 className={`size-4 ${posting ? "animate-spin" : ""}`} />
+              Post Bill
+            </Button>
+          )}
+          {inventoryEnabled && hasInventoryLines && documentStatus !== "void" && documentStatus !== "draft" && (
             <Button asChild variant="secondary">
               <Link href={`/b/${businessId}/purchases/goods-receipts/new?invoiceId=${invoiceId}`}><PackagePlus className="size-4" /> Receive Goods</Link>
             </Button>

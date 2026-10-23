@@ -5,7 +5,7 @@ import { redirect } from "next/navigation";
 import { z } from "zod";
 import { requireModule } from "@/core/permissions/require-module";
 import { salesOrderInputSchema } from "./sales-order-input";
-import { cancelSalesOrder, closeSalesOrder, deleteSalesOrder, saveSalesOrder, getSalesOrder, type SalesOrderIntent } from "./sales-order-service";
+import { cancelSalesOrder, closeSalesOrder, deleteSalesOrder, saveSalesOrder, getSalesOrder, issueSalesOrder, type SalesOrderIntent } from "./sales-order-service";
 import { createInvoice } from "@/modules/sales-invoices/invoice-service";
 
 export type SalesOrderActionResult = { error?: string; fieldErrors?: Record<string, string[]> };
@@ -33,6 +33,18 @@ async function runStatusAction(businessId: string, orderId: string, action: "clo
     revalidatePath(`/b/${businessId}/sales/orders/${orderId}`);
     return {};
   } catch (error) { return { error: error instanceof Error ? error.message : "The sales order could not be updated." }; }
+}
+
+export async function issueSalesOrderAction(businessId: string, orderId: string) {
+  const { user } = await requireModule(businessId, "sales");
+  try {
+    issueSalesOrder(businessId, user.id, orderId);
+    revalidatePath(`/b/${businessId}/sales/orders`);
+    revalidatePath(`/b/${businessId}/sales/orders/${orderId}`);
+    return {};
+  } catch (error) {
+    return { error: error instanceof Error ? error.message : "The sales order could not be activated." };
+  }
 }
 
 export async function closeSalesOrderAction(businessId: string, orderId: string) {

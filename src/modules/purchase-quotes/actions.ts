@@ -10,6 +10,7 @@ import {
   closePurchaseQuote,
   deletePurchaseQuote,
   getPurchaseQuote,
+  issuePurchaseQuote,
   savePurchaseQuote,
   type PurchaseQuoteIntent,
 } from "./purchase-quote-service";
@@ -53,6 +54,18 @@ async function runStatusAction(businessId: string, quoteId: string, action: "clo
     return {};
   } catch (error) {
     return { error: error instanceof Error ? error.message : "The purchase quote could not be updated." };
+  }
+}
+
+export async function issuePurchaseQuoteAction(businessId: string, quoteId: string) {
+  const { user } = await requireModule(businessId, "purchases");
+  try {
+    issuePurchaseQuote(businessId, user.id, quoteId);
+    revalidatePath(`/b/${businessId}/purchases/quotes`);
+    revalidatePath(`/b/${businessId}/purchases/quotes/${quoteId}`);
+    return {};
+  } catch (error) {
+    return { error: error instanceof Error ? error.message : "The purchase quote could not be issued." };
   }
 }
 

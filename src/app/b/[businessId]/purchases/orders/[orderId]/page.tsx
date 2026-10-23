@@ -196,6 +196,16 @@ export default async function PurchaseOrderViewPage({
             <dd className="text-right">{formatDate(order.date)}</dd>
             <dt className="text-muted-foreground">Expected</dt>
             <dd className="text-right">{order.expectedDate ? formatDate(order.expectedDate) : "—"}</dd>
+            {record.linkedQuote && (
+              <>
+                <dt className="text-muted-foreground">Purchase quote</dt>
+                <dd className="text-right">
+                  <Link href={`/b/${businessId}/purchases/quotes/${record.linkedQuote.id}`} className="font-medium text-primary hover:underline">
+                    {record.linkedQuote.quote_number}
+                  </Link>
+                </dd>
+              </>
+            )}
             <dt className="text-muted-foreground">Reference</dt>
             <dd className="text-right">{order.reference || "—"}</dd>
             <dt className="text-muted-foreground">Project</dt>

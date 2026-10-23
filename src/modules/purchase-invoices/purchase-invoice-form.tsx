@@ -187,7 +187,6 @@ export function PurchaseInvoiceForm({
     : `/b/${businessId}/purchases/invoices`;
   return (
     <form className="space-y-5 max-w-none" noValidate>
-      <input type="hidden" {...register("purchaseOrderId")} />
       {serverError && <FormError message={serverError} />}
       <section className="form-section">
         <h2 className="text-base font-semibold">Bill details</h2>
@@ -287,10 +286,20 @@ export function PurchaseInvoiceForm({
                 (optional)
               </span>
             </Label>
-            <SelectNative id="purchaseOrderId" {...register("purchaseOrderId")}>
+            <SelectNative
+              id="purchaseOrderId"
+              {...register("purchaseOrderId", {
+                onChange: (e) => {
+                  const ord = orders.find((o) => o.id === e.target.value);
+                  if (ord && !form.getValues("reference")) {
+                    form.setValue("reference", `PO ${ord.orderNumber}`);
+                  }
+                }
+              })}
+            >
               <option value="">No linked order</option>
               {orders
-                .filter((order) => order.supplierId === supplierId)
+                .filter((order) => !supplierId || order.supplierId === supplierId)
                 .map((order) => (
                   <option key={order.id} value={order.id}>
                     {order.orderNumber}

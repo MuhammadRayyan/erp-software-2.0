@@ -1,15 +1,16 @@
 "use client";
 
 import Link from "next/link";
-import { Truck, RefreshCw, GitBranch, ReceiptText, PackageCheck, ShoppingCart } from "lucide-react";
+import { CheckCircle2, Truck, RefreshCw, GitBranch, ReceiptText, PackageCheck, ShoppingCart } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
-import { cancelSalesOrderAction, closeSalesOrderAction, deleteSalesOrderAction, convertSalesOrderToInvoiceAction, createSalesOrderRevisionAction } from "./actions";
+import { cancelSalesOrderAction, closeSalesOrderAction, deleteSalesOrderAction, convertSalesOrderToInvoiceAction, createSalesOrderRevisionAction, issueSalesOrderAction } from "./actions";
 import type { SalesOrderStatus } from "./sales-order-service";
 import { DocumentViewActions } from "@/components/document-view-actions";
 import { useState } from "react";
 import { DocumentEmailDialog, type DocumentEmailDefaults } from "@/modules/email/email-compose-dialog";
+import { broadcastLiveRefresh } from "@/components/use-live-refresh";
 
 export function SalesOrderViewActions({
   businessId, orderId, orderNumber, documentStatus, inventoryEnabled, hasDeliverableItems, emailDefaults
@@ -24,9 +25,25 @@ export function SalesOrderViewActions({
 }) {
   const router = useRouter();
   const editable = documentStatus === "draft" || documentStatus === "active";
+  const [issuing, setIssuing] = useState(false);
   const [converting, setConverting] = useState(false);
   const [revising, setRevising] = useState(false);
   const [emailOpen, setEmailOpen] = useState(false);
+
+  const handleIssue = async () => {
+    setIssuing(true);
+    try {
+      const result = await issueSalesOrderAction(businessId, orderId);
+      if (result.error) throw new Error(result.error);
+      broadcastLiveRefresh();
+      toast.success("Sales order activated.");
+      router.refresh();
+    } catch (err: any) {
+      toast.error(err.message);
+    } finally {
+      setIssuing(false);
+    }
+  };
 
   const handleRevise = async () => {
     setRevising(true);
@@ -113,13 +130,19 @@ export function SalesOrderViewActions({
         } : undefined}
         extraPrimaryActions={
           <>
+            {documentStatus === "draft" && (
+              <Button onClick={handleIssue} disabled={issuing} className="gap-1.5">
+                <CheckCircle2 className={`size-4 ${issuing ? "animate-spin" : ""}`} />
+                Activate Order
+              </Button>
+            )}
             {documentStatus !== "cancelled" && documentStatus !== "superseded" && (
               <Button variant="secondary" onClick={handleRevise} disabled={revising}>
                 <GitBranch className={`size-4 ${revising ? "animate-spin" : ""}`} />
                 New Revision
               </Button>
             )}
-            {inventoryEnabled && hasDeliverableItems && documentStatus !== "cancelled" && documentStatus !== "superseded" && (
+            {inventoryEnabled && hasDeliverableItems && documentStatus === "active" && (
               <Button asChild variant="secondary">
                 <Link href={`/b/${businessId}/sales/delivery-notes/new?orderId=${orderId}`}>
                   <Truck className="size-4 mr-2" /> Ship Goods

@@ -11,6 +11,8 @@ import { listInventoryItemOptions } from "@/modules/inventory/inventory-item-ser
 import { listProjectOptions } from "@/modules/projects/project-service";
 import { InvoiceForm } from "@/modules/sales-invoices/invoice-form";
 import { getInvoice } from "@/modules/sales-invoices/invoice-service";
+import { listSalesQuotes } from "@/modules/sales-quotes/quote-service";
+import { listSalesOrders } from "@/modules/sales-orders/sales-order-service";
 import { minorToCurrencyInput } from "@/modules/currency/conversion";
 import { getCurrencySettings } from "@/modules/currency/exchange-rate";
 import { Breadcrumbs } from "@/components/breadcrumbs";
@@ -31,6 +33,8 @@ export default async function EditInvoicePage({ params }: { params: Promise<{ bu
   const taxCodes = getActiveTaxCodes(businessId, user.id).filter((code) => code.vatCategory && ["sales", "both"].includes(code.direction));
   const projects = listProjectOptions(businessId, user.id);
   const items = listInventoryItemOptions(businessId, user.id);
+  const quotes = listSalesQuotes(businessId, user.id, { onlyLatest: true });
+  const orders = listSalesOrders(businessId, user.id, { onlyLatest: true });
   const currencySettings = getCurrencySettings(businessId, user.id);
   const documentMinorUnit = currencySettings.currencies.find((entry) => entry.code === record.invoice.currencyCode)?.minor_unit ?? 2;
   const customFields = listCustomFieldDefinitions(businessId, user.id, "sales_invoice").map(({ id, name, fieldType, selectOptions, isRequired }) => ({ id, name, fieldType, selectOptions, isRequired }));
@@ -58,6 +62,8 @@ export default async function EditInvoicePage({ params }: { params: Promise<{ bu
       taxCodes={taxCodes.map(({ id, name, rateBasisPoints }) => ({ id, name, rateBasisPoints }))}
       projects={projects.map((project) => ({ id: project.id, code: project.code, name: project.name, customerId: project.customer_id }))}
       items={items.map(({ id, sku, name, salesPriceMinor, salesAccountId }) => ({ id, sku, name, salesPriceMinor, salesAccountId }))}
+      orders={orders.map((o) => ({ id: o.id, orderNumber: o.order_number, customerId: o.customer_id, date: o.date }))}
+      quotes={quotes.map((q) => ({ id: q.id, quoteNumber: q.quote_number, customerId: q.customer_id, date: q.date }))}
       currency={access.business.currency}
       currencies={currencySettings.currencies.filter((entry) => entry.is_active || entry.code === record.invoice.currencyCode).map((entry) => ({ code: entry.code, name: entry.name, minorUnit: entry.minor_unit }))}
       rates={currencySettings.rates.map((entry) => ({ id: entry.id, currencyCode: entry.currency_code, rateDate: entry.rate_date, rateToBase: entry.rate_to_base, source: entry.source, sourceReference: entry.source_reference }))}

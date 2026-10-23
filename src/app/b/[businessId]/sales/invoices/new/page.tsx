@@ -10,8 +10,8 @@ import { listCustomFieldDefinitions } from "@/modules/custom-fields/custom-field
 import { listProjectOptions } from "@/modules/projects/project-service";
 import { quantityMicrosToInput } from "@/modules/accounting/calculations/money";
 import { minorToCurrencyInput } from "@/modules/currency/conversion";
-import { getSalesQuote } from "@/modules/sales-quotes/quote-service";
-import { getSalesOrder } from "@/modules/sales-orders/sales-order-service";
+import { getSalesQuote, listSalesQuotes } from "@/modules/sales-quotes/quote-service";
+import { getSalesOrder, listSalesOrders } from "@/modules/sales-orders/sales-order-service";
 import { InvoiceForm } from "@/modules/sales-invoices/invoice-form";
 import { listInventoryItemOptions } from "@/modules/inventory/inventory-item-service";
 import { getCurrencySettings } from "@/modules/currency/exchange-rate";
@@ -31,6 +31,8 @@ export default async function NewInvoicePage({
 
   const sourceQuote = query.quoteId ? getSalesQuote(businessId, user.id, query.quoteId) : null;
   const sourceOrder = query.orderId ? getSalesOrder(businessId, user.id, query.orderId) : null;
+  const quotes = listSalesQuotes(businessId, user.id, { onlyLatest: true });
+  const orders = listSalesOrders(businessId, user.id, { onlyLatest: true });
 
   const customers = listCustomers(businessId, user.id);
   const salesAccounts = getSalesAccountOptions(businessId, user.id);
@@ -143,6 +145,8 @@ export default async function NewInvoicePage({
             salesPriceMinor,
             salesAccountId,
           }))}
+          orders={orders.map((o) => ({ id: o.id, orderNumber: o.order_number, customerId: o.customer_id, date: o.date }))}
+          quotes={quotes.map((q) => ({ id: q.id, quoteNumber: q.quote_number, customerId: q.customer_id, date: q.date }))}
           customFields={customFields}
           currency={access.business.currency}
           currencies={currencySettings.currencies
