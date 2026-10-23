@@ -5,6 +5,8 @@ import { requireModule } from "@/core/permissions/require-module";
 import {
   addExistingUser,
   createAndAddBusinessUser,
+  createInvitationLinkForUser,
+  createPasswordResetLinkForUser,
   inviteBusinessUser,
   removeBusinessUser,
   resendInvitation,
@@ -20,8 +22,10 @@ export async function inviteBusinessUserAction(
     email: string;
     role?: "administrator" | "standard";
     modules?: string[];
+    sendEmail?: boolean;
   }
 ) {
+
   const { user, access } = await requireModule(businessId, "settings");
   if (access.membership.role !== "administrator") return { error: "Administrator access is required." };
 
@@ -34,6 +38,7 @@ export async function inviteBusinessUserAction(
       email: input.email,
       role: input.role,
       modules: safeModules,
+      sendEmail: input.sendEmail,
     });
 
     revalidatePath(`/b/${businessId}/settings/users`);
@@ -43,6 +48,32 @@ export async function inviteBusinessUserAction(
     };
   } catch (error) {
     return { error: error instanceof Error ? error.message : "Could not invite user" };
+  }
+}
+
+export async function createInvitationLinkAction(businessId: string, targetUserId: string) {
+  const { user, access } = await requireModule(businessId, "settings");
+  if (access.membership.role !== "administrator") return { error: "Administrator access is required." };
+
+  try {
+    const res = createInvitationLinkForUser(businessId, user.id, targetUserId);
+    revalidatePath(`/b/${businessId}/settings/users`);
+    return { success: true, data: res };
+  } catch (error) {
+    return { error: error instanceof Error ? error.message : "Could not create invitation link" };
+  }
+}
+
+export async function createPasswordResetLinkAction(businessId: string, targetUserId: string) {
+  const { user, access } = await requireModule(businessId, "settings");
+  if (access.membership.role !== "administrator") return { error: "Administrator access is required." };
+
+  try {
+    const res = createPasswordResetLinkForUser(businessId, user.id, targetUserId);
+    revalidatePath(`/b/${businessId}/settings/users`);
+    return { success: true, data: res };
+  } catch (error) {
+    return { error: error instanceof Error ? error.message : "Could not create password reset link" };
   }
 }
 
@@ -71,6 +102,7 @@ export async function sendPasswordResetAction(businessId: string, targetUserId: 
     return { error: error instanceof Error ? error.message : "Could not send password reset email" };
   }
 }
+
 
 export async function toggleUserSuspensionAction(
   businessId: string,

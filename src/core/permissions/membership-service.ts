@@ -15,14 +15,18 @@ import {
 import { getSystemDb, getSystemSqlite } from "@/core/db/system";
 import { recordActivity } from "@/modules/activity-log/activity-log-service";
 import {
-  createInvitationToken,
   createPasswordResetToken,
+  generateInvitationLink,
+  generatePasswordResetLink,
 } from "./invitation-service";
+
+import { getAppBaseUrl } from "@/core/config/app-url";
 import {
   sendAccessGrantedEmail,
   sendInvitationEmail,
   sendPasswordResetEmail,
 } from "@/modules/email/system-email-service";
+
 
 export type UserInvitationStatus = "registered" | "invited" | "suspended";
 
@@ -31,6 +35,9 @@ export function listBusinessUsers(businessId: string, adminUserId: string) {
   if (!access || access.membership.role !== "administrator") throw new Error("BUSINESS_ACCESS_DENIED");
 
   const db = getSystemDb();
+  const currentBusiness = db.select().from(businesses).where(eq(businesses.id, businessId)).get();
+  const ownerUserId = currentBusiness?.ownerUserId;
+
   const rows = db
     .select({ user: users, membership: memberships })
     .from(memberships)
@@ -38,19 +45,23 @@ export function listBusinessUsers(businessId: string, adminUserId: string) {
     .where(eq(memberships.businessId, businessId))
     .all();
 
-  // Check pending invites in verification table
+  // Check pending invites in verification table (only non-expired)
   const activeInviteTokens = db
     .select()
     .from(verifications)
     .where(like(verifications.identifier, "invite:%"))
     .all();
 
+  const now = Date.now();
   const userIdsWithPendingInvite = new Set<string>();
   for (const inv of activeInviteTokens) {
     try {
-      const parsed = JSON.parse(inv.value);
-      if (parsed.userId && parsed.businessId === businessId) {
-        userIdsWithPendingInvite.add(parsed.userId);
+      const expiresTime = inv.expiresAt instanceof Date ? inv.expiresAt.getTime() : Number(inv.expiresAt);
+      if (expiresTime > now) {
+        const parsed = JSON.parse(inv.value);
+        if (parsed.userId && parsed.businessId === businessId) {
+          userIdsWithPendingInvite.add(parsed.userId);
+        }
       }
     } catch {
       // ignore
@@ -80,9 +91,11 @@ export function listBusinessUsers(businessId: string, adminUserId: string) {
       user,
       membership,
       invitationStatus,
+      isOwner: user.id === ownerUserId,
     };
   });
 }
+
 
 function checkUserQuota(businessId: string, adminUserId: string, targetUserId: string) {
   const db = getSystemDb();
@@ -125,6 +138,7 @@ export async function inviteBusinessUser(
     email: string;
     role?: "administrator" | "standard";
     modules?: ModuleKey[];
+    sendEmail?: boolean;
   }
 ) {
   const access = getBusinessAccess(businessId, adminUserId);
@@ -135,6 +149,7 @@ export async function inviteBusinessUser(
   const role = input.role || "standard";
   const modules = input.modules || ["sales"];
   const safeModules = moduleKeys.filter((m) => modules.includes(m));
+  const shouldSendEmail = input.sendEmail !== false;
 
   let user = db.select().from(users).where(eq(users.email, normalized)).get();
 
@@ -221,27 +236,32 @@ export async function inviteBusinessUser(
   let emailDeliveryResult: { success: boolean; error?: string } = { success: true };
 
   if (isRegistered) {
-    // Already registered in the platform: notify that access was granted
-    const emailRes = await sendAccessGrantedEmail({
-      to: user.email,
-      userName: user.name,
-      businessId,
-      businessName,
-      role: role === "administrator" ? "Administrator" : "Standard User",
-    });
-    emailDeliveryResult = { success: emailRes.success, error: emailRes.error };
+    // Already registered in the platform: workspace overview URL
+    inviteUrl = `${getAppBaseUrl()}/b/${businessId}/overview`;
+    if (shouldSendEmail) {
+      const emailRes = await sendAccessGrantedEmail({
+        to: user.email,
+        userName: user.name,
+        businessId,
+        businessName,
+        role: role === "administrator" ? "Administrator" : "Standard User",
+      });
+      emailDeliveryResult = { success: emailRes.success, error: emailRes.error };
+    }
   } else {
-    // New or unverified user: generate invitation token and send setup account link
-    const token = createInvitationToken(user.id, businessId, user.email);
-    const emailRes = await sendInvitationEmail({
-      to: user.email,
-      businessId,
-      businessName,
-      inviterName: adminUser?.name || "Your team administrator",
-      inviteToken: token,
-    });
-    inviteUrl = emailRes.actionUrl;
-    emailDeliveryResult = { success: emailRes.success, error: emailRes.error };
+    // New or unverified user: generate setup invitation link
+    inviteUrl = generateInvitationLink(user.id, businessId, user.email);
+    if (shouldSendEmail) {
+      const token = (inviteUrl.match(/token=([a-f0-9]+)/) || [])[1];
+      const emailRes = await sendInvitationEmail({
+        to: user.email,
+        businessId,
+        businessName,
+        inviterName: adminUser?.name || "Your team administrator",
+        inviteToken: token,
+      });
+      emailDeliveryResult = { success: emailRes.success, error: emailRes.error };
+    }
   }
 
   recordActivity(businessId, {
@@ -252,13 +272,16 @@ export async function inviteBusinessUser(
     entityNumber: user.name,
     summary: isRegistered
       ? `Added registered team member ${user.name} (${user.email}) as ${role}`
-      : `Sent invitation to ${user.email} as ${role} with link`,
+      : shouldSendEmail
+        ? `Sent invitation to ${user.email} as ${role} with link`
+        : `Created invitation link for ${user.email} as ${role}`,
     details: {
       targetUserId: user.id,
       targetEmail: user.email,
       role,
       modules: safeModules,
       isRegistered,
+      emailDispatched: shouldSendEmail,
     },
   });
 
@@ -272,6 +295,7 @@ export async function inviteBusinessUser(
   };
 }
 
+
 /**
  * Resend invitation email with a fresh secure token.
  */
@@ -282,6 +306,9 @@ export async function resendInvitation(businessId: string, adminUserId: string, 
   const db = getSystemDb();
   const target = db.select().from(users).where(eq(users.id, targetUserId)).get();
   if (!target) throw new Error("User account was not found.");
+  if (target.status === "suspended") {
+    throw new Error("Cannot resend invitation to a suspended account. Reactivate the user first.");
+  }
 
   const membership = db
     .select()
@@ -290,11 +317,18 @@ export async function resendInvitation(businessId: string, adminUserId: string, 
     .get();
   if (!membership) throw new Error("User is not a member of this business.");
 
+  const existingAccount = db.select().from(authAccounts).where(eq(authAccounts.userId, target.id)).get();
+  const isRegistered = Boolean(target.emailVerified && existingAccount?.password);
+  if (isRegistered) {
+    throw new Error("User has already completed account setup. You can send or copy a password reset link instead.");
+  }
+
   const business = db.select().from(businesses).where(eq(businesses.id, businessId)).get();
   const adminUser = db.select().from(users).where(eq(users.id, adminUserId)).get();
   const businessName = business?.name || "Business Workspace";
 
-  const token = createInvitationToken(target.id, businessId, target.email);
+  const inviteUrl = generateInvitationLink(target.id, businessId, target.email);
+  const token = (inviteUrl.match(/token=([a-f0-9]+)/) || [])[1];
   const emailRes = await sendInvitationEmail({
     to: target.email,
     businessId,
@@ -321,6 +355,51 @@ export async function resendInvitation(businessId: string, adminUserId: string, 
 }
 
 /**
+ * Create a direct invitation setup link for a pending team member without sending an email.
+ */
+export function createInvitationLinkForUser(businessId: string, adminUserId: string, targetUserId: string) {
+  const access = getBusinessAccess(businessId, adminUserId);
+  if (!access || access.membership.role !== "administrator") throw new Error("BUSINESS_ACCESS_DENIED");
+
+  const db = getSystemDb();
+  const target = db.select().from(users).where(eq(users.id, targetUserId)).get();
+  if (!target) throw new Error("User account was not found.");
+  if (target.status === "suspended") {
+    throw new Error("Cannot create invitation link for a suspended account. Reactivate the user first.");
+  }
+
+  const membership = db
+    .select()
+    .from(memberships)
+    .where(and(eq(memberships.businessId, businessId), eq(memberships.userId, targetUserId)))
+    .get();
+  if (!membership) throw new Error("User is not a member of this business.");
+
+  const existingAccount = db.select().from(authAccounts).where(eq(authAccounts.userId, target.id)).get();
+  const isRegistered = Boolean(target.emailVerified && existingAccount?.password);
+  if (isRegistered) {
+    throw new Error("User has already completed account setup. You can send or copy a password reset link instead.");
+  }
+
+  const inviteUrl = generateInvitationLink(target.id, businessId, target.email);
+
+  recordActivity(businessId, {
+    userId: adminUserId,
+    action: "updated",
+    entityType: "user_access",
+    entityId: target.id,
+    entityNumber: target.email,
+    summary: `Generated direct invitation link for ${target.email}`,
+    details: { targetUserId: target.id, targetEmail: target.email },
+  });
+
+  return {
+    success: true,
+    inviteUrl,
+  };
+}
+
+/**
  * Send password reset email directly to a team member.
  */
 export async function sendPasswordResetForUser(businessId: string, adminUserId: string, targetUserId: string) {
@@ -330,6 +409,9 @@ export async function sendPasswordResetForUser(businessId: string, adminUserId: 
   const db = getSystemDb();
   const target = db.select().from(users).where(eq(users.id, targetUserId)).get();
   if (!target) throw new Error("User account was not found.");
+  if (target.status === "suspended") {
+    throw new Error("Cannot send password reset to a suspended account. Reactivate the user first.");
+  }
 
   const { token } = createPasswordResetToken(target.email, businessId);
   const emailRes = await sendPasswordResetEmail({
@@ -357,6 +439,39 @@ export async function sendPasswordResetForUser(businessId: string, adminUserId: 
 }
 
 /**
+ * Create a direct password reset link for a team member without sending an email.
+ */
+export function createPasswordResetLinkForUser(businessId: string, adminUserId: string, targetUserId: string) {
+  const access = getBusinessAccess(businessId, adminUserId);
+  if (!access || access.membership.role !== "administrator") throw new Error("BUSINESS_ACCESS_DENIED");
+
+  const db = getSystemDb();
+  const target = db.select().from(users).where(eq(users.id, targetUserId)).get();
+  if (!target) throw new Error("User account was not found.");
+  if (target.status === "suspended") {
+    throw new Error("Cannot create password reset link for a suspended account. Reactivate the user first.");
+  }
+
+  const { link } = generatePasswordResetLink(target.email, businessId);
+
+  recordActivity(businessId, {
+    userId: adminUserId,
+    action: "updated",
+    entityType: "user_access",
+    entityId: target.id,
+    entityNumber: target.email,
+    summary: `Generated direct password reset link for ${target.email}`,
+    details: { targetUserId: target.id, targetEmail: target.email },
+  });
+
+  return {
+    success: true,
+    resetUrl: link,
+  };
+}
+
+
+/**
  * Suspend or reactivate user access to the workspace.
  */
 export function toggleUserSuspension(
@@ -373,6 +488,11 @@ export function toggleUserSuspension(
   }
 
   const db = getSystemDb();
+  const currentBusiness = db.select().from(businesses).where(eq(businesses.id, businessId)).get();
+  if (targetUserId === currentBusiness?.ownerUserId) {
+    throw new Error("The business workspace owner cannot be suspended.");
+  }
+
   const target = db.select().from(users).where(eq(users.id, targetUserId)).get();
   if (!target) throw new Error("User was not found.");
 
@@ -409,6 +529,8 @@ export function removeBusinessUser(businessId: string, adminUserId: string, memb
   if (!access || access.membership.role !== "administrator") throw new Error("BUSINESS_ACCESS_DENIED");
 
   const db = getSystemDb();
+  const currentBusiness = db.select().from(businesses).where(eq(businesses.id, businessId)).get();
+
   const target = db
     .select()
     .from(memberships)
@@ -417,8 +539,12 @@ export function removeBusinessUser(businessId: string, adminUserId: string, memb
 
   if (!target) throw new Error("Membership not found.");
   if (target.userId === adminUserId) throw new Error("Use another administrator to remove your own access.");
+  if (target.userId === currentBusiness?.ownerUserId) {
+    throw new Error("The business workspace owner cannot be removed from their business.");
+  }
 
   const targetUser = db.select().from(users).where(eq(users.id, target.userId)).get();
+
 
   getSystemSqlite().transaction(() => {
     // 1. Delete membership
@@ -484,6 +610,12 @@ export function updateMembership(
 
   if (!target) throw new Error("Membership not found");
   if (target.userId === adminUserId) throw new Error("Use another administrator to change your own access.");
+
+  const currentBusiness = getSystemDb().select().from(businesses).where(eq(businesses.id, businessId)).get();
+  if (target.userId === currentBusiness?.ownerUserId) {
+    throw new Error("The business workspace owner must remain an administrator with full access.");
+  }
+
 
   const safeModules = moduleKeys.filter((module) => modules.includes(module));
   getSystemDb()

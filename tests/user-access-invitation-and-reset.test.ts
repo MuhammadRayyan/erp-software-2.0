@@ -12,19 +12,25 @@ import {
 } from "../src/core/db/system-schema";
 import { createBusiness } from "../src/core/businesses/business-service";
 import {
+  createInvitationLinkForUser,
+  createPasswordResetLinkForUser,
   inviteBusinessUser,
   listBusinessUsers,
   removeBusinessUser,
   resendInvitation,
   sendPasswordResetForUser,
   toggleUserSuspension,
+  updateMembership,
 } from "../src/core/permissions/membership-service";
 import {
   completeInvitation,
   completePasswordReset,
+  createPasswordResetToken,
+  generateInvitationLink,
   verifyInvitationToken,
   verifyPasswordResetToken,
 } from "../src/core/permissions/invitation-service";
+
 import {
   sendAccessGrantedEmail,
   sendInvitationEmail,
@@ -492,4 +498,177 @@ test("User Access Control, Invitation Lifecycle, Password Reset & Email Suite", 
     assert.equal(resSuspended.success, true);
     assert.equal((resSuspended as any).resetUrl, undefined);
   });
+
+  // -------------------------------------------------------------
+  // TEST 14: Workspace Owner Safeguards
+  // -------------------------------------------------------------
+  await t.test("14. Workspace Owner Safeguards: Admin cannot demote, suspend, or remove the business owner", async () => {
+    // 1. Check listBusinessUsers returns isOwner correctly
+    const list = listBusinessUsers(businessId, adminUserId);
+    const ownerEntry = list.find((u) => u.user.id === adminUserId);
+    assert.ok(ownerEntry);
+    assert.equal(ownerEntry.isOwner, true, "Admin is the business owner");
+
+    // 2. Add an invited administrator
+    const coAdminEmail = `coadmin.${randomUUID().slice(0, 6)}@testcorp.com`;
+    const coAdminRes = await inviteBusinessUser(businessId, adminUserId, {
+      email: coAdminEmail,
+      role: "administrator",
+    });
+    const coAdminToken = (coAdminRes.inviteUrl?.match(/token=([a-f0-9]+)/) || [])[1];
+    await completeInvitation(coAdminToken, "Co-Admin User", "coAdminPassword123!");
+
+    const updatedList = listBusinessUsers(businessId, adminUserId);
+    const coAdminEntry = updatedList.find((u) => u.user.id === coAdminRes.userId);
+    assert.ok(coAdminEntry);
+    assert.equal(coAdminEntry.isOwner, false, "Co-admin is not the owner");
+
+    // 3. Co-admin attempts to demote owner to standard
+    assert.throws(
+      () => {
+        updateMembership(businessId, coAdminRes.userId, ownerEntry.membership.id, "standard", ["sales"]);
+      },
+      /The business workspace owner must remain an administrator/
+    );
+
+    // 4. Co-admin attempts to suspend owner
+    assert.throws(
+      () => {
+        toggleUserSuspension(businessId, coAdminRes.userId, adminUserId, "suspended");
+      },
+      /The business workspace owner cannot be suspended/
+    );
+
+    // 5. Co-admin attempts to remove owner from business
+    assert.throws(
+      () => {
+        removeBusinessUser(businessId, coAdminRes.userId, ownerEntry.membership.id);
+      },
+      /The business workspace owner cannot be removed/
+    );
+  });
+
+  // -------------------------------------------------------------
+  // TEST 15: Suspended Account Safeguards
+  // -------------------------------------------------------------
+  await t.test("15. Suspended User Safeguards: Suspended users cannot verify or complete password reset and reset does not un-suspend", async () => {
+    const victimEmail = `victim.${randomUUID().slice(0, 6)}@testcorp.com`;
+    const victimInvite = await inviteBusinessUser(businessId, adminUserId, { email: victimEmail });
+    const victimToken = (victimInvite.inviteUrl?.match(/token=([a-f0-9]+)/) || [])[1];
+    await completeInvitation(victimToken, "Victim User", "victimPassword123!");
+
+    // Generate password reset token while active
+    const { token: resetToken } = createPasswordResetToken(victimEmail, businessId);
+
+    // Now administrator suspends the account
+    toggleUserSuspension(businessId, adminUserId, victimInvite.userId, "suspended");
+
+    // Suspended user attempts to verify reset token
+    const tokenCheck = verifyPasswordResetToken(resetToken);
+    assert.equal(tokenCheck.valid, false);
+    assert.ok(tokenCheck.error?.includes("suspended"));
+
+    // Suspended user attempts to complete password reset
+    await assert.rejects(
+      async () => {
+        await completePasswordReset(resetToken, "hackedNewPassword123#");
+      },
+      /suspended/
+    );
+
+    // Verify account remains suspended
+    const userRow = db.select().from(users).where(eq(users.id, victimInvite.userId)).get();
+    assert.equal(userRow?.status, "suspended", "Account must remain suspended");
+
+    // Suspended user attempts to verify invitation link
+    const invLink = generateInvitationLink(victimInvite.userId, businessId, victimEmail);
+    const invToken = (invLink.match(/token=([a-f0-9]+)/) || [])[1];
+    const invCheck = verifyInvitationToken(invToken);
+    assert.equal(invCheck.valid, false);
+    assert.ok(invCheck.error?.includes("suspended"));
+  });
+
+  // -------------------------------------------------------------
+  // TEST 16: Direct Link Creation Without Email
+  // -------------------------------------------------------------
+  await t.test("16. Direct Link Creation without Email: create direct link returns active URL without email delivery", async () => {
+    const directEmail = `direct.${randomUUID().slice(0, 6)}@testcorp.com`;
+    const inviteRes = await inviteBusinessUser(businessId, adminUserId, {
+      email: directEmail,
+      role: "standard",
+      sendEmail: false,
+    });
+
+    assert.equal(inviteRes.status, "invited");
+    assert.ok(inviteRes.inviteUrl);
+    assert.ok(inviteRes.inviteUrl.includes("/accept-invite?token="));
+
+    // Token is fully valid and usable
+    const token = (inviteRes.inviteUrl.match(/token=([a-f0-9]+)/) || [])[1];
+    const verified = verifyInvitationToken(token);
+    assert.equal(verified.valid, true);
+    assert.equal(verified.data?.email, directEmail);
+  });
+
+  // -------------------------------------------------------------
+  // TEST 17: Direct Link Generation for Existing Users
+  // -------------------------------------------------------------
+  await t.test("17. Direct Action Links: createInvitationLinkForUser and createPasswordResetLinkForUser generate valid URLs", async () => {
+    const linkUserEmail = `linkuser.${randomUUID().slice(0, 6)}@testcorp.com`;
+    const memberRes = await inviteBusinessUser(businessId, adminUserId, {
+      email: linkUserEmail,
+      sendEmail: false,
+    });
+
+    // 1. Create setup link for pending user
+    const invLinkRes = createInvitationLinkForUser(businessId, adminUserId, memberRes.userId);
+    assert.ok(invLinkRes.success);
+    assert.ok(invLinkRes.inviteUrl);
+
+    // Complete setup
+    const token = (invLinkRes.inviteUrl.match(/token=([a-f0-9]+)/) || [])[1];
+    await completeInvitation(token, "Link User", "linkUserPassword123!");
+
+    // 2. Cannot create invitation link for registered user
+    assert.throws(
+      () => {
+        createInvitationLinkForUser(businessId, adminUserId, memberRes.userId);
+      },
+      /already completed account setup/
+    );
+
+    // 3. Create password reset link for registered user
+    const resetLinkRes = createPasswordResetLinkForUser(businessId, adminUserId, memberRes.userId);
+    assert.ok(resetLinkRes.success);
+    assert.ok(resetLinkRes.resetUrl.includes("/reset-password?token="));
+
+    const resetToken = (resetLinkRes.resetUrl.match(/token=([a-f0-9]+)/) || [])[1];
+    const resetVerified = verifyPasswordResetToken(resetToken);
+    assert.equal(resetVerified.valid, true);
+    assert.equal(resetVerified.data?.email, linkUserEmail);
+  });
+
+  // -------------------------------------------------------------
+  // TEST 18: Resend Invitation Guard for Registered Users
+  // -------------------------------------------------------------
+  await t.test("18. Resend Invitation Guard: rejects for registered users and preserves registered status", async () => {
+    const regEmail = `registered.user.${randomUUID().slice(0, 6)}@testcorp.com`;
+    const regRes = await inviteBusinessUser(businessId, adminUserId, { email: regEmail });
+    const regToken = (regRes.inviteUrl?.match(/token=([a-f0-9]+)/) || [])[1];
+    await completeInvitation(regToken, "Registered User", "strongPass1234#");
+
+    // Resend must reject because user is already registered
+    await assert.rejects(
+      async () => {
+        await resendInvitation(businessId, adminUserId, regRes.userId);
+      },
+      /already completed account setup/
+    );
+
+    // Status in overview must remain 'registered'
+    const list = listBusinessUsers(businessId, adminUserId);
+    const entry = list.find((u) => u.user.id === regRes.userId);
+    assert.equal(entry?.invitationStatus, "registered");
+  });
 });
+

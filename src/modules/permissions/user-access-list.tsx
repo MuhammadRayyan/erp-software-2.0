@@ -11,10 +11,12 @@ import {
   Mail,
   RotateCcw,
   Send,
+  Shield,
   ShieldCheck,
   Trash2,
   UserCheck,
   UserPlus,
+
 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -30,6 +32,8 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { moduleKeys, type ModuleKey } from "@/core/permissions/module-access";
 import {
+  createInvitationLinkAction,
+  createPasswordResetLinkAction,
   inviteBusinessUserAction,
   removeBusinessUserAction,
   resendInvitationAction,
@@ -39,6 +43,7 @@ import {
 } from "./actions";
 import { FormError } from "@/components/form-error";
 import { SelectNative } from "@/components/ui/select-native";
+import { copyToClipboard } from "@/lib/clipboard";
 
 export type UserAccess = {
   membershipId: string;
@@ -49,6 +54,7 @@ export type UserAccess = {
   modules: ModuleKey[];
   current: boolean;
   status: "registered" | "invited" | "suspended";
+  isOwner?: boolean;
 };
 
 const MODULE_LABELS: Record<ModuleKey, string> = {
@@ -132,6 +138,38 @@ function AccessRow({
     }
   }
 
+  async function handleCopyInviteLink() {
+    setActionPending(true);
+    const result = await createInvitationLinkAction(businessId, entry.userId);
+    setActionPending(false);
+    if (result.error) {
+      toast.error(result.error);
+    } else if (result.data?.inviteUrl) {
+      const copied = await copyToClipboard(result.data.inviteUrl);
+      if (copied) {
+        toast.success("Invitation setup link copied to clipboard!");
+      } else {
+        toast.info(`Invitation link: ${result.data.inviteUrl}`);
+      }
+    }
+  }
+
+  async function handleCopyResetLink() {
+    setActionPending(true);
+    const result = await createPasswordResetLinkAction(businessId, entry.userId);
+    setActionPending(false);
+    if (result.error) {
+      toast.error(result.error);
+    } else if (result.data?.resetUrl) {
+      const copied = await copyToClipboard(result.data.resetUrl);
+      if (copied) {
+        toast.success("Password reset link copied to clipboard!");
+      } else {
+        toast.info(`Reset link: ${result.data.resetUrl}`);
+      }
+    }
+  }
+
   async function handleResendInvite() {
     setActionPending(true);
     const result = await resendInvitationAction(businessId, entry.userId);
@@ -141,14 +179,13 @@ function AccessRow({
     } else {
       if (result.data?.emailDelivery && !result.data.emailDelivery.success) {
         toast.warning(
-          `Invitation regenerated, but email delivery failed: ${result.data.emailDelivery.error || "SMTP offline"}. Link copied to clipboard.`
+          `Invitation regenerated, but email delivery failed: ${result.data.emailDelivery.error || "SMTP offline"}.`
         );
       } else {
         toast.success(`Invitation email resent to ${entry.email}.`);
       }
       if (result.data?.inviteUrl) {
-        navigator.clipboard?.writeText(result.data.inviteUrl);
-        toast.info("Invite link copied to clipboard.", { duration: 6000 });
+        await copyToClipboard(result.data.inviteUrl);
       }
       router.refresh();
     }
@@ -163,14 +200,13 @@ function AccessRow({
     } else {
       if (result.data?.emailDelivery && !result.data.emailDelivery.success) {
         toast.warning(
-          `Password reset generated, but email delivery failed: ${result.data.emailDelivery.error || "SMTP offline"}. Link copied to clipboard.`
+          `Password reset generated, but email delivery failed: ${result.data.emailDelivery.error || "SMTP offline"}.`
         );
       } else {
         toast.success(`Password reset email sent to ${entry.email}.`);
       }
       if (result.data?.resetUrl) {
-        navigator.clipboard?.writeText(result.data.resetUrl);
-        toast.info("Password reset link copied to clipboard.", { duration: 6000 });
+        await copyToClipboard(result.data.resetUrl);
       }
       router.refresh();
     }
@@ -211,15 +247,21 @@ function AccessRow({
     }
   }
 
+
   return (
     <article className="rounded-lg border border-border bg-surface-raised p-4 transition-colors">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="space-y-1">
           <div className="flex items-center gap-2 flex-wrap">
-            <p className="font-semibold text-foreground text-sm">
-              {entry.name}{" "}
+            <p className="font-semibold text-foreground text-sm flex items-center gap-1.5">
+              <span>{entry.name}</span>
               {entry.current && (
-                <span className="ml-1 text-xs font-normal text-muted-foreground">(you)</span>
+                <span className="text-xs font-normal text-muted-foreground">(you)</span>
+              )}
+              {entry.isOwner && (
+                <Badge tone="neutral" className="gap-1 font-normal text-[11px] py-0 px-1.5">
+                  <Shield className="size-3 text-primary" /> Owner
+                </Badge>
               )}
             </p>
             <StatusBadge status={status} />
@@ -234,7 +276,14 @@ function AccessRow({
           <SelectNative
             id={`role-${entry.membershipId}`}
             value={role}
-            disabled={entry.current}
+            disabled={entry.current || entry.isOwner}
+            title={
+              entry.isOwner
+                ? "The workspace owner must remain an administrator"
+                : entry.current
+                  ? "Another administrator must change your access"
+                  : undefined
+            }
             onChange={(event) => setRole(event.target.value as typeof role)}
             className="text-xs h-8"
           >
@@ -244,8 +293,14 @@ function AccessRow({
           <Button
             variant="secondary"
             size="sm"
-            disabled={entry.current || pending}
-            title={entry.current ? "Another administrator must change your access" : undefined}
+            disabled={entry.current || entry.isOwner || pending}
+            title={
+              entry.isOwner
+                ? "The workspace owner must remain an administrator"
+                : entry.current
+                  ? "Another administrator must change your access"
+                  : undefined
+            }
             onClick={save}
             className="h-8 text-xs"
           >
@@ -256,68 +311,100 @@ function AccessRow({
           {!entry.current && (
             <div className="flex items-center gap-1.5 ml-2 border-l border-border pl-3">
               {status === "invited" ? (
-                <Button
-                  variant="secondary"
-                  size="sm"
-                  disabled={actionPending}
-                  onClick={handleResendInvite}
-                  title="Resend invitation email"
-                  className="h-8 text-xs gap-1"
-                >
-                  <RotateCcw className="size-3.5" />
-                  Resend Invite
-                </Button>
+                <>
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    disabled={actionPending}
+                    onClick={handleCopyInviteLink}
+                    title="Generate & copy setup link without sending email"
+                    className="h-8 text-xs gap-1"
+                  >
+                    <Copy className="size-3.5" />
+                    Copy Link
+                  </Button>
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    disabled={actionPending}
+                    onClick={handleResendInvite}
+                    title="Resend invitation email"
+                    className="h-8 text-xs gap-1"
+                  >
+                    <RotateCcw className="size-3.5" />
+                    Resend Email
+                  </Button>
+
+                </>
               ) : (
-                <Button
-                  variant="secondary"
-                  size="sm"
-                  disabled={actionPending}
-                  onClick={handleSendResetPassword}
-                  title="Send password reset link to user's email"
-                  className="h-8 text-xs gap-1"
-                >
-                  <KeyRound className="size-3.5" />
-                  Reset Password
-                </Button>
+                <>
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    disabled={actionPending || status === "suspended"}
+                    onClick={handleCopyResetLink}
+                    title="Generate & copy password reset link without sending email"
+                    className="h-8 text-xs gap-1"
+                  >
+                    <Copy className="size-3.5" />
+                    Copy Reset Link
+                  </Button>
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    disabled={actionPending || status === "suspended"}
+                    onClick={handleSendResetPassword}
+                    title="Send password reset link to user's email"
+                    className="h-8 text-xs gap-1"
+                  >
+                    <KeyRound className="size-3.5" />
+                    Reset Email
+                  </Button>
+                </>
               )}
 
-              <Button
-                variant="secondary"
-                size="sm"
-                disabled={actionPending}
-                onClick={handleToggleSuspension}
-                title={status === "suspended" ? "Reactivate user" : "Suspend user"}
-                className={`h-8 text-xs gap-1 ${
-                  status === "suspended"
-                    ? "text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50 dark:hover:bg-emerald-950/30"
-                    : "text-amber-600 hover:text-amber-700 hover:bg-amber-50 dark:hover:bg-amber-950/30"
-                }`}
-              >
-                {status === "suspended" ? (
-                  <>
-                    <UserCheck className="size-3.5" /> Reactivate
-                  </>
-                ) : (
-                  <>
-                    <Ban className="size-3.5" /> Suspend
-                  </>
-                )}
-              </Button>
+              {!entry.isOwner && (
+                <>
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    disabled={actionPending}
+                    onClick={handleToggleSuspension}
+                    title={status === "suspended" ? "Reactivate user" : "Suspend user"}
+                    className={`h-8 text-xs gap-1 ${
+                      status === "suspended"
+                        ? "text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50 dark:hover:bg-emerald-950/30"
+                        : "text-amber-600 hover:text-amber-700 hover:bg-amber-50 dark:hover:bg-amber-950/30"
+                    }`}
+                  >
+                    {status === "suspended" ? (
+                      <>
+                        <UserCheck className="size-3.5" /> Reactivate
+                      </>
+                    ) : (
+                      <>
+                        <Ban className="size-3.5" /> Suspend
+                      </>
+                    )}
+                  </Button>
 
-              <Button
-                variant="ghost"
-                size="sm"
-                disabled={actionPending}
-                onClick={handleRemoveUser}
-                title="Remove user from this business"
-                className="h-8 text-xs text-danger hover:text-danger hover:bg-danger/10"
-              >
-                <Trash2 className="size-3.5" />
-              </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    disabled={actionPending}
+                    onClick={handleRemoveUser}
+                    title="Remove user from this business"
+                    className="h-8 text-xs text-danger hover:text-danger hover:bg-danger/10"
+                  >
+                    <Trash2 className="size-3.5" />
+                  </Button>
+                </>
+              )}
             </div>
           )}
         </div>
       </div>
+
 
       {role === "standard" && (
         <fieldset className="mt-4 border-t border-border pt-4">
@@ -394,7 +481,7 @@ export function UserAccessList({ businessId, users }: { businessId: string; user
     );
   }
 
-  async function handleInvite() {
+  async function handleInvite(sendEmail: boolean = true) {
     setError("");
     setCreatedInviteUrl(null);
 
@@ -411,6 +498,7 @@ export function UserAccessList({ businessId, users }: { businessId: string; user
         email: cleanEmail,
         role,
         modules: role === "standard" ? selectedModules : moduleKeys as unknown as string[],
+        sendEmail,
       });
 
       if (result.error) {
@@ -425,7 +513,9 @@ export function UserAccessList({ businessId, users }: { businessId: string; user
           setEmail("");
           router.refresh();
         } else {
-          if (result.data.emailDelivery && !result.data.emailDelivery.success) {
+          if (!sendEmail) {
+            toast.success(`Invitation link generated for ${cleanEmail}!`);
+          } else if (result.data.emailDelivery && !result.data.emailDelivery.success) {
             toast.warning(
               `Invitation created, but email delivery failed: ${result.data.emailDelivery.error || "SMTP offline"}. Please share the direct registration link.`
             );
@@ -434,6 +524,7 @@ export function UserAccessList({ businessId, users }: { businessId: string; user
           }
           if (result.data.inviteUrl) {
             setCreatedInviteUrl(result.data.inviteUrl);
+            await copyToClipboard(result.data.inviteUrl);
           } else {
             setOpen(false);
             setEmail("");
@@ -446,12 +537,16 @@ export function UserAccessList({ businessId, users }: { businessId: string; user
     }
   }
 
-  function handleCopyInvite() {
+  async function handleCopyInvite() {
     if (createdInviteUrl) {
-      navigator.clipboard?.writeText(createdInviteUrl);
-      setCopiedLink(true);
-      toast.success("Invitation link copied to clipboard!");
-      setTimeout(() => setCopiedLink(false), 3000);
+      const copied = await copyToClipboard(createdInviteUrl);
+      if (copied) {
+        setCopiedLink(true);
+        toast.success("Invitation link copied to clipboard!");
+        setTimeout(() => setCopiedLink(false), 3000);
+      } else {
+        toast.info(`Invite link: ${createdInviteUrl}`);
+      }
     }
   }
 
@@ -481,8 +576,8 @@ export function UserAccessList({ businessId, users }: { businessId: string; user
           <DialogContent className="max-w-md">
             <DialogTitle>Invite Team Member</DialogTitle>
             <DialogDescription>
-              Enter the colleague&apos;s email address and assign their role. An invitation link will be
-              sent to their email so they can set up their name and password.
+              Enter the colleague&apos;s email address and assign their role. You can send a setup link
+              by email or generate a direct setup link to copy and share.
             </DialogDescription>
 
             {createdInviteUrl ? (
@@ -490,10 +585,10 @@ export function UserAccessList({ businessId, users }: { businessId: string; user
                 <div className="rounded-lg border border-emerald-500/30 bg-emerald-500/10 p-3.5 text-xs text-emerald-800 dark:text-emerald-300">
                   <div className="flex items-center gap-2 font-semibold">
                     <CheckCircle2 className="size-4 text-emerald-600 dark:text-emerald-400" />
-                    Invitation Sent Successfully
+                    Invitation Link Ready
                   </div>
                   <p className="mt-1 text-muted-foreground dark:text-emerald-300/80">
-                    An email was dispatched. You can also share the direct registration link below:
+                    The registration setup link is ready. You can copy and share it with your colleague:
                   </p>
                   <div className="mt-3 flex items-center gap-2">
                     <Input
@@ -590,17 +685,34 @@ export function UserAccessList({ businessId, users }: { businessId: string; user
                   </div>
                 )}
 
-                <div className="mt-5 flex justify-end gap-2">
+                <div className="mt-5 flex justify-end gap-2 flex-wrap">
                   <Button variant="ghost" disabled={pending} onClick={() => setOpen(false)}>
                     Cancel
                   </Button>
-                  <Button disabled={pending} onClick={handleInvite} className="gap-1.5">
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    disabled={pending}
+                    onClick={() => handleInvite(false)}
+                    className="gap-1.5"
+                    title="Generate direct link without sending an email"
+                  >
+                    <Copy className="size-3.5" />
+                    {pending ? "Creating..." : "Create & Copy Link"}
+                  </Button>
+                  <Button
+                    type="button"
+                    disabled={pending}
+                    onClick={() => handleInvite(true)}
+                    className="gap-1.5"
+                  >
                     <Send className="size-3.5" />
-                    {pending ? "Sending..." : "Create User & Send Login Link"}
+                    {pending ? "Sending..." : "Send Login Link"}
                   </Button>
                 </div>
               </>
             )}
+
           </DialogContent>
         </DialogRoot>
       </div>

@@ -11,6 +11,8 @@ import {
   verifications,
 } from "@/core/db/system-schema";
 import { recordActivity } from "@/modules/activity-log/activity-log-service";
+import { getAppBaseUrl } from "@/core/config/app-url";
+
 
 export interface InvitationPayload {
   userId: string;
@@ -74,6 +76,15 @@ export function createInvitationToken(userId: string, businessId: string, email:
 }
 
 /**
+ * Generate a full invitation link with cryptographic token.
+ */
+export function generateInvitationLink(userId: string, businessId: string, email: string): string {
+  const token = createInvitationToken(userId, businessId, email);
+  const baseUrl = getAppBaseUrl();
+  return `${baseUrl}/accept-invite?token=${encodeURIComponent(token)}`;
+}
+
+/**
  * Verify validity of an invitation token.
  */
 export function verifyInvitationToken(token: string) {
@@ -101,6 +112,9 @@ export function verifyInvitationToken(token: string) {
     const user = db.select().from(users).where(eq(users.id, payload.userId)).get();
     if (!user) {
       return { valid: false, error: "The associated user account was not found." };
+    }
+    if (user.status === "suspended") {
+      return { valid: false, error: "This account has been suspended. Please contact your system administrator." };
     }
 
     const business = db.select().from(businesses).where(eq(businesses.id, payload.businessId)).get();
@@ -137,7 +151,7 @@ export async function completeInvitation(token: string, name: string, password: 
   if (cleanName.length < 2) {
     throw new Error("Full name must be at least 2 characters long.");
   }
-  if (!password || password.length < 8) {
+  if (!password || password.trim().length < 8) {
     throw new Error("Password must be at least 8 characters long.");
   }
 
@@ -273,6 +287,16 @@ export function createPasswordResetToken(email: string, businessId?: string): { 
 }
 
 /**
+ * Generate a full password reset link with cryptographic token.
+ */
+export function generatePasswordResetLink(email: string, businessId?: string): { link: string; token: string; user: typeof users.$inferSelect } {
+  const { token, user } = createPasswordResetToken(email, businessId);
+  const baseUrl = getAppBaseUrl();
+  const link = `${baseUrl}/reset-password?token=${encodeURIComponent(token)}`;
+  return { link, token, user };
+}
+
+/**
  * Verify validity of a password reset token.
  */
 export function verifyPasswordResetToken(token: string) {
@@ -300,6 +324,9 @@ export function verifyPasswordResetToken(token: string) {
     if (!user) {
       return { valid: false, error: "User account no longer exists." };
     }
+    if (user.status === "suspended") {
+      return { valid: false, error: "This account has been suspended. Please contact your system administrator." };
+    }
 
     return {
       valid: true,
@@ -324,7 +351,7 @@ export async function completePasswordReset(token: string, newPassword: string) 
     throw new Error(verified.error || "Invalid password reset token.");
   }
 
-  if (!newPassword || newPassword.length < 8) {
+  if (!newPassword || newPassword.trim().length < 8) {
     throw new Error("Password must be at least 8 characters long.");
   }
 
@@ -358,9 +385,9 @@ export async function completePasswordReset(token: string, newPassword: string) 
         .run();
     }
 
-    // 2. Ensure emailVerified is marked true
+    // 2. Ensure emailVerified is marked true (DO NOT overwrite suspension status)
     db.update(users)
-      .set({ emailVerified: true, status: "active", updatedAt: new Date(now) })
+      .set({ emailVerified: true, updatedAt: new Date(now) })
       .where(eq(users.id, userId))
       .run();
 

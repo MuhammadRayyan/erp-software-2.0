@@ -24,7 +24,7 @@ export default async function UsersPage({
     );
   }
 
-  const rows = listBusinessUsers(businessId, user.id).map(({ user: member, membership, invitationStatus }) => ({
+  const rows = listBusinessUsers(businessId, user.id).map(({ user: member, membership, invitationStatus, isOwner }) => ({
     membershipId: membership.id,
     userId: member.id,
     name: member.name,
@@ -33,7 +33,9 @@ export default async function UsersPage({
     modules: parseModules(membership.role, membership.modulesJson),
     current: member.id === user.id,
     status: invitationStatus,
+    isOwner: Boolean(isOwner),
   }));
+
 
   return (
     <SettingsShell
