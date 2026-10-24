@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
-import { requireModule } from "@/core/permissions/require-module";
+import { requireModule, requirePermission } from "@/core/permissions/require-module";
 import { salesQuoteInputSchema } from "./quote-input";
 import { cancelSalesQuote, closeSalesQuote, deleteSalesQuote, getSalesQuote, issueSalesQuote, saveSalesQuote, type SalesQuoteIntent } from "./quote-service";
 import { saveSalesOrder } from "@/modules/sales-orders/sales-order-service";
@@ -36,8 +36,8 @@ async function runStatusAction(businessId: string, quoteId: string, action: "clo
 }
 
 export async function issueSalesQuoteAction(businessId: string, quoteId: string) {
-  const { user } = await requireModule(businessId, "sales");
   try {
+    const { user } = await requirePermission(businessId, "sales", "approve");
     issueSalesQuote(businessId, user.id, quoteId);
     revalidatePath(`/b/${businessId}/sales/quotes`);
     revalidatePath(`/b/${businessId}/sales/quotes/${quoteId}`);
@@ -56,7 +56,12 @@ export async function cancelSalesQuoteAction(businessId: string, quoteId: string
 }
 
 export async function deleteSalesQuoteAction(businessId: string, quoteId: string) {
-  return runStatusAction(businessId, quoteId, "delete");
+  try {
+    await requirePermission(businessId, "sales", "delete");
+    return runStatusAction(businessId, quoteId, "delete");
+  } catch (error) {
+    return { error: error instanceof Error ? error.message : "The sales quote could not be deleted." };
+  }
 }
 
 import { quantityMicrosToInput } from "@/modules/accounting/calculations/money";

@@ -35,6 +35,8 @@ import { Badge } from "@/components/ui/badge";
 import {
   moduleKeys,
   getAvailableActionsForModule,
+  getModuleDefinition,
+  getActionDefinition,
   parseCapabilities,
   type ModuleKey,
   type ActionKey,
@@ -65,28 +67,6 @@ export type UserAccess = {
   current: boolean;
   status: "registered" | "invited" | "suspended";
   isOwner?: boolean;
-};
-
-const MODULE_LABELS: Record<ModuleKey, string> = {
-  sales: "Sales & Invoicing",
-  purchases: "Purchases & Bills",
-  banking: "Banking & Accounts",
-  projects: "Projects",
-  inventory: "Inventory",
-  accounting: "General Ledger & Accounting",
-  reports: "Financial Reports & VAT",
-  payroll: "HR & Payroll",
-  settings: "Settings",
-};
-
-const ACTION_LABELS: Record<string, { label: string; desc: string }> = {
-  view: { label: "View", desc: "Read and browse records" },
-  create: { label: "Create", desc: "Create new records & drafts" },
-  edit: { label: "Edit", desc: "Modify existing records" },
-  delete: { label: "Delete", desc: "Void, delete, or cancel records" },
-  post: { label: "Post", desc: "Post to general ledger or lock entries" },
-  approve: { label: "Approve", desc: "Authorize transactions & quotes" },
-  export: { label: "Export", desc: "Download PDF batches, CSV & reports" },
 };
 
 function StatusBadge({ status }: { status: UserAccess["status"] }) {
@@ -143,6 +123,9 @@ function AccessRow({
 
   function toggleModule(module: ModuleKey) {
     const isCurrentlyActive = (capabilities[module]?.length ?? 0) > 0;
+    if (isCurrentlyActive && expandedModule === module) {
+      setExpandedModule(null);
+    }
     setCapabilities((prev) => ({
       ...prev,
       [module]: isCurrentlyActive ? [] : [...getAvailableActionsForModule(module)],
@@ -155,7 +138,11 @@ function AccessRow({
       const hasAction = currentActions.includes(action);
       let nextActions: ActionKey[];
       if (hasAction) {
-        nextActions = currentActions.filter((a) => a !== action);
+        if (action === "view") {
+          nextActions = [];
+        } else {
+          nextActions = currentActions.filter((a) => a !== action);
+        }
       } else {
         nextActions = [...currentActions, action];
         if (!nextActions.includes("view")) {
@@ -192,7 +179,7 @@ function AccessRow({
       entry.membershipId,
       role,
       activeModules,
-      capabilities
+      role === "administrator" ? undefined : capabilities
     );
     setPending(false);
     if (result.error) toast.error(result.error);
@@ -534,7 +521,7 @@ function AccessRow({
                         onChange={() => toggleModule(mod)}
                         className="size-4 rounded border-border accent-primary focus:ring-primary/20"
                       />
-                      <span>{MODULE_LABELS[mod] || mod}</span>
+                      <span>{getModuleDefinition(mod)?.label ?? mod}</span>
                       {isEnabled && (
                         <span className="text-[11px] font-normal text-muted-foreground">
                           {isFullAccess ? (
@@ -575,7 +562,7 @@ function AccessRow({
                     <div className="border-t border-border/80 bg-surface-raised/50 p-3 pt-2">
                       <div className="mb-1.5 flex items-center justify-between">
                         <span className="text-[11px] font-medium text-muted-foreground">
-                          Sub-permissions for {MODULE_LABELS[mod]}:
+                          Sub-permissions for {getModuleDefinition(mod)?.label ?? mod}:
                         </span>
                         <div className="flex gap-2 text-[11px]">
                           <button
@@ -607,10 +594,7 @@ function AccessRow({
                       </div>
                       <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
                         {availableActions.map((action) => {
-                          const actionMeta = ACTION_LABELS[action] || {
-                            label: action,
-                            desc: "",
-                          };
+                          const actionMeta = getActionDefinition(action);
                           const isActionChecked = modActions.includes(action);
 
                           return (
@@ -627,9 +611,9 @@ function AccessRow({
                               />
                               <div>
                                 <span className="font-medium">{actionMeta.label}</span>
-                                {actionMeta.desc && (
+                                {actionMeta.description && (
                                   <p className="text-[10px] text-muted-foreground leading-tight">
-                                    {actionMeta.desc}
+                                    {actionMeta.description}
                                   </p>
                                 )}
                               </div>
@@ -675,6 +659,9 @@ export function UserAccessList({ businessId, users }: { businessId: string; user
 
   function toggleInviteModule(module: ModuleKey) {
     const isCurrentlyActive = (inviteCapabilities[module]?.length ?? 0) > 0;
+    if (isCurrentlyActive && expandedInviteModule === module) {
+      setExpandedInviteModule(null);
+    }
     const nextActions = isCurrentlyActive ? [] : [...getAvailableActionsForModule(module)];
     setInviteCapabilities((prev) => ({
       ...prev,
@@ -691,7 +678,11 @@ export function UserAccessList({ businessId, users }: { businessId: string; user
       const hasAction = current.includes(action);
       let next: ActionKey[];
       if (hasAction) {
-        next = current.filter((a) => a !== action);
+        if (action === "view") {
+          next = [];
+        } else {
+          next = current.filter((a) => a !== action);
+        }
       } else {
         next = [...current, action];
         if (!next.includes("view")) next.unshift("view");
@@ -872,18 +863,33 @@ export function UserAccessList({ businessId, users }: { businessId: string; user
                     <div className="space-y-2 border-t border-border pt-3">
                       <div className="flex items-center justify-between">
                         <Label>Initial Visible Modules & Actions</Label>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setSelectedModules([...moduleKeys]);
-                            const all = {} as ModuleCapabilities;
-                            for (const m of moduleKeys) all[m] = [...getAvailableActionsForModule(m)];
-                            setInviteCapabilities(all);
-                          }}
-                          className="text-[11px] text-primary hover:underline cursor-pointer"
-                        >
-                          Select all
-                        </button>
+                        <div className="flex items-center gap-2 text-[11px]">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setSelectedModules([...moduleKeys]);
+                              const all = {} as ModuleCapabilities;
+                              for (const m of moduleKeys) all[m] = [...getAvailableActionsForModule(m)];
+                              setInviteCapabilities(all);
+                            }}
+                            className="text-primary hover:underline cursor-pointer"
+                          >
+                            Select all
+                          </button>
+                          <span className="text-muted-foreground">·</span>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setSelectedModules(["sales", "purchases", "inventory"]);
+                              setInviteCapabilities(
+                                parseCapabilities("standard", ["sales", "purchases", "inventory"])
+                              );
+                            }}
+                            className="text-muted-foreground hover:underline cursor-pointer"
+                          >
+                            Default
+                          </button>
+                        </div>
                       </div>
                       <div className="space-y-1.5 max-h-56 overflow-y-auto pr-1">
                         {moduleKeys.map((mod) => {
@@ -906,7 +912,7 @@ export function UserAccessList({ businessId, users }: { businessId: string; user
                                     className="size-3.5 rounded border-border accent-primary"
                                   />
                                   <span className="font-medium text-foreground">
-                                    {MODULE_LABELS[mod]}
+                                    {getModuleDefinition(mod)?.label ?? mod}
                                   </span>
                                 </label>
 
@@ -936,7 +942,7 @@ export function UserAccessList({ businessId, users }: { businessId: string; user
                                         onChange={() => toggleInviteAction(mod, action)}
                                         className="size-3 rounded border-border accent-primary"
                                       />
-                                      <span>{ACTION_LABELS[action]?.label || action}</span>
+                                      <span>{getActionDefinition(action).label}</span>
                                     </label>
                                   ))}
                                 </div>

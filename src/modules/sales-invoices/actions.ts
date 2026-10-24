@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
-import { requireModule } from "@/core/permissions/require-module";
+import { requireModule, requirePermission } from "@/core/permissions/require-module";
 import { invoiceInputSchema } from "./invoice-input";
 import {
   createInvoice,
@@ -78,8 +78,8 @@ export async function updateInvoiceAction(
 }
 
 export async function postInvoiceAction(businessId: string, invoiceId: string): Promise<InvoiceActionResult> {
-  const { user } = await requireModule(businessId, "sales");
   try {
+    const { user } = await requirePermission(businessId, "sales", "post");
     postInvoice(businessId, user.id, invoiceId);
     revalidatePath(`/b/${businessId}/sales/invoices`);
     revalidatePath(`/b/${businessId}/sales/invoices/${invoiceId}`);
@@ -90,8 +90,8 @@ export async function postInvoiceAction(businessId: string, invoiceId: string): 
 }
 
 export async function deleteInvoiceAction(businessId: string, invoiceId: string) {
-  const { user } = await requireModule(businessId, "sales");
   try {
+    const { user } = await requirePermission(businessId, "sales", "delete");
     deleteInvoice(businessId, user.id, invoiceId);
     revalidatePath(`/b/${businessId}/sales/invoices`);
     return {};

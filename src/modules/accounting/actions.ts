@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
-import { requireModule } from "@/core/permissions/require-module";
+import { requireModule, requirePermission } from "@/core/permissions/require-module";
 import { accountInputSchema } from "./account-input";
 import { invoiceNumberingInputSchema } from "./numbering-input";
 import {
@@ -92,8 +92,8 @@ export async function updateFinancialLockDateAction(
   businessId: string,
   lockDate: string | null,
 ): Promise<AccountingActionResult> {
-  const { user } = await requireModule(businessId, "settings");
   try {
+    const { user } = await requirePermission(businessId, "accounting", "post");
     const { setFinancialLockDate } = await import("./services/financial-lock-service");
     setFinancialLockDate(businessId, user.id, lockDate);
     revalidatePath(`/b/${businessId}/settings/lock-date`);

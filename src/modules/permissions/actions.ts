@@ -177,7 +177,14 @@ export async function addExistingUserAction(businessId: string, email: string) {
 
 export async function createAndAddBusinessUserAction(
   businessId: string,
-  input: { name: string; email: string; password?: string; role?: "administrator" | "standard"; modules?: ModuleKey[] }
+  input: {
+    name: string;
+    email: string;
+    password?: string;
+    role?: "administrator" | "standard";
+    modules?: ModuleKey[];
+    capabilities?: Record<string, string[]>;
+  }
 ) {
   const { user, access } = await requireModule(businessId, "settings");
   if (access.membership.role !== "administrator") return { error: "Administrator access is required." };

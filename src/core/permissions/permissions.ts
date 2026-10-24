@@ -8,6 +8,7 @@ import {
   parseCapabilities,
   hasPermission,
   getFullCapabilities,
+  getAvailableActionsForModule,
   type ModuleKey,
   type ActionKey,
 } from "./module-access";
@@ -22,12 +23,15 @@ export {
   getAvailableActionsForModule,
   getModuleDefinition,
   getAllModuleDefinitions,
+  getActionDefinition,
   STANDARD_ACTIONS,
   MODULE_DEFINITIONS,
+  ACTION_DEFINITIONS,
   type ModuleKey,
   type ActionKey,
   type StandardAction,
   type ModuleDefinition,
+  type ActionDefinition,
   type ModuleCapabilities,
   type ModuleCapabilitiesInput,
 } from "./module-access";
@@ -45,6 +49,10 @@ export const getBusinessAccess = cache((businessId: string, userId: string) => {
 
   const user = getSystemDb().select().from(users).where(eq(users.id, userId)).get();
   const isSuper = Boolean(user?.isSuperAdmin);
+
+  if (!user || (user.status === "suspended" && !isSuper)) {
+    return null;
+  }
 
   if (row) {
     const isOwner = row.business.ownerUserId === userId;
@@ -116,6 +124,16 @@ export function hasActionPermission(
 ): boolean {
   const access = getBusinessAccess(businessId, userId);
   if (!access) return false;
+  if (!moduleKeys.includes(module)) return false;
+
+  const availableActions = getAvailableActionsForModule(module);
+  const isValidAction =
+    availableActions.includes(action) ||
+    (action === "approve" && availableActions.includes("post")) ||
+    (action === "post" && availableActions.includes("approve"));
+
+  if (!isValidAction) return false;
+
   if (access.isSuperAdmin || access.isOwner || access.membership.role === "administrator") {
     return true;
   }

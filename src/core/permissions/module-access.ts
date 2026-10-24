@@ -23,6 +23,32 @@ export const STANDARD_ACTIONS = [
 export type StandardAction = (typeof STANDARD_ACTIONS)[number];
 export type ActionKey = StandardAction | (string & {});
 
+export interface ActionDefinition {
+  key: StandardAction;
+  label: string;
+  description: string;
+}
+
+export const ACTION_DEFINITIONS: Record<StandardAction, ActionDefinition> = {
+  view: { key: "view", label: "View", description: "Read and browse records" },
+  create: { key: "create", label: "Create", description: "Create new records & drafts" },
+  edit: { key: "edit", label: "Edit", description: "Modify existing records" },
+  delete: { key: "delete", label: "Delete", description: "Void, delete, or cancel records" },
+  post: { key: "post", label: "Post", description: "Post to general ledger or lock entries" },
+  approve: { key: "approve", label: "Approve", description: "Authorize transactions & quotes" },
+  export: { key: "export", label: "Export", description: "Download PDF batches, CSV & reports" },
+};
+
+export function getActionDefinition(action: ActionKey): ActionDefinition {
+  return (
+    ACTION_DEFINITIONS[action as StandardAction] ?? {
+      key: action as StandardAction,
+      label: action.charAt(0).toUpperCase() + action.slice(1),
+      description: `Perform ${action} action`,
+    }
+  );
+}
+
 export interface ModuleDefinition {
   key: ModuleKey;
   label: string;
@@ -198,20 +224,35 @@ export function parseCapabilities(
 
     for (const mod of moduleKeys) {
       const raw = obj[mod];
+      const available = getAvailableActionsForModule(mod);
+      const isActionSupported = (a: string) =>
+        available.includes(a) ||
+        (a === "approve" && available.includes("post")) ||
+        (a === "post" && available.includes("approve"));
+
       if (raw === true || raw === "*") {
-        result[mod] = [...getAvailableActionsForModule(mod)];
+        result[mod] = [...available];
       } else if (Array.isArray(raw)) {
         if (raw.includes("*") || raw.includes("all")) {
-          result[mod] = [...getAvailableActionsForModule(mod)];
+          result[mod] = [...available];
         } else {
-          result[mod] = raw.filter(
-            (item): item is string => typeof item === "string" && item.trim().length > 0
-          );
+          const filtered = raw
+            .filter((item): item is string => typeof item === "string" && item.trim().length > 0)
+            .filter(isActionSupported);
+          if (filtered.length > 0 && !filtered.includes("view") && available.includes("view")) {
+            filtered.unshift("view");
+          }
+          result[mod] = filtered;
         }
       } else if (typeof raw === "object" && raw !== null) {
-        result[mod] = Object.entries(raw)
+        const filtered = Object.entries(raw)
           .filter(([, enabled]) => Boolean(enabled))
-          .map(([action]) => action);
+          .map(([action]) => action)
+          .filter(isActionSupported);
+        if (filtered.length > 0 && !filtered.includes("view") && available.includes("view")) {
+          filtered.unshift("view");
+        }
+        result[mod] = filtered;
       }
     }
     return result;
@@ -251,7 +292,8 @@ export function parseModules(role: "administrator" | "standard", value: string |
 
 /**
  * Evaluates whether a user's capabilities grant permission to perform a specific action within a module.
- * Incorporates ERP standard action inheritance (e.g., write/post implicitly grants view, post/approve alias).
+ * Incorporates ERP standard action inheritance (e.g., write/post implicitly grants view, post/approve alias)
+ * and strictly verifies that the target action is defined and valid for the given module.
  */
 export function hasPermission(
   capabilities: ModuleCapabilities | undefined | null,
@@ -259,20 +301,31 @@ export function hasPermission(
   action: ActionKey
 ): boolean {
   if (!capabilities) return false;
+  if (!moduleKeys.includes(module)) return false;
+
+  const availableActions = getAvailableActionsForModule(module);
+
+  // Workflow equivalence: post and approve are interchangeable workflow terms in ERP
+  const isEquivalent = (act: string, target: string) => {
+    if (act === target) return true;
+    if ((act === "post" && target === "approve") || (act === "approve" && target === "post")) return true;
+    return false;
+  };
+
+  // If the target action is not a valid action (or workflow equivalent) for this module, deny
+  const isValidAction = availableActions.some((a) => isEquivalent(a, action));
+  if (!isValidAction) return false;
+
   const actions = capabilities[module] || [];
   if (actions.length === 0) return false;
 
-  // Wildcard grants everything for this module
+  // Wildcard grants all valid actions for this module
   if (actions.includes("*") || actions.includes("all")) return true;
 
-  // Exact action match
-  if (actions.includes(action)) return true;
+  // Exact action match or workflow alias match
+  if (actions.some((a) => isEquivalent(a, action))) return true;
 
-  // Action equivalence and workflow aliases
-  if (action === "approve" && actions.includes("post")) return true;
-  if (action === "post" && actions.includes("approve")) return true;
-
-  // View inheritance: Having any capability in a module implies read/view access
+  // View inheritance: Having any operational capability in a module implies read/view access
   if (action === "view" && actions.length > 0) return true;
 
   return false;

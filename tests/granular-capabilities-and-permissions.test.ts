@@ -30,8 +30,10 @@ const {
   getAvailableActionsForModule,
   getModuleDefinition,
   getAllModuleDefinitions,
+  getActionDefinition,
   STANDARD_ACTIONS,
   MODULE_DEFINITIONS,
+  ACTION_DEFINITIONS,
 } = await import("../src/core/permissions/module-access");
 const {
   getBusinessAccess,
@@ -46,6 +48,7 @@ const {
   inviteBusinessUser,
   listBusinessUsers,
   updateMembership,
+  toggleUserSuspension,
 } = await import("../src/core/permissions/membership-service");
 const { completeInvitation } = await import("../src/core/permissions/invitation-service");
 
@@ -75,6 +78,15 @@ test("Granular Capabilities, Sub-Permissions & Extensibility Suite", async (t) =
       STANDARD_ACTIONS,
       ["view", "create", "edit", "delete", "post", "approve", "export"]
     );
+
+    // Verify ACTION_DEFINITIONS coverage and getters
+    for (const act of STANDARD_ACTIONS) {
+      const def = getActionDefinition(act);
+      assert.equal(def.key, act);
+      assert.ok(def.label.length > 0);
+      assert.ok(def.description.length > 0);
+      assert.equal(ACTION_DEFINITIONS[act].key, act);
+    }
 
     // Sales and Purchases have full operational workflows
     const salesDef = MODULE_DEFINITIONS.sales;
@@ -155,6 +167,14 @@ test("Granular Capabilities, Sub-Permissions & Extensibility Suite", async (t) =
     const modWildcardCaps = parseCapabilities("standard", JSON.stringify({ payroll: ["*"] }));
     assert.deepEqual(modWildcardCaps.payroll, [...getAvailableActionsForModule("payroll")]);
     assert.deepEqual(modWildcardCaps.sales, []);
+
+    // 3D: Input sanitization: invalid actions are discarded, view is auto-included if operational actions present
+    const dirtyCaps = parseCapabilities("standard", {
+      reports: ["view", "delete", "arbitrary_bogus"],
+      sales: ["create"],
+    });
+    assert.deepEqual(dirtyCaps.reports, ["view"]);
+    assert.deepEqual(dirtyCaps.sales, ["view", "create"]);
   });
 
   // -------------------------------------------------------------
@@ -203,10 +223,16 @@ test("Granular Capabilities, Sub-Permissions & Extensibility Suite", async (t) =
     assert.equal(hasPermission(caps, "purchases", "post"), true);
     assert.equal(hasPermission(caps, "purchases", "approve"), true);
 
-    // Wildcard module grants all actions
+    // Wildcard module grants all valid actions of that module
     assert.equal(hasPermission(caps, "banking", "view"), true);
     assert.equal(hasPermission(caps, "banking", "delete"), true);
     assert.equal(hasPermission(caps, "banking", "post"), true);
+
+    // Invalid action on module must be rejected even with wildcard or explicit grant
+    assert.equal(hasPermission(caps, "reports", "delete"), false);
+    assert.equal(hasPermission({ reports: ["*"] } as any, "reports", "delete"), false);
+    assert.equal(hasPermission(caps, "projects", "post"), false);
+    assert.equal(hasPermission(caps, "nonexistent_module" as any, "view"), false);
 
     // Unassigned module
     assert.equal(hasPermission(caps, "accounting", "view"), false);
@@ -355,5 +381,56 @@ test("Granular Capabilities, Sub-Permissions & Extensibility Suite", async (t) =
 
     const updatedGuard = await requirePermission(businessId, repUserId, "sales", "approve");
     assert.ok(updatedGuard);
+  });
+
+  // -------------------------------------------------------------
+  // TEST 7: Security Boundaries - Suspended Users & Action Invalidation
+  // -------------------------------------------------------------
+  await t.test("7. Security Hardening: Suspended user denial and invalid action rejection", async () => {
+    // 7A: Admin cannot execute actions that do not exist on a module
+    assert.equal(hasActionPermission(businessId, adminUserId, "reports", "delete"), false);
+    assert.equal(hasActionPermission(businessId, adminUserId, "sales", "fly_to_space" as any), false);
+    assert.equal(canUserPerformAction(businessId, adminUserId, "projects", "approve"), false);
+    await assert.rejects(
+      async () => {
+        await requirePermission(businessId, adminUserId, "reports", "delete");
+      },
+      /PERMISSION_DENIED: Action 'delete' on module 'reports' is not permitted/
+    );
+
+    // 7B: Suspended user access must be completely revoked across guards
+    const suspUser = await inviteBusinessUser(businessId, adminUserId, {
+      email: `suspended.rep.${randomUUID().slice(0, 6)}@acme.local`,
+      role: "standard",
+      capabilities: { sales: ["view", "create"] },
+    });
+    const suspUserId = suspUser.userId;
+
+    // Active user has access
+    assert.equal(hasActionPermission(businessId, suspUserId, "sales", "create"), true);
+    const activeAccess = getBusinessAccess(businessId, suspUserId);
+    assert.ok(activeAccess);
+
+    // Suspend user
+    toggleUserSuspension(businessId, adminUserId, suspUserId, "suspended");
+
+    // Suspended user has NO business access and cannot perform any action
+    const suspendedAccess = getBusinessAccess(businessId, suspUserId);
+    assert.equal(suspendedAccess, null);
+    assert.equal(hasActionPermission(businessId, suspUserId, "sales", "view"), false);
+    assert.equal(hasActionPermission(businessId, suspUserId, "sales", "create"), false);
+
+    // requirePermission rejects suspended user with BUSINESS_ACCESS_DENIED
+    await assert.rejects(
+      async () => {
+        await requirePermission(businessId, suspUserId, "sales", "view");
+      },
+      /BUSINESS_ACCESS_DENIED/
+    );
+
+    // Reactivate user and verify access is restored
+    toggleUserSuspension(businessId, adminUserId, suspUserId, "active");
+    assert.equal(hasActionPermission(businessId, suspUserId, "sales", "view"), true);
+    assert.equal(hasActionPermission(businessId, suspUserId, "sales", "create"), true);
   });
 });
