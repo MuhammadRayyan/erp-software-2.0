@@ -4,10 +4,12 @@ import { Button } from "@/components/ui/button";
 
 export function PermissionDenied({
   module,
+  action,
   returnHref = "/businesses",
   returnLabel = "Return to businesses",
 }: {
   module?: string;
+  action?: string;
   returnHref?: string;
   returnLabel?: string;
 }) {
@@ -17,9 +19,9 @@ export function PermissionDenied({
         <span className="grid size-10 place-items-center rounded-md bg-danger/10 text-danger">
           <ShieldX className="size-5" />
         </span>
-        <h1 className="mt-4 text-xl font-semibold">Module access required</h1>
+        <h1 className="mt-4 text-xl font-semibold">{action ? "Action permission required" : "Module access required"}</h1>
         <p className="mt-2 text-sm leading-6 text-muted-foreground">
-          Your role does not include access to {module ?? "this module"}. Ask a business administrator to update your module access.
+          {action ? `Your role does not allow you to ${action} records in ${module ?? "this module"}.` : `Your role does not include access to ${module ?? "this module"}.`} Ask a business administrator to update your permissions.
         </p>
         <Button asChild className="mt-5"><Link href={returnHref}>{returnLabel}</Link></Button>
       </div>

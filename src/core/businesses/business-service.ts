@@ -1,3 +1,4 @@
+import { assertActiveUser } from "@/core/auth/active-user";
 import { cache } from "react";
 import { randomUUID } from "node:crypto";
 import { rmSync } from "node:fs";
@@ -124,6 +125,7 @@ export function createBusiness(
   userId: string,
   options?: { enforceQuota?: boolean }
 ) {
+  assertActiveUser(userId);
   const data = businessInputSchema.parse(input);
   const id = randomUUID();
   const directoryKey = randomUUID();
@@ -147,7 +149,7 @@ export function createBusiness(
   }
 
   try {
-    const context = openBusinessDatabase(directoryKey);
+    const context = openBusinessDatabase(directoryKey, { create: true });
     db.transaction((tx) => {
       tx.insert(businesses)
         .values({

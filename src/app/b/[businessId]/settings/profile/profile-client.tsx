@@ -184,7 +184,7 @@ export function ProfileClient({ user, role }: ProfileProps) {
           </div>
 
           <div className="flex items-center gap-3 pt-1">
-            <Button type="submit" disabled={namePending || displayName.trim() === savedName || displayName.trim().length < 2}>
+            <Button permission={"save"} type="submit" disabled={namePending || displayName.trim() === savedName || displayName.trim().length < 2}>
               {namePending ? <LoaderCircle className="size-4 animate-spin" /> : "Save Name"}
             </Button>
             {nameSuccess && (

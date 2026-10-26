@@ -1,3 +1,4 @@
+import { assertMutationPermission, assertSavePermission } from "@/core/permissions/mutation-permissions";
 import { randomUUID } from "node:crypto";
 import { asc, eq } from "drizzle-orm";
 import { getBusinessDb } from "@/core/db/business";
@@ -509,6 +510,7 @@ export function createInvoice(
   intent: InvoiceSaveIntent,
   customFieldValues?: Record<string, string>,
 ) {
+  assertSavePermission(businessId, userId, "sales", undefined, intent);
   const data = invoiceInputSchema.parse(input);
   const context = getBusinessDb(businessId, userId);
   const customer = context.db.select().from(customers).where(eq(customers.id, data.customerId)).get();
@@ -672,6 +674,7 @@ export function updateInvoice(
   intent: InvoiceSaveIntent,
   customFieldValues?: Record<string, string>,
 ) {
+  assertSavePermission(businessId, userId, "sales", invoiceId, intent);
   const data = invoiceInputSchema.parse(input);
   const context = getBusinessDb(businessId, userId);
   const current = context.db.select().from(salesInvoices).where(eq(salesInvoices.id, invoiceId)).get();
@@ -718,6 +721,7 @@ export function updateInvoice(
       assertDateNotLocked(context.sqlite, current.invoiceDate, "Sales invoice");
       assertVatSourceUnlocked(context.sqlite, "sales_invoice", invoiceId, current.taxDate);
     }
+    if (shouldPost) assertMutationPermission(businessId, userId, "sales", "post");
     if (shouldPost) {
       assertDateNotLocked(context.sqlite, data.invoiceDate, "Sales invoice");
       assertVatDateUnlocked(context.sqlite, taxDate, lines.map((line) => line.taxCodeId));
@@ -811,6 +815,7 @@ export function updateInvoice(
 }
 
 export function deleteInvoice(businessId: string, userId: string, invoiceId: string) {
+  assertMutationPermission(businessId, userId, "sales", "delete");
   const context = getBusinessDb(businessId, userId);
   const invoice = context.db.select().from(salesInvoices).where(eq(salesInvoices.id, invoiceId)).get();
   if (!invoice) throw new Error("Invoice not found.");
@@ -828,6 +833,7 @@ export function deleteInvoice(businessId: string, userId: string, invoiceId: str
 }
 
 export function duplicateInvoice(businessId: string, userId: string, invoiceId: string) {
+  assertMutationPermission(businessId, userId, "sales", "create");
   const record = getInvoice(businessId, userId, invoiceId);
   if (!record) throw new Error("Invoice not found.");
   // Reuse the already-fetched DB context (via the LRU pool) rather than calling getBusinessDb a second time.
@@ -863,6 +869,7 @@ export function duplicateInvoice(businessId: string, userId: string, invoiceId: 
 }
 
 export function voidInvoice(businessId: string, userId: string, invoiceId: string) {
+  assertMutationPermission(businessId, userId, "sales", "delete");
   const context = getBusinessDb(businessId, userId);
   const invoice = context.db.select().from(salesInvoices).where(eq(salesInvoices.id, invoiceId)).get();
   if (!invoice) throw new Error("Invoice not found.");
@@ -907,6 +914,7 @@ export function voidInvoice(businessId: string, userId: string, invoiceId: strin
 }
 
 export function postInvoice(businessId: string, userId: string, invoiceId: string) {
+  assertMutationPermission(businessId, userId, "sales", "post");
   const record = getInvoice(businessId, userId, invoiceId);
   if (!record) throw new Error("Invoice not found.");
   if (record.invoice.documentStatus === "posted") return;
@@ -958,6 +966,7 @@ export type BatchActionResult = {
 };
 
 export function batchPostInvoices(businessId: string, userId: string, invoiceIds: string[]): BatchActionResult {
+  assertMutationPermission(businessId, userId, "sales", "post");
   const result: BatchActionResult = { successCount: 0, failedCount: 0, errors: [] };
   for (const id of invoiceIds) {
     try {
@@ -987,6 +996,7 @@ export function batchPostInvoices(businessId: string, userId: string, invoiceIds
 }
 
 export function batchVoidInvoices(businessId: string, userId: string, invoiceIds: string[]): BatchActionResult {
+  assertMutationPermission(businessId, userId, "sales", "delete");
   const result: BatchActionResult = { successCount: 0, failedCount: 0, errors: [] };
   for (const id of invoiceIds) {
     try {
@@ -1016,6 +1026,7 @@ export function batchVoidInvoices(businessId: string, userId: string, invoiceIds
 }
 
 export function batchDeleteInvoices(businessId: string, userId: string, invoiceIds: string[]): BatchActionResult {
+  assertMutationPermission(businessId, userId, "sales", "delete");
   const result: BatchActionResult = { successCount: 0, failedCount: 0, errors: [] };
   for (const id of invoiceIds) {
     try {

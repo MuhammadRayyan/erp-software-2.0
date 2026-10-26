@@ -292,16 +292,16 @@ export function DeliveryNoteForm({
           </Link>
         </Button>
         {status === "posted" ? (
-          <Button type="button" disabled={isSubmitting} onClick={handleSubmit((values) => save(values, "post"))}>
+          <Button permission={["save", "post"]} type="button" disabled={isSubmitting} onClick={handleSubmit((values) => save(values, "post"))}>
             {isSubmitting && <LoaderCircle className="size-4 animate-spin" />}
             Update Posted Delivery
           </Button>
         ) : (
           <div className="flex gap-2">
-            <Button type="button" variant="secondary" disabled={isSubmitting} onClick={handleSubmit((values) => save(values, "draft"))}>
+            <Button permission={"save"} type="button" variant="secondary" disabled={isSubmitting} onClick={handleSubmit((values) => save(values, "draft"))}>
               Save Draft
             </Button>
-            <Button type="button" disabled={isSubmitting} onClick={handleSubmit((values) => save(values, "post"))}>
+            <Button permission={["save", "post"]} type="button" disabled={isSubmitting} onClick={handleSubmit((values) => save(values, "post"))}>
               {isSubmitting && <LoaderCircle className="size-4 animate-spin" />}
               Post Delivery
             </Button>

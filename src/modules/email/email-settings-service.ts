@@ -1,3 +1,4 @@
+import { assertMutationPermission } from "@/core/permissions/mutation-permissions";
 import { getBusinessDb } from "@/core/db/business";
 import { createNodemailerTransporter, formatMailbox } from "./email-driver";
 import type {
@@ -115,6 +116,7 @@ export function saveEmailSettings(
   userId: string,
   data: SaveEmailSettingsInput,
 ): BusinessEmailSettings {
+  assertMutationPermission(businessId, userId, "settings", "edit");
   const { sqlite } = getBusinessDb(businessId, userId);
   const existing = getEmailSettings(businessId, userId);
   const now = new Date().toISOString();
@@ -178,6 +180,7 @@ export async function verifyAndSendTestEmail(
   userId: string,
   input: TestEmailInput,
 ): Promise<{ success: boolean; message?: string; error?: string; settings?: BusinessEmailSettings }> {
+  assertMutationPermission(businessId, userId, "settings", "edit");
   const { sqlite } = getBusinessDb(businessId, userId);
   const now = new Date().toISOString();
 

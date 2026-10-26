@@ -1,3 +1,4 @@
+import { assertBusinessAdministrator } from "@/core/permissions/mutation-permissions";
 import { getBusinessDb } from "@/core/db/business";
 import { recordActivity } from "@/modules/activity-log/activity-log-service";
 import { taxSettingsInputSchema, type TaxSettingsInput } from "./tax-settings-input";
@@ -30,6 +31,7 @@ export function updateTaxSettings(
   userId: string,
   input: TaxSettingsInput,
 ) {
+  assertBusinessAdministrator(businessId, userId);
   const data = taxSettingsInputSchema.parse(input);
   const { sqlite } = getBusinessDb(businessId, userId);
   sqlite.prepare(`

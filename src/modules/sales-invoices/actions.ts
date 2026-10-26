@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
-import { requireModule, requirePermission } from "@/core/permissions/require-module";
+import { requirePermission, requireSavePermission } from "@/core/permissions/require-module";
 import { invoiceInputSchema } from "./invoice-input";
 import {
   createInvoice,
@@ -29,7 +29,7 @@ export async function createInvoiceAction(
   intent: InvoiceSaveIntent,
   customFieldValues?: unknown,
 ): Promise<InvoiceActionResult> {
-  const { user } = await requireModule(businessId, "sales");
+  const { user } = await requireSavePermission(businessId, "sales", undefined, intent);
   const parsed = invoiceInputSchema.safeParse(input);
   if (!parsed.success) {
     return { error: "Check the invoice fields and line items.", fieldErrors: z.flattenError(parsed.error).fieldErrors };
@@ -60,7 +60,7 @@ export async function updateInvoiceAction(
   intent: InvoiceSaveIntent,
   customFieldValues?: unknown,
 ): Promise<InvoiceActionResult> {
-  const { user } = await requireModule(businessId, "sales");
+  const { user } = await requireSavePermission(businessId, "sales", invoiceId, intent);
   const parsed = invoiceInputSchema.safeParse(input);
   if (!parsed.success) {
     return { error: "Check the invoice fields and line items.", fieldErrors: z.flattenError(parsed.error).fieldErrors };
@@ -101,7 +101,7 @@ export async function deleteInvoiceAction(businessId: string, invoiceId: string)
 }
 
 export async function duplicateInvoiceAction(businessId: string, invoiceId: string) {
-  const { user } = await requireModule(businessId, "sales");
+  const { user } = await requirePermission(businessId, "sales", "create");
   let duplicateId: string;
   try {
     duplicateId = duplicateInvoice(businessId, user.id, invoiceId);
@@ -114,7 +114,7 @@ export async function duplicateInvoiceAction(businessId: string, invoiceId: stri
 }
 
 export async function voidInvoiceAction(businessId: string, invoiceId: string) {
-  const { user } = await requireModule(businessId, "sales");
+  const { user } = await requirePermission(businessId, "sales", "delete");
   try {
     voidInvoice(businessId, user.id, invoiceId);
     revalidatePath(`/b/${businessId}/sales/invoices/${invoiceId}`);
@@ -125,21 +125,21 @@ export async function voidInvoiceAction(businessId: string, invoiceId: string) {
 }
 
 export async function batchPostInvoicesAction(businessId: string, invoiceIds: string[]): Promise<BatchActionResult> {
-  const { user } = await requireModule(businessId, "sales");
+  const { user } = await requirePermission(businessId, "sales", "post");
   const result = batchPostInvoices(businessId, user.id, invoiceIds);
   revalidatePath(`/b/${businessId}/sales/invoices`);
   return result;
 }
 
 export async function batchVoidInvoicesAction(businessId: string, invoiceIds: string[]): Promise<BatchActionResult> {
-  const { user } = await requireModule(businessId, "sales");
+  const { user } = await requirePermission(businessId, "sales", "delete");
   const result = batchVoidInvoices(businessId, user.id, invoiceIds);
   revalidatePath(`/b/${businessId}/sales/invoices`);
   return result;
 }
 
 export async function batchDeleteInvoicesAction(businessId: string, invoiceIds: string[]): Promise<BatchActionResult> {
-  const { user } = await requireModule(businessId, "sales");
+  const { user } = await requirePermission(businessId, "sales", "delete");
   const result = batchDeleteInvoices(businessId, user.id, invoiceIds);
   revalidatePath(`/b/${businessId}/sales/invoices`);
   return result;

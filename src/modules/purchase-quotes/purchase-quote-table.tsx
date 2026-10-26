@@ -184,13 +184,13 @@ export function PurchaseQuoteTable({
                     </Link>
                   </DropdownMenuItem>
                   {canEdit && (
-                    <DropdownMenuItem asChild>
+                    <DropdownMenuItem permission="edit" asChild>
                       <Link href={`/b/${quote.businessId}/purchases/quotes/${quote.id}/edit`}>
                         <FileEdit className="size-4 text-muted-foreground" /> Edit Quote
                       </Link>
                     </DropdownMenuItem>
                   )}
-                  <DropdownMenuItem asChild>
+                  <DropdownMenuItem permission="export" asChild>
                     <a href={`/api/businesses/${quote.businessId}/documents/purchase-quote/${quote.id}/pdf`} target="_blank" rel="noreferrer">
                       <Download className="size-4 text-muted-foreground" /> Download PDF
                     </a>
@@ -198,7 +198,7 @@ export function PurchaseQuoteTable({
                   {canConvert && (
                     <>
                       <DropdownMenuSeparator />
-                      <DropdownMenuItem asChild>
+                      <DropdownMenuItem permission="create" asChild>
                         <Link href={`/b/${quote.businessId}/purchases/orders/new?quoteId=${quote.id}`}>
                           <ShoppingCart className="size-4 text-muted-foreground" /> Convert to Purchase Order
                         </Link>

@@ -43,14 +43,14 @@ export function DeliveryNoteRowActions({
             </Link>
           </DropdownMenuItem>
           {canEdit && (
-            <DropdownMenuItem asChild>
+            <DropdownMenuItem permission="edit" asChild>
               <Link href={`/b/${businessId}/sales/delivery-notes/${deliveryId}/edit`}>
                 <FileEdit className="size-4 text-muted-foreground" /> Edit Note
               </Link>
             </DropdownMenuItem>
           )}
           <DropdownMenuSeparator />
-          <DropdownMenuItem asChild>
+          <DropdownMenuItem permission="export" asChild>
             <a
               href={`/api/businesses/${businessId}/documents/delivery-note/${deliveryId}/pdf`}
               target="_blank"

@@ -235,7 +235,7 @@ export function EmailTemplateManager({
                 <RotateCcw className="size-3.5" /> Reset to Default
               </Button>
 
-              <Button onClick={handleSave} disabled={saving || resetting} className="gap-1.5">
+              <Button permission={"save"} onClick={handleSave} disabled={saving || resetting} className="gap-1.5">
                 {saving ? <LoaderCircle className="size-4 animate-spin" /> : <Save className="size-4" />}
                 Save Template
               </Button>

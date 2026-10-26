@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
-import { requireModule } from "@/core/permissions/require-module";
+import { requirePermission } from "@/core/permissions/require-module";
 import { deleteProjectAttachment, uploadProjectAttachment } from "./project-attachment-service";
 import { projectCustomerInputSchema, projectInputSchema, projectNoteInputSchema } from "./project-input";
 import { createProjectNote, deleteProjectNote } from "./project-note-service";
@@ -12,7 +12,7 @@ import { addProjectCustomer, createProject, deleteProject, removeProjectCustomer
 export type ProjectActionResult = { error?: string; fieldErrors?: Record<string, string[]> };
 
 export async function createProjectAction(businessId: string, input: unknown): Promise<ProjectActionResult> {
-  const { user } = await requireModule(businessId, "projects");
+  const { user } = await requirePermission(businessId, "projects", "create");
   const parsed = projectInputSchema.safeParse(input);
   if (!parsed.success) return { error: "Check the project fields.", fieldErrors: z.flattenError(parsed.error).fieldErrors };
   let projectId: string;
@@ -24,7 +24,7 @@ export async function createProjectAction(businessId: string, input: unknown): P
 }
 
 export async function updateProjectAction(businessId: string, projectId: string, input: unknown): Promise<ProjectActionResult> {
-  const { user } = await requireModule(businessId, "projects");
+  const { user } = await requirePermission(businessId, "projects", "edit");
   const parsed = projectInputSchema.safeParse(input);
   if (!parsed.success) return { error: "Check the project fields.", fieldErrors: z.flattenError(parsed.error).fieldErrors };
   try { updateProject(businessId, user.id, projectId, parsed.data); }
@@ -35,7 +35,7 @@ export async function updateProjectAction(businessId: string, projectId: string,
 }
 
 export async function deleteProjectAction(businessId: string, projectId: string) {
-  const { user } = await requireModule(businessId, "projects");
+  const { user } = await requirePermission(businessId, "projects", "delete");
   try {
     deleteProject(businessId, user.id, projectId);
     revalidatePath(`/b/${businessId}/projects`);
@@ -46,7 +46,7 @@ export async function deleteProjectAction(businessId: string, projectId: string)
 }
 
 export async function addProjectNoteAction(businessId: string, projectId: string, input: unknown): Promise<ProjectActionResult> {
-  const { user } = await requireModule(businessId, "projects");
+  const { user } = await requirePermission(businessId, "projects", "edit");
   const parsed = projectNoteInputSchema.safeParse(input);
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Enter a note." };
   try {
@@ -59,7 +59,7 @@ export async function addProjectNoteAction(businessId: string, projectId: string
 }
 
 export async function deleteProjectNoteAction(businessId: string, projectId: string, noteId: string) {
-  const { user } = await requireModule(businessId, "projects");
+  const { user } = await requirePermission(businessId, "projects", "delete");
   try {
     deleteProjectNote(businessId, user.id, projectId, noteId);
   } catch (error) {
@@ -70,7 +70,7 @@ export async function deleteProjectNoteAction(businessId: string, projectId: str
 }
 
 export async function uploadProjectAttachmentAction(businessId: string, projectId: string, formData: FormData) {
-  const { user } = await requireModule(businessId, "projects");
+  const { user } = await requirePermission(businessId, "projects", "create");
   const file = formData.get("file");
   if (!(file instanceof File)) return { error: "Choose a file to upload." };
   try {
@@ -83,7 +83,7 @@ export async function uploadProjectAttachmentAction(businessId: string, projectI
 }
 
 export async function deleteProjectAttachmentAction(businessId: string, projectId: string, attachmentId: string) {
-  const { user } = await requireModule(businessId, "projects");
+  const { user } = await requirePermission(businessId, "projects", "delete");
   try {
     deleteProjectAttachment(businessId, user.id, projectId, attachmentId);
     revalidatePath(`/b/${businessId}/projects/${projectId}`);
@@ -94,7 +94,7 @@ export async function deleteProjectAttachmentAction(businessId: string, projectI
 }
 
 export async function addProjectCustomerAction(businessId: string, projectId: string, input: unknown): Promise<ProjectActionResult> {
-  const { user } = await requireModule(businessId, "projects");
+  const { user } = await requirePermission(businessId, "projects", "edit");
   const parsed = projectCustomerInputSchema.safeParse(input);
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Check customer fields." };
   try {
@@ -107,7 +107,7 @@ export async function addProjectCustomerAction(businessId: string, projectId: st
 }
 
 export async function removeProjectCustomerAction(businessId: string, projectId: string, customerId: string) {
-  const { user } = await requireModule(businessId, "projects");
+  const { user } = await requirePermission(businessId, "projects", "delete");
   try {
     removeProjectCustomer(businessId, user.id, projectId, customerId);
   } catch (error) {

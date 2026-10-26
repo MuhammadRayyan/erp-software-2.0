@@ -1,3 +1,4 @@
+import { assertMutationPermission } from "@/core/permissions/mutation-permissions";
 import { randomUUID } from "node:crypto";
 import { cache } from "react";
 import { asc, eq } from "drizzle-orm";
@@ -43,6 +44,7 @@ export const listTaxCodes = cache((businessId: string, userId: string) => {
 });
 
 export function createTaxCode(businessId: string, userId: string, input: TaxCodeInput) {
+  assertMutationPermission(businessId, userId, "settings", "edit");
   const data = taxCodeInputSchema.parse(input);
   const rateBasisPoints = rateToBasisPoints(data.rate);
   validateClassification(data.vatCategory, data.direction, rateBasisPoints, data.isRecoverable);
@@ -88,6 +90,7 @@ export function updateTaxCode(
   taxCodeId: string,
   input: TaxCodeInput,
 ) {
+  assertMutationPermission(businessId, userId, "settings", "edit");
   const data = taxCodeInputSchema.parse(input);
   const rateBasisPoints = rateToBasisPoints(data.rate);
   validateClassification(data.vatCategory, data.direction, rateBasisPoints, data.isRecoverable);

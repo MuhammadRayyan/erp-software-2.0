@@ -182,12 +182,12 @@ export function ProjectStakeholders({
                             <DropdownMenuItem asChild>
                               <Link href={invoiceHref}>New Sales Invoice</Link>
                             </DropdownMenuItem>
-                            <DropdownMenuItem asChild>
+                            <DropdownMenuItem permission="create" asChild>
                               <Link href={`/b/${businessId}/sales/quotes/new?projectId=${projectId}&customerId=${c.customerId}`}>
                                 New Sales Quote
                               </Link>
                             </DropdownMenuItem>
-                            <DropdownMenuItem asChild>
+                            <DropdownMenuItem permission="create" asChild>
                               <Link href={`/b/${businessId}/sales/orders/new?projectId=${projectId}&customerId=${c.customerId}`}>
                                 New Sales Order
                               </Link>

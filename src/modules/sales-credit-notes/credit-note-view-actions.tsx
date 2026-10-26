@@ -69,7 +69,7 @@ export function CreditNoteViewActions({
         }
         extraActions={
           <>
-            <DropdownMenuItem onSelect={() => setEmailOpen(true)}>
+            <DropdownMenuItem permission="export" onSelect={() => setEmailOpen(true)}>
               <Mail className="size-4 mr-2" /> Email
             </DropdownMenuItem>
             {journalEntryId && (

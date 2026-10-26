@@ -13,7 +13,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ busi
   const { businessId, supplierId } = await params;
   
   // Checking access using purchases module since statements relate to payables
-  const { session, access, error: authError } = await requireApiAuth(request, { businessId, module: "purchases" });
+  const { session, access, error: authError } = await requireApiAuth(request, { businessId, module: "purchases", action: "export" });
   if (authError || !session || !access) return authError;
   
   const supplier = getSupplier(businessId, session.user.id, supplierId);

@@ -39,7 +39,7 @@ export default async function PurchaseQuotesPage({
         title="Purchase Quotes"
         description="Draft, receive, and track supplier quotes and RFQs."
       >
-        <Button asChild>
+        <Button permission="create" asChild>
           <Link href={`/b/${businessId}/purchases/quotes/new`}>
             <Plus className="size-4" /> New Purchase Quote
           </Link>
@@ -67,7 +67,7 @@ export default async function PurchaseQuotesPage({
           title="No purchase quotes yet"
           description="Create a purchase quote or RFQ without affecting the ledger."
           action={
-            <Button asChild>
+            <Button permission="create" asChild>
               <Link href={`/b/${businessId}/purchases/quotes/new`}>
                 <Plus className="size-4" /> New Purchase Quote
               </Link>

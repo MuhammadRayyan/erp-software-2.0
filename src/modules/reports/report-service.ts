@@ -1,3 +1,5 @@
+import { addMinor, sumMinorRatios } from "@/modules/accounting/calculations/money";
+import { purchaseSettlementSql } from "@/modules/purchase-invoices/purchase-balance";
 import { getBusinessDb } from "@/core/db/business";
 import { listInvoices } from "@/modules/sales-invoices/invoice-service";
 
@@ -201,17 +203,12 @@ export function getAccountsReceivable(businessId: string, userId: string) {
 export function getAccountsPayable(businessId: string, userId: string) {
   const { sqlite } = getBusinessDb(businessId, userId);
   const today = new Date().toISOString().slice(0, 10);
+  const settled = purchaseSettlementSql();
   const rows = sqlite.prepare(`
     SELECT s.id AS supplier_id, s.name AS supplier_name, pi.id AS document_id,
       pi.internal_number AS document_number, pi.due_date, pi.currency_code,
-      pi.total_minor - COALESCE((SELECT SUM(spa.foreign_amount_allocated)
-        FROM supplier_payment_allocations spa
-        INNER JOIN supplier_payments sp ON sp.id = spa.payment_id AND sp.document_status = 'posted'
-        WHERE spa.purchase_invoice_id = pi.id), 0) AS foreign_open_minor,
-      pi.base_total_minor - COALESCE((SELECT SUM(spa.base_carrying_amount_released)
-        FROM supplier_payment_allocations spa
-        INNER JOIN supplier_payments sp ON sp.id = spa.payment_id AND sp.document_status = 'posted'
-        WHERE spa.purchase_invoice_id = pi.id), 0) AS base_carrying_minor
+      pi.total_minor - (${settled.foreign}) AS foreign_open_minor,
+      pi.base_total_minor - (${settled.base}) AS base_carrying_minor
     FROM purchase_invoices pi INNER JOIN suppliers s ON s.id = pi.supplier_id
     WHERE pi.document_status = 'posted'
     ORDER BY pi.due_date, pi.internal_number
@@ -412,6 +409,19 @@ export function getReceivablesAgingSummary(businessId: string, userId: string): 
   };
 }
 
+type CashAllocationRow = { id: string; name: string; type: string; subtype: string; amountMinor: number; allocatedMinor: number; totalMinor: number };
+function cashAllocationTotals(rows: CashAllocationRow[], side: "debit_total" | "credit_total") {
+  const groups = new Map<string, CashAllocationRow[]>();
+  for (const row of rows) {
+    const group = groups.get(row.id);
+    if (group) group.push(row); else groups.set(row.id, [row]);
+  }
+  return [...groups.values()].map(group => ({ id: group[0].id, name: group[0].name, type: group[0].type, subtype: group[0].subtype,
+    debit_total: side === "debit_total" ? sumMinorRatios(group) : 0,
+    credit_total: side === "credit_total" ? sumMinorRatios(group) : 0,
+  }));
+}
+
 export function getProfitAndLoss(
   businessId: string,
   userId: string,
@@ -454,11 +464,10 @@ export function getProfitAndLoss(
       }[];
 
     // 2. Cash collected on sales invoices via receipts in the date range
-    const invoiceReceiptRows = sqlite
+    const invoiceReceiptRows = cashAllocationTotals(sqlite
       .prepare(`
         SELECT sil.sales_account_id as id, a.name, a.type, a.subtype,
-               0 as debit_total,
-               ROUND(SUM(sil.net_amount_minor * CAST(COALESCE(ra.base_carrying_amount_released, ra.amount_minor) AS REAL) / CAST(si.total_minor AS REAL))) as credit_total
+               sil.net_amount_minor AS amountMinor, COALESCE(ra.base_carrying_amount_released, ra.amount_minor) AS allocatedMinor, si.total_minor AS totalMinor
         FROM receipt_allocations ra
         INNER JOIN receipts r ON r.id = ra.receipt_id
           AND r.document_status = 'posted'
@@ -467,23 +476,14 @@ export function getProfitAndLoss(
         INNER JOIN sales_invoice_lines sil ON sil.invoice_id = si.id
         INNER JOIN accounts a ON a.id = sil.sales_account_id
         WHERE si.total_minor > 0
-        GROUP BY sil.sales_account_id
       `)
-      .all(from, to) as {
-        id: string;
-        name: string;
-        type: string;
-        subtype: string;
-        debit_total: number;
-        credit_total: number;
-      }[];
+      .all(from, to) as CashAllocationRow[], "credit_total");
 
     // 3. Cash paid on purchase invoices via supplier payments in the date range
-    const billPaymentRows = sqlite
+    const billPaymentRows = cashAllocationTotals(sqlite
       .prepare(`
         SELECT pil.expense_account_id as id, a.name, a.type, a.subtype,
-               ROUND(SUM(pil.net_amount_minor * CAST(COALESCE(spa.base_carrying_amount_released, spa.amount_minor) AS REAL) / CAST(pi.total_minor AS REAL))) as debit_total,
-               0 as credit_total
+               pil.net_amount_minor AS amountMinor, COALESCE(spa.base_carrying_amount_released, spa.amount_minor) AS allocatedMinor, pi.total_minor AS totalMinor
         FROM supplier_payment_allocations spa
         INNER JOIN supplier_payments sp ON sp.id = spa.payment_id
           AND sp.document_status = 'posted'
@@ -492,23 +492,15 @@ export function getProfitAndLoss(
         INNER JOIN purchase_invoice_lines pil ON pil.purchase_invoice_id = pi.id
         INNER JOIN accounts a ON a.id = pil.expense_account_id
         WHERE pi.total_minor > 0
-        GROUP BY pil.expense_account_id
       `)
-      .all(from, to) as {
-        id: string;
-        name: string;
-        type: string;
-        subtype: string;
-        debit_total: number;
-        credit_total: number;
-      }[];
+      .all(from, to) as CashAllocationRow[], "debit_total");
 
     const map = new Map<string, { id: string; name: string; type: string; subtype: string; debit_total: number; credit_total: number }>();
     for (const r of [...directRows, ...invoiceReceiptRows, ...billPaymentRows]) {
       const existing = map.get(r.id);
       if (existing) {
-        existing.debit_total += r.debit_total;
-        existing.credit_total += r.credit_total;
+        existing.debit_total = addMinor([existing.debit_total, r.debit_total]);
+        existing.credit_total = addMinor([existing.credit_total, r.credit_total]);
       } else {
         map.set(r.id, { ...r });
       }

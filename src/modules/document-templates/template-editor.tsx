@@ -216,7 +216,7 @@ export function TemplateEditor({
             Reset
           </Button>
 
-          <Button size="sm" onClick={save} disabled={saving} className="gap-1.5">
+          <Button permission={"save"} size="sm" onClick={save} disabled={saving} className="gap-1.5">
             {saving ? <LoaderCircle className="size-3.5 animate-spin" /> : <Save className="size-3.5" />}
             Save Template
           </Button>

@@ -127,7 +127,7 @@ export function ItemsClient({ businessId, items, accounts }: ItemsClientProps) {
                         </Button>
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end" className="w-48">
-                        <DropdownMenuItem
+                        <DropdownMenuItem permission="edit"
                           onClick={() => {
                             setSelectedItem(item);
                             setDialogOpen(true);

@@ -56,7 +56,7 @@ export default async function PurchaseInvoicesPage({
         <Button asChild variant="secondary">
           <Link href={`/b/${businessId}/purchases/payments`}>Supplier Payments</Link>
         </Button>
-        <Button asChild>
+        <Button permission="create" asChild>
           <Link href={`/b/${businessId}/purchases/invoices/new`}>
             <Plus className="size-4" /> New Purchase Invoice
           </Link>
@@ -96,7 +96,7 @@ export default async function PurchaseInvoicesPage({
           title="No purchase invoices yet"
           description="Create a draft or post your first payable."
           action={
-            <Button asChild>
+            <Button permission="create" asChild>
               <Link href={`/b/${businessId}/purchases/invoices/new`}>
                 <Plus className="size-4" /> New Purchase Invoice
               </Link>

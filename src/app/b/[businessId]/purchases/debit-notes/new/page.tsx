@@ -149,7 +149,7 @@ export default async function NewDebitNotePage({
           <p className="mt-1.5 text-sm text-muted-foreground">
             Add a supplier and ensure at least one active expense account and tax code exist.
           </p>
-          <Button asChild className="mt-5">
+          <Button permission="create" asChild className="mt-5">
             <Link href={`/b/${businessId}/suppliers/new`}>New Supplier</Link>
           </Button>
         </div>

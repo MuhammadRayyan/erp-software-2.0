@@ -54,49 +54,19 @@ export function getAppBaseUrl(): string {
   return `${proto}//${domain}`;
 }
 
-export function getTrustedOrigins(request?: Request): string[] {
-  const origins = new Set<string>();
-
-  // Always allow local development ports
-  origins.add("http://localhost:3000");
-  origins.add("http://localhost");
-  origins.add("http://127.0.0.1:3000");
-  origins.add("http://127.0.0.1");
-
-  // Configured base URL and domain
-  const baseUrl = getAppBaseUrl();
-  origins.add(baseUrl);
-
-  const domain = getAppDomain();
-  origins.add(`https://${domain}`);
-  origins.add(`http://${domain}`);
-
-  // Production Oracle VM direct IP access (for resilience and direct curl probes)
-  origins.add("http://84.235.255.173");
-  origins.add("https://84.235.255.173");
-
-  // Dynamic request headers from reverse proxy (Caddy)
-  if (request) {
-    const forwardedHost = request.headers.get("x-forwarded-host") || request.headers.get("host");
-    const forwardedProto = request.headers.get("x-forwarded-proto") || "https";
-    if (forwardedHost) {
-      origins.add(`${forwardedProto}://${forwardedHost}`);
-      origins.add(`http://${forwardedHost}`);
-      origins.add(`https://${forwardedHost}`);
+/** Request Origin/Host headers never grant trust. Configure each deployment explicitly. */
+export function getTrustedOrigins(_request?: Request): string[] {
+  void _request;
+  const configured = [getAppBaseUrl(), ...(process.env.BETTER_AUTH_TRUSTED_ORIGINS?.split(",") ?? [])];
+  if (process.env.NODE_ENV !== "production") configured.push("http://localhost:3000", "http://127.0.0.1:3000");
+  return [...new Set(configured.filter((value) => value.trim()).map((value) => {
+    const url = new URL(value.trim());
+    const loopback = ["localhost", "127.0.0.1", "[::1]"].includes(url.hostname);
+    if (url.username || url.password || url.pathname !== "/" || url.search || url.hash ||
+      !["http:", "https:"].includes(url.protocol) ||
+      (process.env.NODE_ENV === "production" && url.protocol !== "https:" && !loopback)) {
+      throw new Error("Trusted origins must be explicit HTTPS origins in production.");
     }
-    const originHeader = request.headers.get("origin");
-    if (originHeader) {
-      origins.add(originHeader);
-    }
-  }
-
-  // Explicit env var overrides
-  if (process.env.BETTER_AUTH_TRUSTED_ORIGINS) {
-    for (const part of process.env.BETTER_AUTH_TRUSTED_ORIGINS.split(",")) {
-      const trimmed = part.trim();
-      if (trimmed) origins.add(trimmed);
-    }
-  }
-
-  return Array.from(origins);
+    return url.origin;
+  }))];
 }

@@ -202,7 +202,7 @@ test("Manager.io & Modern ERP Feature Suite", async (suite) => {
     assert.equal(calculateDueDate("2026-01-10", eom15), "2026-02-15");
 
     // Create a new payment term preset
-    const customTerm = createPaymentTerm(businessId, {
+    const customTerm = createPaymentTerm(businessId, userId, {
       name: "Net 90 Super Extended",
       days: 90,
       is_eom: false,
@@ -212,7 +212,7 @@ test("Manager.io & Modern ERP Feature Suite", async (suite) => {
     assert.equal(customTerm.days, 90);
 
     // Set as default
-    setDefaultPaymentTerm(businessId, customTerm.id);
+    setDefaultPaymentTerm(businessId, userId, customTerm.id);
     const refreshed = listPaymentTerms(businessId).find((t) => t.id === customTerm.id);
     assert.equal(refreshed?.is_default, 1);
   });
@@ -224,7 +224,7 @@ test("Manager.io & Modern ERP Feature Suite", async (suite) => {
     assert.ok(templates.some((t) => t.document_type === "sales_quote" || t.document_type === "sales-quote"));
 
     // Save custom email template
-    const saved = saveEmailTemplate(businessId, "sales-invoice", {
+    const saved = saveEmailTemplate(businessId, userId, "sales-invoice", {
       subject: "Invoice {{document_number}} - {{business_name}}",
       body: "Hi {{customer_name}}, please find invoice for {{total_amount}} due on {{due_date}}.",
     });
@@ -246,7 +246,7 @@ test("Manager.io & Modern ERP Feature Suite", async (suite) => {
     );
 
     // Reset template
-    const reset = resetEmailTemplate(businessId, "sales-invoice");
+    const reset = resetEmailTemplate(businessId, userId, "sales-invoice");
     assert.ok(reset.subject.includes("Invoice"));
   });
 });

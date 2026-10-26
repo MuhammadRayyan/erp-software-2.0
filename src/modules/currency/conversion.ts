@@ -1,5 +1,6 @@
 import Decimal from "decimal.js";
 import type { RateSnapshot } from "./validation";
+import { addMinor } from "@/modules/accounting/calculations/money";
 
 Decimal.set({ precision: 40, rounding: Decimal.ROUND_HALF_UP });
 
@@ -139,13 +140,13 @@ export function convertDocumentLinesToBase<T extends {
       baseTaxAmountMinor,
       baseGrossAmountMinor: line.grossAmountMinor === line.netAmountMinor
         ? baseNetAmountMinor
-        : baseNetAmountMinor + baseTaxAmountMinor,
+        : addMinor([baseNetAmountMinor, baseTaxAmountMinor]),
     };
   });
   return {
     lines: converted,
-    baseSubtotalMinor: converted.reduce((sum, line) => sum + line.baseNetAmountMinor, 0),
-    baseTaxMinor: converted.reduce((sum, line) => sum + line.baseTaxAmountMinor, 0),
-    baseTotalMinor: converted.reduce((sum, line) => sum + line.baseGrossAmountMinor, 0),
+    baseSubtotalMinor: addMinor(converted.map((line) => line.baseNetAmountMinor)),
+    baseTaxMinor: addMinor(converted.map((line) => line.baseTaxAmountMinor)),
+    baseTotalMinor: addMinor(converted.map((line) => line.baseGrossAmountMinor)),
   };
 }

@@ -43,14 +43,14 @@ export function GoodsReceiptRowActions({
             </Link>
           </DropdownMenuItem>
           {canEdit && (
-            <DropdownMenuItem asChild>
+            <DropdownMenuItem permission="edit" asChild>
               <Link href={`/b/${businessId}/purchases/goods-receipts/${receiptId}/edit`}>
                 <FileEdit className="size-4 text-muted-foreground" /> Edit Receipt
               </Link>
             </DropdownMenuItem>
           )}
           <DropdownMenuSeparator />
-          <DropdownMenuItem asChild>
+          <DropdownMenuItem permission="export" asChild>
             <a
               href={`/api/businesses/${businessId}/documents/goods-receipt/${receiptId}/pdf`}
               target="_blank"

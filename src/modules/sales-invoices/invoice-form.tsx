@@ -389,11 +389,11 @@ export function InvoiceForm({
         }}
       >
         {documentStatus === "posted" ? (
-          <Button type="button" disabled={isSubmitting} onClick={handleSubmit((values) => save(values, "post"))}>
+          <Button permission={["save", "post"]} type="button" disabled={isSubmitting} onClick={handleSubmit((values) => save(values, "post"))}>
             {isSubmitting && <LoaderCircle className="size-4 animate-spin" />} Save Changes
           </Button>
         ) : (
-          <Button type="button" disabled={isSubmitting} onClick={handleSubmit((values) => save(values, "draft"))}>
+          <Button permission={"save"} type="button" disabled={isSubmitting} onClick={handleSubmit((values) => save(values, "draft"))}>
             {isSubmitting && <LoaderCircle className="size-4 animate-spin" />} {invoiceId ? "Save Draft" : "Save Draft Invoice"}
           </Button>
         )}

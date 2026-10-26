@@ -46,13 +46,13 @@ export function InventoryItemRowActions({
               <Eye className="size-4 text-muted-foreground" /> View Item Details
             </Link>
           </DropdownMenuItem>
-          <DropdownMenuItem asChild>
+          <DropdownMenuItem permission="edit" asChild>
             <Link href={`/b/${businessId}/inventory/items/${itemId}/edit`}>
               <FileEdit className="size-4 text-muted-foreground" /> Edit Item
             </Link>
           </DropdownMenuItem>
           <DropdownMenuSeparator />
-          <DropdownMenuItem asChild>
+          <DropdownMenuItem permission="create" asChild>
             <Link href={`/b/${businessId}/inventory/adjustments/new?itemId=${itemId}`}>
               <ClipboardPlus className="size-4 text-muted-foreground" /> Adjust Stock
             </Link>

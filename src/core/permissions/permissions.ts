@@ -124,6 +124,7 @@ export function hasActionPermission(
 ): boolean {
   const access = getBusinessAccess(businessId, userId);
   if (!access) return false;
+  if (access.business.status === "suspended" && !access.isSuperAdmin) return false;
   if (!moduleKeys.includes(module)) return false;
 
   const availableActions = getAvailableActionsForModule(module);

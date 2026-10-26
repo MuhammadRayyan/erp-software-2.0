@@ -8,14 +8,18 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint .",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "next typegen && tsc --noEmit",
     "db:migrate": "tsx --env-file=.env scripts/migrate.ts",
     "db:push": "tsx --env-file=.env scripts/migrate.ts",
     "db:bootstrap": "tsx --env-file=.env scripts/bootstrap.ts",
     "db:check": "tsx --env-file=.env scripts/check-db.ts",
     "db:seed": "tsx --env-file=.env scripts/seed.ts",
-    "test": "tsx --test-force-exit --test tests/proxy-exists.test.ts tests/pre-phase-5.test.ts tests/phase-5.test.ts tests/phase-6.test.ts tests/phase-9.test.ts tests/custom-fields.test.ts tests/phase-10-new-features.test.ts tests/sales-quote-revisions.test.ts tests/purchase-quotes.test.ts tests/pdf-generation.test.ts tests/full-e2e-workflow.test.ts tests/settings-improvements.test.ts tests/complete-system-audit.test.ts tests/ui-ux-enhancements.test.ts tests/manager-erp-features.test.ts tests/comprehensive-edge-cases.test.ts tests/remediation-verification.test.ts tests/top-down-comprehensive-verification.test.ts tests/flow-verification-and-hardening.test.ts tests/multi-customer-projects.test.ts tests/multi-invoice-receipts.test.ts tests/multi-invoice-supplier-payments.test.ts tests/statements-and-pdf-preview.test.ts tests/bank-rules.test.ts tests/inline-credit-and-prepayment.test.ts tests/cash-flow-forecast.test.ts tests/find-and-recode.test.ts tests/deep-audit-verification.test.ts tests/ui-ux-ergonomics-and-validation.test.ts tests/batch-operations.test.ts tests/pdf-customization.test.ts tests/security-and-chaos-edge-cases.test.ts tests/activity-log.test.ts tests/manager-migration.test.ts tests/payroll-module.test.ts tests/phase-a-upgrades.test.ts tests/complete-top-down-audit.test.ts tests/payroll-table-standardization.test.ts tests/super-admin-lifecycle-and-resilience.test.ts tests/admin-tenants-and-quotas.test.ts tests/email-settings-and-domain.test.ts tests/platform-isolation-and-health.test.ts tests/user-access-invitation-and-reset.test.ts tests/document-lifecycle-and-cross-linking.test.ts tests/granular-capabilities-and-permissions.test.ts",
-    "test:e2e": "playwright test"
+    "test": "tsx --test-force-exit --test tests/proxy-exists.test.ts tests/pre-phase-5.test.ts tests/phase-5.test.ts tests/phase-6.test.ts tests/phase-9.test.ts tests/custom-fields.test.ts tests/phase-10-new-features.test.ts tests/sales-quote-revisions.test.ts tests/purchase-quotes.test.ts tests/pdf-generation.test.ts tests/full-e2e-workflow.test.ts tests/settings-improvements.test.ts tests/complete-system-audit.test.ts tests/ui-ux-enhancements.test.ts tests/manager-erp-features.test.ts tests/comprehensive-edge-cases.test.ts tests/remediation-verification.test.ts tests/top-down-comprehensive-verification.test.ts tests/flow-verification-and-hardening.test.ts tests/multi-customer-projects.test.ts tests/multi-invoice-receipts.test.ts tests/multi-invoice-supplier-payments.test.ts tests/statements-and-pdf-preview.test.ts tests/bank-rules.test.ts tests/inline-credit-and-prepayment.test.ts tests/cash-flow-forecast.test.ts tests/find-and-recode.test.ts tests/deep-audit-verification.test.ts tests/ui-ux-ergonomics-and-validation.test.ts tests/batch-operations.test.ts tests/pdf-customization.test.ts tests/security-and-chaos-edge-cases.test.ts tests/activity-log.test.ts tests/manager-migration.test.ts tests/payroll-module.test.ts tests/phase-a-upgrades.test.ts tests/complete-top-down-audit.test.ts tests/payroll-table-standardization.test.ts tests/super-admin-lifecycle-and-resilience.test.ts tests/admin-tenants-and-quotas.test.ts tests/email-settings-and-domain.test.ts tests/platform-isolation-and-health.test.ts tests/user-access-invitation-and-reset.test.ts tests/document-lifecycle-and-cross-linking.test.ts tests/granular-capabilities-and-permissions.test.ts tests/production-hardening.test.ts",
+    "test:e2e": "playwright test",
+    "build:ops": "node scripts/build-ops.mjs",
+    "test:hardening": "tsx --test-force-exit --test tests/production-hardening.test.ts",
+    "check:permissions": "node scripts/check-permissions.mjs",
+    "test:browser:hardening": "playwright test --config playwright.hardening.config.ts"
   },
   "dependencies": {
     "@hookform/resolvers": "5.7.1",
@@ -23,7 +27,7 @@
     "@radix-ui/react-dropdown-menu": "2.1.24",
     "@radix-ui/react-slot": "1.3.3",
     "@react-pdf/renderer": "^4.6.1",
-    "@sentry/nextjs": "^10.71.0",
+    "@sentry/nextjs": "10.75.2",
     "@tanstack/react-table": "^9.2.4",
     "better-auth": "1.6.26",
     "better-sqlite3": "13.0.3",
@@ -31,12 +35,12 @@
     "clsx": "2.1.1",
     "decimal.js": "10.6.0",
     "drizzle-orm": "0.45.2",
-    "handlebars": "^4.7.9",
+    "handlebars": "4.7.10",
     "jszip": "3.10.1",
     "lucide-react": "1.30.0",
-    "next": "^16.3.5",
+    "next": "16.4.3",
     "next-themes": "0.4.6",
-    "nodemailer": "^9.0.5",
+    "nodemailer": "10.2.1",
     "puppeteer": "^25.7.0",
     "react": "19.2.8",
     "react-dom": "19.2.8",
@@ -44,7 +48,7 @@
     "sonner": "2.0.7",
     "tailwind-merge": "3.6.0",
     "z-ai-web-dev-sdk": "^0.0.18",
-    "zod": "4.4.3"
+    "zod": "4.6.7"
   },
   "devDependencies": {
     "@playwright/test": "^1.62.1",
@@ -55,11 +59,16 @@
     "@types/react": "19.2.18",
     "@types/react-dom": "19.2.4",
     "drizzle-kit": "0.31.10",
+    "esbuild": "0.28.2",
     "eslint": "9.39.5",
-    "eslint-config-next": "^16.3.5",
+    "eslint-config-next": "16.4.3",
     "tailwindcss": "4.3.3",
     "tsx": "4.23.11",
     "typescript": "6.0.3"
   },
-  "_comment_puppeteer": "Kept for custom-html template rendering path"
+  "_comment_puppeteer": "Kept for custom-html template rendering path",
+  "engines": {
+    "node": "22.x"
+  },
+  "packageManager": "npm@10.9.4"
 }

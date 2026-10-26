@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
-import { requireModule } from "@/core/permissions/require-module";
+import { requireSavePermission, requirePermission } from "@/core/permissions/require-module";
 import { salesOrderInputSchema } from "./sales-order-input";
 import { cancelSalesOrder, closeSalesOrder, deleteSalesOrder, saveSalesOrder, getSalesOrder, issueSalesOrder, type SalesOrderIntent } from "./sales-order-service";
 import { createInvoice } from "@/modules/sales-invoices/invoice-service";
@@ -11,7 +11,7 @@ import { createInvoice } from "@/modules/sales-invoices/invoice-service";
 export type SalesOrderActionResult = { error?: string; fieldErrors?: Record<string, string[]> };
 
 export async function saveSalesOrderAction(businessId: string, orderId: string | null, input: unknown, intent: SalesOrderIntent): Promise<SalesOrderActionResult> {
-  const { user } = await requireModule(businessId, "sales");
+  const { user } = await requireSavePermission(businessId, "sales", orderId, intent);
   const parsed = salesOrderInputSchema.safeParse(input);
   if (!parsed.success) return { error: "Check the sales order fields and lines.", fieldErrors: z.flattenError(parsed.error).fieldErrors };
   let id: string;
@@ -24,7 +24,7 @@ export async function saveSalesOrderAction(businessId: string, orderId: string |
 }
 
 async function runStatusAction(businessId: string, orderId: string, action: "close" | "cancel" | "delete") {
-  const { user } = await requireModule(businessId, "sales");
+  const { user } = await requirePermission(businessId, "sales", action === "close" ? "edit" : "delete");
   try {
     if (action === "close") closeSalesOrder(businessId, user.id, orderId);
     else if (action === "cancel") cancelSalesOrder(businessId, user.id, orderId);
@@ -36,7 +36,7 @@ async function runStatusAction(businessId: string, orderId: string, action: "clo
 }
 
 export async function issueSalesOrderAction(businessId: string, orderId: string) {
-  const { user } = await requireModule(businessId, "sales");
+  const { user } = await requirePermission(businessId, "sales", "approve");
   try {
     issueSalesOrder(businessId, user.id, orderId);
     revalidatePath(`/b/${businessId}/sales/orders`);
@@ -63,7 +63,7 @@ import { quantityMicrosToInput } from "@/modules/accounting/calculations/money";
 import { minorToDecimalString } from "@/core/format";
 
 export async function convertSalesOrderToInvoiceAction(businessId: string, orderId: string) {
-  const { user } = await requireModule(businessId, "sales");
+  const { user } = await requirePermission(businessId, "sales", "create");
   try {
     const orderData = getSalesOrder(businessId, user.id, orderId);
     if (!orderData) return { error: "Order not found." };
@@ -126,7 +126,7 @@ export async function convertSalesOrderToInvoiceAction(businessId: string, order
 }
 
 export async function createSalesOrderRevisionAction(businessId: string, orderId: string) {
-  const { user } = await requireModule(businessId, "sales");
+  const { user } = await requirePermission(businessId, "sales", "create");
   try {
     const { createSalesOrderRevision } = await import("./sales-order-service");
     const newOrderId = createSalesOrderRevision(businessId, user.id, orderId);

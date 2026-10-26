@@ -12,7 +12,13 @@ function isBuildPhase(environment: NodeJS.ProcessEnv) {
 
 export function resolveBetterAuthSecret(environment = process.env) {
   const configured = environment.BETTER_AUTH_SECRET?.trim();
-  if (configured) return configured;
+  if (configured) {
+    const placeholder = /^(phase-zero-development-secret|ledgerly-secret-change|replace-with|change[-_ ]?me)/i.test(configured);
+    if (environment.NODE_ENV === "production" && !isBuildPhase(environment) && (configured.length < 32 || placeholder)) {
+      throw new Error("BETTER_AUTH_SECRET must contain at least 32 random characters and must not be a known placeholder.");
+    }
+    return configured;
+  }
   if (environment.NODE_ENV === "development") {
     console.warn(
       "[auth] BETTER_AUTH_SECRET is missing; using the development-only fallback secret.",

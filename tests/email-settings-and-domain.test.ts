@@ -271,7 +271,7 @@ test("Email Settings & Unified Domain Configuration Suite", async (t) => {
     assert.equal(getAppProtocol("127.0.0.1:3000"), "http:");
     assert.equal(getAppProtocol("erp-portal.rapidtss.com"), "https:");
 
-    // 5c. getTrustedOrigins includes essential origins and request headers
+    // 5c. Request headers do not grant trusted-origin access.
     const req = new Request("http://localhost:3000/api/health", {
       headers: {
         "x-forwarded-host": "erp-portal.rapidtss.com",
@@ -282,9 +282,9 @@ test("Email Settings & Unified Domain Configuration Suite", async (t) => {
 
     const origins = getTrustedOrigins(req);
     assert.ok(origins.includes("http://localhost:3000"));
-    assert.ok(origins.includes("http://84.235.255.173"));
-    assert.ok(origins.includes("https://84.235.255.173"));
-    assert.ok(origins.includes("https://erp-portal.rapidtss.com"));
+    assert.ok(!origins.includes("http://84.235.255.173"));
+    assert.ok(!origins.includes("https://84.235.255.173"));
+    assert.ok(!origins.includes("https://erp-portal.rapidtss.com"));
 
     // 5d. Precedence of APP_DOMAIN over BETTER_AUTH_URL in getAppBaseUrl
     const prevAppDomain = process.env.APP_DOMAIN;

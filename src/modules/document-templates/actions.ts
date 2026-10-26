@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { requireModule } from "@/core/permissions/require-module";
+import { requirePermission } from "@/core/permissions/require-module";
 import { saveTemplateSettings } from "./template-service";
 
 export type SettingsResult = { error?: string };
@@ -11,7 +11,7 @@ export async function saveTemplateSettingsAction(
   documentType: string,
   settings: unknown,
 ): Promise<SettingsResult> {
-  const { user, access } = await requireModule(businessId, "settings");
+  const { user, access } = await requirePermission(businessId, "settings", "edit");
 
   // Custom HTML templates execute server-side in a headless browser.
   // Restrict that engine choice to business administrators only.

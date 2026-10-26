@@ -1,3 +1,4 @@
+import { assertMutationPermission } from "@/core/permissions/mutation-permissions";
 import { getBusinessDb } from "@/core/db/business";
 import { randomUUID } from "node:crypto";
 
@@ -33,6 +34,7 @@ export function listUnitsOfMeasure(businessId: string, userId: string): UnitOfMe
 }
 
 export function createUnitOfMeasure(businessId: string, userId: string, code: string, name: string): void {
+  assertMutationPermission(businessId, userId, "settings", "edit");
   const { sqlite } = getBusinessDb(businessId, userId);
   const now = new Date().toISOString();
   const trimmedCode = code.trim().toLowerCase();
@@ -46,11 +48,13 @@ export function createUnitOfMeasure(businessId: string, userId: string, code: st
 }
 
 export function deleteUnitOfMeasure(businessId: string, userId: string, id: string): void {
+  assertMutationPermission(businessId, userId, "settings", "edit");
   const { sqlite } = getBusinessDb(businessId, userId);
   sqlite.prepare("DELETE FROM units_of_measure WHERE id = ?").run(id);
 }
 
 export function toggleUnitOfMeasure(businessId: string, userId: string, id: string, isActive: boolean): void {
+  assertMutationPermission(businessId, userId, "settings", "edit");
   const { sqlite } = getBusinessDb(businessId, userId);
   const now = new Date().toISOString();
   sqlite.prepare("UPDATE units_of_measure SET is_active = ?, updated_at = ? WHERE id = ?").run(isActive ? 1 : 0, now, id);

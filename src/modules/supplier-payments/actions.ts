@@ -2,7 +2,7 @@
 
 import { redirect } from "next/navigation";
 import { z } from "zod";
-import { requireModule } from "@/core/permissions/require-module";
+import { requirePermission } from "@/core/permissions/require-module";
 import { supplierPaymentInputSchema, applySupplierPaymentCreditInputSchema } from "./supplier-payment-input";
 import { createSupplierPayment, voidSupplierPayment, applySupplierPaymentCredit } from "./supplier-payment-service";
 import { revalidatePath } from "next/cache";
@@ -10,7 +10,7 @@ import { revalidatePath } from "next/cache";
 export type SupplierPaymentActionResult = { error?: string; fieldErrors?: Record<string, string[]> };
 
 export async function createSupplierPaymentAction(businessId: string, input: unknown): Promise<SupplierPaymentActionResult> {
-  const { user } = await requireModule(businessId, "purchases");
+  const { user } = await requirePermission(businessId, "purchases", "create");
   const parsed = supplierPaymentInputSchema.safeParse(input);
   if (!parsed.success) {
     return { error: "Check the payment fields.", fieldErrors: z.flattenError(parsed.error).fieldErrors };
@@ -34,7 +34,7 @@ export async function applySupplierPaymentCreditAction(
   businessId: string,
   input: unknown,
 ) {
-  const { user } = await requireModule(businessId, "purchases");
+  const { user } = await requirePermission(businessId, "purchases", "post");
   const parsed = applySupplierPaymentCreditInputSchema.safeParse(input);
   if (!parsed.success) {
     return {
@@ -54,7 +54,7 @@ export async function applySupplierPaymentCreditAction(
 }
 
 export async function voidSupplierPaymentAction(businessId: string, paymentId: string) {
-  const { user } = await requireModule(businessId, "purchases");
+  const { user } = await requirePermission(businessId, "purchases", "delete");
   try {
     voidSupplierPayment(businessId, user.id, paymentId);
     revalidatePath(`/b/${businessId}/purchases/payments`);

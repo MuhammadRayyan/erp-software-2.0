@@ -1,4 +1,4 @@
-import { getBusinessAccess } from "./permissions";
+import { getBusinessAccess, hasActionPermission } from "./permissions";
 import type { ModuleKey } from "./module-access";
 
 const documentModules = {
@@ -34,6 +34,6 @@ export function getDocumentPdfAccess(
   const requiredModule = getDocumentPdfModule(documentType);
   if (!requiredModule) return null;
   const access = getBusinessAccess(businessId, userId);
-  if (!access?.modules.includes(requiredModule)) return null;
+  if (!access || !hasActionPermission(businessId, userId, requiredModule, "export")) return null;
   return access;
 }

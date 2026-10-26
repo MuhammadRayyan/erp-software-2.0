@@ -1,6 +1,7 @@
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { auth } from "./auth";
+import { assertActiveUser } from "./active-user";
 
 export async function getCurrentSession() {
   return auth.api.getSession({ headers: await headers() });
@@ -9,6 +10,7 @@ export async function getCurrentSession() {
 export async function requireUser() {
   const session = await getCurrentSession();
   if (!session) redirect("/login");
+  try { assertActiveUser(session.user.id); } catch { redirect("/login?suspended=1"); }
   const user = session.user as typeof session.user & { status?: string };
   if (user.status === "suspended") {
     redirect("/login?suspended=1");

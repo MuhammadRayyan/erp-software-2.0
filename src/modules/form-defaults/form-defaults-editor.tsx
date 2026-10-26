@@ -181,7 +181,7 @@ export function FormDefaultsEditor({
 
       <div className="flex justify-end gap-2">
         <Button variant="ghost" onClick={() => router.back()}>Cancel</Button>
-        <Button onClick={onSave} disabled={saving}>
+        <Button permission={"save"} onClick={onSave} disabled={saving}>
           {saving ? "Saving…" : "Save defaults"}
         </Button>
       </div>

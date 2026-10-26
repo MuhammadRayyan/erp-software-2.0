@@ -1,3 +1,4 @@
+import { assertSavePermission, assertMutationPermission } from "@/core/permissions/mutation-permissions";
 import { createDocumentRevision, deleteDraftRevision } from "@/core/versioning/revision-engine";
 import { randomUUID } from "node:crypto";
 import { asc, eq } from "drizzle-orm";
@@ -127,6 +128,7 @@ function resolvePurchaseQuoteIdFromReference(sqlite: any, reference?: string | n
 }
 
 export function savePurchaseOrder(businessId: string, userId: string, input: PurchaseOrderInput, intent: PurchaseOrderIntent, orderId?: string) {
+  assertSavePermission(businessId, userId, "purchases", orderId, intent);
   const data = purchaseOrderInputSchema.parse(input);
   const context = getBusinessDb(businessId, userId);
   const supplier = context.db.select().from(suppliers).where(eq(suppliers.id, data.supplierId)).get();
@@ -155,6 +157,7 @@ export function savePurchaseOrder(businessId: string, userId: string, input: Pur
       if (context.sqlite.prepare("SELECT 1 FROM goods_receipts WHERE purchase_order_id = ? LIMIT 1").get(orderId)) throw new Error("A Purchase Order cannot be edited after a Goods Receipt has been created.");
       recordedOrderNumber = current.orderNumber;
       const nextStatus = current.status === "issued" || intent === "issue" ? "issued" : "draft";
+      if (nextStatus !== "draft") assertMutationPermission(businessId, userId, "purchases", "approve");
       const effectivePurchaseQuoteId = resolvedQuoteId || ("purchaseQuoteId" in input ? null : current.purchaseQuoteId) || null;
       context.sqlite.prepare(`UPDATE purchase_orders SET supplier_id = ?, project_id = ?, purchase_quote_id = ?, date = ?, expected_date = ?, reference = ?, notes = ?, terms = ?, status = ?, subtotal_minor = ?, tax_minor = ?, total_minor = ?, currency_code = ?, exchange_rate_to_base = ?, exchange_rate_date = ?, exchange_rate_source = ?, base_subtotal_minor = ?, base_tax_minor = ?, base_total_minor = ?, updated_at = ?, issued_at = CASE WHEN ? = 'issued' THEN COALESCE(issued_at, ?) ELSE issued_at END WHERE id = ?`)
         .run(data.supplierId, data.projectId || null, effectivePurchaseQuoteId, data.date, data.expectedDate || null, data.reference || null, data.notes || null, data.terms || null, nextStatus, amounts.subtotalMinor, amounts.taxMinor, amounts.totalMinor, rate.currencyCode, rate.exchangeRateToBase, rate.exchangeRateDate, rate.exchangeRateSource, base.baseSubtotalMinor, base.baseTaxMinor, base.baseTotalMinor, now, nextStatus, now, orderId);
@@ -188,6 +191,7 @@ export function savePurchaseOrder(businessId: string, userId: string, input: Pur
 }
 
 export function issuePurchaseOrder(businessId: string, userId: string, orderId: string) {
+  assertMutationPermission(businessId, userId, "purchases", "approve");
   const context = getBusinessDb(businessId, userId);
   const order = context.db.select().from(purchaseOrders).where(eq(purchaseOrders.id, orderId)).get();
   if (!order) throw new Error("Purchase order not found.");
@@ -212,6 +216,7 @@ export function issuePurchaseOrder(businessId: string, userId: string, orderId: 
 }
 
 export function closePurchaseOrder(businessId: string, userId: string, orderId: string) {
+  assertMutationPermission(businessId, userId, "purchases", "edit");
   const context = getBusinessDb(businessId, userId);
   const order = context.db.select().from(purchaseOrders).where(eq(purchaseOrders.id, orderId)).get();
   if (!order) throw new Error("Purchase order not found.");
@@ -236,6 +241,7 @@ export function closePurchaseOrder(businessId: string, userId: string, orderId: 
 }
 
 export function cancelPurchaseOrder(businessId: string, userId: string, orderId: string) {
+  assertMutationPermission(businessId, userId, "purchases", "delete");
   const context = getBusinessDb(businessId, userId);
   const order = context.db.select().from(purchaseOrders).where(eq(purchaseOrders.id, orderId)).get();
   if (!order) throw new Error("Purchase order not found.");
@@ -270,6 +276,7 @@ const revisionConfig = {
 };
 
 export function deletePurchaseOrder(businessId: string, userId: string, orderId: string) {
+  assertMutationPermission(businessId, userId, "purchases", "delete");
   const context = getBusinessDb(businessId, userId);
   const order = context.sqlite.prepare("SELECT order_number FROM purchase_orders WHERE id = ?").get(orderId) as { order_number: string } | undefined;
   deleteDraftRevision(context.sqlite, revisionConfig, orderId);
@@ -292,6 +299,7 @@ export function deletePurchaseOrder(businessId: string, userId: string, orderId:
 }
 
 export function createPurchaseOrderRevision(businessId: string, userId: string, sourceOrderId: string): string {
+  assertMutationPermission(businessId, userId, "purchases", "create");
   const context = getBusinessDb(businessId, userId);
   const newId = createDocumentRevision(context.sqlite, revisionConfig, userId, sourceOrderId);
   const rev = context.sqlite.prepare("SELECT order_number, revision_number FROM purchase_orders WHERE id = ?").get(newId) as { order_number: string; revision_number: number } | undefined;

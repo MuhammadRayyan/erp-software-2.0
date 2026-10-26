@@ -191,11 +191,11 @@ export function SalesQuoteForm({ businessId, quoteId, status = "draft", customer
       }}
     >
       {status === "sent" ? (
-        <Button type="button" disabled={isSubmitting} onClick={handleSubmit((values) => save(values, "issue"))}>
+        <Button permission={["save", "approve"]} type="button" disabled={isSubmitting} onClick={handleSubmit((values) => save(values, "issue"))}>
           {isSubmitting && <LoaderCircle className="size-4 animate-spin" />} Save Changes
         </Button>
       ) : (
-        <Button type="button" disabled={isSubmitting} onClick={handleSubmit((values) => save(values, "draft"))}>
+        <Button permission={"save"} type="button" disabled={isSubmitting} onClick={handleSubmit((values) => save(values, "draft"))}>
           {isSubmitting && <LoaderCircle className="size-4 animate-spin" />} {quoteId ? "Save Draft" : "Save Draft Quote"}
         </Button>
       )}

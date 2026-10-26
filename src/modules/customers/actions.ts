@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
-import { requireModule } from "@/core/permissions/require-module";
+import { requirePermission } from "@/core/permissions/require-module";
 import { createCustomer, updateCustomer } from "./customer-service";
 import { customerInputSchema } from "./customer-input";
 
@@ -19,7 +19,7 @@ export async function createCustomerAction(
   input: unknown,
   customFieldValues?: unknown,
 ): Promise<CustomerActionResult> {
-  const { user } = await requireModule(businessId, "sales");
+  const { user } = await requirePermission(businessId, "sales", "create");
   const parsed = customerInputSchema.safeParse(input);
   if (!parsed.success) return { error: "Check the highlighted fields.", fieldErrors: z.flattenError(parsed.error).fieldErrors };
   const parsedCustomFields = customFieldValuesSchema.safeParse(customFieldValues);
@@ -41,7 +41,7 @@ export async function updateCustomerAction(
   input: unknown,
   customFieldValues?: unknown,
 ): Promise<CustomerActionResult> {
-  const { user } = await requireModule(businessId, "sales");
+  const { user } = await requirePermission(businessId, "sales", "edit");
   const parsed = customerInputSchema.safeParse(input);
   if (!parsed.success) return { error: "Check the highlighted fields.", fieldErrors: z.flattenError(parsed.error).fieldErrors };
   const parsedCustomFields = customFieldValuesSchema.safeParse(customFieldValues);

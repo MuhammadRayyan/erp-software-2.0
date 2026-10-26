@@ -159,18 +159,18 @@ export function ProjectTable({
                       <Eye className="size-4 text-muted-foreground" /> View Project
                     </Link>
                   </DropdownMenuItem>
-                  <DropdownMenuItem asChild>
+                  <DropdownMenuItem permission="edit" asChild>
                     <Link href={`/b/${prj.businessId}/projects/${prj.id}/edit`}>
                       <FileEdit className="size-4 text-muted-foreground" /> Edit Project
                     </Link>
                   </DropdownMenuItem>
                   <DropdownMenuSeparator />
-                  <DropdownMenuItem asChild>
+                  <DropdownMenuItem permission="create" asChild>
                     <Link href={`/b/${prj.businessId}/sales/invoices/new?projectId=${prj.id}`}>
                       <ReceiptText className="size-4 text-muted-foreground" /> New Invoice
                     </Link>
                   </DropdownMenuItem>
-                  <DropdownMenuItem asChild>
+                  <DropdownMenuItem permission="create" asChild>
                     <Link href={`/b/${prj.businessId}/purchases/invoices/new?projectId=${prj.id}`}>
                       <FileInput className="size-4 text-muted-foreground" /> New Bill
                     </Link>

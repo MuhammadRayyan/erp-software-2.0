@@ -348,7 +348,7 @@ test("Complete Top-Down ERP Architecture, Workflow & Financial Audit", async (su
   // --------------------------------------------------------------------------
   await suite.test("Phase 2: Master Setup - Payment Terms, UOM, Custom Fields & Master Entities", () => {
     // 2.1 Payment Term
-    const term = createPaymentTerm(businessId, {
+    const term = createPaymentTerm(businessId, userId, {
       name: "Net 45 Days",
       days: 45,
       is_default: false,

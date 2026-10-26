@@ -1,3 +1,4 @@
+import { assertMutationPermission } from "@/core/permissions/mutation-permissions";
 import { cache } from "react";
 import { eq } from "drizzle-orm";
 import { getBusinessDb } from "@/core/db/business";
@@ -120,6 +121,7 @@ export function updateBusinessProfile(
   userId: string,
   input: BusinessProfileInput,
 ): ResolvedBusinessProfile {
+  assertMutationPermission(businessId, userId, "settings", "edit");
   const data = businessProfileInputSchema.parse(input);
   const { db, sqlite } = getBusinessDb(businessId, userId);
   const now = new Date().toISOString();
@@ -271,6 +273,7 @@ export function updateLocalization(
   userId: string,
   input: LocalizationInput,
 ): ResolvedBusinessProfile {
+  assertMutationPermission(businessId, userId, "settings", "edit");
   const data = localizationInputSchema.parse(input);
   const { sqlite } = getBusinessDb(businessId, userId);
   const now = new Date().toISOString();

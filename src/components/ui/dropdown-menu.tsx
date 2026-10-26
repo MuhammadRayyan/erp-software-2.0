@@ -3,6 +3,8 @@
 import * as Dropdown from "@radix-ui/react-dropdown-menu";
 import { Check, ChevronRight } from "lucide-react";
 import { cn } from "@/lib/cn";
+import { useActionPermission } from "@/components/permissions-provider";
+import type { ActionKey } from "@/core/permissions/module-access";
 
 export function DropdownMenu({
   modal = false,
@@ -35,7 +37,9 @@ export function DropdownMenuContent({
   );
 }
 
-export function DropdownMenuItem({ className, inset, ...props }: React.ComponentProps<typeof Dropdown.Item> & { inset?: boolean }) {
+export function DropdownMenuItem({ className, inset, permission, ...props }: React.ComponentProps<typeof Dropdown.Item> & { inset?: boolean; permission?: ActionKey | ActionKey[] }) {
+  const allowed = useActionPermission(permission);
+  if (!allowed) return null;
   return (
     <Dropdown.Item
       className={cn(

@@ -36,7 +36,7 @@ export default async function PurchaseOrdersPage({
         title="Purchase Orders"
         description="Operational orders with no ledger, AP, or Input VAT effect."
       >
-        <Button asChild>
+        <Button permission="create" asChild>
           <Link href={`/b/${businessId}/purchases/orders/new`}>
             <Plus className="size-4" /> New Purchase Order
           </Link>
@@ -61,7 +61,7 @@ export default async function PurchaseOrdersPage({
           title="No purchase orders yet"
           description="Create an order without affecting the ledger."
           action={
-            <Button asChild>
+            <Button permission="create" asChild>
               <Link href={`/b/${businessId}/purchases/orders/new`}>
                 <Plus className="size-4" /> New Purchase Order
               </Link>

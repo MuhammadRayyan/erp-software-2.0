@@ -1,3 +1,5 @@
+import { getBusinessDb } from "@/core/db/business";
+import { getBaseCurrency } from "@/modules/currency/currency";
 import { PageHeader } from "@/components/page-header";
 import { requireModule } from "@/core/permissions/require-module";
 import { listEmployees, listPayslipItems } from "@/modules/payroll/services/payroll-service";
@@ -40,6 +42,7 @@ export default async function NewPayslipPage({
         items={items}
         accounts={accounts.map((a) => ({ id: a.id, name: a.name, type: a.type }))}
         currency={access.business.currency}
+        currencyMinorUnit={getBaseCurrency(getBusinessDb(businessId, user.id).sqlite).minor_unit}
         prefill={{
           employeeId: sp.employeeId,
           gratuityAED: sp.gratuityAED,

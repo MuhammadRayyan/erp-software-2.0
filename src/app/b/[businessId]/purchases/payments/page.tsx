@@ -51,7 +51,7 @@ export default async function SupplierPaymentsPage({
         description="Posted supplier disbursements and their reversals."
       >
         <DensityToggle businessId={businessId} />
-        <Button asChild>
+        <Button permission="create" asChild>
           <Link href={`/b/${businessId}/purchases/payments/new`}>
             <Plus className="size-4" /> Record Payment
           </Link>
@@ -143,7 +143,7 @@ export default async function SupplierPaymentsPage({
           title="No supplier payments yet"
           description="Record a payment from a posted Purchase Invoice."
           action={
-            <Button asChild>
+            <Button permission="create" asChild>
               <Link href={`/b/${businessId}/purchases/payments/new`}>
                 <Plus className="size-4" /> Record Payment
               </Link>

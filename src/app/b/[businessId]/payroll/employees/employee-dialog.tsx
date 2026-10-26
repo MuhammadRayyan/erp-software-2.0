@@ -276,7 +276,7 @@ export function EmployeeDialog({
             >
               Cancel
             </Button>
-            <Button type="submit" disabled={loading}>
+            <Button permission={"save"} type="submit" disabled={loading}>
               {loading ? "Saving..." : isEdit ? "Update Employee" : "Create Employee"}
             </Button>
           </div>

@@ -1,3 +1,4 @@
+import { assertSavePermission, assertMutationPermission } from "@/core/permissions/mutation-permissions";
 import type { BaseStoredLine } from "@/modules/documents/document-types";
 import { randomUUID } from "node:crypto";
 import { getBusinessDb } from "@/core/db/business";
@@ -311,6 +312,7 @@ export function saveDeliveryNote(
   intent: InventoryDocumentIntent,
   deliveryId?: string,
 ) {
+  assertSavePermission(businessId, userId, "inventory", deliveryId, intent);
   const data = deliveryNoteInputSchema.parse(input);
   const context = getBusinessDb(businessId, userId);
   const now = new Date().toISOString();
@@ -358,6 +360,7 @@ export function saveDeliveryNote(
       number = allocateNumber(context.sqlite, "deliveryNote");
     }
 
+    if (shouldPost) assertMutationPermission(businessId, userId, "inventory", "post");
     if (shouldPost) {
       assertDateNotLocked(context.sqlite, data.date, "Delivery note");
       assertInventoryPostingOrder(
@@ -432,6 +435,7 @@ export function saveDeliveryNote(
 }
 
 export function voidDeliveryNote(businessId: string, userId: string, deliveryId: string) {
+  assertMutationPermission(businessId, userId, "inventory", "delete");
   const context = getBusinessDb(businessId, userId);
   const now = new Date().toISOString();
 
@@ -514,6 +518,7 @@ export function voidDeliveryNote(businessId: string, userId: string, deliveryId:
 }
 
 export function deleteDeliveryNote(businessId: string, userId: string, deliveryId: string) {
+  assertMutationPermission(businessId, userId, "inventory", "delete");
   const { sqlite } = getBusinessDb(businessId, userId);
   const row = sqlite
     .prepare("SELECT document_status FROM delivery_notes WHERE id = ?")

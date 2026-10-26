@@ -1,3 +1,4 @@
+import { assertMutationPermission } from "@/core/permissions/mutation-permissions";
 import { getBusinessDb } from "@/core/db/business";
 import type Database from "better-sqlite3";
 import { recordActivity } from "@/modules/activity-log/activity-log-service";
@@ -11,6 +12,7 @@ export function getFinancialLockDate(businessId: string, userId: string): string
 }
 
 export function setFinancialLockDate(businessId: string, userId: string, lockDate: string | null): void {
+  assertMutationPermission(businessId, userId, "accounting", "post");
   const { sqlite } = getBusinessDb(businessId, userId);
   const now = new Date().toISOString();
   sqlite

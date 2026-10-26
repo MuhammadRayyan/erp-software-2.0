@@ -86,6 +86,6 @@ export function SupplierForm({ businessId, supplierId, currencies, initial, cust
         />
       </section>
     )}
-    <div className="flex justify-end gap-2"><Button asChild variant="ghost"><Link href={cancelHref}>Cancel</Link></Button><Button type="submit" disabled={isSubmitting}>{isSubmitting && <LoaderCircle className="size-4 animate-spin" />} {supplierId ? "Save changes" : "Create supplier"}</Button></div>
+    <div className="flex justify-end gap-2"><Button asChild variant="ghost"><Link href={cancelHref}>Cancel</Link></Button><Button permission={"save"} type="submit" disabled={isSubmitting}>{isSubmitting && <LoaderCircle className="size-4 animate-spin" />} {supplierId ? "Save changes" : "Create supplier"}</Button></div>
   </form>;
 }

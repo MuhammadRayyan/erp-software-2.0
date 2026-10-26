@@ -163,5 +163,8 @@ export function getEmailDriver(customSettings?: SmtpTransportConfig | null): Ema
     };
   }
 
+  if (process.env.NODE_ENV === "production") {
+    return { name: "disabled", async send() { return { ok: false, error: "Email delivery is not configured. Ask an administrator to configure and test SMTP settings." }; } };
+  }
   return logDriver;
 }

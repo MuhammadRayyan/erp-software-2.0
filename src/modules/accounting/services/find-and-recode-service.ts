@@ -1,3 +1,4 @@
+import { assertMutationPermission } from "@/core/permissions/mutation-permissions";
 import { getBusinessDb } from "@/core/db/business";
 import { addMinor, calculateTax } from "@/modules/accounting/calculations/money";
 import { assertFinancialLock } from "@/modules/accounting/services/financial-lock-service";
@@ -411,6 +412,7 @@ export function recodeSelectedLines(
   updatedDocuments: number;
   message: string;
 } {
+  assertMutationPermission(businessId, userId, "accounting", "post");
   const { sqlite } = getBusinessDb(businessId, userId);
 
   if (!payload.lines || payload.lines.length === 0) {

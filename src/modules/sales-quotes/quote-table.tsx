@@ -216,13 +216,13 @@ export function SalesQuoteTable({
                     </Link>
                   </DropdownMenuItem>
                   {canEdit && (
-                    <DropdownMenuItem asChild>
+                    <DropdownMenuItem permission="edit" asChild>
                       <Link href={`/b/${quote.businessId}/sales/quotes/${quote.id}/edit`}>
                         <FileEdit className="size-4 text-muted-foreground" /> Edit Quote
                       </Link>
                     </DropdownMenuItem>
                   )}
-                  <DropdownMenuItem asChild>
+                  <DropdownMenuItem permission="export" asChild>
                     <a href={`/api/businesses/${quote.businessId}/documents/sales-quote/${quote.id}/pdf`} target="_blank" rel="noreferrer">
                       <Download className="size-4 text-muted-foreground" /> Download PDF
                     </a>
@@ -230,12 +230,12 @@ export function SalesQuoteTable({
                   {canConvert && (
                     <>
                       <DropdownMenuSeparator />
-                      <DropdownMenuItem asChild>
+                      <DropdownMenuItem permission="create" asChild>
                         <Link href={`/b/${quote.businessId}/sales/orders/new?quoteId=${quote.id}`}>
                           <ShoppingCart className="size-4 text-muted-foreground" /> Convert to Order
                         </Link>
                       </DropdownMenuItem>
-                      <DropdownMenuItem asChild>
+                      <DropdownMenuItem permission="create" asChild>
                         <Link href={`/b/${quote.businessId}/sales/invoices/new?quoteId=${quote.id}`}>
                           <FileText className="size-4 text-muted-foreground" /> Convert to Invoice
                         </Link>

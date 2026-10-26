@@ -87,7 +87,7 @@ export function PayslipActionsBar({
           <Printer className="size-3.5 mr-1.5" /> Print
         </Button>
 
-        <Button asChild variant="secondary" size="sm" className="h-8">
+        <Button permission={"export"} asChild variant="secondary" size="sm" className="h-8">
           <a href={pdfUrl} target="_blank" rel="noopener noreferrer">
             <Download className="size-3.5 mr-1.5" /> Download PDF
           </a>
@@ -95,19 +95,19 @@ export function PayslipActionsBar({
 
         {status === "draft" && (
           <>
-            <Button asChild variant="secondary" size="sm" className="h-8">
+            <Button permission={"edit"} asChild variant="secondary" size="sm" className="h-8">
               <Link href={`/b/${businessId}/payroll/payslips/${payslipId}/edit`}>
                 <Edit className="size-3.5 mr-1.5" /> Edit
               </Link>
             </Button>
-            <Button size="sm" onClick={handlePost} disabled={loading} className="h-8">
+            <Button permission={"post"} size="sm" onClick={handlePost} disabled={loading} className="h-8">
               <CheckCircle2 className="size-3.5 mr-1.5" /> Post to Ledger
             </Button>
           </>
         )}
 
         {status === "posted" && (
-          <Button
+          <Button permission={"delete"}
             variant="secondary"
             size="sm"
             onClick={handleVoid}

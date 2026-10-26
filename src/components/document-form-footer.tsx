@@ -3,6 +3,7 @@ import { Button } from "@/components/ui/button";
 import { StatusBadge } from "@/components/status-badge";
 import { formatMoney } from "@/core/format";
 import { cn } from "@/lib/cn";
+import { DocumentWorkflowPermissions } from "@/components/permissions-provider";
 
 export type DocumentTotalsSummary = {
   subtotalMinor?: number;
@@ -88,7 +89,7 @@ export function DocumentFormFooter({
         </div>
       )}
 
-      <div className="flex items-center gap-3 ml-auto sm:ml-0">{children}</div>
+      <div className="flex items-center gap-3 ml-auto sm:ml-0"><DocumentWorkflowPermissions status={status}>{children}</DocumentWorkflowPermissions></div>
     </div>
   );
 }

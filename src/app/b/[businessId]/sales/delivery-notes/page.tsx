@@ -35,7 +35,7 @@ export default async function DeliveryNotesPage({
     <div className="page-container">
       <BackLink href={`/b/${businessId}/inventory/items`}>Inventory</BackLink>
       <PageHeader title="Delivery Notes" description="Customer deliveries reduce stock and post moving-average Cost of Sales.">
-        <Button asChild>
+        <Button permission="create" asChild>
           <Link href={`/b/${businessId}/sales/delivery-notes/new`}>
             <Plus className="size-4" /> New Delivery Note
           </Link>
@@ -98,7 +98,7 @@ export default async function DeliveryNotesPage({
           title="No delivery notes yet"
           description="Create a delivery from a posted Sales Invoice or directly."
           action={
-            <Button asChild>
+            <Button permission="create" asChild>
               <Link href={`/b/${businessId}/sales/delivery-notes/new`}>Create Delivery Note</Link>
             </Button>
           }

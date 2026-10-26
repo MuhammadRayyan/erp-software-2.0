@@ -1,7 +1,10 @@
+"use client";
 import * as React from "react";
 import { Slot } from "@radix-ui/react-slot";
 import { cva, type VariantProps } from "class-variance-authority";
 import { cn } from "@/lib/cn";
+import { useActionPermission } from "@/components/permissions-provider";
+import type { ActionKey } from "@/core/permissions/module-access";
 
 const buttonVariants = cva(
   "inline-flex h-9 items-center justify-center gap-2 rounded-[6px] px-3 text-sm font-medium whitespace-nowrap transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background disabled:pointer-events-none disabled:opacity-50",
@@ -25,9 +28,11 @@ const buttonVariants = cva(
 );
 
 export type ButtonProps = React.ButtonHTMLAttributes<HTMLButtonElement> &
-  VariantProps<typeof buttonVariants> & { asChild?: boolean };
+  VariantProps<typeof buttonVariants> & { asChild?: boolean; permission?: ActionKey | ActionKey[] };
 
-export function Button({ className, variant, size, asChild, ...props }: ButtonProps) {
+export function Button({ className, variant, size, asChild, permission, ...props }: ButtonProps) {
+  const allowed = useActionPermission(permission);
+  if (!allowed) return null;
   const Component = asChild ? Slot : "button";
   return <Component className={cn(buttonVariants({ variant, size }), className)} {...props} />;
 }

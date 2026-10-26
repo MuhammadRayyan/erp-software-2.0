@@ -1,3 +1,4 @@
+import { assertMutationPermission } from "@/core/permissions/mutation-permissions";
 import { getBusinessDb } from "@/core/db/business";
 import { randomUUID } from "node:crypto";
 
@@ -51,7 +52,7 @@ export function getDefaultPaymentTerm(businessId: string): PaymentTerm | null {
 }
 
 export function createPaymentTerm(
-  businessId: string,
+  businessId: string, userId: string,
   input: {
     name: string;
     days?: number;
@@ -61,7 +62,8 @@ export function createPaymentTerm(
     is_default?: boolean;
   }
 ): PaymentTerm {
-  const { sqlite } = getBusinessDb(businessId);
+  assertMutationPermission(businessId, userId, "settings", "edit");
+  const { sqlite } = getBusinessDb(businessId, userId);
   const id = randomUUID();
   const name = input.name.trim();
   const days = Math.max(0, input.days ?? input.days_count ?? 0);
@@ -89,7 +91,7 @@ export function createPaymentTerm(
 }
 
 export function updatePaymentTerm(
-  businessId: string,
+  businessId: string, userId: string,
   id: string,
   input: {
     name: string;
@@ -100,7 +102,8 @@ export function updatePaymentTerm(
     is_default?: boolean;
   }
 ): PaymentTerm {
-  const { sqlite } = getBusinessDb(businessId);
+  assertMutationPermission(businessId, userId, "settings", "edit");
+  const { sqlite } = getBusinessDb(businessId, userId);
   const existing = getPaymentTerm(businessId, id);
   if (!existing) {
     throw new Error("Payment term not found.");
@@ -132,13 +135,15 @@ export function updatePaymentTerm(
   return getPaymentTerm(businessId, id)!;
 }
 
-export function deletePaymentTerm(businessId: string, id: string): void {
-  const { sqlite } = getBusinessDb(businessId);
+export function deletePaymentTerm(businessId: string, userId: string, id: string): void {
+  assertMutationPermission(businessId, userId, "settings", "edit");
+  const { sqlite } = getBusinessDb(businessId, userId);
   sqlite.prepare(`DELETE FROM payment_terms WHERE id = ?`).run(id);
 }
 
-export function setDefaultPaymentTerm(businessId: string, id: string): void {
-  const { sqlite } = getBusinessDb(businessId);
+export function setDefaultPaymentTerm(businessId: string, userId: string, id: string): void {
+  assertMutationPermission(businessId, userId, "settings", "edit");
+  const { sqlite } = getBusinessDb(businessId, userId);
   const tx = sqlite.transaction(() => {
     sqlite.prepare(`UPDATE payment_terms SET is_default = 0`).run();
     sqlite.prepare(`UPDATE payment_terms SET is_default = 1 WHERE id = ?`).run(id);

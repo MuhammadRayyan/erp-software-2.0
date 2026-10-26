@@ -1,3 +1,4 @@
+import { assertMutationPermission } from "@/core/permissions/mutation-permissions";
 import { cache } from "react";
 import { randomUUID } from "node:crypto";
 import type Database from "better-sqlite3";
@@ -138,6 +139,7 @@ export function synchronizeBusinessBaseCurrency(sqlite: Database.Database, regis
 }
 
 export function changeBaseCurrency(businessId: string, userId: string, nextCode: string) {
+  assertMutationPermission(businessId, userId, "settings", "edit");
   const context = getBusinessDb(businessId, userId);
   if (context.membership.role !== "administrator") throw new Error("BUSINESS_ACCESS_DENIED");
   const code = normalizedCode(nextCode);
@@ -193,6 +195,7 @@ export function saveRealizedFxAccounts(
   userId: string,
   input: { gainAccountId: string; lossAccountId: string },
 ) {
+  assertMutationPermission(businessId, userId, "settings", "edit");
   const context = getBusinessDb(businessId, userId);
   if (context.membership.role !== "administrator") throw new Error("BUSINESS_ACCESS_DENIED");
   const gain = context.sqlite.prepare(`
@@ -219,6 +222,7 @@ export function saveCurrency(
   userId: string,
   input: { code: string; name: string; symbol?: string; minorUnit: number; isActive: boolean },
 ) {
+  assertMutationPermission(businessId, userId, "settings", "edit");
   const context = getBusinessDb(businessId, userId);
   if (context.membership.role !== "administrator") throw new Error("BUSINESS_ACCESS_DENIED");
   const code = normalizedCode(input.code);
@@ -253,6 +257,7 @@ export function saveExchangeRate(
     sourceReference?: string;
   },
 ) {
+  assertMutationPermission(businessId, userId, "settings", "edit");
   const context = getBusinessDb(businessId, userId);
   if (context.membership.role !== "administrator") throw new Error("BUSINESS_ACCESS_DENIED");
   const currency = getCurrency(context.sqlite, input.currencyCode, true);
@@ -272,6 +277,7 @@ export function saveExchangeRate(
 }
 
 export function deleteExchangeRate(businessId: string, userId: string, rateId: string) {
+  assertMutationPermission(businessId, userId, "settings", "edit");
   const context = getBusinessDb(businessId, userId);
   if (context.membership.role !== "administrator") throw new Error("BUSINESS_ACCESS_DENIED");
   context.sqlite.prepare("DELETE FROM exchange_rates WHERE id = ?").run(rateId);

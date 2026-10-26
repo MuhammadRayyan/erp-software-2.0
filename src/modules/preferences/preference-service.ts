@@ -32,6 +32,7 @@ function assertMembership(businessId: string, userId: string): void {
   if (!access) {
     throw new Error("User does not have access to this business.");
   }
+  if (access.business.status === "suspended" && !access.isSuperAdmin) throw new Error("BUSINESS_SUSPENDED");
 }
 
 /**

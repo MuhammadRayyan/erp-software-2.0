@@ -159,7 +159,7 @@ export function NumberingForm({ businessId, initial }: { businessId: string; ini
 
       <div className="sticky bottom-4 z-10 flex items-center justify-between rounded-lg border border-border bg-surface/95 p-3 shadow-md backdrop-blur-sm">
         <p className="text-xs text-muted-foreground">Make sure prefixes end with a separator like &ldquo;-&rdquo; if desired.</p>
-        <Button onClick={save} disabled={pending}>
+        <Button permission={"save"} onClick={save} disabled={pending}>
           {pending && <LoaderCircle className="size-4 animate-spin mr-1.5" />}
           Save all numbering sequences
         </Button>

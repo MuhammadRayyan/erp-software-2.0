@@ -1,3 +1,4 @@
+import { assertMutationPermission, assertSavePermission } from "@/core/permissions/mutation-permissions";
 import { randomUUID } from "crypto";
 import { eq } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/better-sqlite3";
@@ -103,6 +104,7 @@ export function listDebitNotes(
 }
 
 export function saveDebitNote(businessId: string, userId: string, data: DebitNoteInput, intent: DebitNoteIntent, noteId?: string) {
+  assertSavePermission(businessId, userId, "purchases", noteId, intent);
   const context = getBusinessDb(businessId, userId);
   if (noteId) {
     const current = context.db.select().from(debitNotes).where(eq(debitNotes.id, noteId)).get();
@@ -210,6 +212,7 @@ export function saveDebitNote(businessId: string, userId: string, data: DebitNot
     
     insertLines(context.db, id, lines);
     
+    if (shouldPost) assertMutationPermission(businessId, userId, "purchases", "post");
     if (shouldPost) {
       assertDateNotLocked(context.sqlite, data.date, "Debit note");
       assertVatDateUnlocked(context.sqlite, taxDate, lines.map((line) => line.taxCodeId));
@@ -243,6 +246,7 @@ export function saveDebitNote(businessId: string, userId: string, data: DebitNot
 }
 
 export function duplicateDebitNote(businessId: string, userId: string, noteId: string) {
+  assertMutationPermission(businessId, userId, "purchases", "create");
   const record = getDebitNote(businessId, userId, noteId);
   if (!record) throw new Error("Debit note not found.");
   const rate = storedRateSnapshot(getBusinessDb(businessId, userId).sqlite, record.note);
@@ -272,6 +276,7 @@ export function duplicateDebitNote(businessId: string, userId: string, noteId: s
 }
 
 export function deleteDebitNote(businessId: string, userId: string, noteId: string) {
+  assertMutationPermission(businessId, userId, "purchases", "delete");
   const context = getBusinessDb(businessId, userId); 
   const note = context.db.select().from(debitNotes).where(eq(debitNotes.id, noteId)).get();
   if (!note) throw new Error("Debit note not found."); 
@@ -294,6 +299,7 @@ export function deleteDebitNote(businessId: string, userId: string, noteId: stri
 }
 
 export function voidDebitNote(businessId: string, userId: string, noteId: string) {
+  assertMutationPermission(businessId, userId, "purchases", "delete");
   const context = getBusinessDb(businessId, userId); 
   const note = context.db.select().from(debitNotes).where(eq(debitNotes.id, noteId)).get();
   if (!note) throw new Error("Debit note not found."); 

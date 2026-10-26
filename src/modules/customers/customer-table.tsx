@@ -133,7 +133,7 @@ export function CustomerTable({ businessId, customers, customFields = [], custom
                         <Eye className="size-4 text-muted-foreground" /> View Profile
                       </Link>
                     </DropdownMenuItem>
-                    <DropdownMenuItem asChild>
+                    <DropdownMenuItem permission="edit" asChild>
                       <Link href={`/b/${cust.businessId}/customers/${cust.id}/edit`}>
                         <FileEdit className="size-4 text-muted-foreground" /> Edit Customer
                       </Link>
@@ -144,12 +144,12 @@ export function CustomerTable({ businessId, customers, customFields = [], custom
                       </Link>
                     </DropdownMenuItem>
                     <DropdownMenuSeparator />
-                    <DropdownMenuItem asChild>
+                    <DropdownMenuItem permission="create" asChild>
                       <Link href={`/b/${cust.businessId}/sales/invoices/new?customerId=${cust.id}`}>
                         <FileText className="size-4 text-muted-foreground" /> New Invoice
                       </Link>
                     </DropdownMenuItem>
-                    <DropdownMenuItem asChild>
+                    <DropdownMenuItem permission="create" asChild>
                       <Link href={`/b/${cust.businessId}/sales/quotes/new?customerId=${cust.id}`}>
                         <FilePlus2 className="size-4 text-muted-foreground" /> New Quote
                       </Link>

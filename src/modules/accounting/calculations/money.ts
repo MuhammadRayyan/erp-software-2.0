@@ -1,3 +1,6 @@
+import Decimal from "decimal.js";
+
+const MoneyDecimal = Decimal.clone({ precision: 60, rounding: Decimal.ROUND_HALF_UP });
 const MONEY_SCALE = 100n;
 const QUANTITY_SCALE = 10_000n;
 const BASIS_POINT_SCALE = 10_000n;
@@ -20,6 +23,24 @@ function toSafeNumber(value: bigint, label: string) {
 
 function divideAndRound(value: bigint, divisor: bigint) {
   return (value + divisor / 2n) / divisor;
+}
+
+/** Exact rational HALF_UP rounding, including negative amounts, at the final minor-unit boundary. */
+export function roundMinorRatio(numerator: bigint, denominator: bigint): number {
+  if (denominator <= 0n) throw new Error("Money divisor must be positive.");
+  const negative = numerator < 0n;
+  const rounded = divideAndRound(negative ? -numerator : numerator, denominator);
+  return toSafeNumber(negative ? -rounded : rounded, "Amount");
+}
+
+/** Reports sum decimal ratios before rounding once per account; never use SQL REAL for money. */
+export function sumMinorRatios(rows: readonly { amountMinor: number; allocatedMinor: number; totalMinor: number }[]) {
+  let sum = new MoneyDecimal(0);
+  for (const row of rows) {
+    if (![row.amountMinor, row.allocatedMinor, row.totalMinor].every(Number.isSafeInteger) || row.totalMinor <= 0) throw new Error("Money ratios require safe integers and a positive total.");
+    sum = sum.plus(new MoneyDecimal(row.amountMinor).mul(row.allocatedMinor).div(row.totalMinor));
+  }
+  return toSafeNumber(BigInt(sum.toDecimalPlaces(0).toFixed(0)), "Report total");
 }
 
 export function parseMoneyToMinor(value: string, label = "Amount") {
@@ -100,6 +121,7 @@ export function splitTaxInclusive(grossMinor: number, rateBasisPoints: number) {
 }
 
 export function addMinor(values: number[]) {
+  if (values.some((value) => !Number.isSafeInteger(value))) throw new Error("Money values must be safe integers.");
   const total = values.reduce((sum, value) => sum + BigInt(value), 0n);
   return toSafeNumber(total, "Total");
 }

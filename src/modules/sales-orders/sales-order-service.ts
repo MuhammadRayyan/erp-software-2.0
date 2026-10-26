@@ -1,3 +1,4 @@
+import { assertSavePermission, assertMutationPermission } from "@/core/permissions/mutation-permissions";
 import { createDocumentRevision, deleteDraftRevision } from "@/core/versioning/revision-engine";
 import { randomUUID } from "node:crypto";
 import { asc, eq } from "drizzle-orm";
@@ -129,6 +130,7 @@ function resolveQuoteIdFromReference(sqlite: any, reference?: string | null, cus
 }
 
 export function saveSalesOrder(businessId: string, userId: string, input: SalesOrderInput, intent: SalesOrderIntent, orderId?: string) {
+  assertSavePermission(businessId, userId, "sales", orderId, intent);
   const data = salesOrderInputSchema.parse(input);
   const context = getBusinessDb(businessId, userId);
   const customer = context.db.select().from(customers).where(eq(customers.id, data.customerId)).get();
@@ -157,6 +159,7 @@ export function saveSalesOrder(businessId: string, userId: string, input: SalesO
       
       recordedOrderNumber = current.orderNumber;
       const nextStatus = current.documentStatus === "active" || intent === "issue" ? "active" : "draft";
+      if (nextStatus !== "draft") assertMutationPermission(businessId, userId, "sales", "approve");
       const effectiveSalesQuoteId = resolvedQuoteId || ("salesQuoteId" in input ? null : current.salesQuoteId) || null;
       context.sqlite.prepare(`UPDATE sales_orders SET customer_id = ?, project_id = ?, sales_quote_id = ?, order_date = ?, delivery_date = ?, reference = ?, document_status = ?, amounts_include_tax = ?, subtotal_minor = ?, tax_minor = ?, total_minor = ?, currency_code = ?, exchange_rate_to_base = ?, exchange_rate_date = ?, exchange_rate_source = ?, base_subtotal_minor = ?, base_tax_minor = ?, base_total_minor = ?, notes = ?, terms = ?, updated_at = ? WHERE id = ?`)
         .run(data.customerId, data.projectId || null, effectiveSalesQuoteId, data.date, data.expectedDate || "", data.reference || null, nextStatus, data.amountsIncludeTax ? 1 : 0, amounts.subtotalMinor, amounts.taxMinor, amounts.totalMinor, rate.currencyCode, rate.exchangeRateToBase, rate.exchangeRateDate, rate.exchangeRateSource, base.baseSubtotalMinor, base.baseTaxMinor, base.baseTotalMinor, data.notes || null, data.terms || null, now, orderId);
@@ -190,6 +193,7 @@ export function saveSalesOrder(businessId: string, userId: string, input: SalesO
 }
 
 export function issueSalesOrder(businessId: string, userId: string, orderId: string) {
+  assertMutationPermission(businessId, userId, "sales", "approve");
   const context = getBusinessDb(businessId, userId);
   const order = context.db.select().from(salesOrders).where(eq(salesOrders.id, orderId)).get();
   if (!order) throw new Error("Sales order not found.");
@@ -214,6 +218,7 @@ export function issueSalesOrder(businessId: string, userId: string, orderId: str
 }
 
 export function closeSalesOrder(businessId: string, userId: string, orderId: string) {
+  assertMutationPermission(businessId, userId, "sales", "edit");
   const context = getBusinessDb(businessId, userId);
   const order = context.db.select().from(salesOrders).where(eq(salesOrders.id, orderId)).get();
   if (!order) throw new Error("Sales order not found.");
@@ -238,6 +243,7 @@ export function closeSalesOrder(businessId: string, userId: string, orderId: str
 }
 
 export function cancelSalesOrder(businessId: string, userId: string, orderId: string) {
+  assertMutationPermission(businessId, userId, "sales", "delete");
   const context = getBusinessDb(businessId, userId);
   const order = context.db.select().from(salesOrders).where(eq(salesOrders.id, orderId)).get();
   if (!order) throw new Error("Sales order not found.");
@@ -271,6 +277,7 @@ const revisionConfig = {
 };
 
 export function deleteSalesOrder(businessId: string, userId: string, orderId: string) {
+  assertMutationPermission(businessId, userId, "sales", "delete");
   const context = getBusinessDb(businessId, userId);
   const order = context.sqlite.prepare("SELECT order_number FROM sales_orders WHERE id = ?").get(orderId) as { order_number: string } | undefined;
   deleteDraftRevision(context.sqlite, revisionConfig, orderId);
@@ -293,6 +300,7 @@ export function deleteSalesOrder(businessId: string, userId: string, orderId: st
 }
 
 export function createSalesOrderRevision(businessId: string, userId: string, sourceOrderId: string): string {
+  assertMutationPermission(businessId, userId, "sales", "create");
   const context = getBusinessDb(businessId, userId);
   const newId = createDocumentRevision(context.sqlite, revisionConfig, userId, sourceOrderId);
   const rev = context.sqlite.prepare("SELECT order_number, revision_number FROM sales_orders WHERE id = ?").get(newId) as { order_number: string; revision_number: number } | undefined;

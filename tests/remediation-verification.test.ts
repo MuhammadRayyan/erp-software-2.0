@@ -35,7 +35,7 @@ const { exportBusinessBackup, importBusinessBackup } = await import("../src/core
 const { logger, getRecentLogs, getTraceContext } = await import("../src/core/logger");
 const { onRequestError } = await import("../src/instrumentation");
 const { GET: healthGet } = await import("../src/app/api/health/route");
-const { emitDiagnosticTrace } = await import("../src/app/b/[businessId]/settings/system-health/actions");
+const { emitDiagnosticTrace } = await import("../src/core/diagnostics/diagnostic-service");
 const { createInvoice, getInvoice } = await import("../src/modules/sales-invoices/invoice-service");
 const { saveSalesQuote, getSalesQuote } = await import("../src/modules/sales-quotes/quote-service");
 const { saveSalesOrder, getSalesOrder } = await import("../src/modules/sales-orders/sales-order-service");
@@ -52,13 +52,13 @@ test("Remediation 1: SQLite busy timeout and synchronous pragmas configured on b
   const sysBusy = sysSqlite.pragma("busy_timeout", { simple: true });
   assert.equal(sysBusy, 5000, "System database busy_timeout must be 5000ms");
   const sysSync = sysSqlite.pragma("synchronous", { simple: true });
-  assert.equal(sysSync, 1, "System database synchronous must be 1 (NORMAL)");
+  assert.equal(sysSync, 2, "System database synchronous must be 2 (FULL)");
 
   const { sqlite: bizSqlite } = getBusinessDb(seeded.business.id, seeded.admin.id);
   const bizBusy = bizSqlite.pragma("busy_timeout", { simple: true });
   assert.equal(bizBusy, 5000, "Business database busy_timeout must be 5000ms");
   const bizSync = bizSqlite.pragma("synchronous", { simple: true });
-  assert.equal(bizSync, 1, "Business database synchronous must be 1 (NORMAL)");
+  assert.equal(bizSync, 2, "Business database synchronous must be 2 (FULL)");
 });
 
 test("Remediation 2: splitTaxInclusive handles zero amounts gracefully", () => {
@@ -589,29 +589,22 @@ test("Remediation 13: Next.js Error Instrumentation captures unhandled route err
   assert.equal(meta.routerKind, "App Router");
 });
 
-test("Remediation 14: Fast Uptime Health Probe GET /api/health returns database connectivity and memory telemetry", async () => {
+test("Remediation 14: readiness verifies schema and exposes only status and release identity", async () => {
   const response = await healthGet();
-  assert.equal(response.status, 200, "Health endpoint should return HTTP 200");
-  assert.equal(response.headers.get("Cache-Control"), "no-cache, no-store, must-revalidate");
-
+  assert.equal(response.status, 200);
+  assert.equal(response.headers.get("Cache-Control"), "no-store");
   const data = await response.json();
+  assert.deepEqual(Object.keys(data).sort(), ["revision", "status"]);
   assert.equal(data.status, "ok");
-  assert.equal(typeof data.uptime, "number");
-  assert.ok(data.uptime >= 0);
-  assert.equal(data.database.status, "connected");
-  assert.equal(typeof data.database.latencyMs, "number");
-  assert.ok(data.database.latencyMs >= 0);
-  assert.equal(typeof data.memory.heapUsedMb, "number");
-  assert.equal(typeof data.memory.heapTotalMb, "number");
-  assert.equal(typeof data.memory.rssMb, "number");
-  assert.ok(data.memory.heapUsedMb > 0);
+  assert.equal(typeof data.revision, "string");
 });
 
 test("Remediation 15: Admin Diagnostic Trace Action triggers Sentry span and persists trace to system_logs", async () => {
   const seeded = await seedDemoData();
   const businessId = seeded.business.id;
 
-  const result = await emitDiagnosticTrace(businessId, seeded.admin);
+  getSystemSqlite().prepare("UPDATE user SET is_super_admin=1 WHERE id=?").run(seeded.admin.id);
+  const result = await emitDiagnosticTrace(businessId, seeded.admin.id);
   assert.equal(result.success, true);
   assert.ok(result.traceId, "Diagnostic trace ID should be generated");
   assert.ok(result.spanId, "Diagnostic span ID should be generated");

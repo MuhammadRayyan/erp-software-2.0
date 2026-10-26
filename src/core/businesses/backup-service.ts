@@ -1,3 +1,5 @@
+import { assertActiveUser } from "@/core/auth/active-user";
+import { assertBusinessAdministrator } from "@/core/permissions/mutation-permissions";
 import { createHash, randomUUID } from "node:crypto";
 import { mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -57,6 +59,7 @@ function addAttachments(zip: JSZip, root: string, current = root) {
 }
 
 export async function exportBusinessBackup(businessId: string, userId: string) {
+  assertBusinessAdministrator(businessId, userId);
   const access = getBusinessForUser(businessId, userId);
   if (!access || access.membership.role !== "administrator") throw new Error("BUSINESS_ACCESS_DENIED");
   const context = getBusinessDb(businessId, userId);
@@ -100,6 +103,7 @@ export async function exportBusinessBackup(businessId: string, userId: string) {
 }
 
 export async function importBusinessBackup(buffer: ArrayBuffer | Buffer, userId: string) {
+  assertActiveUser(userId);
   const MAX_BACKUP_BYTES = 50 * 1024 * 1024;
   if (buffer.byteLength > MAX_BACKUP_BYTES) {
     throw new Error("Backup file exceeds maximum allowed size of 50 MB.");
@@ -158,7 +162,7 @@ export async function importBusinessBackup(buffer: ArrayBuffer | Buffer, userId:
   writeFileSync(paths.database, database);
 
   try {
-    const context = openBusinessDatabase(directoryKey);
+    const context = openBusinessDatabase(directoryKey, { create: true });
     context.sqlite.prepare("SELECT 1 FROM customers LIMIT 1").all();
     if (manifest.formatVersion === 2) {
       const restoredBase = context.sqlite.prepare(`
@@ -204,6 +208,7 @@ export async function importBusinessBackup(buffer: ArrayBuffer | Buffer, userId:
           financialYearStartMonth: manifest.formatVersion === 2 ? manifest.financialYearStartMonth : 1,
           directoryKey,
           archived: false,
+          ownerUserId: userId,
           createdAt: now,
           updatedAt: now,
           lastOpenedAt: now,

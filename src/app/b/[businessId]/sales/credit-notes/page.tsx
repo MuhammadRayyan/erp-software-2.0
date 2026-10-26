@@ -30,7 +30,7 @@ export default async function CreditNotesPage({
   return (
     <div className="page-container">
       <PageHeader title="Sales Credit Notes" description="Customer credits applied to posted Sales Invoices.">
-        <Button asChild>
+        <Button permission="create" asChild>
           <Link href={`/b/${businessId}/sales/credit-notes/new`}>
             <Plus className="size-4" /> New Credit Note
           </Link>

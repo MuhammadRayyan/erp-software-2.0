@@ -1,3 +1,4 @@
+import { assertMutationPermission } from "@/core/permissions/mutation-permissions";
 import { getBusinessDb } from "@/core/db/business";
 import type { MatchCandidate, MatchSourceType } from "./matching-types";
 
@@ -105,6 +106,7 @@ export function confirmStatementMatch(
   sourceType: MatchSourceType,
   sourceId: string,
 ) {
+  assertMutationPermission(businessId, userId, "banking", "edit");
   const context = getBusinessDb(businessId, userId);
   context.sqlite.transaction(() => {
     const line = context.sqlite.prepare(`
@@ -140,6 +142,7 @@ function ensureNotReconciled(sqlite: ReturnType<typeof getBusinessDb>["sqlite"],
 }
 
 export function ignoreStatementLine(businessId: string, userId: string, statementLineId: string) {
+  assertMutationPermission(businessId, userId, "banking", "edit");
   const { sqlite } = getBusinessDb(businessId, userId);
   sqlite.transaction(() => {
     ensureNotReconciled(sqlite, statementLineId);
@@ -152,6 +155,7 @@ export function ignoreStatementLine(businessId: string, userId: string, statemen
 }
 
 export function resetStatementLine(businessId: string, userId: string, statementLineId: string) {
+  assertMutationPermission(businessId, userId, "banking", "edit");
   const { sqlite } = getBusinessDb(businessId, userId);
   sqlite.transaction(() => {
     ensureNotReconciled(sqlite, statementLineId);

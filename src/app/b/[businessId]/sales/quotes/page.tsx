@@ -36,7 +36,7 @@ export default async function QuoteListPage({
     <div className="page-container">
       <LiveRefresh />
       <PageHeader title="Sales Quotes" description="Draft, send, and track customer quotes.">
-        <Button asChild>
+        <Button permission="create" asChild>
           <Link href={`/b/${businessId}/sales/quotes/new`}>
             <Plus className="size-4" /> New Quote
           </Link>
@@ -64,7 +64,7 @@ export default async function QuoteListPage({
           title="No sales quotes yet"
           description="Create your first sales quote for a customer."
           action={
-            <Button asChild>
+            <Button permission="create" asChild>
               <Link href={`/b/${businessId}/sales/quotes/new`}>
                 <Plus className="size-4" /> New Quote
               </Link>

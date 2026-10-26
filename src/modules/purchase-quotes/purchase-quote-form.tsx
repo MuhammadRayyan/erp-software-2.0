@@ -309,11 +309,11 @@ export function PurchaseQuoteForm({
 
       <DocumentFormFooter onCancel={() => router.push(cancelHref)}>
         {status === "sent" ? (
-          <Button type="button" disabled={isSubmitting} onClick={handleSubmit((values) => save(values, "issue"))}>
+          <Button permission={["save", "approve"]} type="button" disabled={isSubmitting} onClick={handleSubmit((values) => save(values, "issue"))}>
             {isSubmitting && <LoaderCircle className="size-4 animate-spin" />} Save Changes
           </Button>
         ) : (
-          <Button
+          <Button permission={"save"}
             type="button"
             disabled={isSubmitting}
             onClick={handleSubmit((values) => save(values, "draft"))}

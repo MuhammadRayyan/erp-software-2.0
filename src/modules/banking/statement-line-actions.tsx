@@ -136,7 +136,7 @@ export function StatementLineActions({
           <Search className="size-3.5" /> Find Other{candidates.length ? ` (${candidates.length})` : ""}
         </Button>
 
-        <Button asChild variant="ghost" size="sm" title="Create non-AR/AP bank transaction">
+        <Button permission="create" asChild variant="ghost" size="sm" title="Create non-AR/AP bank transaction">
           <Link
             href={`/b/${businessId}/banking/transactions/new?accountId=${accountId}&statementLineId=${lineId}`}
           >

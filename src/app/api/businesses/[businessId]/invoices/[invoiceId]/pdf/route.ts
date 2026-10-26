@@ -15,7 +15,7 @@ export async function GET(
   { params }: { params: Promise<{ businessId: string; invoiceId: string }> }
 ) {
   const { businessId, invoiceId } = await params;
-  const { session, access, error: authError } = await requireApiAuth(request, { businessId, module: "sales" });
+  const { session, access, error: authError } = await requireApiAuth(request, { businessId, module: "sales", action: "export" });
   if (authError || !session || !access) return authError;
 
   try {

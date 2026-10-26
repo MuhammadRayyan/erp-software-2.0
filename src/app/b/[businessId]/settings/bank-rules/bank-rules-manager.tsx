@@ -565,7 +565,7 @@ export function BankRulesManager({
               >
                 Cancel
               </Button>
-              <Button type="submit" size="sm" disabled={pending} className="shadow-xs">
+              <Button permission={"save"} type="submit" size="sm" disabled={pending} className="shadow-xs">
                 {pending ? "Saving..." : editingRule ? "Update Rule" : "Create Rule"}
               </Button>
             </div>

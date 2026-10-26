@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
-import { requireModule } from "@/core/permissions/require-module";
+import { requireSavePermission, requirePermission } from "@/core/permissions/require-module";
 import { deleteGoodsReceipt, saveGoodsReceipt, voidGoodsReceipt, type InventoryDocumentIntent } from "./goods-receipt-service";
 import { goodsReceiptInputSchema } from "./goods-receipt-input";
 import { inventoryErrorMessage } from "./inventory-error";
@@ -14,7 +14,7 @@ export async function saveGoodsReceiptAction(
   input: unknown,
   intent: InventoryDocumentIntent
 ) {
-  const { user } = await requireModule(businessId, "inventory");
+  const { user } = await requireSavePermission(businessId, "inventory", receiptId, intent);
   const parsed = goodsReceiptInputSchema.safeParse(input);
   if (!parsed.success) {
     return { error: "Check the Goods Receipt fields and lines.", fieldErrors: z.flattenError(parsed.error).fieldErrors };
@@ -32,7 +32,7 @@ export async function saveGoodsReceiptAction(
 }
 
 export async function voidGoodsReceiptAction(businessId: string, receiptId: string) {
-  const { user } = await requireModule(businessId, "inventory");
+  const { user } = await requirePermission(businessId, "inventory", "delete");
   try {
     voidGoodsReceipt(businessId, user.id, receiptId);
     revalidatePath(`/b/${businessId}/purchases/goods-receipts`);
@@ -44,7 +44,7 @@ export async function voidGoodsReceiptAction(businessId: string, receiptId: stri
 }
 
 export async function deleteGoodsReceiptAction(businessId: string, receiptId: string) {
-  const { user } = await requireModule(businessId, "inventory");
+  const { user } = await requirePermission(businessId, "inventory", "delete");
   try {
     deleteGoodsReceipt(businessId, user.id, receiptId);
     revalidatePath(`/b/${businessId}/purchases/goods-receipts`);

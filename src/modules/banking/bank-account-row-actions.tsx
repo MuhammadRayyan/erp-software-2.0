@@ -49,7 +49,7 @@ export function BankAccountRowActions({
               <Eye className="size-4 text-muted-foreground" /> View Transactions
             </Link>
           </DropdownMenuItem>
-          <DropdownMenuItem asChild>
+          <DropdownMenuItem permission="edit" asChild>
             <Link href={`/b/${businessId}/banking/accounts/${accountId}/edit`}>
               <FileEdit className="size-4 text-muted-foreground" /> Edit Account
             </Link>
@@ -70,7 +70,7 @@ export function BankAccountRowActions({
             </>
           )}
           <DropdownMenuSeparator />
-          <DropdownMenuItem asChild>
+          <DropdownMenuItem permission="create" asChild>
             <Link href={`/b/${businessId}/banking/transactions/new?accountId=${accountId}`}>
               <PlusCircle className="size-4 text-muted-foreground" /> New Transaction
             </Link>

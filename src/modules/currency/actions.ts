@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
-import { requireModule } from "@/core/permissions/require-module";
+import { requirePermission } from "@/core/permissions/require-module";
 import {
   changeBaseCurrency,
   deleteExchangeRate,
@@ -34,7 +34,7 @@ function errorMessage(error: unknown, fallback: string) {
 }
 
 async function administrator(businessId: string) {
-  const context = await requireModule(businessId, "settings");
+  const context = await requirePermission(businessId, "settings", "edit");
   if (context.access.membership.role !== "administrator") {
     throw new Error("Only a business Administrator can change currency settings.");
   }

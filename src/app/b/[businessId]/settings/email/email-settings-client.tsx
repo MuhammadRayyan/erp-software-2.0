@@ -465,7 +465,7 @@ export function EmailSettingsClient({
 
       {/* Save Action Bar */}
       <div className="flex justify-end border-t border-border pt-4">
-        <Button
+        <Button permission={"save"}
           onClick={handleSave}
           disabled={isSaving}
           className="min-w-32 font-semibold shadow-xs"

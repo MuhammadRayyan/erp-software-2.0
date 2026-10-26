@@ -56,7 +56,7 @@ export default async function InvoiceListPage({
         <Button asChild variant="secondary">
           <Link href={`/b/${businessId}/sales/receipts`}>Receipts</Link>
         </Button>
-        <Button asChild>
+        <Button permission="create" asChild>
           <Link href={`/b/${businessId}/sales/invoices/new`}>
             <Plus className="size-4" /> New Invoice
           </Link>
@@ -98,7 +98,7 @@ export default async function InvoiceListPage({
           title="No sales invoices yet"
           description="Create a draft or post your first receivable."
           action={
-            <Button asChild>
+            <Button permission="create" asChild>
               <Link href={`/b/${businessId}/sales/invoices/new`}>
                 <Plus className="size-4" /> New Invoice
               </Link>

@@ -1,17 +1,20 @@
 import { NextResponse } from "next/server";
 import { getCurrentSession } from "@/core/auth/session";
-import { getBusinessAccess } from "@/core/permissions/permissions";
+import { getBusinessAccess, hasActionPermission, type ActionKey } from "@/core/permissions/permissions";
 import type { ModuleKey } from "@/core/permissions/permissions";
+import { assertActiveUser } from "./active-user";
 
 export async function requireApiAuth(
   // Kept for future per-request context (e.g. rate limiting / client IP checks); intentionally unused.
   _request: Request,
-  options?: { businessId?: string; module?: ModuleKey; requireAdmin?: boolean }
+  options?: { businessId?: string; module?: ModuleKey; action?: ActionKey; requireAdmin?: boolean }
 ) {
   const session = await getCurrentSession();
   if (!session) {
     return { error: NextResponse.json({ error: "Unauthorized" }, { status: 401 }) };
   }
+  try { assertActiveUser(session.user.id); }
+  catch { return { error: NextResponse.json({ error: "Forbidden" }, { status: 403 }) }; }
 
   if (options?.businessId) {
     const access = getBusinessAccess(options.businessId, session.user.id);
@@ -23,7 +26,7 @@ export async function requireApiAuth(
       return { error: NextResponse.json({ error: "Forbidden" }, { status: 403 }) };
     }
 
-    if (options.module && !access.modules.includes(options.module)) {
+    if (options.module && !hasActionPermission(options.businessId, session.user.id, options.module, options.action ?? "view")) {
       return { error: NextResponse.json({ error: "Forbidden" }, { status: 403 }) };
     }
 

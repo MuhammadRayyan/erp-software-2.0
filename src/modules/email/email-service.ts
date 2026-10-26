@@ -1,3 +1,6 @@
+import { getDocumentPdfModule } from "@/core/permissions/document-pdf-access";
+import { getBusinessAccess, hasActionPermission } from "@/core/permissions/permissions";
+import { assertMutationPermission } from "@/core/permissions/mutation-permissions";
 import { randomUUID } from "node:crypto";
 import { desc, eq } from "drizzle-orm";
 import { getBusinessDb } from "@/core/db/business";
@@ -55,6 +58,13 @@ function toRow(row: SentEmailSqlRow): SentEmailRow {
   };
 }
 
+function canReadEmail(businessId: string, userId: string, row: SentEmailSqlRow) {
+  const requiredModule = getDocumentPdfModule(row.related_entity_type?.replaceAll("_", "-") ?? "");
+  return requiredModule
+    ? hasActionPermission(businessId, userId, requiredModule, "view")
+    : getBusinessAccess(businessId, userId)?.membership.role === "administrator";
+}
+
 /**
  * Send an email: validate input, persist a `queued` audit row, hand off to
  * the email driver, then mark the row `sent` (or `failed` if the driver
@@ -72,6 +82,7 @@ export async function sendEmail(
   userId: string,
   input: SendEmailInput,
 ): Promise<SendEmailResult> {
+  assertMutationPermission(businessId, userId, getDocumentPdfModule(input.relatedEntityType?.replace(/_/g, "-") ?? "") ?? "settings", "export");
   if (input.to.length === 0) throw new Error("At least one recipient is required.");
   if (!input.subject.trim()) throw new Error("Email subject is required.");
   if (!input.bodyHtml.trim()) throw new Error("Email body is required.");
@@ -250,7 +261,7 @@ export function listSentEmails(
        LIMIT 200`,
     )
     .all(...values) as SentEmailSqlRow[];
-  return rows.map(toRow);
+  return rows.filter(row => canReadEmail(businessId, userId, row)).map(toRow);
 }
 
 /**
@@ -275,7 +286,7 @@ export function getSentEmail(
        WHERE id = ?`,
     )
     .get(emailId) as SentEmailSqlRow | undefined;
-  return row ? toRow(row) : null;
+  return row && canReadEmail(businessId, userId, row) ? toRow(row) : null;
 }
 
 /**

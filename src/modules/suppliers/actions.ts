@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
-import { requireModule } from "@/core/permissions/require-module";
+import { requirePermission } from "@/core/permissions/require-module";
 import { supplierInputSchema } from "./supplier-input";
 import { createSupplier, updateSupplier } from "./supplier-service";
 
@@ -19,7 +19,7 @@ export async function createSupplierAction(
   input: unknown,
   customFieldValues?: unknown,
 ): Promise<SupplierActionResult> {
-  const { user } = await requireModule(businessId, "purchases");
+  const { user } = await requirePermission(businessId, "purchases", "create");
   const parsed = supplierInputSchema.safeParse(input);
   if (!parsed.success) return { error: "Check the supplier fields.", fieldErrors: z.flattenError(parsed.error).fieldErrors };
   const parsedCustomFields = customFieldValuesSchema.safeParse(customFieldValues);
@@ -38,7 +38,7 @@ export async function updateSupplierAction(
   input: unknown,
   customFieldValues?: unknown,
 ): Promise<SupplierActionResult> {
-  const { user } = await requireModule(businessId, "purchases");
+  const { user } = await requirePermission(businessId, "purchases", "edit");
   const parsed = supplierInputSchema.safeParse(input);
   if (!parsed.success) return { error: "Check the supplier fields.", fieldErrors: z.flattenError(parsed.error).fieldErrors };
   const parsedCustomFields = customFieldValuesSchema.safeParse(customFieldValues);

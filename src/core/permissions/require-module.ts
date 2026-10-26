@@ -10,12 +10,13 @@ import {
 } from "./permissions";
 import { getSystemDb } from "@/core/db/system";
 import { users } from "@/core/db/system-schema";
+import { assertMutationPermission, assertSavePermission } from "./mutation-permissions";
 
 export async function requireModule(businessId: string, module: ModuleKey) {
   const user = await requireUser();
   const access = getBusinessAccess(businessId, user.id);
   if (!access) redirect("/businesses");
-  if (!access.modules.includes(module)) redirect(`/b/${businessId}/forbidden?module=${module}`);
+  if (!hasActionPermission(businessId, user.id, module, "view")) redirect(`/b/${businessId}/forbidden?module=${module}`);
   return { user, access };
 }
 
@@ -94,3 +95,20 @@ export async function requirePermission(
  * Standardized alias for requirePermission.
  */
 export const assertBusinessPermission = requirePermission;
+
+export async function requireSavePermission(businessId: string, module: ModuleKey, id?: string | null, intent = "draft") {
+  const user = await requireUser();
+  assertSavePermission(businessId, user.id, module, id, intent);
+  return { user, access: getBusinessAccess(businessId, user.id)! };
+}
+
+export async function requireMutationPermission(businessId: string, module: ModuleKey, ...actions: ActionKey[]) {
+  const user = await requireUser();
+  assertMutationPermission(businessId, user.id, module, ...actions);
+  return { user, access: getBusinessAccess(businessId, user.id)! };
+}
+
+export async function requireInputSavePermission(businessId: string, module: ModuleKey, input: unknown) {
+  const record = input && typeof input === "object" ? input as Record<string, unknown> : {};
+  return requireSavePermission(businessId, module, typeof record.id === "string" ? record.id : undefined, record.autoPost === true ? "post" : "draft");
+}

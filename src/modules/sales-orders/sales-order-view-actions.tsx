@@ -143,7 +143,7 @@ export function SalesOrderViewActions({
               </Button>
             )}
             {inventoryEnabled && hasDeliverableItems && documentStatus === "active" && (
-              <Button asChild variant="secondary">
+              <Button permission="create" asChild variant="secondary">
                 <Link href={`/b/${businessId}/sales/delivery-notes/new?orderId=${orderId}`}>
                   <Truck className="size-4 mr-2" /> Ship Goods
                 </Link>

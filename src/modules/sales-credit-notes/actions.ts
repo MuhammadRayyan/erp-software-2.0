@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
-import { requireModule } from "@/core/permissions/require-module";
+import { requireSavePermission, requirePermission } from "@/core/permissions/require-module";
 import { creditNoteInputSchema } from "./credit-note-input";
 import { deleteCreditNote, duplicateCreditNote, saveCreditNote, voidCreditNote, type CreditNoteIntent } from "./credit-note-service";
 
@@ -15,7 +15,7 @@ export async function saveCreditNoteAction(
   input: unknown,
   intent: CreditNoteIntent
 ): Promise<CreditNoteActionResult> {
-  const { user } = await requireModule(businessId, "sales");
+  const { user } = await requireSavePermission(businessId, "sales", noteId, intent);
   const parsed = creditNoteInputSchema.safeParse(input);
   if (!parsed.success) {
     return { error: "Check the credit note fields and lines.", fieldErrors: z.flattenError(parsed.error).fieldErrors };
@@ -33,7 +33,7 @@ export async function saveCreditNoteAction(
 }
 
 export async function duplicateCreditNoteAction(businessId: string, noteId: string) {
-  const { user } = await requireModule(businessId, "sales");
+  const { user } = await requirePermission(businessId, "sales", "create");
   let id: string;
   try {
     id = duplicateCreditNote(businessId, user.id, noteId);
@@ -46,7 +46,7 @@ export async function duplicateCreditNoteAction(businessId: string, noteId: stri
 }
 
 export async function deleteCreditNoteAction(businessId: string, noteId: string) {
-  const { user } = await requireModule(businessId, "sales");
+  const { user } = await requirePermission(businessId, "sales", "delete");
   try {
     deleteCreditNote(businessId, user.id, noteId);
     revalidatePath(`/b/${businessId}/sales/credit-notes`);
@@ -57,7 +57,7 @@ export async function deleteCreditNoteAction(businessId: string, noteId: string)
 }
 
 export async function voidCreditNoteAction(businessId: string, noteId: string) {
-  const { user } = await requireModule(businessId, "sales");
+  const { user } = await requirePermission(businessId, "sales", "delete");
   try {
     voidCreditNote(businessId, user.id, noteId);
     revalidatePath(`/b/${businessId}/sales/credit-notes`);

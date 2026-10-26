@@ -1,3 +1,4 @@
+import { assertMutationPermission } from "@/core/permissions/mutation-permissions";
 import { randomUUID } from "node:crypto";
 import { getBusinessDb } from "@/core/db/business";
 import { mapCsvRows, parseCsv, statementFingerprint, type CsvMapping } from "./csv-import";
@@ -10,6 +11,7 @@ export function importBankStatement(
   csvText: string,
   mapping: CsvMapping,
 ) {
+  assertMutationPermission(businessId, userId, "banking", "create");
   if (!/\.csv$/i.test(fileName)) throw new Error("Choose a CSV statement file.");
   const table = parseCsv(csvText);
   const mapped = mapCsvRows(table, mapping);

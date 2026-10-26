@@ -162,13 +162,13 @@ export function PurchaseOrderTable({
                     </Link>
                   </DropdownMenuItem>
                   {canEdit && (
-                    <DropdownMenuItem asChild>
+                    <DropdownMenuItem permission="edit" asChild>
                       <Link href={`/b/${order.businessId}/purchases/orders/${order.id}/edit`}>
                         <FileEdit className="size-4 text-muted-foreground" /> Edit Order
                       </Link>
                     </DropdownMenuItem>
                   )}
-                  <DropdownMenuItem asChild>
+                  <DropdownMenuItem permission="export" asChild>
                     <a href={`/api/businesses/${order.businessId}/documents/purchase-order/${order.id}/pdf`} target="_blank" rel="noreferrer">
                       <Download className="size-4 text-muted-foreground" /> Download PDF
                     </a>
@@ -176,12 +176,12 @@ export function PurchaseOrderTable({
                   {canBill && (
                     <>
                       <DropdownMenuSeparator />
-                      <DropdownMenuItem asChild>
+                      <DropdownMenuItem permission="create" asChild>
                         <Link href={`/b/${order.businessId}/purchases/invoices/new?orderId=${order.id}`}>
                           <FileText className="size-4 text-muted-foreground" /> Bill Purchase Order
                         </Link>
                       </DropdownMenuItem>
-                      <DropdownMenuItem asChild>
+                      <DropdownMenuItem permission="create" asChild>
                         <Link href={`/b/${order.businessId}/purchases/goods-receipts/new?orderId=${order.id}`}>
                           <PackagePlus className="size-4 text-muted-foreground" /> Receive Goods
                         </Link>

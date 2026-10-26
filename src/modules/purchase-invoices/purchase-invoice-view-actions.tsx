@@ -94,18 +94,18 @@ export function PurchaseInvoiceViewActions({
       extraPrimaryActions={
         <>
           {documentStatus === "draft" && (
-            <Button onClick={handlePost} disabled={posting} className="gap-1.5">
+            <Button permission={"post"} onClick={handlePost} disabled={posting} className="gap-1.5">
               <CheckCircle2 className={`size-4 ${posting ? "animate-spin" : ""}`} />
               Post Bill
             </Button>
           )}
           {inventoryEnabled && hasInventoryLines && documentStatus !== "void" && documentStatus !== "draft" && (
-            <Button asChild variant="secondary">
+            <Button permission="create" asChild variant="secondary">
               <Link href={`/b/${businessId}/purchases/goods-receipts/new?invoiceId=${invoiceId}`}><PackagePlus className="size-4" /> Receive Goods</Link>
             </Button>
           )}
           {documentStatus === "posted" && balanceMinor > 0 && (
-            <Button asChild variant="secondary">
+            <Button permission="create" asChild variant="secondary">
               <Link href={`/b/${businessId}/purchases/payments/new?invoiceId=${invoiceId}`}><CircleDollarSign className="size-4" /> Record Payment</Link>
             </Button>
           )}
@@ -114,7 +114,7 @@ export function PurchaseInvoiceViewActions({
       extraActions={
         <>
           {documentStatus !== "void" && documentStatus !== "draft" && (
-            <DropdownMenuItem asChild>
+            <DropdownMenuItem permission="create" asChild>
               <Link href={`/b/${businessId}/purchases/debit-notes/new?invoiceId=${invoiceId}`}>
                 <BookOpenText className="size-4" /> Request Refund / Debit Note
               </Link>

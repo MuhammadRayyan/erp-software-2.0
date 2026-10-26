@@ -1,3 +1,4 @@
+import { assertMutationPermission } from "@/core/permissions/mutation-permissions";
 import { createSettlement, voidSettlement, applySettlementCredit, type SettlementConfig } from "@/modules/settlement/settlement-service";
 import { getBusinessDb } from "@/core/db/business";
 import { postSupplierPayment } from "@/modules/accounting/services/supplier-payment-posting-service";
@@ -34,6 +35,7 @@ export const supplierPaymentConfig: SettlementConfig = {
 const paymentConfig = supplierPaymentConfig;
 
 export function createSupplierPayment(businessId: string, userId: string, input: SupplierPaymentInput) {
+  assertMutationPermission(businessId, userId, "purchases", "create", "post");
   const data = supplierPaymentInputSchema.parse(input);
   const context = getBusinessDb(businessId, userId);
 
@@ -293,6 +295,7 @@ export function getSupplierPayment(
 }
 
 export function voidSupplierPayment(businessId: string, userId: string, paymentId: string) {
+  assertMutationPermission(businessId, userId, "purchases", "delete");
   const context = getBusinessDb(businessId, userId);
   const payment = context.sqlite
     .prepare("SELECT payment_number, supplier_id FROM supplier_payments WHERE id = ?")
@@ -419,6 +422,7 @@ export function applySupplierPaymentCredit(
   userId: string,
   data: ApplySupplierPaymentCreditInput,
 ) {
+  assertMutationPermission(businessId, userId, "purchases", "post");
   const context = getBusinessDb(businessId, userId);
   let result!: ReturnType<typeof applySettlementCredit>;
   context.sqlite.transaction(() => {

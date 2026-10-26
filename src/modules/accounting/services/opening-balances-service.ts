@@ -1,3 +1,4 @@
+import { assertMutationPermission } from "@/core/permissions/mutation-permissions";
 import { getBusinessDb } from "@/core/db/business";
 import { randomUUID } from "node:crypto";
 import { listAccounts } from "./account-service";
@@ -79,6 +80,8 @@ export function saveOpeningBalances(
   date: string,
   balances: { accountId: string; debitMinor: number; creditMinor: number }[],
 ): void {
+  assertMutationPermission(businessId, userId, "settings", "edit");
+  assertMutationPermission(businessId, userId, "accounting", "post");
   const { sqlite } = getBusinessDb(businessId, userId);
 
   sqlite.transaction(() => {

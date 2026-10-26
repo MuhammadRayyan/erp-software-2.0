@@ -1,3 +1,4 @@
+import { assertBusinessAdministrator } from "@/core/permissions/mutation-permissions";
 import { randomUUID } from "node:crypto";
 import { getBusinessDb } from "@/core/db/business";
 import { parseSignedMoneyToMinor } from "@/modules/accounting/calculations/money";
@@ -69,6 +70,7 @@ export function getVatPeriod(businessId: string, userId: string, periodId: strin
 }
 
 export function createVatPeriod(businessId: string, userId: string, input: VatPeriodInput) {
+  assertBusinessAdministrator(businessId, userId);
   const data = vatPeriodInputSchema.parse(input);
   const { sqlite } = getBusinessDb(businessId, userId);
   const id = randomUUID();
@@ -89,6 +91,7 @@ export function createVatPeriod(businessId: string, userId: string, input: VatPe
 }
 
 export function markVatPeriodPrepared(businessId: string, userId: string, periodId: string) {
+  assertBusinessAdministrator(businessId, userId);
   const { sqlite } = getBusinessDb(businessId, userId);
   sqlite.transaction(() => {
     const period = sqlite.prepare("SELECT status FROM vat_periods WHERE id = ?").get(periodId) as { status: string } | undefined;
@@ -99,6 +102,7 @@ export function markVatPeriodPrepared(businessId: string, userId: string, period
 }
 
 export function addVatAdjustment(businessId: string, userId: string, periodId: string, input: VatAdjustmentInput) {
+  assertBusinessAdministrator(businessId, userId);
   const data = vatAdjustmentInputSchema.parse(input);
   const { sqlite } = getBusinessDb(businessId, userId);
   sqlite.transaction(() => {
@@ -116,6 +120,7 @@ export function addVatAdjustment(businessId: string, userId: string, periodId: s
 }
 
 export function finalizeVatPeriod(businessId: string, userId: string, periodId: string) {
+  assertBusinessAdministrator(businessId, userId);
   const { sqlite } = getBusinessDb(businessId, userId);
   const snapshot = buildVatSnapshot(businessId, userId, periodId);
   if (snapshot.reviewCount > 0) throw new Error("Resolve the VAT Data Review items in this period before finalizing.");
@@ -136,6 +141,7 @@ export function finalizeVatPeriod(businessId: string, userId: string, periodId: 
 }
 
 export function reopenVatPeriod(businessId: string, userId: string, periodId: string, input: ReopenPeriodInput) {
+  assertBusinessAdministrator(businessId, userId);
   const data = reopenPeriodInputSchema.parse(input);
   const { sqlite } = getBusinessDb(businessId, userId);
   const now = new Date().toISOString();
@@ -151,6 +157,7 @@ export function reopenVatPeriod(businessId: string, userId: string, periodId: st
 }
 
 export function markVatPeriodFiledExternally(businessId: string, userId: string, periodId: string, input: FiledExternallyInput) {
+  assertBusinessAdministrator(businessId, userId);
   const data = filedExternallyInputSchema.parse(input);
   const { sqlite } = getBusinessDb(businessId, userId);
   const now = new Date().toISOString();

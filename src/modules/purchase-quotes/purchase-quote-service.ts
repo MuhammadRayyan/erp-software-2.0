@@ -1,3 +1,4 @@
+import { assertSavePermission, assertMutationPermission } from "@/core/permissions/mutation-permissions";
 import { createDocumentRevision, deleteDraftRevision } from "@/core/versioning/revision-engine";
 import { randomUUID } from "node:crypto";
 import { asc, eq } from "drizzle-orm";
@@ -125,6 +126,7 @@ export function getPurchaseQuote(businessId: string, userId: string, quoteId: st
 }
 
 export function savePurchaseQuote(businessId: string, userId: string, input: PurchaseQuoteInput, intent: PurchaseQuoteIntent, quoteId?: string) {
+  assertSavePermission(businessId, userId, "purchases", quoteId, intent);
   const data = purchaseQuoteInputSchema.parse(input);
   const context = getBusinessDb(businessId, userId);
   const supplier = context.db.select().from(suppliers).where(eq(suppliers.id, data.supplierId)).get();
@@ -160,6 +162,7 @@ export function savePurchaseQuote(businessId: string, userId: string, input: Pur
       }
       recordedNumber = current.quoteNumber;
       const nextStatus = current.documentStatus === "sent" || intent === "issue" ? "sent" : "draft";
+      if (nextStatus !== "draft") assertMutationPermission(businessId, userId, "purchases", "approve");
       context.sqlite.prepare(`
         UPDATE purchase_quotes SET
           supplier_id = ?, project_id = ?, quote_date = ?, expiry_date = ?, reference = ?,
@@ -255,6 +258,7 @@ export function savePurchaseQuote(businessId: string, userId: string, input: Pur
 }
 
 export function issuePurchaseQuote(businessId: string, userId: string, quoteId: string) {
+  assertMutationPermission(businessId, userId, "purchases", "approve");
   const context = getBusinessDb(businessId, userId);
   const quote = context.db.select().from(purchaseQuotes).where(eq(purchaseQuotes.id, quoteId)).get();
   if (!quote) throw new Error("Purchase quote not found.");
@@ -279,6 +283,7 @@ export function issuePurchaseQuote(businessId: string, userId: string, quoteId: 
 }
 
 export function closePurchaseQuote(businessId: string, userId: string, quoteId: string) {
+  assertMutationPermission(businessId, userId, "purchases", "edit");
   const context = getBusinessDb(businessId, userId);
   const quote = context.db.select().from(purchaseQuotes).where(eq(purchaseQuotes.id, quoteId)).get();
   if (!quote) throw new Error("Purchase quote not found.");
@@ -303,6 +308,7 @@ export function closePurchaseQuote(businessId: string, userId: string, quoteId: 
 }
 
 export function cancelPurchaseQuote(businessId: string, userId: string, quoteId: string) {
+  assertMutationPermission(businessId, userId, "purchases", "delete");
   const context = getBusinessDb(businessId, userId);
   const quote = context.db.select().from(purchaseQuotes).where(eq(purchaseQuotes.id, quoteId)).get();
   if (!quote) throw new Error("Purchase quote not found.");
@@ -336,6 +342,7 @@ const revisionConfig = {
 };
 
 export function deletePurchaseQuote(businessId: string, userId: string, quoteId: string) {
+  assertMutationPermission(businessId, userId, "purchases", "delete");
   const context = getBusinessDb(businessId, userId);
   const quote = context.sqlite.prepare("SELECT quote_number FROM purchase_quotes WHERE id = ?").get(quoteId) as { quote_number: string } | undefined;
   deleteDraftRevision(context.sqlite, revisionConfig, quoteId);
@@ -358,6 +365,7 @@ export function deletePurchaseQuote(businessId: string, userId: string, quoteId:
 }
 
 export function createPurchaseQuoteRevision(businessId: string, userId: string, sourceQuoteId: string): string {
+  assertMutationPermission(businessId, userId, "purchases", "create");
   const context = getBusinessDb(businessId, userId);
   const newId = createDocumentRevision(context.sqlite, revisionConfig, userId, sourceQuoteId);
   const rev = context.sqlite.prepare("SELECT quote_number, revision_number FROM purchase_quotes WHERE id = ?").get(newId) as { quote_number: string; revision_number: number } | undefined;

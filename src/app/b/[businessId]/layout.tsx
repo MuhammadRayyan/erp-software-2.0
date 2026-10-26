@@ -6,6 +6,9 @@ import { requireUser } from "@/core/auth/session";
 import { touchBusiness } from "@/core/businesses/business-service";
 import { getBusinessAccess } from "@/core/permissions/permissions";
 import { moduleForBusinessPath } from "@/core/permissions/module-access";
+import { hasActionPermission } from "@/core/permissions/permissions";
+import { PermissionsProvider } from "@/components/permissions-provider";
+import { PermissionDenied } from "@/components/permission-denied";
 
 export default async function BusinessLayout({ children, params }: { children: React.ReactNode; params: Promise<{ businessId: string }> }) {
   const { businessId } = await params;
@@ -40,6 +43,13 @@ export default async function BusinessLayout({ children, params }: { children: R
     redirect(`/b/${businessId}/forbidden?module=${requirement.module}`);
   }
 
+  const routeAction = pathname.split("/").includes("edit") ? "edit" : pathname.split("/").includes("new") ? "create" : null;
+  const postsOnCreate = /\/(receipts|payments|transfers)\/new(?:\/|$)/.test(pathname);
+  const canOpenForm = !requirement || !routeAction || (
+    hasActionPermission(businessId, user.id, requirement.module, requirement.module === "settings" ? "edit" : routeAction)
+    && (!postsOnCreate || hasActionPermission(businessId, user.id, requirement.module, "post"))
+  );
+
   // touchBusiness has its own in-memory throttle to prevent DB thrashing
   touchBusiness(businessId, user.id);
 
@@ -65,7 +75,9 @@ export default async function BusinessLayout({ children, params }: { children: R
           </Link>
         </div>
       )}
-      {children}
+      <PermissionsProvider capabilities={access.capabilities} isAdministrator={access.membership.role === "administrator"}>
+        {canOpenForm ? children : <PermissionDenied module={requirement?.module} action={routeAction ?? undefined} returnHref={`/b/${businessId}/overview`} returnLabel="Return to overview" />}
+      </PermissionsProvider>
     </AppShell>
   );
 }

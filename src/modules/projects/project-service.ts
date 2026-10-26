@@ -1,3 +1,4 @@
+import { assertMutationPermission } from "@/core/permissions/mutation-permissions";
 import { cache } from "react";
 import { randomUUID } from "node:crypto";
 import { getBusinessDb } from "@/core/db/business";
@@ -285,6 +286,7 @@ function budgetValue(value: string) {
 }
 
 export function createProject(businessId: string, userId: string, input: ProjectInput) {
+  assertMutationPermission(businessId, userId, "projects", "create");
   const data = projectInputSchema.parse(input);
   const { sqlite } = getBusinessDb(businessId, userId);
   if (data.customerId) ensureCustomer(sqlite, data.customerId);
@@ -353,6 +355,7 @@ export function createProject(businessId: string, userId: string, input: Project
 }
 
 export function updateProject(businessId: string, userId: string, projectId: string, input: ProjectInput) {
+  assertMutationPermission(businessId, userId, "projects", "edit");
   const data = projectInputSchema.parse(input);
   const { sqlite } = getBusinessDb(businessId, userId);
   const current = sqlite.prepare("SELECT id, code, customer_id FROM projects WHERE id = ?").get(projectId) as { id: string; code: string; customer_id: string | null } | undefined;
@@ -422,6 +425,7 @@ export function addProjectCustomer(
   projectId: string,
   input: ProjectCustomerInput,
 ) {
+  assertMutationPermission(businessId, userId, "projects", "edit");
   const data = projectCustomerInputSchema.parse(input);
   const { sqlite } = getBusinessDb(businessId, userId);
   const project = sqlite.prepare("SELECT id, customer_id FROM projects WHERE id = ?").get(projectId) as { id: string; customer_id: string | null } | undefined;
@@ -461,6 +465,7 @@ export function addProjectCustomer(
 }
 
 export function removeProjectCustomer(businessId: string, userId: string, projectId: string, customerId: string) {
+  assertMutationPermission(businessId, userId, "projects", "delete");
   const { sqlite } = getBusinessDb(businessId, userId);
   const project = sqlite.prepare("SELECT id, customer_id FROM projects WHERE id = ?").get(projectId) as { id: string; customer_id: string | null } | undefined;
   if (!project) throw new Error("Project not found.");
@@ -528,6 +533,7 @@ export function projectToInput(project: NonNullable<ReturnType<typeof getProject
 }
 
 export function deleteProject(businessId: string, userId: string, projectId: string) {
+  assertMutationPermission(businessId, userId, "projects", "delete");
   const { sqlite } = getBusinessDb(businessId, userId);
   const existing = sqlite.prepare("SELECT code, name FROM projects WHERE id = ?").get(projectId) as { code: string; name: string } | undefined;
   if (!existing) throw new Error("Project not found.");

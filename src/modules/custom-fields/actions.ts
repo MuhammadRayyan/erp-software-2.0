@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
-import { requireModule } from "@/core/permissions/require-module";
+import { requirePermission } from "@/core/permissions/require-module";
 import {
   createCustomFieldDefinition,
   deleteCustomFieldDefinition,
@@ -20,7 +20,7 @@ export async function createCustomFieldAction(
   businessId: string,
   input: unknown,
 ): Promise<CustomFieldActionResult> {
-  const { user } = await requireModule(businessId, "settings");
+  const { user } = await requirePermission(businessId, "settings", "edit");
   const parsed = customFieldDefinitionSchema.safeParse(input);
   if (!parsed.success) {
     return { error: "Check the custom field entries.", fieldErrors: z.flattenError(parsed.error).fieldErrors };
@@ -39,7 +39,7 @@ export async function updateCustomFieldAction(
   definitionId: string,
   input: unknown,
 ): Promise<CustomFieldActionResult> {
-  const { user } = await requireModule(businessId, "settings");
+  const { user } = await requirePermission(businessId, "settings", "edit");
   const parsed = customFieldDefinitionSchema.safeParse(input);
   if (!parsed.success) {
     return { error: "Check the custom field entries.", fieldErrors: z.flattenError(parsed.error).fieldErrors };
@@ -57,7 +57,7 @@ export async function deleteCustomFieldAction(
   businessId: string,
   definitionId: string,
 ): Promise<CustomFieldActionResult> {
-  const { user } = await requireModule(businessId, "settings");
+  const { user } = await requirePermission(businessId, "settings", "edit");
   try {
     deleteCustomFieldDefinition(businessId, user.id, definitionId);
   } catch (error) {
@@ -72,7 +72,7 @@ export async function moveCustomFieldAction(
   definitionId: string,
   direction: "up" | "down",
 ): Promise<CustomFieldActionResult> {
-  const { user } = await requireModule(businessId, "settings");
+  const { user } = await requirePermission(businessId, "settings", "edit");
   try {
     moveCustomFieldDefinition(businessId, user.id, definitionId, direction);
   } catch (error) {

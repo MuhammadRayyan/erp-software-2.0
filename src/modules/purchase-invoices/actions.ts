@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
-import { requireModule } from "@/core/permissions/require-module";
+import { requireSavePermission, requirePermission } from "@/core/permissions/require-module";
 import { purchaseInvoiceInputSchema } from "./purchase-invoice-input";
 import {
   deletePurchaseInvoice,
@@ -21,7 +21,7 @@ import {
 export type PurchaseInvoiceActionResult = { error?: string; fieldErrors?: Record<string, string[]> };
 
 export async function savePurchaseInvoiceAction(businessId: string, invoiceId: string | null, input: unknown, intent: PurchaseInvoiceIntent): Promise<PurchaseInvoiceActionResult> {
-  const { user } = await requireModule(businessId, "purchases");
+  const { user } = await requireSavePermission(businessId, "purchases", invoiceId, intent);
   const parsed = purchaseInvoiceInputSchema.safeParse(input);
   if (!parsed.success) return { error: "Check the purchase invoice fields and lines.", fieldErrors: z.flattenError(parsed.error).fieldErrors };
   let id: string;
@@ -39,7 +39,7 @@ export async function savePurchaseInvoiceAction(businessId: string, invoiceId: s
 }
 
 export async function duplicatePurchaseInvoiceAction(businessId: string, invoiceId: string) {
-  const { user } = await requireModule(businessId, "purchases");
+  const { user } = await requirePermission(businessId, "purchases", "create");
   try {
     const id = duplicatePurchaseInvoice(businessId, user.id, invoiceId);
     revalidatePath(`/b/${businessId}/purchases/invoices`);
@@ -49,11 +49,11 @@ export async function duplicatePurchaseInvoiceAction(businessId: string, invoice
     return { error: error instanceof Error ? error.message : "The purchase invoice could not be duplicated." };
   }
 }
-export async function deletePurchaseInvoiceAction(businessId: string, invoiceId: string) { const { user } = await requireModule(businessId, "purchases"); try { deletePurchaseInvoice(businessId, user.id, invoiceId); revalidatePath(`/b/${businessId}/purchases/invoices`); return {}; } catch (error) { return { error: error instanceof Error ? error.message : "The purchase invoice could not be deleted." }; } }
-export async function voidPurchaseInvoiceAction(businessId: string, invoiceId: string) { const { user } = await requireModule(businessId, "purchases"); try { voidPurchaseInvoice(businessId, user.id, invoiceId); revalidatePath(`/b/${businessId}/purchases/invoices/${invoiceId}`); return {}; } catch (error) { return { error: error instanceof Error ? error.message : "The purchase invoice could not be voided." }; } }
+export async function deletePurchaseInvoiceAction(businessId: string, invoiceId: string) { const { user } = await requirePermission(businessId, "purchases", "delete"); try { deletePurchaseInvoice(businessId, user.id, invoiceId); revalidatePath(`/b/${businessId}/purchases/invoices`); return {}; } catch (error) { return { error: error instanceof Error ? error.message : "The purchase invoice could not be deleted." }; } }
+export async function voidPurchaseInvoiceAction(businessId: string, invoiceId: string) { const { user } = await requirePermission(businessId, "purchases", "delete"); try { voidPurchaseInvoice(businessId, user.id, invoiceId); revalidatePath(`/b/${businessId}/purchases/invoices/${invoiceId}`); return {}; } catch (error) { return { error: error instanceof Error ? error.message : "The purchase invoice could not be voided." }; } }
 
 export async function postPurchaseInvoiceAction(businessId: string, invoiceId: string) {
-  const { user } = await requireModule(businessId, "purchases");
+  const { user } = await requirePermission(businessId, "purchases", "post");
   try {
     postPurchaseInvoiceDoc(businessId, user.id, invoiceId);
     revalidatePath(`/b/${businessId}/purchases/invoices`);
@@ -65,21 +65,21 @@ export async function postPurchaseInvoiceAction(businessId: string, invoiceId: s
 }
 
 export async function batchPostPurchaseInvoicesAction(businessId: string, invoiceIds: string[]): Promise<BatchPurchaseActionResult> {
-  const { user } = await requireModule(businessId, "purchases");
+  const { user } = await requirePermission(businessId, "purchases", "post");
   const result = batchPostPurchaseInvoices(businessId, user.id, invoiceIds);
   revalidatePath(`/b/${businessId}/purchases/invoices`);
   return result;
 }
 
 export async function batchVoidPurchaseInvoicesAction(businessId: string, invoiceIds: string[]): Promise<BatchPurchaseActionResult> {
-  const { user } = await requireModule(businessId, "purchases");
+  const { user } = await requirePermission(businessId, "purchases", "delete");
   const result = batchVoidPurchaseInvoices(businessId, user.id, invoiceIds);
   revalidatePath(`/b/${businessId}/purchases/invoices`);
   return result;
 }
 
 export async function batchDeletePurchaseInvoicesAction(businessId: string, invoiceIds: string[]): Promise<BatchPurchaseActionResult> {
-  const { user } = await requireModule(businessId, "purchases");
+  const { user } = await requirePermission(businessId, "purchases", "delete");
   const result = batchDeletePurchaseInvoices(businessId, user.id, invoiceIds);
   revalidatePath(`/b/${businessId}/purchases/invoices`);
   return result;

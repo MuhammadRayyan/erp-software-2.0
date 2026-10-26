@@ -194,7 +194,7 @@ export function AppearanceForm({ initialFont, initialSize }: { initialFont: stri
       </section>
 
       <div className="flex justify-end pt-2">
-        <Button type="submit" disabled={isPending}>
+        <Button permission={"save"} type="submit" disabled={isPending}>
           {isPending ? "Saving…" : "Save Appearance Settings"}
         </Button>
       </div>

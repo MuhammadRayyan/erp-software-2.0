@@ -16,7 +16,7 @@ export async function GET(
     return NextResponse.json({ error: "Unsupported document type" }, { status: 404 });
   }
 
-  const { session, access, error: authError } = await requireApiAuth(request, { businessId, module: requiredModule });
+  const { session, access, error: authError } = await requireApiAuth(request, { businessId, module: requiredModule, action: "export" });
   if (authError || !session || !access) {
     return authError ?? NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }

@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
-import { requireModule } from "@/core/permissions/require-module";
+import { requireInputSavePermission, requirePermission } from "@/core/permissions/require-module";
 import {
   saveEmployee,
   toggleEmployeeActive,
@@ -81,7 +81,7 @@ export async function saveEmployeeAction(
   businessId: string,
   input: unknown
 ): Promise<ActionResult<{ id: string }>> {
-  const { user } = await requireModule(businessId, "payroll");
+  const { user } = await requireInputSavePermission(businessId, "payroll", input);
   const parsed = employeeSchema.safeParse(input);
   if (!parsed.success) {
     return {
@@ -105,7 +105,7 @@ export async function toggleEmployeeActiveAction(
   employeeId: string,
   isActive: boolean
 ): Promise<ActionResult> {
-  const { user } = await requireModule(businessId, "payroll");
+  const { user } = await requirePermission(businessId, "payroll", "edit");
   try {
     toggleEmployeeActive(businessId, user.id, employeeId, isActive);
     revalidatePath(`/b/${businessId}/payroll/employees`);
@@ -120,7 +120,7 @@ export async function savePayslipItemAction(
   businessId: string,
   input: unknown
 ): Promise<ActionResult<{ id: string }>> {
-  const { user } = await requireModule(businessId, "payroll");
+  const { user } = await requireInputSavePermission(businessId, "payroll", input);
   const parsed = payslipItemSchema.safeParse(input);
   if (!parsed.success) {
     return {
@@ -143,7 +143,7 @@ export async function savePayslipAction(
   businessId: string,
   input: unknown
 ): Promise<ActionResult<{ id: string }>> {
-  const { user } = await requireModule(businessId, "payroll");
+  const { user } = await requireInputSavePermission(businessId, "payroll", input);
   const parsed = payslipSchema.safeParse(input);
   if (!parsed.success) {
     return {
@@ -168,7 +168,7 @@ export async function postPayslipAction(
   businessId: string,
   payslipId: string
 ): Promise<ActionResult> {
-  const { user } = await requireModule(businessId, "payroll");
+  const { user } = await requirePermission(businessId, "payroll", "post");
   try {
     postPayslipToLedger(businessId, user.id, payslipId);
     revalidatePath(`/b/${businessId}/payroll/payslips/${payslipId}`);
@@ -184,7 +184,7 @@ export async function voidPayslipAction(
   businessId: string,
   payslipId: string
 ): Promise<ActionResult> {
-  const { user } = await requireModule(businessId, "payroll");
+  const { user } = await requirePermission(businessId, "payroll", "delete");
   try {
     voidPayslip(businessId, user.id, payslipId);
     revalidatePath(`/b/${businessId}/payroll/payslips/${payslipId}`);
@@ -200,7 +200,7 @@ export async function generateBatchPayslipsAction(
   businessId: string,
   input: unknown
 ): Promise<ActionResult<{ createdCount: number }>> {
-  const { user } = await requireModule(businessId, "payroll");
+  const { user } = await requirePermission(businessId, "payroll", "create");
   const parsed = batchPayRunSchema.safeParse(input);
   if (!parsed.success) {
     return {

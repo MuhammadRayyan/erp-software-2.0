@@ -238,13 +238,13 @@ export function InvoiceTable({
                   </Link>
                 </DropdownMenuItem>
                 {canEdit && (
-                  <DropdownMenuItem asChild>
+                  <DropdownMenuItem permission="edit" asChild>
                     <Link href={`/b/${inv.businessId}/sales/invoices/${inv.id}/edit`}>
                       <FileEdit className="size-4 text-muted-foreground" /> Edit Invoice
                     </Link>
                   </DropdownMenuItem>
                 )}
-                <DropdownMenuItem asChild>
+                <DropdownMenuItem permission="export" asChild>
                   <a href={`/api/businesses/${inv.businessId}/documents/sales-invoice/${inv.id}/pdf`} target="_blank" rel="noreferrer">
                     <Download className="size-4 text-muted-foreground" /> Download PDF
                   </a>
@@ -252,7 +252,7 @@ export function InvoiceTable({
                 {canReceive && (
                   <>
                     <DropdownMenuSeparator />
-                    <DropdownMenuItem asChild>
+                    <DropdownMenuItem permission="create" asChild>
                       <Link href={`/b/${inv.businessId}/sales/receipts/new?invoiceId=${inv.id}`}>
                         <CircleDollarSign className="size-4 text-muted-foreground" /> Record Receipt
                       </Link>
@@ -538,7 +538,7 @@ export function InvoiceTable({
               <FileArchive className="size-3.5" /> Download ZIP
             </Button>
 
-            <Button
+            <Button permission={"delete"}
               type="button"
               variant="secondary"
               size="sm"

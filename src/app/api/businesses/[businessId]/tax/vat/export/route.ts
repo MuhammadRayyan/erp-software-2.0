@@ -9,7 +9,7 @@ export const runtime = "nodejs";
 
 export async function GET(request: Request, { params }: { params: Promise<{ businessId: string }> }) {
   const { businessId } = await params;
-  const { session, access, error: authError } = await requireApiAuth(request, { businessId, module: "reports" });
+  const { session, access, error: authError } = await requireApiAuth(request, { businessId, module: "reports", action: "export" });
   if (authError || !session || !access) return authError;
   const url = new URL(request.url);
   const type = url.searchParams.get("type") ?? "detail";

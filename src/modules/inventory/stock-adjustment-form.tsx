@@ -186,7 +186,7 @@ export function StockAdjustmentForm({
           </Link>
         </Button>
         {status === "posted" ? (
-          <Button
+          <Button permission={["save", "post"]}
             type="button"
             disabled={isSubmitting}
             onClick={handleSubmit((values) => save(values, "post"))}
@@ -196,7 +196,7 @@ export function StockAdjustmentForm({
           </Button>
         ) : (
           <div className="flex gap-2">
-            <Button
+            <Button permission={"save"}
               type="button"
               variant="secondary"
               disabled={isSubmitting}
@@ -204,7 +204,7 @@ export function StockAdjustmentForm({
             >
               Save Draft
             </Button>
-            <Button
+            <Button permission={["save", "post"]}
               type="button"
               disabled={isSubmitting}
               onClick={handleSubmit((values) => save(values, "post"))}

@@ -38,7 +38,7 @@ export function InventoryLocationRowActions({
               <Eye className="size-4 text-muted-foreground" /> View Details
             </Link>
           </DropdownMenuItem>
-          <DropdownMenuItem asChild>
+          <DropdownMenuItem permission="edit" asChild>
             <Link href={`/b/${businessId}/inventory/locations/${locationId}/edit`}>
               <FileEdit className="size-4 text-muted-foreground" /> Edit Location
             </Link>
