@@ -60,7 +60,7 @@ test.describe('Top-Down Visual and Architecture Flow Verification', () => {
     }
 
     // Take screenshot of Document Paper View
-    await page.screenshot({ path: 'screenshots/01-sales-invoice-paper-view.png', fullPage: true });
+    await page.screenshot({ path: 'test-results/visual/01-sales-invoice-paper-view.png', fullPage: true });
 
     // 6. Test Zoom controls
     const zoom75 = page.getByRole('button', { name: '75%' });
@@ -84,7 +84,7 @@ test.describe('Top-Down Visual and Architecture Flow Verification', () => {
     if (await flowStepper.isVisible()) {
       await expect(flowStepper).toBeVisible();
     }
-    await page.screenshot({ path: 'screenshots/02-sales-invoice-operational-ledger.png', fullPage: true });
+    await page.screenshot({ path: 'test-results/visual/02-sales-invoice-operational-ledger.png', fullPage: true });
 
     // Switch back to Document View
     const docTab = page.getByRole('button', { name: /Document View \(Paper\)/i });
@@ -131,7 +131,7 @@ test.describe('Top-Down Visual and Architecture Flow Verification', () => {
     const emailError = page.locator('p.field-error:has-text("email")');
     await expect(emailError).toBeVisible();
 
-    await page.screenshot({ path: 'screenshots/03-customer-email-validation-error.png' });
+    await page.screenshot({ path: 'test-results/visual/03-customer-email-validation-error.png' });
 
     // Now fix the email
     await emailInput.fill('valid.customer@example.com');
@@ -141,7 +141,7 @@ test.describe('Top-Down Visual and Architecture Flow Verification', () => {
     await expect(emailInput).toHaveAttribute('aria-invalid', 'false');
     await expect(page.locator('p.field-error:has-text("email")')).toHaveCount(0);
 
-    await page.screenshot({ path: 'screenshots/04-customer-email-validation-resolved.png' });
+    await page.screenshot({ path: 'test-results/visual/04-customer-email-validation-resolved.png' });
   });
 
   test('3. Top-Down Sales Architecture Flow & Calculation Math: Quote -> Order -> Invoice -> Paper Canvas', async ({ page }) => {
@@ -190,7 +190,7 @@ test.describe('Top-Down Visual and Architecture Flow Verification', () => {
     await expect(quotePaper.locator('text=1,000.00').first()).toBeVisible();
     await expect(quotePaper.locator('text=1,050.00').first()).toBeVisible();
 
-    await page.screenshot({ path: 'screenshots/05-quote-flow-paper.png', fullPage: true });
+    await page.screenshot({ path: 'test-results/visual/05-quote-flow-paper.png', fullPage: true });
 
     // 4. Convert Quote to Sales Order
     const convertToOrderBtn = page.getByRole('button', { name: /convert to order/i });
@@ -213,7 +213,7 @@ test.describe('Top-Down Visual and Architecture Flow Verification', () => {
     await expect(orderPaper.getByRole('heading', { name: 'SALES ORDER' })).toBeVisible();
     await expect(orderPaper.locator('text=1,050.00').first()).toBeVisible();
 
-    await page.screenshot({ path: 'screenshots/06-order-flow-paper.png', fullPage: true });
+    await page.screenshot({ path: 'test-results/visual/06-order-flow-paper.png', fullPage: true });
 
     // 5. Convert Order to Sales Invoice
     const convertToInvoiceBtn = page.getByRole('button', { name: /convert to invoice/i });
@@ -234,7 +234,7 @@ test.describe('Top-Down Visual and Architecture Flow Verification', () => {
     await expect(invoicePaper.getByRole('heading', { name: /INVOICE/i })).toBeVisible();
     await expect(invoicePaper.locator('text=1,050.00').first()).toBeVisible();
 
-    await page.screenshot({ path: 'screenshots/07-invoice-flow-paper.png', fullPage: true });
+    await page.screenshot({ path: 'test-results/visual/07-invoice-flow-paper.png', fullPage: true });
   });
 
   test('4. Visual Paper Document View across all modules: Customer Receipt, Purchase Bill, Purchase Order, Debit Note, Supplier Payment', async ({ page }) => {
@@ -248,7 +248,7 @@ test.describe('Top-Down Visual and Architecture Flow Verification', () => {
       const receiptPaper = page.locator('#printable-document-sheet');
       await expect(receiptPaper).toBeVisible();
       await expect(receiptPaper.getByRole('heading', { name: 'PAYMENT RECEIPT' })).toBeVisible();
-      await page.screenshot({ path: 'screenshots/08-customer-receipt-paper.png', fullPage: true });
+      await page.screenshot({ path: 'test-results/visual/08-customer-receipt-paper.png', fullPage: true });
     }
 
     // 2. Purchase Bills (Invoices)
@@ -259,7 +259,7 @@ test.describe('Top-Down Visual and Architecture Flow Verification', () => {
       const billPaper = page.locator('#printable-document-sheet');
       await expect(billPaper).toBeVisible();
       await expect(billPaper.getByRole('heading', { name: 'PURCHASE INVOICE' })).toBeVisible();
-      await page.screenshot({ path: 'screenshots/09-purchase-bill-paper.png', fullPage: true });
+      await page.screenshot({ path: 'test-results/visual/09-purchase-bill-paper.png', fullPage: true });
 
       // Copy to Debit Note
       const copyToBtn = page.getByRole('button', { name: /copy to/i });
@@ -274,7 +274,7 @@ test.describe('Top-Down Visual and Architecture Flow Verification', () => {
             await expect(page.locator('#printable-document-sheet')).toBeVisible({ timeout: 15000 });
             const dnPaper = page.locator('#printable-document-sheet');
             await expect(dnPaper.getByRole('heading', { name: 'DEBIT NOTE' })).toBeVisible();
-            await page.screenshot({ path: 'screenshots/11-debit-note-paper.png', fullPage: true });
+            await page.screenshot({ path: 'test-results/visual/11-debit-note-paper.png', fullPage: true });
           }
         }
       }
@@ -288,7 +288,7 @@ test.describe('Top-Down Visual and Architecture Flow Verification', () => {
       const poPaper = page.locator('#printable-document-sheet');
       await expect(poPaper).toBeVisible();
       await expect(poPaper.getByRole('heading', { name: 'PURCHASE ORDER' })).toBeVisible();
-      await page.screenshot({ path: 'screenshots/10-purchase-order-paper.png', fullPage: true });
+      await page.screenshot({ path: 'test-results/visual/10-purchase-order-paper.png', fullPage: true });
     }
 
     // 4. Debit Notes
@@ -299,7 +299,7 @@ test.describe('Top-Down Visual and Architecture Flow Verification', () => {
       const dnPaper = page.locator('#printable-document-sheet');
       await expect(dnPaper).toBeVisible();
       await expect(dnPaper.getByRole('heading', { name: 'DEBIT NOTE' })).toBeVisible();
-      await page.screenshot({ path: 'screenshots/11-debit-note-paper.png', fullPage: true });
+      await page.screenshot({ path: 'test-results/visual/11-debit-note-paper.png', fullPage: true });
     }
 
     // 5. Supplier Payments
@@ -310,7 +310,7 @@ test.describe('Top-Down Visual and Architecture Flow Verification', () => {
       const payPaper = page.locator('#printable-document-sheet');
       await expect(payPaper).toBeVisible();
       await expect(payPaper.getByRole('heading', { name: 'PAYMENT VOUCHER' })).toBeVisible();
-      await page.screenshot({ path: 'screenshots/12-supplier-payment-paper.png', fullPage: true });
+      await page.screenshot({ path: 'test-results/visual/12-supplier-payment-paper.png', fullPage: true });
     }
   });
 });

@@ -1,0 +1,77 @@
+# Testing-phase operations — 26 October 2026
+
+For the maintained testing checklist and deferred decisions, use [NEXT_STEPS.md](NEXT_STEPS.md). [CURRENT_STATE.md](CURRENT_STATE.md) is the current release summary; [DEPLOYMENT.md](DEPLOYMENT.md) is the operating procedure. The dated evidence below is not a new authorization to change infrastructure or send monitoring events.
+
+The owner has chosen to keep the repository public and defer the remaining optional hardening/backlog while testing. Existing fixes and automatic deployment checks remain in place. This follow-up performs operational verification. The owner subsequently explicitly approved separate read-only Sentry and Oracle API access; those credentials and the limited OCI IAM policy are configured below. No application change, monitoring job, maintenance automation or server reboot was introduced.
+
+## Verified now
+
+| Area | Actual observation | Testing-phase implication |
+|---|---|---|
+| Public application | HTTPS readiness is healthy at revision `32df273e5eeecec3db15f95bd8ba8d0f1cc1cd93`. | Current release is running. |
+| Oracle instance | IMDSv2 confirms `VM.Standard.A1.Flex`, region `me-dubai-1`, 2 OCPUs and 12 GB RAM. | The deployment targets the expected native ARM64 machine. This does not independently establish account billing/free-tier entitlement. |
+| Capacity | About 9.9 GB RAM available; 84 GB disk free; low load at the inspection checkpoint. | No observed capacity-pressure reason for an upgrade or more cleanup now. |
+| Services | Application and Caddy containers running; application healthy, zero restarts and no recorded OOM kill. No failed systemd units. | No observed service incident requiring repair. |
+| Databases | System schema 6; all six business schemas 35; integrity, foreign keys and financial reconciliation passed. | All seven databases pass the current checks. |
+| Network exposure on host | SSH 22 and proxy HTTP/HTTPS 80/443 listen publicly. App port 3000 and Caddy admin port 2019 are not exposed as host listeners. | App traffic reaches the reverse proxy. OCI NSGs/security-list rules still require console access. |
+| Host firewall | UFW is not installed; existing iptables input rules allow 22/80/443, established traffic, ICMP and loopback, then reject other input. | UFW's absence alone is not evidence that the host lacks filtering. No firewall rule was changed. Docker/cloud ingress must be assessed separately. |
+| Restart setup | Docker is enabled/active; app and Caddy use `unless-stopped`. | Both are configured for automatic recovery after a normal host boot. Actual reboot recovery was not exercised this turn. |
+| Local release snapshots | Two complete manifests dated 11:59:47 and 12:57:17 UTC contain all seven databases. Prior deployment verified checksums and restore/migration rehearsal. The earlier failed snapshot has no manifest. | Local deployment recovery exists. Offsite scheduling remains deferred. The failed snapshot must not be used for restore. |
+| Kernel upkeep | Running kernel is `6.17.0-1020-oracle`; `/var/run/reboot-required` lists `linux-image-7.0.0-1013-oracle`. | A reboot is pending; none was performed. |
+| Sentry source configuration | SDKs use a fallback DSN when environment DSNs are absent. Server tracing samples 10% in production; logs/local-variable capture are enabled. Browser configuration includes replay sampling. The configured build project is `personal-bv0 / erp-20`. | Authenticated API access, historical events and existing enabled monitors/email workflow are now verified below. Current-release event ingestion and email delivery remain unproven. No monitoring configuration or synthetic event was sent. |
+
+## Account-level verification and access
+
+At the initial inspection, no OCI CLI profile or Sentry API credential was available locally or on the VM. Plugin discovery did not find a relevant Oracle Cloud or Sentry connector. Existing SSH and GitHub access work. Subsequent inspection also found no Sentry credential in the Windows process/user/machine environment or the checked local client configuration. GitHub currently has only the three existing server connection secret names.
+
+The owner subsequently signed in to both Oracle Cloud and Sentry in Chrome. At that checkpoint, Oracle's owner user profile showed no registered API keys, and Sentry's personal-token and organization-token lists both showed no tokens. The app's DSN is configured, but this is not a management API authentication token. The new operational credentials were then created as described below; no secret needed to be pasted into chat.
+
+After the owner's explicit action-time confirmation, a Sentry personal token named `ERP operations - read only` was created with `alerts:read`, `event:read`, `org:read` and `project:read`. No team/member/release/write/admin permission is selected. It is saved in `C:\Users\Rayyan\.sentryclirc`, outside the repository, with inheritance disabled and access limited to the current Windows user and SYSTEM. The secret was written directly from the creation form to that file without printing it or using the clipboard. No token was added to GitHub, the application image or the production server.
+
+Direct authenticated API reads verified active project `erp-20` (`javascript-nextjs`, ID `4511977771302992`) and organization `personal-bv0`. The same private configuration can be reused without a browser login for each Sentry check, while the token remains valid. Revocation is available in Sentry's Personal Tokens page.
+
+OCI signing-key registration and Sentry token creation have no separate credential-creation charge. Resource/monitoring usage and plan limits remain separate. A configured OCI signing key/private local profile and Sentry authentication token allow direct API access without a browser login for every check. The already-working merge/deploy pipeline uses SSH and its job-scoped GitHub token and does not require these new operational credentials. [OCI IAM](https://www.oracle.com/security/cloud-security/identity-cloud/), [OCI signing keys](https://docs.oracle.com/en-us/iaas/Content/API/Concepts/apisigningkey.htm), [Sentry authentication](https://docs.sentry.io/api/auth/)
+
+The first Oracle console attempt could not complete signing-key registration: IAM/storage pages remained blank and Cloud Shell terminal input failed, so the temporary shell was explicitly exited and those checks were left unverified. After a renewed sign-in and full refresh, authenticated Cloud Shell worked, and the owner-approved setup and API checks below completed. Unlike Sentry's token scopes, OCI signing-key access follows the owning user's IAM permissions, which is why the new credential belongs to a separate limited identity. [Cloud Shell availability and limits](https://docs.oracle.com/en-us/iaas/Content/API/Concepts/cloudshellintro.htm)
+
+### OCI API setup follow-up
+
+At the owner's request, OCI CLI **3.95.1** was installed in the isolated local environment `C:\Users\Rayyan\.oci\cli`. A new RSA 3072-bit signing key pair was generated in the private `.oci` folder. The private key remains only on this computer; its public counterpart is `C:\Users\Rayyan\.oci\erp_operations_api_public.pem`, fingerprint `4a:51:58:98:1e:cf:b0:ad:7a:65:93:0b:fa:2a:1c:8d`. Folder permissions allow only the current Windows user and SYSTEM, and the generated files inherit those restricted permissions.
+
+After explicit owner approval, the API-only user **`erp-operations-api`**, group **`erp-operations-readonly`**, and policy **`erp-operations-readonly`** were created in the Default domain. The approved owner-controlled Gmail plus alias was used for Oracle's required user email. Both user and key are ACTIVE. API signing is enabled; Console password, auth tokens, customer secret keys, database credentials, OAuth2 client credentials and SMTP credentials are disabled. The private local configuration is `C:\Users\Rayyan\.oci\config`, named profile **`ERP_OPERATIONS`**. The exact policy and operating instructions are in `C:\Users\Rayyan\.oci\erp-operations-readonly-policy.txt` and `C:\Users\Rayyan\.oci\ERP_API_SETUP.md`. No credential was added to GitHub or the production server/image.
+
+**Setup is complete:** an actual local CLI read returned the expected running `modern-erp` instance. The same named profile then passed **13 read-only SDK checks with zero failures**, covering the instance, API-only capabilities, group membership, compartments, policies, boot volume, backup assignment/list, VNIC, security list, alarms and metrics. Results are saved privately in `C:\Users\Rayyan\.oci\ERP_API_VERIFICATION.json`. The returned membership is only the operations group, there are no child compartments, and the two root policies are the existing Administrators policy and the new infrastructure/monitoring-read and IAM-metadata-inspection policy. No production mutation was attempted as a negative permission test. OCI's ordinary self-service management of the user's own credentials still applies; resource read-only access does not disable that behavior.
+
+The initial local calls briefly returned `NotAuthenticated` while the newly registered identity/key propagated; both were ACTIVE and clock comparison matched Oracle. Authentication then succeeded without widening permissions or replacing the key. The local helper `C:\Users\Rayyan\.oci\oci.ps1` supplies compatible Windows PowerShell module paths for OCI's ACL check and restores the process environment afterward; it was verified with the actual instance read. No global PATH or PowerShell settings were changed. Future checks can use this local profile without signing into the browser again while the key/access remain valid. This setup does not alter production or the deployment pipeline. [Oracle's documented propagation delay](https://docs.oracle.com/en-us/iaas/Content/data-science/using/tshoot-jobs.htm)
+
+## Authenticated console findings
+
+- OCI identifies the expected running `modern-erp` instance and public IP in the root compartment, using A1 Flex with 2 OCPUs / 12 GB RAM and Ubuntu 24.04 Minimal aarch64. Metadata is **v2 only** and boot/data attachment in-transit encryption is enabled.
+- The linked `subnet-erp` is a regional public subnet, `10.0.0.0/24`. Its default security list allows stateful ingress from `0.0.0.0/0` to TCP 22, 80 and 443, plus the listed ICMP rules, and permits all-protocol outbound traffic. No rules were changed.
+- Subsequent authenticated Cloud Shell API reads confirm that the instance's VNIC has **no associated NSGs**. The attached boot volume is **100 GB, 10 VPUs/GB**, available, with no autotune policies, and its attachment has in-transit encryption enabled. The boot-volume backup-policy assignment query and boot-volume backup list both returned no entries; there is no verified OCI boot-volume backup or assigned schedule for this volume. Root-compartment alarm listing also returned no entries. These findings are distinct from the application's verified local deployment snapshots and do not imply that the full tenancy has no other backup products or alarms in other compartments/regions. No cloud configuration was changed.
+- The new local operations identity independently read these infrastructure settings and ten `oci_computeagent` metric names. Its last-hour CPU query returned twelve five-minute averages, the highest approximately **4.28%**. This verifies authenticated metric access and modest sampled CPU usage at this checkpoint; it is not a load test or an instantaneous peak measurement.
+- The home dashboard shows a free trial with €250 remaining and €0 used at the inspection checkpoint, six of thirty days elapsed. This is dashboard evidence, not a guarantee of future free-tier eligibility or complete settled billing. The root-compartment dashboard lists no alarms.
+- Sentry authenticated project `personal-bv0 / erp-20` exists and its issue feed contains captured events. The bounded recent-issue API read returned six issue groups in the requested last-24-hour view; the latest `lastSeen` among them was 05:16:10 UTC on 26 October, before the final production rollout. Historical ingestion is established; current-release event ingestion and release association have not been demonstrated by a new synthetic event.
+- The current Sentry alert/monitor APIs confirm one enabled email alert workflow with no recorded `lastTriggered`, and three enabled monitors: `error`, `issue_stream`, and `uptime_domain_failure`. The uptime monitor targets `erp-portal.rapidtss.com`. Existing email configuration is established; actual delivery is not proven, and no notification/test event was sent. No alert or monitor configuration was changed.
+
+The remaining read-only verification is:
+
+- **OCI:** independently establish settled billing/free-tier entitlement beyond the observed trial dashboard. Local API authentication, the new identity's memberships/capabilities and root policies, compartment listing, instance/storage/network settings, backup-policy status, root alarms and bounded monitoring metrics are verified above. This does not constitute an exhaustive audit of all identity-domain application assignments or every cloud service/region.
+- **Sentry:** current-release event ingestion/association and actual notification delivery evidence. Project access, historical events and existing monitor/alert configuration have now been verified. A synthetic event would be a separate explicitly described check rather than an assumed read-only inspection.
+
+The uncompleted account-level items are not verified passes. The user can choose to defer them too.
+
+## What “operational maintenance” means here
+
+It is routine server upkeep: activating installed kernel updates through a reboot, checking resource usage, and eventually managing old images, assets, logs and backups. It does not mean rebuilding the app or adding a larger architecture.
+
+For the current testing phase:
+
+1. **Pending kernel reboot:** use a convenient break in testing. It will briefly interrupt the app. Docker/container restart configuration has been checked; public readiness should be checked after the reboot. No reboot has been scheduled or authorized in this follow-up.
+2. **Disk cleanup:** no immediate further action is indicated by current free space. Old unused build cache was already reduced from 33.6 GB to about 4.7 GB, preserving rollback images.
+3. **Recurring monitoring/retention automation:** deferred at the owner's request. Existing release checks and bounded container logs remain in place.
+4. **Other hardening/backlog:** deferred during testing, including offsite backup automation, SMTP setup, import redesign, extra audit controls, deployment-identity changes and load testing.
+
+The repository remains public. Its already tracked real Manager.io backup and Git history remain publicly accessible; the earlier ignore changes do not remove them. This is recorded as an existing exposure and an owner-deferred cleanup item, not as a new change to perform during testing.
+
+References: [OCI instance metadata](https://docs.oracle.com/en-us/iaas/Content/Compute/Tasks/gettingmetadata.htm), [Ubuntu automatic updates and reboot handling](https://ubuntu.com/server/docs/how-to/software/automatic-updates/), [Sentry alert API](https://docs.sentry.io/api/monitors/fetch-alerts/), [Sentry monitor API](https://docs.sentry.io/api/monitors/fetch-an-organizations-monitors/). Authenticated findings above are separate from the unresolved items.

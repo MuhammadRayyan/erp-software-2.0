@@ -1,14 +1,8 @@
-import { test, expect, type Page } from "@playwright/test";
+import { test, expect } from "@playwright/test";
 import { readFileSync } from "node:fs";
+import { login } from "./helpers/session";
 
 function businessId() { return (JSON.parse(readFileSync(process.env.ERP_BROWSER_META!, "utf8")) as { businessId: string }).businessId; }
-async function login(page: Page, role: "admin" | "warehouse" | "salesviewer" | "creator") {
-  await page.goto("/login");
-  await page.locator('input[name="email"]').fill(role === "admin" ? "admin@demo.local" : `${role}@hardening.invalid`);
-  await page.locator('input[name="password"]').fill(role === "admin" ? "demo12345" : "SyntheticPass123!");
-  await page.getByRole("button", { name: /sign in|log in/i }).click();
-  await expect(page.getByRole("heading", { name: "My Businesses" })).toBeVisible();
-}
 
 test("warehouse users see a useful permission state and no financial data", async ({ page }) => {
   await login(page, "warehouse");

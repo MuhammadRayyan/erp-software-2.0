@@ -49,13 +49,13 @@ jobs:
       - name: Browser workflow and permission verification
         run: |
           npx playwright install --with-deps chromium
-          npm run test:browser:hardening
+          npm run test:e2e
       - name: Browser failure evidence
         if: failure()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: browser-failure-evidence
-          path: test-results/hardening
+          path: test-results/acceptance
           if-no-files-found: ignore
           retention-days: 3
 
