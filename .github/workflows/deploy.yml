@@ -75,6 +75,16 @@ jobs:
         run: docker build --build-arg APP_REVISION="$GITHUB_SHA" --tag erp-verified:"$GITHUB_SHA" .
       - name: Test the final production image
         run: bash scripts/ci-image-smoke.sh erp-verified:"$GITHUB_SHA" "$GITHUB_SHA"
+      - name: Extract release metadata and production dependency inventory
+        run: |
+          mkdir -p release-evidence
+          docker run --rm --entrypoint cat erp-verified:"$GITHUB_SHA" tools/release.json > release-evidence/release.json
+          docker run --rm --entrypoint cat erp-verified:"$GITHUB_SHA" tools/production-dependencies.cdx.json > release-evidence/production-dependencies.cdx.json
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: release-evidence-${{ github.sha }}
+          path: release-evidence
+          retention-days: 30
       - name: Publish verified immutable release
         id: publish
         if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')

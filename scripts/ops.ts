@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
+import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { spawnSync } from "node:child_process";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -10,6 +10,9 @@ import { DATA_ROOT, SYSTEM_DB_PATH } from "../src/core/db/paths";
 import { closeAllBusinessConnections } from "../src/core/db/business";
 import { resolveBetterAuthSecret } from "../src/core/auth/auth-config";
 import { getTrustedOrigins } from "../src/core/config/app-url";
+import { businessMigrations } from "../src/core/db/business-migrations";
+import { systemMigrations } from "../src/core/db/migrations/system";
+import { version } from "../package.json";
 
 function files(root: string): string[] {
   return readdirSync(root, { withFileTypes: true }).flatMap(entry => {
@@ -22,7 +25,11 @@ function files(root: string): string[] {
 async function main() {
   const command = process.argv[2];
   try {
-    if (command === "validate-env") {
+    if (command === "release-info") {
+      console.log(JSON.stringify({ version, revision: process.env.APP_REVISION,
+        systemSchema: Math.max(...systemMigrations.map(migration => migration.version)),
+        businessSchema: Math.max(...businessMigrations.map(migration => migration.version)) }));
+    } else if (command === "validate-env") {
       resolveBetterAuthSecret();
       getTrustedOrigins();
       const setup = process.env.SETUP_KEY;
@@ -44,12 +51,15 @@ async function main() {
       console.log(createHash("sha256").update(JSON.stringify(schemas)).digest("hex"));
     } else if (command === "rehearse") {
       if (!process.argv[3]) throw new Error("A verified backup directory is required.");
-      const destination = path.join(mkdtempSync(path.join(tmpdir(), "erp-rehearsal-")), "data");
-      cpSync(path.resolve(process.argv[3]), destination, { recursive: true });
-      const result = spawnSync(process.execPath, [process.argv[1], "migrate"], {
-        env: { ...process.env, ERP_DATA_DIR: destination }, stdio: "inherit",
-      });
-      if (result.status !== 0) throw new Error("Backup restore/migration rehearsal failed.");
+      const temporary = mkdtempSync(path.join(tmpdir(), "erp-rehearsal-"));
+      try {
+        const destination = path.join(temporary, "data");
+        cpSync(path.resolve(process.argv[3]), destination, { recursive: true });
+        const result = spawnSync(process.execPath, [process.argv[1], "migrate"], {
+          env: { ...process.env, ERP_DATA_DIR: destination }, stdio: "inherit", timeout: 110_000,
+        });
+        if (result.status !== 0) throw new Error("Backup restore/migration rehearsal failed.");
+      } finally { rmSync(temporary, { recursive: true, force: true }); }
     } else if (command === "invalidate-sessions") {
       const sqlite = new Database(SYSTEM_DB_PATH, { fileMustExist: true });
       try {
@@ -66,21 +76,35 @@ async function main() {
       if (!process.argv[3] || destination.startsWith(DATA_ROOT + path.sep) || destination === DATA_ROOT || existsSync(destination)) throw new Error("Use a new backup directory outside the data root.");
       mkdirSync(destination, { recursive: true, mode: 0o700 });
       const entries: { file: string; bytes: number; sha256: string }[] = [];
-      for (const source of files(DATA_ROOT).filter(file => !/-(wal|shm)$/.test(file))) {
-        const relative = path.relative(DATA_ROOT, source), target = path.join(destination, relative);
-        mkdirSync(path.dirname(target), { recursive: true });
-        if (source.endsWith(".sqlite")) {
-          const sqlite = new Database(source, { readonly: true, fileMustExist: true });
-          try {
-            if (sqlite.pragma("integrity_check", { simple: true }) !== "ok" || (sqlite.pragma("foreign_key_check") as unknown[]).length) throw new Error("Source database integrity failed.");
-            await sqlite.backup(target);
-          } finally { sqlite.close(); }
-        } else cpSync(source, target);
-        const bytes = readFileSync(target);
-        entries.push({ file: relative, bytes: bytes.length, sha256: createHash("sha256").update(bytes).digest("hex") });
-      }
-      writeFileSync(path.join(destination, "manifest.json"), JSON.stringify({ format: 1, createdAt: new Date().toISOString(), revision: process.env.APP_REVISION, entries }, null, 2), { mode: 0o600 });
-      console.log(`Backup complete: ${entries.length} files.`);
+      const sourceFiles = files(DATA_ROOT);
+      // A read-only bind mount may contain a hot WAL. Recover/check a private writable copy,
+      // never the original files; all writers remain stopped until the full snapshot completes.
+      const staging = mkdtempSync(path.join(tmpdir(), "erp-snapshot-"));
+      if (staging.startsWith(DATA_ROOT + path.sep)) throw new Error("Use a dedicated data directory outside the temporary directory root.");
+      try {
+        cpSync(DATA_ROOT, staging, { recursive: true });
+        for (const source of sourceFiles.filter(file => !/\.sqlite-(wal|shm|journal)$/.test(file) && path.relative(DATA_ROOT, file) !== "manifest.json")) {
+          const relative = path.relative(DATA_ROOT, source), target = path.join(destination, relative);
+          mkdirSync(path.dirname(target), { recursive: true });
+          if (source.endsWith(".sqlite")) {
+            const sqlite = new Database(path.join(staging, relative), { fileMustExist: true });
+            try {
+              if (sqlite.pragma("integrity_check", { simple: true }) !== "ok" || (sqlite.pragma("foreign_key_check") as unknown[]).length) throw new Error("Source database integrity failed.");
+              await sqlite.backup(target);
+            } finally { sqlite.close(); }
+            // A portable backup must not require WAL/SHM creation when mounted read-only.
+            const snapshot = new Database(target, { fileMustExist: true });
+            try {
+              snapshot.pragma("journal_mode=DELETE");
+              if (snapshot.pragma("integrity_check", { simple: true }) !== "ok") throw new Error("Backup database integrity failed.");
+            } finally { snapshot.close(); }
+          } else cpSync(source, target);
+          const bytes = readFileSync(target);
+          entries.push({ file: relative, bytes: bytes.length, sha256: createHash("sha256").update(bytes).digest("hex") });
+        }
+        writeFileSync(path.join(destination, "manifest.json"), JSON.stringify({ format: 1, createdAt: new Date().toISOString(), revision: process.env.APP_REVISION, entries }, null, 2), { mode: 0o600 });
+        console.log(`Backup complete: ${entries.length} files.`);
+      } finally { rmSync(staging, { recursive: true, force: true }); }
     } else if (command === "verify-backup") {
       const root = path.resolve(process.argv[3] ?? "");
       const manifest = JSON.parse(readFileSync(path.join(root, "manifest.json"), "utf8")) as { entries: { file: string; bytes: number; sha256: string }[] };

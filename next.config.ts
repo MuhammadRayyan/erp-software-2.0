@@ -1,4 +1,5 @@
 import type { NextConfig } from "next";
+import { randomUUID } from "node:crypto";
 import { withSentryConfig } from "@sentry/nextjs/config";
 
 const nextConfig: NextConfig = {
@@ -7,6 +8,8 @@ const nextConfig: NextConfig = {
   // Caddy owns gzip/zstd compression in production.
   compress: false,
   deploymentId: process.env.APP_REVISION,
+  // Keep manifest paths distinct when old hashed assets are retained across releases.
+  generateBuildId: async () => process.env.APP_REVISION ?? randomUUID(),
   // Allows validation builds to target a separate directory (NEXT_DIST_DIR=.next-validate)
   // so they never clobber the running dev server's .next output.
   ...(process.env.NEXT_DIST_DIR ? { distDir: process.env.NEXT_DIST_DIR } : {}),
