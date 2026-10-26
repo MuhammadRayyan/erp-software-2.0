@@ -30,6 +30,7 @@ compose-watch*
 playwright-report
 test-results
 playwright/.auth
+public/downloads/*.zip
 .ops
 .npmrc
 runtime.env

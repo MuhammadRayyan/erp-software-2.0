@@ -4,6 +4,8 @@ The supported production path is a pull request to `main`, required verification
 
 ## Everyday remote work
 
+Current scope: a few businesses and 5–10 users in closed testing. The owner is keeping the repository public and deferring additional hardening/maintenance automation. Existing release gates remain enabled. See [NEXT_STEPS.md](NEXT_STEPS.md) for testing and deferred decisions; this runbook does not authorize a reboot or new infrastructure by itself.
+
 1. Create a short branch from current `main`, make the change, and open a pull request.
 2. The **Verify source and financial regressions** check validates the workflow and deployment failure recovery, performs a locked install, typechecks, lints, tests, audits production dependencies, builds production, and runs isolated browser scenarios.
 3. **Verify ARM64 production image** builds the actual Linux ARM64 image and exercises its runtime validation, migrations, checks, readiness, login route, non-root user, and secret-file exclusions. A deliberately interrupted synthetic process leaves committed system/tenant WAL files; CI snapshots the read-only source, checksums the backup, confirms committed rows/attachments survived, and rehearses restoration/migration.
@@ -12,6 +14,8 @@ The supported production path is a pull request to `main`, required verification
 
 The `production` GitHub environment must allow only protected branches. Protect `main` with the two check names above, strict up-to-date checks, required pull requests, no force pushes/deletion, and resolved conversations. A single-maintainer repository can require PRs with zero additional approvals; a second reviewer can be required when collaborators are available.
 
+The acceptance/cleanup follow-up expands the source job's browser command to `npm run test:e2e`: eleven isolated scenarios covering business/action boundaries, sales/purchase settlement flows, payroll, PDFs and keyboard/mobile behavior. Failure evidence is collected from `test-results/acceptance`. The smaller `test:browser:hardening` command remains available for focused checks. Historical release results describe their original five browser scenarios; each new release must pass the expanded gate before promotion.
+
 The workflow uses the existing `SERVER_HOST`, `SERVER_USER`, and `SSH_PRIVATE_KEY` secrets. `SERVER_KNOWN_HOSTS` is a repository variable containing the verified public SSH host key entry, not a key obtained blindly during deployment. Third-party Actions and base images are pinned; Dependabot proposes updates.
 
 Each image includes `tools/release.json` with application/revision/schema versions and `tools/production-dependencies.cdx.json`, a CycloneDX inventory of locked production npm dependencies. CI validates and retains both as release evidence for 30 days. The inventory describes the production dependency graph; it is not a complete operating-system package inventory or proof that every dependency is traced into the standalone runtime.
@@ -19,6 +23,17 @@ Each image includes `tools/release.json` with application/revision/schema versio
 The image test also invokes the application's actual HTML-template PDF renderer in an isolated, non-root, read-only container with no network, a writable temporary filesystem and bounded memory/PIDs. Chromium's XDG config/cache directories live under `/tmp`, allowing its profile/crash-report initialization without a writable application filesystem. `node tools/verify-html-pdf.cjs` runs the same synthetic render diagnostic manually.
 
 Builds can fail. The guarantee provided by the workflow is that an unverified build is not promoted, and a deployment failure is reported as a failure. A single application instance has a short maintenance interval; measure it rather than claiming zero downtime.
+
+## Operational access — verified 26 October 2026
+
+GitHub and verified SSH access work. The owner workstation also has separately approved read-only Oracle/Sentry API credentials; they are independent of the deployment secrets above. Check existing private configuration before asking for another login or creating another credential. Other workstations need their own authorized access.
+
+- **OCI:** named profile `ERP_OPERATIONS` in `~/.oci/config`; API-only user `erp-operations-api`, group/policy `erp-operations-readonly`. The key/user are ACTIVE. Console login, auth tokens, customer secret keys, database/OAuth2/SMTP credentials are disabled. Infrastructure/monitoring reads and IAM metadata inspection are granted across the tenancy; ordinary self-service management of this user's own keys still applies. Thirteen actual local read-only checks passed with zero failures.
+- **Local OCI usage:** `~/.oci/ERP_API_SETUP.md` contains usage/revocation instructions; `~/.oci/ERP_API_VERIFICATION.json` contains dated results. The isolated CLI is `~/.oci/cli/Scripts/oci.exe`. On this Windows workstation, `~/.oci/oci.ps1` supplies compatible process-only module paths for the CLI's Windows ACL check. Use `--profile ERP_OPERATIONS`; no DEFAULT profile was created.
+- **Sentry:** private `~/.sentryclirc`, project `personal-bv0 / erp-20`, scopes `alerts:read`, `event:read`, `org:read`, `project:read`. Project/historical events and existing monitors/email workflow were verified. Current-release ingestion/association, source-map upload and notification delivery remain unproven. The DSN is not a management token, and the read-only token is not a CI write credential.
+- Private keys/tokens remain outside Git and have restricted Windows ACLs. Never copy them into a report, workflow, image or production environment merely to run operational checks. Do not widen permissions to resolve a read error without identifying the missing operation first.
+
+The verified VM is A1 Flex ARM64, 2 OCPUs/12 GB RAM, with a 100 GB boot volume at 10 VPUs/GB. No boot-volume backup policy/backups, VNIC NSGs or root alarms were returned by the scoped checks. These are separate from local application deployment snapshots. Trial credit was observed; settled billing/free-tier eligibility remains unestablished. See [dated operations evidence](TESTING_PHASE_OPERATIONS_2026-10-26.md) for limits and the pending reboot.
 
 ## Runtime secrets
 

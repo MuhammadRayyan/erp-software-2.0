@@ -1,5 +1,7 @@
 # Worklog — ERP Software 2.0 (Antigravity Edits)
 
+> Historical task record. Current runtime and release guidance are in [README.md](../../README.md), [CURRENT_STATE.md](../CURRENT_STATE.md) and [DEPLOYMENT.md](../DEPLOYMENT.md). Older Bun-only, build-on-server, phase permission and backup instructions below are superseded. See [NEXT_STEPS.md](../NEXT_STEPS.md) for the owner's current testing/deferred-work decisions; old recommendations are not authorization to execute them.
+
 Project: Manager.io-inspired multi-business ERP (Next.js 16 + Drizzle + better-sqlite3 + better-auth).
 Uploaded via `upload/erp-software-2.0-antigravity-edits (2).zip`, extracted to `upload/extracted/erp-software-2.0-antigravity-edits`.
 
@@ -2276,3 +2278,21 @@ Stage Summary:
 
 
 
+
+
+## 2026-10-26 — Documentation synchronization and testing handoff
+
+Updated the maintained README, root SYSTEM_DOSSIER, docs/CURRENT_STATE and docs/CONTEXT from source and the deployed revision. Replaced the duplicated docs dossier with a compatibility link. Corrected Bun/Node 24, database filenames, synchronous mode, build-on-server deployment, live-tar backup, zero-downtime and unsupported compliance/free-tier claims in maintained summaries. Added docs/NEXT_STEPS with closed acceptance flows, evidence requirements and owner-deferred items.
+
+Synchronized docs/DEPLOYMENT and the oracle-cloud-deployment skill with approved existing private OCI/Sentry access. Updated hardening/review/operations evidence and changelog to distinguish completed checks from remaining billing and Sentry ingestion/delivery evidence. Historical worklog/branch narratives are retained and explicitly superseded by current guidance.
+
+Documentation validation: checked local links, whitespace/diff, source/runtime/workflow consistency and deployment-skill metadata. Public health was read again and returned status ok with application revision 32df273e5eeecec3db15f95bd8ba8d0f1cc1cd93. Application tests were not rerun for prose-only edits. No credentials were embedded, no app code/database/production configuration changed, and nothing was committed, pushed or deployed in this follow-up.
+
+Next: a small synthetic-business acceptance round, then reproducible defect fixes through normal PR checks. Keep the public-repository and deferred-hardening decisions. No maintenance/reboot/monitoring or broader implementation is implied by this handoff.
+
+
+## 2026-10-26 — Synthetic flow verification and project cleanup
+
+Completed 341 service/regression checks in 45 suites and eleven production-build browser scenarios, plus the actual Chromium HTML PDF diagnostic, production build, TypeScript, lint and permission coverage. The Manager.io real-fixture import suite was excluded from the synthetic round. Added a shared per-process test isolation preload, an isolated default acceptance browser configuration, reusable in-memory role login and direct Server Action denial coverage. CI's local workflow now uses the eleven-scenario command and matching failure artifacts; these changes have not been pushed or deployed.
+
+Moved historical worklog/branch records into docs/history, generated screenshots into ignored test-results, and obsolete source ZIP/Bun lock/inactive build/pnpm cache into ignored scratch/archive after reference/path/hash verification. Automatic approval review blocked permanent deletion without a detailed reason, so archival moves preserve recoverability. All 656 original local SQLite hashes match; no existing local database was added/removed. Real Manager backups and referenced Drizzle/toolchain files were retained. Full evidence and scope are in ../FLOW_VERIFICATION_AND_CLEANUP_2026-10-26.md.

@@ -1,8 +1,8 @@
-# Changelog ?" Ledgerly ERP
+# Changelog — Ledgerly ERP
 
 All notable changes since the original `erp-software-2.0-antigravity-edits` upload. Grouped by development wave, newest last. Dates use the development environment calendar (August 2026 demo data).
 
-Full per-task detail (file lists, verification transcripts, QA walkthroughs) lives in `worklog.md` at the repository root.
+Full historical task detail is retained in [history/WORKLOG.md](history/WORKLOG.md). Current acceptance and cleanup evidence is in [FLOW_VERIFICATION_AND_CLEANUP_2026-10-26.md](FLOW_VERIFICATION_AND_CLEANUP_2026-10-26.md).
 
 
 ## Core Commercial Flow Verification, Deep Accounting Audit & Hardening (improvements-settings-v1)
@@ -755,3 +755,21 @@ Following the modern accounting software industry standard (e.g., Xero, FreeAgen
 - Replaced the `ManagerSummary` module-directory grid on the Overview page with the `FinancialSummary` component (Balance Sheet + P&L at-a-glance).
 - Overview page now shows: KPI cards -> Financial Summary (Balance Sheet / P&L) -> Recent Invoices -> Recent Emails.
 - Removed `getDashboardCounts` import from overview page (no longer needed there).
+
+
+## 2026-10-26 — Verified release, operational access and current documentation
+
+- Application release `32df273e5eeecec3db15f95bd8ba8d0f1cc1cd93` merged/deployed through the protected PR and native ARM64 image pipeline. Source/browser/image gates, immutable digest promotion, serialized snapshot/migration/recovery and public revision verification are active.
+- Deployed shared mutation permissions and restricted financial reads, configured production origins, payroll lifecycle and financial calculation/reconciliation fixes, private runtime secrets, non-root image controls and real Chromium/WAL recovery checks. See [implementation evidence](HARDENING_OUTCOME_2026-10-26.md).
+- Historical release validation passed 345 unit/integration tests, five isolated browser scenarios and eight deployment recovery scenarios. These were not rerun for the documentation-only follow-up.
+- Owner-approved OCI API-only user/read-only policy and local profile ERP_OPERATIONS passed 13 read-only checks with zero failures. Read-only Sentry access verified the project, historical events and existing monitors/workflow. Keys/tokens remain outside Git and production.
+- Updated README/current state/product context to Node 22/npm and the small closed rollout. Consolidated the dossier at the repository root; the docs copy is a compatibility link. Updated runbook/skill, evidence status and [next steps](NEXT_STEPS.md).
+- Repository remains public; tracked real-data backup cleanup and additional hardening/backlog remain owner-deferred. Remaining verification includes settled OCI entitlement and current-release Sentry ingestion/source maps/delivery. No reboot, new monitoring automation or deployment was performed by this documentation follow-up.
+
+
+## 2026-10-26 — Isolated acceptance testing and repository organization
+
+- Passed 341 synthetic service/regression checks and eleven production-build browser scenarios covering access/action denial, sales/purchase settlement, payroll and keyboard/mobile/PDF behavior. Real Manager import fixtures were excluded from this round.
+- Added per-process service isolation, an isolated default browser suite, shared role-session reuse and current workflow selectors. The local CI change runs the expanded browser suite and collects its failure evidence.
+- Moved historical records to docs/history, old generated screenshots to ignored test output, and unused ZIP/Bun lock/inactive caches to ignored local archive. Existing business data and real Manager backups remain intact; quarantine does not reclaim disk space.
+- Updated [flow verification and cleanup evidence](FLOW_VERIFICATION_AND_CLEANUP_2026-10-26.md). Changes remain local and undeployed; optional hardening remains deferred.
