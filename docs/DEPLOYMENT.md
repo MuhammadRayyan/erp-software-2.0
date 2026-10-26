@@ -14,6 +14,8 @@ The `production` GitHub environment must allow only protected branches. Protect 
 
 The workflow uses the existing `SERVER_HOST`, `SERVER_USER`, and `SSH_PRIVATE_KEY` secrets. `SERVER_KNOWN_HOSTS` is a repository variable containing the verified public SSH host key entry, not a key obtained blindly during deployment. Third-party Actions and base images are pinned; Dependabot proposes updates.
 
+Each image includes `tools/release.json` with application/revision/schema versions and `tools/production-dependencies.cdx.json`, a CycloneDX inventory of locked production npm dependencies. CI validates and retains both as release evidence for 30 days. The inventory describes the production dependency graph; it is not a complete operating-system package inventory or proof that every dependency is traced into the standalone runtime.
+
 Builds can fail. The guarantee provided by the workflow is that an unverified build is not promoted, and a deployment failure is reported as a failure. A single application instance has a short maintenance interval; measure it rather than claiming zero downtime.
 
 ## Runtime secrets

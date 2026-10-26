@@ -28,6 +28,8 @@ COPY . .
 ENV NODE_ENV=production
 
 RUN npm run build:ops \
+    && node .ops/ops.cjs release-info > .ops/release.json \
+    && npm sbom --package-lock-only --omit=dev --sbom-format cyclonedx --sbom-type application > .ops/production-dependencies.cdx.json \
     && ERP_DATA_DIR=/tmp/erp-build node .ops/ops.cjs migrate \
     && NEXT_PHASE=phase-production-build ERP_DATA_DIR=/tmp/erp-build npm run build
 

@@ -19,6 +19,7 @@ docker run --rm --network none -v "$PWD/Caddyfile:/etc/caddy/Caddyfile:ro" "$cad
 [[ "$(docker image inspect "$image" --format '{{index .Config.Labels "org.opencontainers.image.revision"}}')" == "$revision" ]]
 [[ "$(docker run --rm --entrypoint cat "$image" .next/BUILD_ID)" == "$revision" ]]
 [[ "$(docker image inspect "$image" --format '{{.Config.User}}')" == 10001:10001 ]]
+docker run --rm --network none --entrypoint node "$image" -e 'const fs=require("fs"),r=JSON.parse(fs.readFileSync("tools/release.json")),s=JSON.parse(fs.readFileSync("tools/production-dependencies.cdx.json")); if(r.revision!==process.env.APP_REVISION||!r.version||r.systemSchema<1||r.businessSchema<1||s.bomFormat!=="CycloneDX"||!s.components.length) process.exit(1);'
 docker run --rm --entrypoint sh "$image" -c 'test ! -f /app/.env && test ! -f /app/.env.local && test ! -f /app/manager_backup_file.manager'
 if docker run --rm --network none -e NODE_ENV=production -e BETTER_AUTH_SECRET=ledgerly-secret-change-in-production --entrypoint node "$image" tools/ops.cjs validate-env; then
   echo "Placeholder secret unexpectedly accepted" >&2; exit 1

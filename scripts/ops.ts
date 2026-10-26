@@ -10,6 +10,9 @@ import { DATA_ROOT, SYSTEM_DB_PATH } from "../src/core/db/paths";
 import { closeAllBusinessConnections } from "../src/core/db/business";
 import { resolveBetterAuthSecret } from "../src/core/auth/auth-config";
 import { getTrustedOrigins } from "../src/core/config/app-url";
+import { businessMigrations } from "../src/core/db/business-migrations";
+import { systemMigrations } from "../src/core/db/migrations/system";
+import { version } from "../package.json";
 
 function files(root: string): string[] {
   return readdirSync(root, { withFileTypes: true }).flatMap(entry => {
@@ -22,7 +25,11 @@ function files(root: string): string[] {
 async function main() {
   const command = process.argv[2];
   try {
-    if (command === "validate-env") {
+    if (command === "release-info") {
+      console.log(JSON.stringify({ version, revision: process.env.APP_REVISION,
+        systemSchema: Math.max(...systemMigrations.map(migration => migration.version)),
+        businessSchema: Math.max(...businessMigrations.map(migration => migration.version)) }));
+    } else if (command === "validate-env") {
       resolveBetterAuthSecret();
       getTrustedOrigins();
       const setup = process.env.SETUP_KEY;
