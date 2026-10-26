@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
-import { requireModule } from "@/core/permissions/require-module";
+import { requireSavePermission, requirePermission } from "@/core/permissions/require-module";
 import { purchaseQuoteInputSchema } from "./purchase-quote-input";
 import {
   cancelPurchaseQuote,
@@ -26,7 +26,7 @@ export async function savePurchaseQuoteAction(
   input: unknown,
   intent: PurchaseQuoteIntent,
 ): Promise<PurchaseQuoteActionResult> {
-  const { user } = await requireModule(businessId, "purchases");
+  const { user } = await requireSavePermission(businessId, "purchases", quoteId, intent);
   const parsed = purchaseQuoteInputSchema.safeParse(input);
   if (!parsed.success) {
     return { error: "Check the purchase quote fields and lines.", fieldErrors: z.flattenError(parsed.error).fieldErrors };
@@ -44,7 +44,7 @@ export async function savePurchaseQuoteAction(
 }
 
 async function runStatusAction(businessId: string, quoteId: string, action: "close" | "cancel" | "delete") {
-  const { user } = await requireModule(businessId, "purchases");
+  const { user } = await requirePermission(businessId, "purchases", action === "close" ? "edit" : "delete");
   try {
     if (action === "close") closePurchaseQuote(businessId, user.id, quoteId);
     else if (action === "cancel") cancelPurchaseQuote(businessId, user.id, quoteId);
@@ -58,7 +58,7 @@ async function runStatusAction(businessId: string, quoteId: string, action: "clo
 }
 
 export async function issuePurchaseQuoteAction(businessId: string, quoteId: string) {
-  const { user } = await requireModule(businessId, "purchases");
+  const { user } = await requirePermission(businessId, "purchases", "approve");
   try {
     issuePurchaseQuote(businessId, user.id, quoteId);
     revalidatePath(`/b/${businessId}/purchases/quotes`);
@@ -82,7 +82,7 @@ export async function deletePurchaseQuoteAction(businessId: string, quoteId: str
 }
 
 export async function convertPurchaseQuoteToOrderAction(businessId: string, quoteId: string) {
-  const { user } = await requireModule(businessId, "purchases");
+  const { user } = await requirePermission(businessId, "purchases", "create");
   try {
     const quoteData = getPurchaseQuote(businessId, user.id, quoteId);
     if (!quoteData) return { error: "Purchase quote not found." };
@@ -142,7 +142,7 @@ export async function convertPurchaseQuoteToOrderAction(businessId: string, quot
 }
 
 export async function createPurchaseQuoteRevisionAction(businessId: string, quoteId: string) {
-  const { user } = await requireModule(businessId, "purchases");
+  const { user } = await requirePermission(businessId, "purchases", "create");
   try {
     const { createPurchaseQuoteRevision } = await import("./purchase-quote-service");
     const newQuoteId = createPurchaseQuoteRevision(businessId, user.id, quoteId);

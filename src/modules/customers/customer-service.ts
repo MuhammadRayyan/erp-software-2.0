@@ -1,3 +1,4 @@
+import { assertMutationPermission } from "@/core/permissions/mutation-permissions";
 import { randomUUID } from "node:crypto";
 import { asc, eq } from "drizzle-orm";
 import { getBusinessDb } from "@/core/db/business";
@@ -114,6 +115,7 @@ export function createCustomer(
   input: CustomerInput,
   customFieldValues?: Record<string, string>,
 ) {
+  assertMutationPermission(businessId, userId, "sales", "create");
   const data = customerInputSchema.parse(input);
   const context = getBusinessDb(businessId, userId);
   const defaultCurrencyCode = data.defaultCurrencyCode || getBaseCurrency(context.sqlite).code;
@@ -165,6 +167,7 @@ export function updateCustomer(
   input: CustomerInput,
   customFieldValues?: Record<string, string>,
 ) {
+  assertMutationPermission(businessId, userId, "sales", "edit");
   const data = customerInputSchema.parse(input);
   const context = getBusinessDb(businessId, userId);
   const defaultCurrencyCode = data.defaultCurrencyCode || getBaseCurrency(context.sqlite).code;

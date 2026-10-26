@@ -44,7 +44,7 @@ export default async function SentEmailViewPage({ params }: { params: Promise<{ 
           )}
         </div>
         {email.relatedEntityType === "sales_invoice" && email.relatedEntityId && email.relatedDocumentNumber && (
-          <Button asChild variant="secondary">
+          <Button permission={"export"} asChild variant="secondary">
             <Link href={`/b/${businessId}/sales/invoices/${email.relatedEntityId}`}>
               <FileText className="size-4" /> View {email.relatedDocumentNumber}
             </Link>

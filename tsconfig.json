@@ -33,7 +33,9 @@
     "**/*.ts",
     "**/*.tsx",
     ".next/types/**/*.ts",
-    ".next/dev/types/**/*.ts"
+    ".next/dev/types/**/*.ts",
+    ".next-validate/types/**/*.ts",
+    ".next-validate/dev/types/**/*.ts"
   ],
   "exclude": [
     "node_modules",
@@ -45,6 +47,9 @@
     "playwright-report",
     "test-results",
     "pdf-tests",
-    ".zscripts"
+    ".zscripts",
+    ".next/dev",
+    ".next-validate/dev",
+    "scratch"
   ]
 }

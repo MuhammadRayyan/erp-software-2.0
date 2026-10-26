@@ -1,3 +1,5 @@
+import { parseDateOnly } from "@/core/dates";
+import { addMinor, roundMinorRatio } from "@/modules/accounting/calculations/money";
 export interface EosbCalculationInput {
   joiningDate: string; // YYYY-MM-DD
   terminationDate: string; // YYYY-MM-DD
@@ -46,34 +48,22 @@ export interface EosbCalculationResult {
  * 6. Leave encashment = unused leave days * daily wage.
  */
 export function calculateUaeEosb(input: EosbCalculationInput): EosbCalculationResult {
-  const jMatch = input.joiningDate.match(/^(\d{4})-(\d{2})-(\d{2})/);
-  const tMatch = input.terminationDate.match(/^(\d{4})-(\d{2})-(\d{2})/);
-
-  if (!jMatch || !tMatch) {
-    throw new Error("Invalid joining date or termination date format (expected YYYY-MM-DD).");
-  }
-
-  const jYear = parseInt(jMatch[1], 10);
-  const jMonth = parseInt(jMatch[2], 10);
-  const jDay = parseInt(jMatch[3], 10);
-
-  const tYear = parseInt(tMatch[1], 10);
-  const tMonth = parseInt(tMatch[2], 10);
-  const tDay = parseInt(tMatch[3], 10);
-
-  const joiningUtc = Date.UTC(jYear, jMonth - 1, jDay);
-  const terminationUtc = Date.UTC(tYear, tMonth - 1, tDay);
-
-  if (isNaN(joiningUtc) || isNaN(terminationUtc)) {
-    throw new Error("Invalid joining date or termination date.");
-  }
+  const joining = parseDateOnly(input.joiningDate);
+  const termination = parseDateOnly(input.terminationDate);
+  const [jYear, jMonth, jDay] = [joining.getUTCFullYear(), joining.getUTCMonth() + 1, joining.getUTCDate()];
+  const [tYear, tMonth, tDay] = [termination.getUTCFullYear(), termination.getUTCMonth() + 1, termination.getUTCDate()];
+  const joiningUtc = joining.getTime();
+  const terminationUtc = termination.getTime();
   if (terminationUtc < joiningUtc) {
     throw new Error("Termination date cannot be before joining date.");
   }
 
-  const basicSalaryMinor = Math.max(0, Math.round(input.basicSalaryMinor));
-  const unpaidLeaveDays = Math.max(0, Math.round(input.unpaidLeaveDays ?? 0));
-  const unusedLeaveDays = Math.max(0, Math.round(input.unusedLeaveDays ?? 0));
+  const basicSalaryMinor = input.basicSalaryMinor;
+  const unpaidLeaveDays = input.unpaidLeaveDays ?? 0;
+  const unusedLeaveDays = input.unusedLeaveDays ?? 0;
+  if ([basicSalaryMinor, unpaidLeaveDays, unusedLeaveDays].some(value => !Number.isSafeInteger(value) || value < 0)) {
+    throw new Error("Salary and leave days must be non-negative safe integers.");
+  }
 
   // Calendar days difference (inclusive of start and end date)
   const msDiff = terminationUtc - joiningUtc;
@@ -100,7 +90,7 @@ export function calculateUaeEosb(input: EosbCalculationInput): EosbCalculationRe
 
   // Fractional years for calculation: 365 days per year
   const yearsOfService = Number((netServiceDays / 365).toFixed(4));
-  const dailyWageMinor = Math.round(basicSalaryMinor / 30);
+  const dailyWageMinor = roundMinorRatio(BigInt(basicSalaryMinor), 30n);
 
   let eligibleForGratuity = false;
   let gratuityTier1Minor = 0;
@@ -114,26 +104,26 @@ export function calculateUaeEosb(input: EosbCalculationInput): EosbCalculationRe
     const daysOver5 = Math.max(0, netServiceDays - 5 * 365);
 
     // 21 days' basic wage per year for first 5 years
-    gratuityTier1Minor = Math.round((daysInFirst5 / 365) * 21 * dailyWageMinor);
+    gratuityTier1Minor = roundMinorRatio(BigInt(daysInFirst5) * 21n * BigInt(basicSalaryMinor), 365n * 30n);
 
     // 30 days' basic wage per year beyond 5 years
     if (daysOver5 > 0) {
-      gratuityTier2Minor = Math.round((daysOver5 / 365) * 30 * dailyWageMinor);
+      gratuityTier2Minor = roundMinorRatio(BigInt(daysOver5) * BigInt(basicSalaryMinor), 365n);
     }
 
-    uncappedGratuityMinor = gratuityTier1Minor + gratuityTier2Minor;
+    uncappedGratuityMinor = addMinor([gratuityTier1Minor, gratuityTier2Minor]);
   }
 
   // Statutory maximum cap: 24 months basic salary (Article 51 clause 5)
-  const maxCapMinor = basicSalaryMinor * 24;
+  const maxCapMinor = roundMinorRatio(BigInt(basicSalaryMinor) * 24n, 1n);
   const isCapped = uncappedGratuityMinor > maxCapMinor;
   const gratuityMinor = isCapped ? maxCapMinor : uncappedGratuityMinor;
 
   // Article 29: Leave Encashment on basic wage
-  const leaveEncashmentMinor = Math.round(unusedLeaveDays * dailyWageMinor);
+  const leaveEncashmentMinor = roundMinorRatio(BigInt(unusedLeaveDays) * BigInt(basicSalaryMinor), 30n);
 
   // Total final settlement
-  const totalSettlementMinor = gratuityMinor + leaveEncashmentMinor;
+  const totalSettlementMinor = addMinor([gratuityMinor, leaveEncashmentMinor]);
 
   const durationParts: string[] = [];
   if (years > 0) durationParts.push(`${years} ${years === 1 ? "year" : "years"}`);

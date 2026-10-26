@@ -121,7 +121,7 @@ export function PurchaseOrderViewActions({
         extraPrimaryActions={
           <>
             {status === "draft" && (
-              <Button onClick={handleIssue} disabled={issuing} className="gap-1.5">
+              <Button permission={"approve"} onClick={handleIssue} disabled={issuing} className="gap-1.5">
                 <Send className={`size-4 ${issuing ? "animate-spin" : ""}`} /> 
                 Issue Order
               </Button>
@@ -133,7 +133,7 @@ export function PurchaseOrderViewActions({
               </Button>
             )}
             {status === "issued" && inventoryEnabled && (
-              <Button asChild variant="secondary" disabled={!hasReceivableItems}>
+              <Button permission="create" asChild variant="secondary" disabled={!hasReceivableItems}>
                 <Link href={`/b/${businessId}/purchases/goods-receipts/new?orderId=${orderId}`}><PackagePlus className="size-4 mr-2" /> Receive Goods</Link>
               </Button>
             )}

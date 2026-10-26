@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
-import { requireModule } from "@/core/permissions/require-module";
+import { requireSavePermission, requirePermission } from "@/core/permissions/require-module";
 import { stockAdjustmentInputSchema } from "./stock-adjustment-input";
 import { deleteStockAdjustment, saveStockAdjustment, voidStockAdjustment, type InventoryDocumentIntent } from "./stock-adjustment-service";
 import { inventoryErrorMessage } from "./inventory-error";
@@ -14,7 +14,7 @@ export async function saveStockAdjustmentAction(
   input: unknown,
   intent: InventoryDocumentIntent
 ) {
-  const { user } = await requireModule(businessId, "inventory");
+  const { user } = await requireSavePermission(businessId, "inventory", adjustmentId, intent);
   const parsed = stockAdjustmentInputSchema.safeParse(input);
   if (!parsed.success) {
     return { error: "Check the Stock Adjustment fields.", fieldErrors: z.flattenError(parsed.error).fieldErrors };
@@ -32,7 +32,7 @@ export async function saveStockAdjustmentAction(
 }
 
 export async function voidStockAdjustmentAction(businessId: string, adjustmentId: string) {
-  const { user } = await requireModule(businessId, "inventory");
+  const { user } = await requirePermission(businessId, "inventory", "delete");
   try {
     voidStockAdjustment(businessId, user.id, adjustmentId);
     revalidatePath(`/b/${businessId}/inventory/adjustments`);
@@ -44,7 +44,7 @@ export async function voidStockAdjustmentAction(businessId: string, adjustmentId
 }
 
 export async function deleteStockAdjustmentAction(businessId: string, adjustmentId: string) {
-  const { user } = await requireModule(businessId, "inventory");
+  const { user } = await requirePermission(businessId, "inventory", "delete");
   try {
     deleteStockAdjustment(businessId, user.id, adjustmentId);
     revalidatePath(`/b/${businessId}/inventory/adjustments`);

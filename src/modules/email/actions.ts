@@ -145,13 +145,13 @@ export async function saveEmailTemplateAction(
   subject: string,
   body: string
 ) {
-  const { requireModule } = await import("@/core/permissions/require-module");
+  const { requirePermission } = await import("@/core/permissions/require-module");
   const { revalidatePath } = await import("next/cache");
   const { saveEmailTemplate } = await import("./email-template-service");
 
-  await requireModule(businessId, "settings");
+  const { user } = await requirePermission(businessId, "settings", "edit");
   try {
-    const template = saveEmailTemplate(businessId, templateType, { subject, body });
+    const template = saveEmailTemplate(businessId, user.id, templateType, { subject, body });
     revalidatePath(`/b/${businessId}/settings/email-templates`);
     return { data: template };
   } catch (error) {
@@ -160,13 +160,13 @@ export async function saveEmailTemplateAction(
 }
 
 export async function resetEmailTemplateAction(businessId: string, templateType: string) {
-  const { requireModule } = await import("@/core/permissions/require-module");
+  const { requirePermission } = await import("@/core/permissions/require-module");
   const { revalidatePath } = await import("next/cache");
   const { resetEmailTemplate } = await import("./email-template-service");
 
-  await requireModule(businessId, "settings");
+  const { user } = await requirePermission(businessId, "settings", "edit");
   try {
-    const template = resetEmailTemplate(businessId, templateType);
+    const template = resetEmailTemplate(businessId, user.id, templateType);
     revalidatePath(`/b/${businessId}/settings/email-templates`);
     return { data: template };
   } catch (error) {

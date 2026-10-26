@@ -36,7 +36,7 @@ export default async function OrderListPage({
     <div className="page-container">
       <LiveRefresh />
       <PageHeader title="Sales Orders" description="Draft, issue, and track customer orders.">
-        <Button asChild>
+        <Button permission="create" asChild>
           <Link href={`/b/${businessId}/sales/orders/new`}>
             <Plus className="size-4" /> New Order
           </Link>
@@ -64,7 +64,7 @@ export default async function OrderListPage({
           title="No sales orders yet"
           description="Create your first sales order for a customer."
           action={
-            <Button asChild>
+            <Button permission="create" asChild>
               <Link href={`/b/${businessId}/sales/orders/new`}>
                 <Plus className="size-4" /> New Order
               </Link>

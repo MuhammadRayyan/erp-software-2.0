@@ -349,7 +349,7 @@ function AccessRow({
             <option value="administrator">Administrator</option>
             <option value="standard">Standard User</option>
           </SelectNative>
-          <Button
+          <Button permission={"save"}
             variant="secondary"
             size="sm"
             disabled={entry.current || entry.isOwner || pending}

@@ -1,3 +1,4 @@
+import { assertMutationPermission } from "@/core/permissions/mutation-permissions";
 import { randomUUID } from "node:crypto";
 import { existsSync, mkdirSync, unlinkSync, writeFileSync } from "node:fs";
 import path from "node:path";
@@ -18,6 +19,7 @@ export async function uploadProjectAttachment(
   projectId: string,
   file: File,
 ) {
+  assertMutationPermission(businessId, userId, "projects", "create");
   const context = getBusinessDb(businessId, userId);
   if (!context.sqlite.prepare("SELECT 1 FROM projects WHERE id = ?").get(projectId)) throw new Error("Project not found.");
   if (!file.name.trim()) throw new Error("Choose a file to upload.");
@@ -50,6 +52,7 @@ export function getProjectAttachment(businessId: string, userId: string, attachm
 }
 
 export function deleteProjectAttachment(businessId: string, userId: string, projectId: string, attachmentId: string) {
+  assertMutationPermission(businessId, userId, "projects", "delete");
   const context = getBusinessDb(businessId, userId);
   const row = context.sqlite.prepare(`SELECT storage_path FROM project_attachments WHERE id = ? AND project_id = ?`).get(attachmentId, projectId) as { storage_path: string } | undefined;
   if (!row) throw new Error("Attachment not found.");

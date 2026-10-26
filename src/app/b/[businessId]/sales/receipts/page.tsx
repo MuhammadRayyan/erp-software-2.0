@@ -38,7 +38,7 @@ export default async function ReceiptsPage({
     <div className="page-container">
       <PageHeader title="Receipts" description="Posted customer collections and their reversals.">
         <DensityToggle businessId={businessId} />
-        <Button asChild>
+        <Button permission="create" asChild>
           <Link href={`/b/${businessId}/sales/receipts/new`}>
             <Plus className="size-4" /> Record Receipt
           </Link>
@@ -121,7 +121,7 @@ export default async function ReceiptsPage({
           title="No receipts yet"
           description="Record a customer collection from a posted invoice."
           action={
-            <Button asChild>
+            <Button permission="create" asChild>
               <Link href={`/b/${businessId}/sales/receipts/new`}>
                 <Plus className="size-4" /> Record Receipt
               </Link>

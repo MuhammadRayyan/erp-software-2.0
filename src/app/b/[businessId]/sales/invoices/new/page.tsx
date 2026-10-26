@@ -205,7 +205,7 @@ export default async function NewInvoicePage({
           <p className="mt-1.5 text-sm text-muted-foreground">
             Add a customer and ensure at least one active Sales account and tax code exist.
           </p>
-          <Button asChild className="mt-5">
+          <Button permission="create" asChild className="mt-5">
             <Link href={`/b/${businessId}/customers/new`}>New Customer</Link>
           </Button>
         </div>

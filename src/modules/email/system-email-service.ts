@@ -138,7 +138,7 @@ This invitation link will expire in 7 days.
     });
 
     if (driver.name === "log") {
-      console.log(`[System Email: Invitation] Sent to ${options.to} | Setup URL: ${actionUrl}`);
+      console.log("[System Email] Development email driver used; delivery was simulated.");
     }
 
     return {
@@ -257,7 +257,7 @@ This link is valid for 24 hours. If you did not request a password reset, you ca
     });
 
     if (driver.name === "log") {
-      console.log(`[System Email: Password Reset] Sent to ${options.to} | Reset URL: ${actionUrl}`);
+      console.log("[System Email] Development email driver used; delivery was simulated.");
     }
 
     return {

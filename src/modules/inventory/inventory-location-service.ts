@@ -1,3 +1,4 @@
+import { assertSavePermission } from "@/core/permissions/mutation-permissions";
 import { cache } from "react";
 import { randomUUID } from "node:crypto";
 import { getBusinessDb } from "@/core/db/business";
@@ -30,6 +31,7 @@ export function getInventoryLocation(businessId: string, userId: string, locatio
 }
 
 export function saveInventoryLocation(businessId: string, userId: string, input: InventoryLocationInput, locationId?: string) {
+  assertSavePermission(businessId, userId, "inventory", locationId, "draft");
   const data = inventoryLocationInputSchema.parse(input);
   const { sqlite } = getBusinessDb(businessId, userId);
   const duplicate = sqlite.prepare("SELECT id FROM inventory_locations WHERE code = ? COLLATE NOCASE AND id <> ?")

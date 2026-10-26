@@ -65,7 +65,7 @@ export default async function CustomerStatementPage({
         </div>
         <div className="flex gap-2 print:hidden">
           <PrintButton />
-          <Button asChild variant="primary">
+          <Button permission={"export"} asChild variant="primary">
             <Link href={pdfHref} target="_blank">
               <FileText className="size-4 mr-1.5" /> Export PDF
             </Link>

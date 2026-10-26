@@ -1,3 +1,4 @@
+import { assertMutationPermission } from "@/core/permissions/mutation-permissions";
 import { cache } from "react";
 import { randomUUID } from "node:crypto";
 import { asc, eq } from "drizzle-orm";
@@ -21,6 +22,7 @@ export const listAccounts = cache((businessId: string, userId: string) => {
 });
 
 export function createAccount(businessId: string, userId: string, input: AccountInput) {
+  assertMutationPermission(businessId, userId, "accounting", "create");
   const data = accountInputSchema.parse(input);
   validateSubtype(data);
   const context = getBusinessDb(businessId, userId);
@@ -53,6 +55,7 @@ export function updateAccount(
   accountId: string,
   input: AccountInput,
 ) {
+  assertMutationPermission(businessId, userId, "accounting", "edit");
   const data = accountInputSchema.parse(input);
   validateSubtype(data);
   const context = getBusinessDb(businessId, userId);
@@ -84,6 +87,7 @@ export function updateAccount(
 }
 
 export function deleteAccount(businessId: string, userId: string, accountId: string) {
+  assertMutationPermission(businessId, userId, "accounting", "delete");
   const context = getBusinessDb(businessId, userId);
   let deletedAccountName = "";
   const run = context.sqlite.transaction(() => {

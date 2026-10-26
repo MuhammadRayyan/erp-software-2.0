@@ -83,7 +83,7 @@ export function TaxCodeManager({
           <tbody>{taxCodes.map((code) => {
             const account = liabilityAccounts.find((item) => item.id === code.salesTaxAccountId);
             const purchaseAccount = assetAccounts.find((item) => item.id === code.purchaseTaxAccountId);
-            return <tr key={code.id}><td className="font-medium">{code.name}</td><td className="money text-right">{rateBasisPointsToPercent(code.rateBasisPoints)}%</td><td>{taxDirectionLabels[code.direction]}</td><td>{code.vatCategory ? vatCategoryLabels[code.vatCategory] : <Badge tone="warning">Needs review</Badge>}</td><td>{code.isRecoverable ? "Yes" : "No"}</td><td className="text-muted-foreground">{account ? `${account.name}` : "Not required"}</td><td className="text-muted-foreground">{purchaseAccount ? `${purchaseAccount.name}` : "Not required"}</td><td><Badge tone={code.isActive ? "success" : "neutral"}>{code.isActive ? "Active" : "Inactive"}</Badge></td><td><Button variant="ghost" size="sm" onClick={() => open(code)}><Pencil className="size-3.5" /> Edit</Button></td></tr>;
+            return <tr key={code.id}><td className="font-medium">{code.name}</td><td className="money text-right">{rateBasisPointsToPercent(code.rateBasisPoints)}%</td><td>{taxDirectionLabels[code.direction]}</td><td>{code.vatCategory ? vatCategoryLabels[code.vatCategory] : <Badge tone="warning">Needs review</Badge>}</td><td>{code.isRecoverable ? "Yes" : "No"}</td><td className="text-muted-foreground">{account ? `${account.name}` : "Not required"}</td><td className="text-muted-foreground">{purchaseAccount ? `${purchaseAccount.name}` : "Not required"}</td><td><Badge tone={code.isActive ? "success" : "neutral"}>{code.isActive ? "Active" : "Inactive"}</Badge></td><td><Button permission={"edit"} variant="ghost" size="sm" onClick={() => open(code)}><Pencil className="size-3.5" /> Edit</Button></td></tr>;
           })}</tbody>
         </table>
       </div>
@@ -101,7 +101,7 @@ export function TaxCodeManager({
             <label className="flex min-h-9 items-center gap-2 text-sm"><input type="checkbox" checked={values.isActive} onChange={(event) => setValues((current) => ({ ...current, isActive: event.target.checked }))} className="size-4 accent-[var(--primary)]" /> Active tax code</label>
           </div>
           {serverError && <FormError message={serverError} />}
-          <div className="mt-5 flex justify-end gap-2"><Button variant="ghost" onClick={() => setEditing(undefined)}>Cancel</Button><Button onClick={save} disabled={pending}>{editing ? "Save changes" : "Create tax code"}</Button></div>
+          <div className="mt-5 flex justify-end gap-2"><Button variant="ghost" onClick={() => setEditing(undefined)}>Cancel</Button><Button permission={"save"} onClick={save} disabled={pending}>{editing ? "Save changes" : "Create tax code"}</Button></div>
         </DialogContent>
       </DialogRoot>
     </>

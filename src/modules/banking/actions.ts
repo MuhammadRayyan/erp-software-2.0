@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
-import { requireModule } from "@/core/permissions/require-module";
+import { requireSavePermission, requirePermission } from "@/core/permissions/require-module";
 import { bankAccountInputSchema } from "./bank-account-input";
 import { saveBankAccount } from "./bank-account-service";
 import { bankTransactionInputSchema } from "./bank-transaction-input";
@@ -32,7 +32,7 @@ function message(error: unknown, fallback: string) { return error instanceof Err
 export async function saveBankAccountAction(
   businessId: string, bankAccountId: string | null, input: unknown,
 ): Promise<BankingActionResult> {
-  const { user } = await requireModule(businessId, "banking");
+  const { user } = await requireSavePermission(businessId, "banking", bankAccountId, "draft");
   const parsed = bankAccountInputSchema.safeParse(input);
   if (!parsed.success) return { error: "Check the Bank Account fields.", fieldErrors: z.flattenError(parsed.error).fieldErrors };
   let id: string;
@@ -44,7 +44,7 @@ export async function saveBankAccountAction(
 export async function saveBankTransactionAction(
   businessId: string, transactionId: string | null, intent: "draft" | "post", input: unknown,
 ): Promise<BankingActionResult> {
-  const { user } = await requireModule(businessId, "banking");
+  const { user } = await requireSavePermission(businessId, "banking", transactionId, intent);
   const parsed = bankTransactionInputSchema.safeParse(input);
   if (!parsed.success) return { error: "Check the Bank Transaction fields.", fieldErrors: z.flattenError(parsed.error).fieldErrors as Record<string, string[]> };
   let id: string;
@@ -54,7 +54,7 @@ export async function saveBankTransactionAction(
 }
 
 export async function voidBankTransactionAction(businessId: string, transactionId: string) {
-  const { user } = await requireModule(businessId, "banking");
+  const { user } = await requirePermission(businessId, "banking", "delete");
   try {
     voidBankTransaction(businessId, user.id, transactionId);
     revalidatePath(`/b/${businessId}/banking`);
@@ -63,7 +63,7 @@ export async function voidBankTransactionAction(businessId: string, transactionI
 }
 
 export async function createBankTransferAction(businessId: string, input: unknown): Promise<BankingActionResult> {
-  const { user } = await requireModule(businessId, "banking");
+  const { user } = await requirePermission(businessId, "banking", "create");
   const parsed = bankTransferInputSchema.safeParse(input);
   if (!parsed.success) return { error: "Check the transfer fields.", fieldErrors: z.flattenError(parsed.error).fieldErrors };
   let id: string;
@@ -73,7 +73,7 @@ export async function createBankTransferAction(businessId: string, input: unknow
 }
 
 export async function voidBankTransferAction(businessId: string, transferId: string) {
-  const { user } = await requireModule(businessId, "banking");
+  const { user } = await requirePermission(businessId, "banking", "delete");
   try { voidBankTransfer(businessId, user.id, transferId); return {}; }
   catch (error) { return { error: message(error, "The Bank Transfer could not be voided.") }; }
 }
@@ -81,7 +81,7 @@ export async function voidBankTransferAction(businessId: string, transferId: str
 export async function importStatementAction(
   businessId: string, bankAccountId: string, fileName: string, csvText: string, mapping: unknown,
 ): Promise<BankingActionResult & { importedCount?: number; duplicateCount?: number }> {
-  const { user } = await requireModule(businessId, "banking");
+  const { user } = await requirePermission(businessId, "banking", "create");
   const parsedMapping = csvMappingSchema.safeParse(mapping);
   if (!parsedMapping.success) return { error: "Map Date, Description, and either Amount or Debit/Credit columns." };
   try {
@@ -94,7 +94,7 @@ export async function importStatementAction(
 export async function matchStatementLineAction(
   businessId: string, accountId: string, lineId: string, sourceType: MatchSourceType, sourceId: string,
 ) {
-  const { user } = await requireModule(businessId, "banking");
+  const { user } = await requirePermission(businessId, "banking", "edit");
   try {
     confirmStatementMatch(businessId, user.id, lineId, sourceType, sourceId);
     revalidatePath(`/b/${businessId}/banking/accounts/${accountId}`);
@@ -103,13 +103,13 @@ export async function matchStatementLineAction(
 }
 
 export async function ignoreStatementLineAction(businessId: string, accountId: string, lineId: string) {
-  const { user } = await requireModule(businessId, "banking");
+  const { user } = await requirePermission(businessId, "banking", "edit");
   try { ignoreStatementLine(businessId, user.id, lineId); revalidatePath(`/b/${businessId}/banking/accounts/${accountId}`); return {}; }
   catch (error) { return { error: message(error, "The statement line could not be ignored.") }; }
 }
 
 export async function resetStatementLineAction(businessId: string, accountId: string, lineId: string) {
-  const { user } = await requireModule(businessId, "banking");
+  const { user } = await requirePermission(businessId, "banking", "edit");
   try { resetStatementLine(businessId, user.id, lineId); revalidatePath(`/b/${businessId}/banking/accounts/${accountId}`); return {}; }
   catch (error) { return { error: message(error, "The statement line could not be reset.") }; }
 }
@@ -117,7 +117,7 @@ export async function resetStatementLineAction(businessId: string, accountId: st
 export async function startReconciliationAction(
   businessId: string, accountId: string, input: unknown,
 ): Promise<BankingActionResult> {
-  const { user } = await requireModule(businessId, "banking");
+  const { user } = await requirePermission(businessId, "banking", "create");
   const parsed = reconciliationInputSchema.safeParse(input);
   if (!parsed.success) return { error: "Check the reconciliation fields.", fieldErrors: z.flattenError(parsed.error).fieldErrors };
   let id: string;
@@ -127,7 +127,7 @@ export async function startReconciliationAction(
 }
 
 export async function completeReconciliationAction(businessId: string, accountId: string, reconciliationId: string) {
-  const { user } = await requireModule(businessId, "banking");
+  const { user } = await requirePermission(businessId, "banking", "post");
   try {
     completeReconciliation(businessId, user.id, accountId, reconciliationId);
     revalidatePath(`/b/${businessId}/banking/accounts/${accountId}`);
@@ -140,7 +140,7 @@ export async function saveBankRuleAction(
   ruleId: string | null,
   input: unknown,
 ): Promise<BankingActionResult & { id?: string }> {
-  const { user } = await requireModule(businessId, "settings");
+  const { user } = await requirePermission(businessId, "settings", "edit");
   const parsed = bankRuleInputSchema.safeParse(input);
   if (!parsed.success) {
     return {
@@ -169,7 +169,7 @@ export async function deleteBankRuleAction(
   businessId: string,
   ruleId: string,
 ): Promise<BankingActionResult> {
-  const { user } = await requireModule(businessId, "settings");
+  const { user } = await requirePermission(businessId, "settings", "edit");
   try {
     deleteBankRule(businessId, user.id, ruleId);
     revalidatePath(`/b/${businessId}/settings/bank-rules`);
@@ -185,7 +185,7 @@ export async function toggleBankRuleActiveAction(
   ruleId: string,
   isActive: boolean,
 ): Promise<BankingActionResult> {
-  const { user } = await requireModule(businessId, "settings");
+  const { user } = await requirePermission(businessId, "settings", "edit");
   try {
     toggleBankRuleActive(businessId, user.id, ruleId, isActive);
     revalidatePath(`/b/${businessId}/settings/bank-rules`);
@@ -202,7 +202,7 @@ export async function applyBankRuleAction(
   ruleId: string,
   statementLineId: string,
 ): Promise<BankingActionResult & { transactionId?: string }> {
-  const { user } = await requireModule(businessId, "banking");
+  const { user } = await requirePermission(businessId, "banking", "edit");
   try {
     const result = applyBankRule(businessId, user.id, ruleId, statementLineId);
     revalidatePath(`/b/${businessId}/banking/accounts/${accountId}`);
@@ -216,7 +216,7 @@ export async function batchApplyBankRulesAction(
   businessId: string,
   accountId: string,
 ): Promise<BankingActionResult & { appliedCount?: number }> {
-  const { user } = await requireModule(businessId, "banking");
+  const { user } = await requirePermission(businessId, "banking", "edit");
   try {
     const result = batchApplyBankRules(businessId, user.id, accountId);
     revalidatePath(`/b/${businessId}/banking/accounts/${accountId}`);

@@ -44,7 +44,7 @@ export default async function GoodsReceiptsPage({
         description="Supplier receipts change physical stock without duplicating AP accounting."
       >
         <DensityToggle businessId={businessId} />
-        <Button asChild>
+        <Button permission="create" asChild>
           <Link href={`/b/${businessId}/purchases/goods-receipts/new`}>
             <Plus className="size-4" /> New Goods Receipt
           </Link>
@@ -117,7 +117,7 @@ export default async function GoodsReceiptsPage({
           title="No goods receipts yet"
           description="Receive against a Purchase Order or create a direct receipt."
           action={
-            <Button asChild>
+            <Button permission="create" asChild>
               <Link href={`/b/${businessId}/purchases/goods-receipts/new`}>
                 Create Goods Receipt
               </Link>

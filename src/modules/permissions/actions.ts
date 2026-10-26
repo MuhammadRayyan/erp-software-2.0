@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { requireModule } from "@/core/permissions/require-module";
+import { requirePermission } from "@/core/permissions/require-module";
 import {
   addExistingUser,
   createAndAddBusinessUser,
@@ -26,7 +26,7 @@ export async function inviteBusinessUserAction(
     sendEmail?: boolean;
   }
 ) {
-  const { user, access } = await requireModule(businessId, "settings");
+  const { user, access } = await requirePermission(businessId, "settings", "edit");
   if (access.membership.role !== "administrator") return { error: "Administrator access is required." };
 
   try {
@@ -53,7 +53,7 @@ export async function inviteBusinessUserAction(
 }
 
 export async function createInvitationLinkAction(businessId: string, targetUserId: string) {
-  const { user, access } = await requireModule(businessId, "settings");
+  const { user, access } = await requirePermission(businessId, "settings", "edit");
   if (access.membership.role !== "administrator") return { error: "Administrator access is required." };
 
   try {
@@ -66,7 +66,7 @@ export async function createInvitationLinkAction(businessId: string, targetUserI
 }
 
 export async function createPasswordResetLinkAction(businessId: string, targetUserId: string) {
-  const { user, access } = await requireModule(businessId, "settings");
+  const { user, access } = await requirePermission(businessId, "settings", "edit");
   if (access.membership.role !== "administrator") return { error: "Administrator access is required." };
 
   try {
@@ -79,7 +79,7 @@ export async function createPasswordResetLinkAction(businessId: string, targetUs
 }
 
 export async function resendInvitationAction(businessId: string, targetUserId: string) {
-  const { user, access } = await requireModule(businessId, "settings");
+  const { user, access } = await requirePermission(businessId, "settings", "edit");
   if (access.membership.role !== "administrator") return { error: "Administrator access is required." };
 
   try {
@@ -92,7 +92,7 @@ export async function resendInvitationAction(businessId: string, targetUserId: s
 }
 
 export async function sendPasswordResetAction(businessId: string, targetUserId: string) {
-  const { user, access } = await requireModule(businessId, "settings");
+  const { user, access } = await requirePermission(businessId, "settings", "edit");
   if (access.membership.role !== "administrator") return { error: "Administrator access is required." };
 
   try {
@@ -110,7 +110,7 @@ export async function toggleUserSuspensionAction(
   targetUserId: string,
   status: "active" | "suspended"
 ) {
-  const { user, access } = await requireModule(businessId, "settings");
+  const { user, access } = await requirePermission(businessId, "settings", "edit");
   if (access.membership.role !== "administrator") return { error: "Administrator access is required." };
 
   try {
@@ -123,7 +123,7 @@ export async function toggleUserSuspensionAction(
 }
 
 export async function removeBusinessUserAction(businessId: string, membershipId: string) {
-  const { user, access } = await requireModule(businessId, "settings");
+  const { user, access } = await requirePermission(businessId, "settings", "edit");
   if (access.membership.role !== "administrator") return { error: "Administrator access is required." };
 
   try {
@@ -142,7 +142,7 @@ export async function updateMembershipAction(
   modules: string[],
   capabilities?: Record<string, string[]>
 ) {
-  const { user, access } = await requireModule(businessId, "settings");
+  const { user, access } = await requirePermission(businessId, "settings", "edit");
   if (access.membership.role !== "administrator") return { error: "Administrator access is required." };
   try {
     const payload =
@@ -164,7 +164,7 @@ export async function updateMembershipAction(
 }
 
 export async function addExistingUserAction(businessId: string, email: string) {
-  const { user, access } = await requireModule(businessId, "settings");
+  const { user, access } = await requirePermission(businessId, "settings", "edit");
   if (access.membership.role !== "administrator") return { error: "Administrator access is required." };
   try {
     addExistingUser(businessId, user.id, email);
@@ -186,7 +186,7 @@ export async function createAndAddBusinessUserAction(
     capabilities?: Record<string, string[]>;
   }
 ) {
-  const { user, access } = await requireModule(businessId, "settings");
+  const { user, access } = await requirePermission(businessId, "settings", "edit");
   if (access.membership.role !== "administrator") return { error: "Administrator access is required." };
   try {
     await createAndAddBusinessUser(businessId, user.id, input);

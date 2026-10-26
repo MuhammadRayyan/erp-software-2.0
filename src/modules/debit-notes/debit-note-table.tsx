@@ -154,13 +154,13 @@ export function DebitNoteTable({
                     </Link>
                   </DropdownMenuItem>
                   {canEdit && (
-                    <DropdownMenuItem asChild>
+                    <DropdownMenuItem permission="edit" asChild>
                       <Link href={`/b/${dn.businessId}/purchases/debit-notes/${dn.id}/edit`}>
                         <FileEdit className="size-4 text-muted-foreground" /> Edit Debit Note
                       </Link>
                     </DropdownMenuItem>
                   )}
-                  <DropdownMenuItem asChild>
+                  <DropdownMenuItem permission="export" asChild>
                     <a href={`/api/businesses/${dn.businessId}/documents/debit-note/${dn.id}/pdf`} target="_blank" rel="noreferrer">
                       <Download className="size-4 text-muted-foreground" /> Download PDF
                     </a>

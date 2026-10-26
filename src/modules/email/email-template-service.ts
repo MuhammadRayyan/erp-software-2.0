@@ -1,3 +1,4 @@
+import { assertMutationPermission } from "@/core/permissions/mutation-permissions";
 import { getBusinessDb } from "@/core/db/business";
 import { randomUUID } from "node:crypto";
 
@@ -35,11 +36,12 @@ export function getEmailTemplate(businessId: string, documentType: string): Emai
 }
 
 export function saveEmailTemplate(
-  businessId: string,
+  businessId: string, userId: string,
   documentType: string,
   input: { subject: string; body: string; name?: string }
 ): EmailTemplate {
-  const { sqlite } = getBusinessDb(businessId);
+  assertMutationPermission(businessId, userId, "settings", "edit");
+  const { sqlite } = getBusinessDb(businessId, userId);
   const existing = getEmailTemplate(businessId, documentType);
   const def = SUPPORTED_TEMPLATE_TYPES.find((t) => t.type === documentType || t.type === documentType.replace(/-/g, "_"));
   const name = input.name || def?.name || documentType;
@@ -63,7 +65,8 @@ export function saveEmailTemplate(
   }
 }
 
-export function resetEmailTemplate(businessId: string, documentType: string): EmailTemplate {
+export function resetEmailTemplate(businessId: string, userId: string, documentType: string): EmailTemplate {
+  assertMutationPermission(businessId, userId, "settings", "edit");
   const defaults =
     DEFAULT_TEMPLATES[documentType] ||
     DEFAULT_TEMPLATES[documentType.replace(/_/g, "-")] ||
@@ -72,7 +75,7 @@ export function resetEmailTemplate(businessId: string, documentType: string): Em
       body: `Hello {{customer_name}},\n\nPlease find document {{document_number}} attached.\n\nBest regards,\n{{business_name}}`,
     };
   const def = SUPPORTED_TEMPLATE_TYPES.find((t) => t.type === documentType || t.type === documentType.replace(/-/g, "_"));
-  return saveEmailTemplate(businessId, documentType, {
+  return saveEmailTemplate(businessId, userId, documentType, {
     subject: defaults.subject,
     body: defaults.body,
     name: def?.name || documentType,

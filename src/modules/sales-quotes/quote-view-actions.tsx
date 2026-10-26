@@ -122,7 +122,7 @@ export function SalesQuoteViewActions({
         extraPrimaryActions={
           <>
             {documentStatus === "draft" && (
-              <Button onClick={handleIssue} disabled={issuing} className="gap-1.5">
+              <Button permission={"approve"} onClick={handleIssue} disabled={issuing} className="gap-1.5">
                 <Send className={`size-4 ${issuing ? "animate-spin" : ""}`} />
                 Issue Quote
               </Button>

@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
-import { requireModule, requirePermission } from "@/core/permissions/require-module";
+import { requirePermission, requireSavePermission } from "@/core/permissions/require-module";
 import { accountInputSchema } from "./account-input";
 import { invoiceNumberingInputSchema } from "./numbering-input";
 import {
@@ -24,7 +24,7 @@ export async function saveAccountAction(
   accountId: string | null,
   input: unknown,
 ): Promise<AccountingActionResult> {
-  const { user } = await requireModule(businessId, "accounting");
+  const { user } = await requireSavePermission(businessId, "accounting", accountId, "draft");
   const parsed = accountInputSchema.safeParse(input);
   if (!parsed.success) {
     return { error: "Check the account fields.", fieldErrors: z.flattenError(parsed.error).fieldErrors };
@@ -40,7 +40,7 @@ export async function saveAccountAction(
 }
 
 export async function deleteAccountAction(businessId: string, accountId: string) {
-  const { user } = await requireModule(businessId, "accounting");
+  const { user } = await requirePermission(businessId, "accounting", "delete");
   try {
     deleteAccount(businessId, user.id, accountId);
     revalidatePath(`/b/${businessId}/accounting/chart-of-accounts`);
@@ -55,7 +55,7 @@ export async function saveTaxCodeAction(
   taxCodeId: string | null,
   input: unknown,
 ): Promise<AccountingActionResult> {
-  const { user } = await requireModule(businessId, "settings");
+  const { user } = await requirePermission(businessId, "settings", "edit");
   const parsed = taxCodeInputSchema.safeParse(input);
   if (!parsed.success) {
     return { error: "Check the tax code fields.", fieldErrors: z.flattenError(parsed.error).fieldErrors };
@@ -74,7 +74,7 @@ export async function updateInvoiceNumberingAction(
   businessId: string,
   input: unknown,
 ): Promise<AccountingActionResult> {
-  const { user } = await requireModule(businessId, "settings");
+  const { user } = await requirePermission(businessId, "settings", "edit");
   const parsed = invoiceNumberingInputSchema.safeParse(input);
   if (!parsed.success) {
     return { error: "Check the numbering fields.", fieldErrors: z.flattenError(parsed.error).fieldErrors };
@@ -109,7 +109,7 @@ export async function saveOpeningBalancesAction(
   date: string,
   balances: { accountId: string; debitMinor: number; creditMinor: number }[],
 ): Promise<AccountingActionResult> {
-  const { user } = await requireModule(businessId, "settings");
+  const { user } = await requirePermission(businessId, "settings", "edit");
   if (!date || !/^\d{4}-\d{2}-\d{2}$/.test(date)) {
     return { error: "Please choose a valid opening balance date (YYYY-MM-DD)." };
   }
@@ -139,7 +139,7 @@ export async function recodeLinesAction(
       | { type: "taxCode"; targetTaxCodeId: string };
   },
 ): Promise<{ success?: boolean; message?: string; error?: string }> {
-  const { user } = await requireModule(businessId, "accounting");
+  const { user } = await requirePermission(businessId, "accounting", "post");
   try {
     const { recodeSelectedLines } = await import("./services/find-and-recode-service");
     const result = recodeSelectedLines(businessId, user.id, payload);

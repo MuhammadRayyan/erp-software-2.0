@@ -58,7 +58,7 @@ export function ProjectForm({ businessId, projectId, customers, initial }: { bus
       </div>
     </section>
     <DocumentFormFooter onCancel={() => router.push(cancelHref)}>
-      <Button type="submit" disabled={isSubmitting}>{isSubmitting && <LoaderCircle className="size-4 animate-spin" />}{projectId ? "Save Changes" : "Create Project"}</Button>
+      <Button permission={"save"} type="submit" disabled={isSubmitting}>{isSubmitting && <LoaderCircle className="size-4 animate-spin" />}{projectId ? "Save Changes" : "Create Project"}</Button>
     </DocumentFormFooter>
     </form>;
 }

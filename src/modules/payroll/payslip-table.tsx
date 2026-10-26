@@ -199,7 +199,7 @@ export function PayslipTable({
                   </Link>
                 </DropdownMenuItem>
                 {slip.documentStatus === "draft" && (
-                  <DropdownMenuItem asChild>
+                  <DropdownMenuItem permission="edit" asChild>
                     <Link href={`/b/${businessId}/payroll/payslips/${slip.id}/edit`}>
                       <FileEdit className="size-4 text-muted-foreground" /> Edit Draft
                     </Link>
@@ -284,7 +284,7 @@ export function PayslipTable({
           >
             <Play className="size-3.5 mr-1.5 text-primary" /> Generate Pay Run
           </Button>
-          <Button asChild className="h-9">
+          <Button permission="create" asChild className="h-9">
             <Link href={`/b/${businessId}/payroll/payslips/new`}>
               <Plus className="size-4 mr-1.5" /> New Payslip
             </Link>

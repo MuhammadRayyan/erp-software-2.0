@@ -1,3 +1,5 @@
+import { assertMutationPermission, assertSavePermission } from "@/core/permissions/mutation-permissions";
+import { getPurchaseSettlement } from "./purchase-balance";
 import { randomUUID } from "node:crypto";
 import { asc, eq } from "drizzle-orm";
 import { getBusinessDb } from "@/core/db/business";
@@ -32,16 +34,7 @@ function deriveStatus(documentStatus: PurchaseInvoiceStatus, totalMinor: number,
 }
 
 export function paidForPurchaseInvoice(sqlite: ReturnType<typeof getBusinessDb>["sqlite"], invoiceId: string) {
-  const row = sqlite.prepare(`
-    SELECT
-      COALESCE((SELECT SUM(spa.amount_minor) FROM supplier_payment_allocations spa
-        INNER JOIN supplier_payments sp ON sp.id = spa.payment_id AND sp.document_status = 'posted'
-        WHERE spa.purchase_invoice_id = ?), 0)
-      + COALESCE((SELECT SUM(dn.total_minor) FROM debit_notes dn
-        WHERE dn.purchase_invoice_id = ? AND dn.document_status = 'posted'), 0)
-      AS paid_minor
-  `).get(invoiceId, invoiceId) as { paid_minor: number };
-  return row.paid_minor;
+  return getPurchaseSettlement(sqlite, invoiceId)?.foreignMinor ?? 0;
 }
 
 
@@ -333,6 +326,7 @@ export function savePurchaseInvoice(
   intent: PurchaseInvoiceIntent,
   invoiceId?: string,
 ) {
+  assertSavePermission(businessId, userId, "purchases", invoiceId, intent);
   const data = purchaseInvoiceInputSchema.parse(input);
   const context = getBusinessDb(businessId, userId);
   const supplier = context.db.select().from(suppliers).where(eq(suppliers.id, data.supplierId)).get();
@@ -418,6 +412,7 @@ export function savePurchaseInvoice(
       `).run(id, internalNumber, data.supplierId, data.projectId || null, data.supplierInvoiceNumber, data.invoiceDate, taxDate, data.dueDate, data.reference || null, resolvedOrderId || null, amounts.subtotalMinor, amounts.taxMinor, amounts.totalMinor, userId, now, now, rate.currencyCode, rate.exchangeRateToBase, rate.exchangeRateDate, rate.exchangeRateSource, base.baseSubtotalMinor, base.baseTaxMinor, base.baseTotalMinor, data.notes || null, data.terms || null);
     }
     insertLines(context.db, id, lines);
+    if (shouldPost) assertMutationPermission(businessId, userId, "purchases", "post");
     if (shouldPost) {
       assertDateNotLocked(context.sqlite, data.invoiceDate, "Purchase invoice");
       assertVatDateUnlocked(context.sqlite, taxDate, lines.map((line) => line.taxCodeId));
@@ -488,6 +483,7 @@ export function savePurchaseInvoice(
 }
 
 export function duplicatePurchaseInvoice(businessId: string, userId: string, invoiceId: string) {
+  assertMutationPermission(businessId, userId, "purchases", "create");
   const record = getPurchaseInvoice(businessId, userId, invoiceId);
   if (!record) throw new Error("Purchase invoice not found.");
   // Reuse the already-fetched DB context rather than calling getBusinessDb a second time.
@@ -505,6 +501,7 @@ export function duplicatePurchaseInvoice(businessId: string, userId: string, inv
 }
 
 export function deletePurchaseInvoice(businessId: string, userId: string, invoiceId: string) {
+  assertMutationPermission(businessId, userId, "purchases", "delete");
   const context = getBusinessDb(businessId, userId);
   const invoice = context.db.select().from(purchaseInvoices).where(eq(purchaseInvoices.id, invoiceId)).get();
   if (!invoice) throw new Error("Purchase invoice not found.");
@@ -524,6 +521,7 @@ export function deletePurchaseInvoice(businessId: string, userId: string, invoic
 }
 
 export function voidPurchaseInvoice(businessId: string, userId: string, invoiceId: string) {
+  assertMutationPermission(businessId, userId, "purchases", "delete");
   const context = getBusinessDb(businessId, userId);
   const invoice = context.db.select().from(purchaseInvoices).where(eq(purchaseInvoices.id, invoiceId)).get();
   if (!invoice) throw new Error("Purchase invoice not found.");
@@ -557,6 +555,7 @@ export function voidPurchaseInvoice(businessId: string, userId: string, invoiceI
 }
 
 export function postPurchaseInvoiceDoc(businessId: string, userId: string, invoiceId: string) {
+  assertMutationPermission(businessId, userId, "purchases", "post");
   const record = getPurchaseInvoice(businessId, userId, invoiceId);
   if (!record) throw new Error("Purchase invoice not found.");
   if (record.invoice.documentStatus === "posted") return;
@@ -606,6 +605,7 @@ export type BatchPurchaseActionResult = {
 };
 
 export function batchPostPurchaseInvoices(businessId: string, userId: string, invoiceIds: string[]): BatchPurchaseActionResult {
+  assertMutationPermission(businessId, userId, "purchases", "post");
   const result: BatchPurchaseActionResult = { successCount: 0, failedCount: 0, errors: [] };
   for (const id of invoiceIds) {
     try {
@@ -635,6 +635,7 @@ export function batchPostPurchaseInvoices(businessId: string, userId: string, in
 }
 
 export function batchVoidPurchaseInvoices(businessId: string, userId: string, invoiceIds: string[]): BatchPurchaseActionResult {
+  assertMutationPermission(businessId, userId, "purchases", "delete");
   const result: BatchPurchaseActionResult = { successCount: 0, failedCount: 0, errors: [] };
   for (const id of invoiceIds) {
     try {
@@ -664,6 +665,7 @@ export function batchVoidPurchaseInvoices(businessId: string, userId: string, in
 }
 
 export function batchDeletePurchaseInvoices(businessId: string, userId: string, invoiceIds: string[]): BatchPurchaseActionResult {
+  assertMutationPermission(businessId, userId, "purchases", "delete");
   const result: BatchPurchaseActionResult = { successCount: 0, failedCount: 0, errors: [] };
   for (const id of invoiceIds) {
     try {

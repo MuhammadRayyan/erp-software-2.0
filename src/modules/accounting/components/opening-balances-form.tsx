@@ -239,7 +239,7 @@ export function OpeningBalancesForm({
             </span>
           )}
         </div>
-        <Button onClick={handleSave} disabled={pending}>
+        <Button permission={"save"} onClick={handleSave} disabled={pending}>
           <Save className="size-4" /> Save Opening Balances
         </Button>
       </div>

@@ -35,7 +35,7 @@ export function TaxSettingsForm({ businessId, initial, isAdmin }: { businessId: 
       <div className="space-y-1.5"><Label htmlFor="deregistration-date">Deregistration date <span className="font-normal text-muted-foreground">(optional)</span></Label><Input id="deregistration-date" type="date" disabled={!isAdmin} value={values.vatDeregistrationDate ?? ""} onChange={(event) => setValues((current) => ({ ...current, vatDeregistrationDate: event.target.value }))} /></div>
     </div>
     {error && <FormError message={error} />}
-    {isAdmin && <div className="flex justify-end"><Button onClick={save} disabled={pending}>{pending ? "Saving…" : "Save VAT settings"}</Button></div>}
+    {isAdmin && <div className="flex justify-end"><Button permission={"save"} onClick={save} disabled={pending}>{pending ? "Saving…" : "Save VAT settings"}</Button></div>}
   </div>;
 }
 

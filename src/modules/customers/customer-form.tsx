@@ -271,7 +271,7 @@ export function CustomerForm({
 
       <div className="flex justify-end gap-2">
         <Button asChild variant="ghost"><Link href={cancelHref}>Cancel</Link></Button>
-        <Button type="submit" disabled={isSubmitting}>
+        <Button permission={"save"} type="submit" disabled={isSubmitting}>
           {isSubmitting && <LoaderCircle className="size-4 animate-spin" />}
           {customerId ? "Save changes" : "Save customer"}
         </Button>

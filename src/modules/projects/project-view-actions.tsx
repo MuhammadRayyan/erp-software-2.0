@@ -41,7 +41,7 @@ export function ProjectViewActions({
   }
   return <>
     <div className="flex flex-wrap justify-end gap-2">
-      <Button asChild variant="secondary"><Link href={`/b/${businessId}/projects/${projectId}/edit`}><Pencil className="size-4" /> Edit</Link></Button>
+      <Button permission={"edit"} asChild variant="secondary"><Link href={`/b/${businessId}/projects/${projectId}/edit`}><Pencil className="size-4" /> Edit</Link></Button>
       {customers.length > 1 ? (
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
@@ -50,7 +50,7 @@ export function ProjectViewActions({
           <DropdownMenuContent align="end">
             <div className="px-2 py-1.5 text-xs font-semibold text-muted-foreground">Select Client to Invoice:</div>
             {customers.map((c) => (
-              <DropdownMenuItem key={c.customerId} asChild>
+              <DropdownMenuItem permission="create" key={c.customerId} asChild>
                 <Link href={`/b/${businessId}/sales/invoices/new?projectId=${projectId}&customerId=${c.customerId}`}>
                   <span className="font-medium">{c.customerName}</span>
                   {c.isPrimary && <span className="ml-1.5 text-xs text-muted-foreground">(Primary)</span>}
@@ -63,8 +63,8 @@ export function ProjectViewActions({
         <Button asChild><Link href={defaultInvoiceHref}><Plus className="size-4" /> New Invoice</Link></Button>
       )}
       <Button asChild variant="secondary" className="hidden md:inline-flex"><Link href={poHref}><ShoppingCart className="size-4" /> New Purchase Order</Link></Button>
-      <DropdownMenu><DropdownMenuTrigger asChild><Button variant="secondary"><MoreHorizontal className="size-4" /> More</Button></DropdownMenuTrigger><DropdownMenuContent align="end"><DropdownMenuItem asChild className="md:hidden"><Link href={poHref}>New Purchase Order</Link></DropdownMenuItem><DropdownMenuItem asChild><Link href={piHref}>New Purchase Invoice</Link></DropdownMenuItem><DropdownMenuSeparator /><DropdownMenuItem className="text-danger" onSelect={() => setConfirmDelete(true)}>Delete unused project</DropdownMenuItem></DropdownMenuContent></DropdownMenu>
+      <DropdownMenu><DropdownMenuTrigger asChild><Button variant="secondary"><MoreHorizontal className="size-4" /> More</Button></DropdownMenuTrigger><DropdownMenuContent align="end"><DropdownMenuItem asChild className="md:hidden"><Link href={poHref}>New Purchase Order</Link></DropdownMenuItem><DropdownMenuItem asChild><Link href={piHref}>New Purchase Invoice</Link></DropdownMenuItem><DropdownMenuSeparator /><DropdownMenuItem permission="delete" className="text-danger" onSelect={() => setConfirmDelete(true)}>Delete unused project</DropdownMenuItem></DropdownMenuContent></DropdownMenu>
     </div>
-    <DialogRoot open={confirmDelete} onOpenChange={setConfirmDelete}><DialogContent><DialogTitle>Delete project?</DialogTitle><DialogDescription>Only a project with no documents, journal lines, notes, or files can be deleted. This action cannot be undone.</DialogDescription>{error && <FormError message={error} />}<div className="mt-5 flex justify-end gap-2"><DialogClose asChild><Button variant="secondary" disabled={pending}>Cancel</Button></DialogClose><Button variant="danger" disabled={pending} onClick={remove}>{pending ? "Deleting…" : "Delete Project"}</Button></div></DialogContent></DialogRoot>
+    <DialogRoot open={confirmDelete} onOpenChange={setConfirmDelete}><DialogContent><DialogTitle>Delete project?</DialogTitle><DialogDescription>Only a project with no documents, journal lines, notes, or files can be deleted. This action cannot be undone.</DialogDescription>{error && <FormError message={error} />}<div className="mt-5 flex justify-end gap-2"><DialogClose asChild><Button variant="secondary" disabled={pending}>Cancel</Button></DialogClose><Button permission={"delete"} variant="danger" disabled={pending} onClick={remove}>{pending ? "Deleting…" : "Delete Project"}</Button></div></DialogContent></DialogRoot>
   </>;
 }

@@ -1,3 +1,4 @@
+import { assertSavePermission, assertMutationPermission } from "@/core/permissions/mutation-permissions";
 import { randomUUID } from "node:crypto";
 import { getBusinessDb } from "@/core/db/business";
 import { addMinor, minorToInput, parseMoneyToMinor, splitTaxInclusive } from "@/modules/accounting/calculations/money";
@@ -107,6 +108,7 @@ export function saveBankTransaction(
   intent: BankTransactionIntent,
   transactionId?: string,
 ) {
+  assertSavePermission(businessId, userId, "banking", transactionId, intent);
   const data = bankTransactionInputSchema.parse(input);
   const context = getBusinessDb(businessId, userId);
   const id = transactionId ?? randomUUID();
@@ -228,6 +230,7 @@ export function bankTransactionToInput(record: NonNullable<ReturnType<typeof get
 }
 
 export function voidBankTransaction(businessId: string, userId: string, transactionId: string) {
+  assertMutationPermission(businessId, userId, "banking", "delete");
   const context = getBusinessDb(businessId, userId);
   const now = new Date().toISOString();
   context.sqlite.transaction(() => {

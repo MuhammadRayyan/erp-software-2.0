@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
-import { requireModule } from "@/core/permissions/require-module";
+import { requireSavePermission } from "@/core/permissions/require-module";
 import { inventoryItemInputSchema } from "./inventory-item-input";
 import { saveInventoryItem } from "./inventory-item-service";
 import { inventoryLocationInputSchema } from "./inventory-location-input";
@@ -13,7 +13,7 @@ import { inventoryErrorMessage } from "./inventory-error";
 export type InventoryActionResult = { error?: string; fieldErrors?: Record<string, string[]> };
 
 export async function saveInventoryItemAction(businessId: string, itemId: string | null, input: unknown): Promise<InventoryActionResult> {
-  const { user } = await requireModule(businessId, "inventory");
+  const { user } = await requireSavePermission(businessId, "inventory", itemId, "draft");
   const parsed = inventoryItemInputSchema.safeParse(input);
   if (!parsed.success) return { error: "Check the item fields.", fieldErrors: z.flattenError(parsed.error).fieldErrors };
   let id: string;
@@ -26,7 +26,7 @@ export async function saveInventoryItemAction(businessId: string, itemId: string
 }
 
 export async function saveInventoryLocationAction(businessId: string, locationId: string | null, input: unknown): Promise<InventoryActionResult> {
-  const { user } = await requireModule(businessId, "inventory");
+  const { user } = await requireSavePermission(businessId, "inventory", locationId, "draft");
   const parsed = inventoryLocationInputSchema.safeParse(input);
   if (!parsed.success) return { error: "Check the location fields.", fieldErrors: z.flattenError(parsed.error).fieldErrors };
   let id: string;

@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { requireModule } from "@/core/permissions/require-module";
+import { requirePermission } from "@/core/permissions/require-module";
 import {
   createPaymentTerm,
   updatePaymentTerm,
@@ -18,9 +18,9 @@ export async function createPaymentTermAction(
     is_default?: boolean;
   }
 ) {
-  await requireModule(businessId, "settings");
+  const { user } = await requirePermission(businessId, "settings", "edit");
   try {
-    const term = createPaymentTerm(businessId, input);
+    const term = createPaymentTerm(businessId, user.id, input);
     revalidatePath(`/b/${businessId}/settings/payment-terms`);
     return { data: term };
   } catch (error) {
@@ -38,9 +38,9 @@ export async function updatePaymentTermAction(
     is_default?: boolean;
   }
 ) {
-  await requireModule(businessId, "settings");
+  const { user } = await requirePermission(businessId, "settings", "edit");
   try {
-    const term = updatePaymentTerm(businessId, id, input);
+    const term = updatePaymentTerm(businessId, user.id, id, input);
     revalidatePath(`/b/${businessId}/settings/payment-terms`);
     return { data: term };
   } catch (error) {
@@ -49,9 +49,9 @@ export async function updatePaymentTermAction(
 }
 
 export async function deletePaymentTermAction(businessId: string, id: string) {
-  await requireModule(businessId, "settings");
+  const { user } = await requirePermission(businessId, "settings", "edit");
   try {
-    deletePaymentTerm(businessId, id);
+    deletePaymentTerm(businessId, user.id, id);
     revalidatePath(`/b/${businessId}/settings/payment-terms`);
     return {};
   } catch (error) {
@@ -60,9 +60,9 @@ export async function deletePaymentTermAction(businessId: string, id: string) {
 }
 
 export async function setDefaultPaymentTermAction(businessId: string, id: string) {
-  await requireModule(businessId, "settings");
+  const { user } = await requirePermission(businessId, "settings", "edit");
   try {
-    setDefaultPaymentTerm(businessId, id);
+    setDefaultPaymentTerm(businessId, user.id, id);
     revalidatePath(`/b/${businessId}/settings/payment-terms`);
     return {};
   } catch (error) {

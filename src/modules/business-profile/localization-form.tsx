@@ -184,7 +184,7 @@ export function LocalizationForm({
 
       {isAdmin && (
         <div className="flex justify-end gap-3 pt-2">
-          <Button type="submit" disabled={pending}>
+          <Button permission={"save"} type="submit" disabled={pending}>
             {pending && <LoaderCircle className="size-4 animate-spin mr-1.5" />}
             Save Localization Settings
           </Button>

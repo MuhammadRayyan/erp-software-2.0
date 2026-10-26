@@ -1,3 +1,4 @@
+import { assertSavePermission, assertMutationPermission } from "@/core/permissions/mutation-permissions";
 import { cache } from "react";
 import { randomUUID } from "node:crypto";
 import { getBusinessDb } from "@/core/db/business";
@@ -95,6 +96,7 @@ export function saveBankAccount(
   input: BankAccountInput,
   bankAccountId?: string,
 ) {
+  assertSavePermission(businessId, userId, "banking", bankAccountId, "draft");
   const data = bankAccountInputSchema.parse(input);
   const context = getBusinessDb(businessId, userId);
   if (data.currencyCode !== context.business.currency.toUpperCase()) {
@@ -152,6 +154,7 @@ export function bankAccountToInput(account: BankAccountRow): BankAccountInput {
 }
 
 export function ensureDefaultDemoBankAccounts(businessId: string, userId: string) {
+  assertMutationPermission(businessId, userId, "banking", "create");
   const context = getBusinessDb(businessId, userId);
   const existing = listBankAccounts(businessId, userId);
   const settings = context.sqlite.prepare(`

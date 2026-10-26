@@ -35,12 +35,12 @@ export default async function InventoryItemsPage({
         description="Posted movement-derived stock with moving weighted-average valuation."
       >
         <DensityToggle businessId={businessId} />
-        <Button asChild variant="secondary">
+        <Button permission="create" asChild variant="secondary">
           <Link href={`/b/${businessId}/inventory/adjustments/new`}>
             <ClipboardPlus className="size-4" /> Adjust Stock
           </Link>
         </Button>
-        <Button asChild>
+        <Button permission="create" asChild>
           <Link href={`/b/${businessId}/inventory/items/new`}>
             <Plus className="size-4" /> New Item
           </Link>
@@ -118,7 +118,7 @@ export default async function InventoryItemsPage({
           description={query.search ? "Clear the search or adjust the active filter." : "Create an item before receiving or delivering stock."}
           action={
             !query.search ? (
-              <Button asChild>
+              <Button permission="create" asChild>
                 <Link href={`/b/${businessId}/inventory/items/new`}>Create first item</Link>
               </Button>
             ) : undefined

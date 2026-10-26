@@ -182,11 +182,11 @@ export function SalesOrderForm({ businessId, orderId, status = "draft", customer
     </section>
     <DocumentFormFooter onCancel={() => router.push(cancelHref)}>
       {status === "active" ? (
-        <Button type="button" disabled={isSubmitting} onClick={handleSubmit((values) => save(values, "issue"))}>
+        <Button permission={["save", "approve"]} type="button" disabled={isSubmitting} onClick={handleSubmit((values) => save(values, "issue"))}>
           {isSubmitting && <LoaderCircle className="size-4 animate-spin" />} Save Changes
         </Button>
       ) : (
-        <Button type="button" disabled={isSubmitting} onClick={handleSubmit((values) => save(values, "draft"))}>
+        <Button permission={"save"} type="button" disabled={isSubmitting} onClick={handleSubmit((values) => save(values, "draft"))}>
           {isSubmitting && <LoaderCircle className="size-4 animate-spin" />} {orderId ? "Save Draft" : "Save Draft Order"}
         </Button>
       )}

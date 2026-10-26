@@ -1,3 +1,4 @@
+import { assertMutationPermission } from "@/core/permissions/mutation-permissions";
 import { randomUUID } from "node:crypto";
 import type Database from "better-sqlite3";
 import { getBusinessDb } from "@/core/db/business";
@@ -8,6 +9,10 @@ import {
   type CustomFieldEntityType,
 } from "./custom-field-input";
 import { formatCustomFieldValue } from "./custom-field-display";
+
+function assertCustomFieldWritePermission(businessId: string, userId: string, entityType: CustomFieldEntityType) {
+  assertMutationPermission(businessId, userId, entityType === "supplier" || entityType.startsWith("purchase_") ? "purchases" : "sales", "edit");
+}
 
 export type CustomFieldDefinitionRow = {
   id: string;
@@ -108,6 +113,7 @@ export function createCustomFieldDefinition(
   userId: string,
   input: unknown,
 ): string {
+  assertMutationPermission(businessId, userId, "settings", "edit");
   const data: CustomFieldDefinitionData = customFieldDefinitionSchema.parse(input);
   const { sqlite } = getBusinessDb(businessId, userId);
   const id = randomUUID();
@@ -156,6 +162,7 @@ export function updateCustomFieldDefinition(
   definitionId: string,
   input: unknown,
 ): void {
+  assertMutationPermission(businessId, userId, "settings", "edit");
   const data: CustomFieldDefinitionData = customFieldDefinitionSchema.parse(input);
   const { sqlite } = getBusinessDb(businessId, userId);
   const current = sqlite
@@ -199,6 +206,7 @@ export function deleteCustomFieldDefinition(
   userId: string,
   definitionId: string,
 ): void {
+  assertMutationPermission(businessId, userId, "settings", "edit");
   const { sqlite } = getBusinessDb(businessId, userId);
   const current = sqlite
     .prepare("SELECT id, name, entity_type FROM custom_field_definitions WHERE id = ?")
@@ -230,6 +238,7 @@ export function moveCustomFieldDefinition(
   definitionId: string,
   direction: "up" | "down",
 ): void {
+  assertMutationPermission(businessId, userId, "settings", "edit");
   const { sqlite } = getBusinessDb(businessId, userId);
   const row = sqlite
     .prepare("SELECT entity_type FROM custom_field_definitions WHERE id = ?")
@@ -354,6 +363,7 @@ export function saveCustomFieldValues(
   entityId: string,
   values: Record<string, string>,
 ): void {
+  assertCustomFieldWritePermission(businessId, userId, entityType);
   const { sqlite } = getBusinessDb(businessId, userId);
   sqlite.transaction(() => {
     saveCustomFieldValuesInTransaction(sqlite, entityType, entityId, values);

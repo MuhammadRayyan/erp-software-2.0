@@ -5,6 +5,7 @@ import { businessMigrations } from "./business-migrations";
 import { BUSINESSES_DIRECTORY, getBusinessPaths, SYSTEM_DB_PATH } from "./paths";
 import { readMigrationState } from "./migrations/runner";
 import { systemMigrations } from "./migrations/system";
+import { reconcileBusinessDatabase } from "./reconciliation";
 
 type RegistryBusiness = {
   id: string;
@@ -39,7 +40,7 @@ function discoverBusinessDatabases(registry: readonly RegistryBusiness[]) {
   return discovered;
 }
 
-export function checkDatabases() {
+export function checkDatabases(options: { deep?: boolean } = { deep: true }) {
   if (!existsSync(SYSTEM_DB_PATH)) {
     throw new Error(`System database is missing at ${SYSTEM_DB_PATH}; run npm run db:migrate.`);
   }
@@ -55,7 +56,10 @@ export function checkDatabases() {
       );
     }
     systemVersion = state.currentVersion;
-    checkForeignKeys(systemSqlite, "system database");
+    if (options.deep) {
+      checkForeignKeys(systemSqlite, "system database");
+      if (systemSqlite.pragma("integrity_check", { simple: true }) !== "ok") throw new Error("System integrity check failed.");
+    }
     registry = systemSqlite
       .prepare("SELECT id, directory_key FROM businesses ORDER BY id")
       .all() as RegistryBusiness[];
@@ -74,7 +78,11 @@ export function checkDatabases() {
       if (!state.current) {
         throw new Error(`${label} is at schema ${state.currentVersion}; expected ${state.latestVersion}.`);
       }
-      checkForeignKeys(sqlite, label);
+      if (options.deep) {
+        checkForeignKeys(sqlite, label);
+        if (sqlite.pragma("integrity_check", { simple: true }) !== "ok") throw new Error(`${label}: integrity check failed.`);
+        reconcileBusinessDatabase(sqlite);
+      }
       businesses.push({ label, version: state.currentVersion });
     } finally {
       sqlite.close();

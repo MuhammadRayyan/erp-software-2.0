@@ -3,14 +3,14 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
-import { requireModule } from "@/core/permissions/require-module";
+import { requireSavePermission, requirePermission } from "@/core/permissions/require-module";
 import { purchaseOrderInputSchema } from "./purchase-order-input";
 import { cancelPurchaseOrder, closePurchaseOrder, deletePurchaseOrder, issuePurchaseOrder, savePurchaseOrder, type PurchaseOrderIntent } from "./purchase-order-service";
 
 export type PurchaseOrderActionResult = { error?: string; fieldErrors?: Record<string, string[]> };
 
 export async function savePurchaseOrderAction(businessId: string, orderId: string | null, input: unknown, intent: PurchaseOrderIntent): Promise<PurchaseOrderActionResult> {
-  const { user } = await requireModule(businessId, "purchases");
+  const { user } = await requireSavePermission(businessId, "purchases", orderId, intent);
   const parsed = purchaseOrderInputSchema.safeParse(input);
   if (!parsed.success) return { error: "Check the purchase order fields and lines.", fieldErrors: z.flattenError(parsed.error).fieldErrors };
   let id: string;
@@ -23,7 +23,7 @@ export async function savePurchaseOrderAction(businessId: string, orderId: strin
 }
 
 async function runStatusAction(businessId: string, orderId: string, action: "close" | "cancel" | "delete") {
-  const { user } = await requireModule(businessId, "purchases");
+  const { user } = await requirePermission(businessId, "purchases", action === "close" ? "edit" : "delete");
   try {
     if (action === "close") closePurchaseOrder(businessId, user.id, orderId);
     else if (action === "cancel") cancelPurchaseOrder(businessId, user.id, orderId);
@@ -35,7 +35,7 @@ async function runStatusAction(businessId: string, orderId: string, action: "clo
 }
 
 export async function issuePurchaseOrderAction(businessId: string, orderId: string) {
-  const { user } = await requireModule(businessId, "purchases");
+  const { user } = await requirePermission(businessId, "purchases", "approve");
   try {
     issuePurchaseOrder(businessId, user.id, orderId);
     revalidatePath(`/b/${businessId}/purchases/orders`);
@@ -65,7 +65,7 @@ import { quantityMicrosToInput } from "@/modules/accounting/calculations/money";
 import { minorToDecimalString } from "@/core/format";
 
 export async function convertPurchaseOrderToInvoiceAction(businessId: string, orderId: string) {
-  const { user } = await requireModule(businessId, "purchases");
+  const { user } = await requirePermission(businessId, "purchases", "create");
   try {
     const orderData = getPurchaseOrder(businessId, user.id, orderId);
     if (!orderData) return { error: "Order not found." };
@@ -129,7 +129,7 @@ export async function convertPurchaseOrderToInvoiceAction(businessId: string, or
 }
 
 export async function createPurchaseOrderRevisionAction(businessId: string, orderId: string) {
-  const { user } = await requireModule(businessId, "purchases");
+  const { user } = await requirePermission(businessId, "purchases", "create");
   try {
     const { createPurchaseOrderRevision } = await import("./purchase-order-service");
     const newOrderId = createPurchaseOrderRevision(businessId, user.id, orderId);

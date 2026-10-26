@@ -1,3 +1,4 @@
+import { assertMutationPermission } from "@/core/permissions/mutation-permissions";
 import { randomUUID } from "node:crypto";
 import { z } from "zod";
 import { getBusinessDb } from "@/core/db/business";
@@ -93,6 +94,7 @@ export function createBankRule(
   userId: string,
   rawInput: BankRuleInput,
 ): string {
+  assertMutationPermission(businessId, userId, "settings", "edit");
   const data = bankRuleInputSchema.parse(rawInput);
   const context = getBusinessDb(businessId, userId);
   const id = randomUUID();
@@ -184,6 +186,7 @@ export function updateBankRule(
   ruleId: string,
   rawInput: BankRuleInput,
 ): void {
+  assertMutationPermission(businessId, userId, "settings", "edit");
   const data = bankRuleInputSchema.parse(rawInput);
   const context = getBusinessDb(businessId, userId);
   const now = new Date().toISOString();
@@ -271,6 +274,7 @@ export function deleteBankRule(
   userId: string,
   ruleId: string,
 ): void {
+  assertMutationPermission(businessId, userId, "settings", "edit");
   const { sqlite } = getBusinessDb(businessId, userId);
   const existing = sqlite.prepare("SELECT name FROM bank_rules WHERE id = ?").get(ruleId) as { name: string } | undefined;
   const result = sqlite.prepare("DELETE FROM bank_rules WHERE id = ?").run(ruleId);
@@ -299,6 +303,7 @@ export function toggleBankRuleActive(
   ruleId: string,
   isActive: boolean,
 ): void {
+  assertMutationPermission(businessId, userId, "settings", "edit");
   const { sqlite } = getBusinessDb(businessId, userId);
   const now = new Date().toISOString();
   sqlite.prepare(
@@ -311,6 +316,7 @@ export function reorderBankRules(
   userId: string,
   ruleIds: string[],
 ): void {
+  assertMutationPermission(businessId, userId, "settings", "edit");
   const context = getBusinessDb(businessId, userId);
   const now = new Date().toISOString();
   context.sqlite.transaction(() => {
@@ -398,6 +404,7 @@ export function applyBankRule(
   ruleId: string,
   statementLineId: string,
 ): { transactionId: string } {
+  assertMutationPermission(businessId, userId, "banking", "edit");
   const context = getBusinessDb(businessId, userId);
   const rule = getBankRule(businessId, userId, ruleId);
   if (!rule) throw new Error("Bank rule not found.");
@@ -466,6 +473,7 @@ export function batchApplyBankRules(
   appliedCount: number;
   matchedLines: { lineId: string; ruleName: string; transactionId: string }[];
 } {
+  assertMutationPermission(businessId, userId, "banking", "edit");
   const context = getBusinessDb(businessId, userId);
   const rules = listBankRules(businessId, userId, bankAccountId).filter((r) => r.is_active);
   if (rules.length === 0) return { appliedCount: 0, matchedLines: [] };

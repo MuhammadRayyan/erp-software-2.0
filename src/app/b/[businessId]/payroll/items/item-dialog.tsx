@@ -158,7 +158,7 @@ export function ItemDialog({
             >
               Cancel
             </Button>
-            <Button type="submit" disabled={loading}>
+            <Button permission={"save"} type="submit" disabled={loading}>
               {loading ? "Saving..." : isEdit ? "Update Item" : "Create Item"}
             </Button>
           </div>

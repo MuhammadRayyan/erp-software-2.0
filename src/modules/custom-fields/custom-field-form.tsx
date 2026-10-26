@@ -194,7 +194,7 @@ export function CustomFieldsManager({
                             <div className="flex items-center gap-1">
                               <Button variant="ghost" size="icon" aria-label={`Move ${definition.name} up`} disabled={index === 0 || movingId === definition.id} onClick={() => move(definition, "up")}><ArrowUp className="size-3.5" /></Button>
                               <Button variant="ghost" size="icon" aria-label={`Move ${definition.name} down`} disabled={index === group.length - 1 || movingId === definition.id} onClick={() => move(definition, "down")}><ArrowDown className="size-3.5" /></Button>
-                              <Button variant="ghost" size="sm" onClick={() => open(definition)}><Pencil className="size-3.5" /> Edit</Button>
+                              <Button permission={"edit"} variant="ghost" size="sm" onClick={() => open(definition)}><Pencil className="size-3.5" /> Edit</Button>
                               <Button variant="ghost" size="icon" aria-label={`Delete ${definition.name}`} onClick={() => setDeleting(definition)}><Trash2 className="size-3.5 text-danger" /></Button>
                             </div>
                           </td>
@@ -278,7 +278,7 @@ export function CustomFieldsManager({
           {serverError && <FormError message={serverError} />}
           <div className="mt-5 flex justify-end gap-2">
             <Button variant="ghost" onClick={() => setEditing(undefined)}>Cancel</Button>
-            <Button onClick={save} disabled={pending}>{editing ? "Save changes" : "Create field"}</Button>
+            <Button permission={"save"} onClick={save} disabled={pending}>{editing ? "Save changes" : "Create field"}</Button>
           </div>
         </DialogContent>
       </DialogRoot>
@@ -289,7 +289,7 @@ export function CustomFieldsManager({
           <DialogDescription>This removes the field and every value stored on {deleting ? entityTypeLabels[deleting.entityType].toLowerCase() : "records"}. This cannot be undone.</DialogDescription>
           <div className="mt-5 flex justify-end gap-2">
             <Button variant="secondary" onClick={() => setDeleting(null)}>Cancel</Button>
-            <Button variant="danger" onClick={remove} disabled={deletePending}><Trash2 className="size-4" /> Delete field</Button>
+            <Button permission={"delete"} variant="danger" onClick={remove} disabled={deletePending}><Trash2 className="size-4" /> Delete field</Button>
           </div>
         </DialogContent>
       </DialogRoot>

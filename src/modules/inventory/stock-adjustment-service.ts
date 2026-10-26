@@ -1,3 +1,4 @@
+import { assertSavePermission, assertMutationPermission } from "@/core/permissions/mutation-permissions";
 import { randomUUID } from "node:crypto";
 import { getBusinessDb } from "@/core/db/business";
 import {
@@ -222,6 +223,7 @@ export function saveStockAdjustment(
   intent: InventoryDocumentIntent,
   adjustmentId?: string,
 ) {
+  assertSavePermission(businessId, userId, "inventory", adjustmentId, intent);
   const data = stockAdjustmentInputSchema.parse(input);
   const context = getBusinessDb(businessId, userId);
   const quantityDelta = parseSignedQuantity(data.quantityChange);
@@ -289,6 +291,7 @@ export function saveStockAdjustment(
 
     assertDateNotLocked(context.sqlite, data.date, "Stock adjustment");
 
+    if (shouldPost) assertMutationPermission(businessId, userId, "inventory", "post");
     if (shouldPost) {
       assertInventoryPostingOrder(
         context.sqlite,
@@ -399,6 +402,7 @@ export function voidStockAdjustment(
   userId: string,
   adjustmentId: string,
 ) {
+  assertMutationPermission(businessId, userId, "inventory", "delete");
   const context = getBusinessDb(businessId, userId);
   const now = new Date().toISOString();
 
@@ -497,6 +501,7 @@ export function deleteStockAdjustment(
   userId: string,
   adjustmentId: string,
 ) {
+  assertMutationPermission(businessId, userId, "inventory", "delete");
   const { sqlite } = getBusinessDb(businessId, userId);
   const adjustment = sqlite
     .prepare("SELECT adjustment_number, document_status, date FROM stock_adjustments WHERE id = ?")

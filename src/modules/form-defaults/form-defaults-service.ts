@@ -1,3 +1,4 @@
+import { assertMutationPermission } from "@/core/permissions/mutation-permissions";
 import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
 import { getBusinessDb } from "@/core/db/business";
@@ -71,8 +72,11 @@ export function saveFormDefaults(
   formType: string,
   values: FormDefaultValues,
 ): void {
+  assertMutationPermission(businessId, userId, "settings", "edit");
   const { db, sqlite } = getBusinessDb(businessId, userId);
   const payloadJson = JSON.stringify(values);
+  if (!isFormType(formType)) throw new Error("Unsupported form type.");
+  if (!values || typeof values !== "object" || Array.isArray(values) || payloadJson.length > 16_384) throw new Error("Form defaults must be an object smaller than 16 KB.");
   const now = new Date().toISOString();
   const existing = db.select().from(formDefaults).where(eq(formDefaults.formType, formType)).get();
   if (existing) {

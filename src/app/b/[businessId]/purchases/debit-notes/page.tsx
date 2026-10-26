@@ -32,7 +32,7 @@ export default async function DebitNoteListPage({
         title="Debit Notes"
         description="Draft, post, and track supplier debit notes."
       >
-        <Button asChild>
+        <Button permission="create" asChild>
           <Link href={`/b/${businessId}/purchases/debit-notes/new`}>
             <Plus className="size-4" /> New Debit Note
           </Link>
@@ -56,7 +56,7 @@ export default async function DebitNoteListPage({
           title="No debit notes yet"
           description="Create a draft or post your first supplier debit note."
           action={
-            <Button asChild>
+            <Button permission="create" asChild>
               <Link href={`/b/${businessId}/purchases/debit-notes/new`}>
                 <Plus className="size-4" /> New Debit Note
               </Link>

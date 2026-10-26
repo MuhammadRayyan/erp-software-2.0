@@ -20,7 +20,7 @@ export default async function ProjectsPage({ params }: { params: Promise<{ busin
         title="Projects"
         description="Operational links and ledger-backed profitability without project-management overhead."
       >
-        <Button asChild>
+        <Button permission="create" asChild>
           <Link href={`/b/${businessId}/projects/new`}>
             <Plus className="size-4" /> New Project
           </Link>
@@ -35,7 +35,7 @@ export default async function ProjectsPage({ params }: { params: Promise<{ busin
           title="No projects yet"
           description="Create a project to connect customer, sales, purchase, and accounting activity."
           action={
-            <Button asChild>
+            <Button permission="create" asChild>
               <Link href={`/b/${businessId}/projects/new`}>
                 <Plus className="size-4" /> New Project
               </Link>

@@ -61,7 +61,17 @@ server.log
 
 # Large external Manager.io backup files
 *.manager
-!manager_backup_file.manager
+*.erpbackup
+*.db
+*.db-wal
+*.db-shm
+/backups/
+/scratch/
+/.next-validate/
+/.ops/
+/runtime.env
+/.release.env
+/releases/
 /data/
 
 # SQLite databases and WAL files

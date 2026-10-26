@@ -118,7 +118,7 @@ export function DocumentViewLayout({
             </Button>
 
             {/* Download PDF Button */}
-            <Button
+            <Button permission={"export"}
               type="button"
               variant="secondary"
               size="sm"

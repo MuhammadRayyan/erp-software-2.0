@@ -1,48 +1,54 @@
 services:
   modern-erp:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    image: modern-erp:latest
+    image: ${ERP_IMAGE:?Set ERP_IMAGE to the tested image digest}
     container_name: modern-erp
+    init: true
     restart: unless-stopped
+    stop_grace_period: 30s
+    env_file:
+      - ./runtime.env
     environment:
-      - NODE_ENV=production
-      - PORT=3000
-      - HOSTNAME=0.0.0.0
-      - ERP_DATA_DIR=/app/data
-      - BETTER_AUTH_SECRET=${BETTER_AUTH_SECRET:-ledgerly-secret-change-in-production-random-key-64chars}
-      - APP_DOMAIN=${APP_DOMAIN:-erp-portal.rapidtss.com}
-      - BETTER_AUTH_URL=${BETTER_AUTH_URL:-https://${APP_DOMAIN:-erp-portal.rapidtss.com}}
-      - BETTER_AUTH_TRUSTED_ORIGINS=${BETTER_AUTH_TRUSTED_ORIGINS:-https://erp-portal.rapidtss.com,http://erp-portal.rapidtss.com,http://84.235.255.173,https://84.235.255.173,http://localhost:3000,http://localhost}
-      - SETUP_KEY=${SETUP_KEY}
+      NODE_ENV: production
+      PORT: 3000
+      HOSTNAME: 0.0.0.0
+      ERP_DATA_DIR: /app/data
+      ERP_MIGRATION_MODE: external
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    mem_limit: 3g
+    pids_limit: 256
+    tmpfs:
+      - /tmp:size=1024m,mode=1777
     volumes:
       - /opt/modern-erp/data:/app/data
-    networks:
-      - erp-network
+      - next_cache:/app/.next/cache
+    logging:
+      driver: json-file
+      options: {max-size: 10m, max-file: "3"}
+    networks: [erp-network]
 
   caddy:
-    image: caddy:2-alpine
+    image: caddy:2-alpine@sha256:eb4d35b7452d1ab6171fbdbe8d9275b2301dad6dad92115d91e19fb9b24d510f
     container_name: erp-caddy
     restart: unless-stopped
     environment:
-      - APP_DOMAIN=${APP_DOMAIN:-erp-portal.rapidtss.com}
-    ports:
-      - "80:80"
-      - "443:443"
+      APP_DOMAIN: ${APP_DOMAIN:-erp-portal.rapidtss.com}
+    ports: ["80:80", "443:443"]
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - ./static:/srv/erp-static:ro
       - caddy_data:/data
       - caddy_config:/config
-    depends_on:
-      - modern-erp
-    networks:
-      - erp-network
+    logging:
+      driver: json-file
+      options: {max-size: 10m, max-file: "3"}
+    networks: [erp-network]
 
 networks:
   erp-network:
     driver: bridge
-
 volumes:
   caddy_data:
   caddy_config:
+  next_cache:

@@ -28,7 +28,7 @@ export default async function StockAdjustmentsPage({ params }: { params: Promise
         title="Stock Adjustments"
         description="Opening balances and controlled stock corrections."
       >
-        <Button asChild>
+        <Button permission="create" asChild>
           <Link href={`/b/${businessId}/inventory/adjustments/new`}>
             <Plus className="size-4" /> New Adjustment
           </Link>

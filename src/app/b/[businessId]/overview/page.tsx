@@ -1,11 +1,13 @@
 import Link from "next/link";
+import { addMinor } from "@/modules/accounting/calculations/money";
+import { PermissionDenied } from "@/components/permission-denied";
 import { notFound } from "next/navigation";
 import { ArrowRight, Mail } from "lucide-react";
 import { NoticeToast } from "@/components/notice-toast";
 import { requireUser } from "@/core/auth/session";
 import { getBusinessForUser } from "@/core/businesses/business-service";
 import { formatDate, formatDateTime, formatMoney } from "@/core/format";
-import { parseModules } from "@/core/permissions/permissions";
+import { hasActionPermission } from "@/core/permissions/permissions";
 import { listPreferences } from "@/modules/preferences/preference-service";
 import { decodeColumnSnapshots } from "@/modules/preferences/snapshot-codec";
 import {
@@ -60,19 +62,19 @@ export default async function OverviewPage({
   const initialView = rawView === "charts" || rawView === "operations" ? "charts" : "financial";
   const currency = access.business.currency;
 
-  const invoiceList = listInvoices(businessId, user.id);
+  const canViewBanking = hasActionPermission(businessId, user.id, "banking", "view");
+  const canViewSales = hasActionPermission(businessId, user.id, "sales", "view");
+  const canViewReports = hasActionPermission(businessId, user.id, "reports", "view");
+  const invoiceList = canViewSales ? listInvoices(businessId, user.id) : [];
   const posted = invoiceList.filter((invoice) => invoice.documentStatus === "posted");
   // Balance-based KPIs are always "as of today"; only Posted Sales follows the selected period.
-  const outstanding = posted.reduce((sum, invoice) => sum + invoice.baseBalanceMinor, 0);
-  const overdue = posted.filter((invoice) => invoice.paymentStatus === "overdue").reduce((sum, invoice) => sum + invoice.baseBalanceMinor, 0);
-  const canViewBanking = parseModules(access.membership.role, access.membership.modulesJson).includes("banking");
-  const canViewSales = parseModules(access.membership.role, access.membership.modulesJson).includes("sales");
-  const canViewReports = parseModules(access.membership.role, access.membership.modulesJson).includes("reports");
+  const outstanding = addMinor(posted.map(invoice => invoice.baseBalanceMinor));
+  const overdue = addMinor(posted.filter((invoice) => invoice.paymentStatus === "overdue").map(invoice => invoice.baseBalanceMinor));
   const bankBalance = canViewBanking ? getBankBalance(businessId, user.id) : null;
-  const periodPosted = from || to
+  const periodPosted = canViewSales && (from || to)
     ? listInvoices(businessId, user.id, { from, to }).filter((invoice) => invoice.documentStatus === "posted")
     : posted;
-  const sales = periodPosted.reduce((sum, invoice) => sum + invoice.baseTotalMinor, 0);
+  const sales = addMinor(periodPosted.map(invoice => invoice.baseTotalMinor));
   const recentEmails = canViewSales ? listSentEmails(businessId, user.id).slice(0, 4) : [];
   const periodLabel = from || to
     ? `${from ? formatDate(from, { day: "numeric", month: "short", year: "numeric" }) : "start"} – ${to ? formatDate(to, { day: "numeric", month: "short", year: "numeric" }) : "today"}`
@@ -82,7 +84,7 @@ export default async function OverviewPage({
   const serverRange = decodeServerRange(preferences);
 
   // All 4 primary cards: Posted Sales, Outstanding Receivables, Overdue, and Bank & Cash
-  const cards: KpiCardData[] = [
+  const allCards: KpiCardData[] = [
     {
       id: "posted-sales",
       icon: "sales",
@@ -121,13 +123,15 @@ export default async function OverviewPage({
       note: "Posted receipt balance",
       caption: "as of today",
       tooltip: "Sum of posted bank and cash account balances from the general ledger.",
-      href: `/b/${businessId}/reports/bank-transactions`,
+      href: `/b/${businessId}/banking/accounts`,
     },
   ];
 
+  const cards = allCards.filter(card => card.id === "bank" ? canViewBanking : canViewSales);
+
   // Financial trends & Receivables aging summary
-  const trend = getMonthlyFinancialTrend(businessId, user.id, 6);
-  const aging = getReceivablesAgingSummary(businessId, user.id);
+  const trend = canViewReports ? getMonthlyFinancialTrend(businessId, user.id, 6) : [];
+  const aging = canViewReports ? getReceivablesAgingSummary(businessId, user.id) : null;
 
 
   return (
@@ -146,9 +150,10 @@ export default async function OverviewPage({
           <div className="space-y-5">
             <OverviewControls from={from} to={to} serverRange={serverRange} businessId={businessId} />
             <KpiCards cards={cards} businessId={businessId} serverSnapshot={decodeColumnSnapshots(preferences)["overview-cards"]} />
-            <FinancialSummary businessId={businessId} userId={user.id} currency={currency} />
+            {canViewReports && <FinancialSummary businessId={businessId} userId={user.id} currency={currency} />}
+            {!cards.length && !canViewReports && <PermissionDenied module="financial overview" returnHref={`/b/${businessId}/settings/profile`} returnLabel="Open your profile" />}
             <div className="grid gap-5 lg:grid-cols-3">
-              <section className="data-panel lg:col-span-2">
+              {canViewSales && <section className="data-panel lg:col-span-2">
                 <div className="flex h-12 items-center justify-between border-b border-border px-4">
                   <h2 className="font-semibold">Recent Invoices</h2>
                   <Link href={`/b/${businessId}/sales/invoices`} className="flex items-center gap-1 text-xs font-medium text-primary hover:underline">
@@ -197,7 +202,7 @@ export default async function OverviewPage({
                     <p className="mt-1 text-sm text-muted-foreground">Create an invoice to see it listed here.</p>
                   </div>
                 )}
-              </section>
+              </section>}
               {canViewSales && (
                 <section className="data-panel">
                   <div className="flex h-12 items-center justify-between border-b border-border px-4">
@@ -241,7 +246,7 @@ export default async function OverviewPage({
         }
         chartViews={
           <div className="space-y-6">
-            <FinancialCharts businessId={businessId} currency={currency} trend={trend} aging={aging} />
+            {canViewReports && aging ? <FinancialCharts businessId={businessId} currency={currency} trend={trend} aging={aging} /> : <PermissionDenied module="financial reports" returnHref={`/b/${businessId}/overview`} returnLabel="Return to overview" />}
             {canViewReports && (
               <CashFlowRunwayWidget
                 businessId={businessId}

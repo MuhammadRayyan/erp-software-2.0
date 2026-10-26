@@ -163,7 +163,7 @@ export function DocumentViewActions({
               <Printer className="size-4" /> Print
             </DropdownMenuItem>
             {onEmail && (
-              <DropdownMenuItem className="md:hidden" onSelect={(e) => { e.preventDefault(); onEmail(); }}>
+              <DropdownMenuItem permission="export" className="md:hidden" onSelect={(e) => { e.preventDefault(); onEmail(); }}>
                 <Mail className="size-4" /> Email
               </DropdownMenuItem>
             )}
@@ -174,7 +174,7 @@ export function DocumentViewActions({
             )}
 
             {pdfHref && (
-              <DropdownMenuItem asChild className="md:hidden">
+              <DropdownMenuItem permission="export" asChild className="md:hidden">
                 <a href={pdfHref} target="_blank" rel="noreferrer">
                   <Download className="size-4" /> Download PDF
                 </a>
@@ -182,7 +182,7 @@ export function DocumentViewActions({
             )}
 
             {onDuplicate && (
-              <DropdownMenuItem disabled={pending} onSelect={() => { setError(""); setConfirm("duplicate"); }}>
+              <DropdownMenuItem permission="create" disabled={pending} onSelect={() => { setError(""); setConfirm("duplicate"); }}>
                 <Copy className="size-4" /> Duplicate
               </DropdownMenuItem>
             )}

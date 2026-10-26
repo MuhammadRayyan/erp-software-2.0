@@ -193,7 +193,7 @@ export function EmployeeTable({
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="w-48">
-                <DropdownMenuItem onClick={() => onEditEmployee(emp)}>
+                <DropdownMenuItem permission="edit" onClick={() => onEditEmployee(emp)}>
                   <FileEdit className="size-4 text-muted-foreground" /> Edit Employee
                 </DropdownMenuItem>
                 <DropdownMenuSeparator />

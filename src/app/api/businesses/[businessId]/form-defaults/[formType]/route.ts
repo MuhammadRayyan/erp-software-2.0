@@ -1,65 +1,23 @@
 export const runtime = "nodejs";
 import { NextResponse } from "next/server";
-import { getBusinessDb } from "@/core/db/business";
-import { formDefaults } from "@/core/db/business-schema";
-import { eq } from "drizzle-orm";
-import { randomUUID } from "crypto";
-
 import { requireApiAuth } from "@/core/auth/api-auth";
+import { getFormDefaults, saveFormDefaults } from "@/modules/form-defaults/form-defaults-service";
 
-export async function GET(
-  request: Request,
-  { params }: { params: Promise<{ businessId: string; formType: string }> }
-) {
-  try {
-    const { businessId, formType } = await params;
-    const auth = await requireApiAuth(request, { businessId, module: "settings" });
-    if ("error" in auth) return auth.error;
-    const user = auth.session.user;
-
-    const { db } = getBusinessDb(businessId, user.id);
-    const existing = db.select().from(formDefaults).where(eq(formDefaults.formType, formType)).get();
-    
-    return NextResponse.json({ data: existing ? JSON.parse(existing.payloadJson) : null });
-  } catch (error: any) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
-  }
+type Context = { params: Promise<{ businessId: string; formType: string }> };
+export async function GET(request: Request, { params }: Context) {
+  const { businessId, formType } = await params;
+  const auth = await requireApiAuth(request, { businessId, module: "settings" });
+  if ("error" in auth) return auth.error;
+  return NextResponse.json({ data: getFormDefaults(businessId, auth.session.user.id, formType) });
 }
-
-export async function PUT(
-  request: Request,
-  { params }: { params: Promise<{ businessId: string; formType: string }> }
-) {
+export async function PUT(request: Request, { params }: Context) {
+  const { businessId, formType } = await params;
+  const auth = await requireApiAuth(request, { businessId, module: "settings", action: "edit" });
+  if ("error" in auth) return auth.error;
   try {
-    const { businessId, formType } = await params;
-    const auth = await requireApiAuth(request, { businessId, module: "settings" });
-    if ("error" in auth) return auth.error;
-    const user = auth.session.user;
-
-    const body = await request.json();
-    const payloadJson = JSON.stringify(body);
-
-    const { db } = getBusinessDb(businessId, user.id);
-    const existing = db.select().from(formDefaults).where(eq(formDefaults.formType, formType)).get();
-
-    if (existing) {
-      db.update(formDefaults)
-        .set({ payloadJson, updatedAt: new Date().toISOString() })
-        .where(eq(formDefaults.id, existing.id))
-        .run();
-    } else {
-      db.insert(formDefaults)
-        .values({
-          id: randomUUID(),
-          formType,
-          payloadJson,
-          updatedAt: new Date().toISOString(),
-        })
-        .run();
-    }
-
+    saveFormDefaults(businessId, auth.session.user.id, formType, await request.json());
     return NextResponse.json({ success: true });
-  } catch (error: any) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+  } catch (error) {
+    return NextResponse.json({ error: error instanceof Error ? error.message : "Form defaults could not be saved." }, { status: 400 });
   }
 }

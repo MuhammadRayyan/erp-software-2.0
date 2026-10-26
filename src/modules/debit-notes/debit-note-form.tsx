@@ -367,7 +367,7 @@ export function DebitNoteForm({
 
       <DocumentFormFooter onCancel={() => router.push(cancelHref)}>
         {documentStatus === "posted" ? (
-          <Button
+          <Button permission={["save", "post"]}
             type="button"
             disabled={isSubmitting}
             onClick={handleSubmit((values) => save(values, "post"))}
@@ -377,7 +377,7 @@ export function DebitNoteForm({
           </Button>
         ) : (
           <div className="flex gap-2">
-            <Button
+            <Button permission={"save"}
               type="button"
               variant="secondary"
               disabled={isSubmitting}
@@ -385,7 +385,7 @@ export function DebitNoteForm({
             >
               Save Draft
             </Button>
-            <Button
+            <Button permission={["save", "post"]}
               type="button"
               disabled={isSubmitting}
               onClick={handleSubmit((values) => save(values, "post"))}

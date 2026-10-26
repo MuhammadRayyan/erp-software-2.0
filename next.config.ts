@@ -1,14 +1,18 @@
 import type { NextConfig } from "next";
-import { withSentryConfig } from "@sentry/nextjs";
+import { withSentryConfig } from "@sentry/nextjs/config";
 
 const nextConfig: NextConfig = {
   // Standalone output for container deployment (server.js + traced node_modules).
   output: "standalone",
+  // Caddy owns gzip/zstd compression in production.
+  compress: false,
+  deploymentId: process.env.APP_REVISION,
   // Allows validation builds to target a separate directory (NEXT_DIST_DIR=.next-validate)
   // so they never clobber the running dev server's .next output.
   ...(process.env.NEXT_DIST_DIR ? { distDir: process.env.NEXT_DIST_DIR } : {}),
   serverExternalPackages: ["better-sqlite3", "puppeteer"],
   experimental: {
+    cpus: 2,
     serverActions: {
       bodySizeLimit: "1mb",
     },

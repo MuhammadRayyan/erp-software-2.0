@@ -118,18 +118,18 @@ export function InvoiceViewActions({
         extraPrimaryActions={
           <>
             {documentStatus === "draft" && (
-              <Button onClick={handlePost} disabled={posting} className="gap-1.5">
+              <Button permission={"post"} onClick={handlePost} disabled={posting} className="gap-1.5">
                 <CheckCircle2 className={`size-4 ${posting ? "animate-spin" : ""}`} />
                 Post Invoice
               </Button>
             )}
             {inventoryEnabled && hasDeliverableItems && documentStatus === "posted" && (
-              <Button asChild variant="secondary">
+              <Button permission="create" asChild variant="secondary">
                 <Link href={`/b/${businessId}/sales/delivery-notes/new?invoiceId=${invoiceId}`}><PackageCheck className="mr-1.5 size-3.5" /> Create Delivery Note</Link>
               </Button>
             )}
             {canReceive && (
-              <Button asChild variant="secondary">
+              <Button permission="create" asChild variant="secondary">
                 <Link href={`/b/${businessId}/sales/receipts/new?invoiceId=${invoiceId}`}><CircleDollarSign className="mr-1.5 size-3.5" /> Record Receipt</Link>
               </Button>
             )}
@@ -138,7 +138,7 @@ export function InvoiceViewActions({
         extraActions={
           <>
             {canReceive && (
-              <DropdownMenuItem asChild>
+              <DropdownMenuItem permission="create" asChild>
                 <Link href={`/b/${businessId}/sales/credit-notes/new?invoiceId=${invoiceId}`}><FileMinus2 className="size-4" /> Create Credit Note</Link>
               </DropdownMenuItem>
             )}

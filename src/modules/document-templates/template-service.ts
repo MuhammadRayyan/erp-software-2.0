@@ -1,3 +1,4 @@
+import { assertMutationPermission } from "@/core/permissions/mutation-permissions";
 import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
 import { getBusinessDb } from "@/core/db/business";
@@ -40,6 +41,7 @@ export function getTemplateSettings(businessId: string, userId: string, document
 }
 
 export function saveTemplateSettings(businessId: string, userId: string, documentType: string, settings: unknown) {
+  assertMutationPermission(businessId, userId, "settings", "edit");
   const parsed = templateSettingsSchema.parse(settings);
   const context = getBusinessDb(businessId, userId);
   const current = context.db.select().from(documentTemplates).where(eq(documentTemplates.documentType, documentType)).get();

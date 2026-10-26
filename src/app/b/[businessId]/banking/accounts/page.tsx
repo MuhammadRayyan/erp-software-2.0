@@ -31,12 +31,12 @@ export default async function BankAccountsPage({ params }: { params: Promise<{ b
             <LineChart className="size-4" /> Liquidity Forecast
           </Link>
         </Button>
-        <Button asChild variant="secondary">
+        <Button permission="create" asChild variant="secondary">
           <Link href={`/b/${businessId}/banking/transfers/new`}>
             <ArrowRightLeft className="size-4" /> Transfer
           </Link>
         </Button>
-        <Button asChild>
+        <Button permission="create" asChild>
           <Link href={`/b/${businessId}/banking/accounts/new`}>
             <Plus className="size-4" /> New Bank Account
           </Link>
@@ -102,7 +102,7 @@ export default async function BankAccountsPage({ params }: { params: Promise<{ b
           title="No bank accounts yet"
           description="Map an existing Bank or Cash Asset account to begin."
           action={
-            <Button asChild>
+            <Button permission="create" asChild>
               <Link href={`/b/${businessId}/banking/accounts/new`}>Create first Bank Account</Link>
             </Button>
           }

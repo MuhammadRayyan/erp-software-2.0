@@ -8,6 +8,8 @@ import { getSystemDb } from "./system";
 import { migrateBusinessDatabase } from "./business-migrations";
 import { moduleKeys } from "@/core/permissions/module-access";
 import * as schema from "./business-schema";
+import { businessMigrations } from "./business-migrations";
+import { readMigrationState } from "./migrations/runner";
 
 const MAX_CONNECTIONS = 50;
 const IDLE_TIMEOUT_MS = 5 * 60 * 1000;  // 5 minutes
@@ -69,21 +71,29 @@ function evictIfNeeded() {
   if (oldestKey) closeConnection(oldestKey);
 }
 
-export function openBusinessDatabase(directoryKey: string) {
+export function openBusinessDatabase(directoryKey: string, options: { create?: boolean } = {}) {
   let conn = connections.get(directoryKey);
   if (!conn) {
     evictIfNeeded();
     const paths = getBusinessPaths(directoryKey);
     mkdirSync(paths.attachments, { recursive: true });
-    const sqlite = new Database(paths.database, { timeout: 5000 });
+    const external = process.env.ERP_MIGRATION_MODE === "external" && !options.create;
+    const sqlite = new Database(paths.database, { timeout: 5000, fileMustExist: external });
+    try {
     sqlite.pragma("journal_mode = WAL");
     sqlite.pragma("busy_timeout = 5000");
-    sqlite.pragma("synchronous = NORMAL");
+    sqlite.pragma("synchronous = FULL");
     sqlite.pragma("foreign_keys = ON");
-    migrateBusinessDatabase(sqlite, `business database ${directoryKey}`);
+    if (external) {
+      if (!readMigrationState(sqlite, businessMigrations, `business database ${directoryKey}`).current) throw new Error("Business migrations are pending.");
+    } else migrateBusinessDatabase(sqlite, `business database ${directoryKey}`);
     const db = drizzle(sqlite, { schema });
     conn = { sqlite, db, paths, lastUsed: Date.now(), idleTimer: null };
     connections.set(directoryKey, conn);
+    } catch (error) {
+      sqlite.close();
+      throw error;
+    }
   }
   conn.lastUsed = Date.now();
   scheduleIdleClose(directoryKey);
@@ -104,6 +114,7 @@ export function getBusinessDb(businessId: string, userId?: string) {
 
     const user = getSystemDb().select().from(users).where(eq(users.id, userId)).get();
     const isSuper = Boolean(user?.isSuperAdmin);
+    if (!user || (user.status === "suspended" && !isSuper)) throw new Error("BUSINESS_ACCESS_DENIED");
 
     if (!row) {
       if (isSuper) {

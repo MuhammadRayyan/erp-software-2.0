@@ -1,3 +1,4 @@
+import { assertMutationPermission } from "@/core/permissions/mutation-permissions";
 import { randomUUID } from "node:crypto";
 import { getBusinessDb } from "@/core/db/business";
 import { parseMoneyToMinor } from "@/modules/accounting/calculations/money";
@@ -14,6 +15,7 @@ export function startReconciliation(
   bankAccountId: string,
   input: ReconciliationInput,
 ) {
+  assertMutationPermission(businessId, userId, "banking", "create");
   const data = reconciliationInputSchema.parse(input);
   const { sqlite } = getBusinessDb(businessId, userId);
   const account = sqlite.prepare("SELECT id, is_cash_account FROM bank_accounts WHERE id = ? AND is_active = 1")
@@ -133,6 +135,7 @@ export function completeReconciliation(
   bankAccountId: string,
   reconciliationId: string,
 ) {
+  assertMutationPermission(businessId, userId, "banking", "post");
   const context = getBusinessDb(businessId, userId);
   context.sqlite.transaction(() => {
     const snapshot = getReconciliationSnapshot(businessId, userId, reconciliationId, bankAccountId);

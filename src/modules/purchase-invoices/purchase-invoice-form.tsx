@@ -490,7 +490,7 @@ export function PurchaseInvoiceForm({
         }}
       >
         {documentStatus === "posted" ? (
-          <Button
+          <Button permission={["save", "post"]}
             type="button"
             disabled={isSubmitting}
             onClick={handleSubmit((values) => save(values, "post"))}
@@ -499,7 +499,7 @@ export function PurchaseInvoiceForm({
             Save Changes
           </Button>
         ) : (
-          <Button
+          <Button permission={"save"}
             type="button"
             disabled={isSubmitting}
             onClick={handleSubmit((values) => save(values, "draft"))}

@@ -625,7 +625,7 @@ export function ActivityLogClient({
                     <Trash2 className="size-3.5" />
                     <span>{isPruningLogs ? "Pruning..." : "Prune Expired Logs Now"}</span>
                   </Button>
-                  <Button
+                  <Button permission={"save"}
                     variant="primary"
                     size="sm"
                     onClick={handleSaveRetention}

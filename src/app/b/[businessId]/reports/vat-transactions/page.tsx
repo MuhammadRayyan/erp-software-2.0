@@ -53,7 +53,7 @@ export default async function VatTransactionsPage({
         <h1 className="page-title">VAT Transaction Detail</h1>
         <p className="page-description">Posted source tax detail with preserved classifications and drill-down totals.</p>
       </div>
-      <Button asChild variant="secondary" size="sm">
+      <Button permission={"export"} asChild variant="secondary" size="sm">
         <a href={`/api/businesses/${businessId}/tax/vat/export?type=detail&${detailQuery}`}>
           <Download className="size-4" /> Export CSV
         </a>

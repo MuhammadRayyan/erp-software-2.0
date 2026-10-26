@@ -1,8 +1,10 @@
+import { assertSavePermission, assertMutationPermission } from "@/core/permissions/mutation-permissions";
 import { randomUUID } from "node:crypto";
 import { getBusinessDb } from "@/core/db/business";
 import { allocateNumber } from "@/modules/accounting/services/numbering-service";
 import { postTransaction, reverseTransaction } from "@/modules/accounting/services/posting-service";
 import { assertDateNotLocked } from "@/modules/accounting/services/financial-lock-service";
+import { addMinor } from "@/modules/accounting/calculations/money";
 
 export interface EmployeeInput {
   id?: string;
@@ -229,11 +231,13 @@ export function saveEmployee(
   userId: string,
   input: EmployeeInput
 ): string {
+  assertSavePermission(businessId, userId, "payroll", input.id, "draft");
   const { sqlite } = getBusinessDb(businessId, userId);
   const now = new Date().toISOString();
   const id = input.id || randomUUID();
 
   const existing = sqlite.prepare(`SELECT id FROM employees WHERE id = ?`).get(id);
+  if (input.id && !existing) throw new Error("Employee not found.");
 
   if (existing) {
     sqlite
@@ -303,6 +307,7 @@ export function toggleEmployeeActive(
   employeeId: string,
   isActive: boolean
 ): void {
+  assertMutationPermission(businessId, userId, "payroll", "edit");
   const { sqlite } = getBusinessDb(businessId, userId);
   const now = new Date().toISOString();
   sqlite
@@ -397,11 +402,13 @@ export function savePayslipItem(
   userId: string,
   input: PayslipItemInput
 ): string {
+  assertSavePermission(businessId, userId, "payroll", input.id, "draft");
   const { sqlite } = getBusinessDb(businessId, userId);
   const now = new Date().toISOString();
   const id = input.id || `item-${randomUUID().slice(0, 8)}`;
 
   const existing = sqlite.prepare(`SELECT id FROM payslip_items WHERE id = ?`).get(id);
+  if (input.id && !existing) throw new Error("Payslip item not found.");
 
   if (existing) {
     sqlite
@@ -640,6 +647,7 @@ export function savePayslip(
   userId: string,
   input: PayslipInput
 ): string {
+  assertSavePermission(businessId, userId, "payroll", input.id, input.autoPost ? "post" : "draft");
   const context = getBusinessDb(businessId, userId);
   const now = new Date().toISOString();
   const id = input.id || randomUUID();
@@ -653,19 +661,19 @@ export function savePayslip(
   let deductionsMinor = 0;
 
   for (const line of input.lines) {
-    if (line.amountMinor < 0) {
+    if (!Number.isSafeInteger(line.amountMinor) || line.amountMinor < 0) {
       throw new Error("Line amounts must be non-negative.");
     }
     if (line.type === "earnings") {
-      grossAmountMinor += line.amountMinor;
+      grossAmountMinor = addMinor([grossAmountMinor, line.amountMinor]);
     } else if (line.type === "deduction") {
-      deductionsMinor += line.amountMinor;
+      deductionsMinor = addMinor([deductionsMinor, line.amountMinor]);
     } else {
       throw new Error(`Invalid line type: ${line.type}`);
     }
   }
 
-  const netAmountMinor = grossAmountMinor - deductionsMinor;
+  const netAmountMinor = addMinor([grossAmountMinor, -deductionsMinor]);
   if (netAmountMinor < 0) {
     throw new Error("Total deductions cannot exceed gross earnings.");
   }
@@ -681,13 +689,19 @@ export function savePayslip(
       throw new Error("Cannot modify a voided payslip.");
     }
 
+    if (input.id && !existing) throw new Error("Payslip not found.");
+    if (existing?.document_status === "posted") {
+      throw new Error("Posted payslips cannot be edited. Void the payslip and create a corrected draft.");
+    }
+    if (input.documentStatus && input.documentStatus !== "draft") {
+      throw new Error("Payslip status is controlled by posting and void actions.");
+    }
+
     const payslipNumber = existing
       ? existing.payslip_number
       : (input.payslipNumber?.trim() || allocateNumber(context.sqlite, "payslip"));
 
-    const documentStatus = input.autoPost
-      ? "posted"
-      : (input.documentStatus || (existing ? (existing.document_status as any) : "draft"));
+    const documentStatus = "draft";
 
     if (existing) {
       context.sqlite
@@ -860,12 +874,17 @@ export function postPayslipToLedger(
   userId: string,
   payslipId: string
 ): void {
+  assertMutationPermission(businessId, userId, "payroll", "post");
   const context = getBusinessDb(businessId, userId);
   context.sqlite.transaction(() => {
     const record = getPayslipWithLines(businessId, userId, payslipId);
     if (!record) throw new Error("Payslip not found.");
     if (record.payslip.documentStatus === "void") {
       throw new Error("Cannot post a voided payslip.");
+    }
+    if (record.payslip.documentStatus === "posted") {
+      if (!record.payslip.journalEntryId) throw new Error("Posted payslip is missing its journal. Reconciliation is required.");
+      return;
     }
     assertDateNotLocked(context.sqlite, record.payslip.date, "Payslip");
 
@@ -887,6 +906,7 @@ export function voidPayslip(
   userId: string,
   payslipId: string
 ): void {
+  assertMutationPermission(businessId, userId, "payroll", "delete");
   const context = getBusinessDb(businessId, userId);
   const now = new Date().toISOString();
 
@@ -934,6 +954,8 @@ export function generateBatchPayslips(
   createdCount: number;
   payslipIds: string[];
 } {
+  assertMutationPermission(businessId, userId, "payroll", "create");
+  if (options.autoPost) assertMutationPermission(businessId, userId, "payroll", "post");
   const context = getBusinessDb(businessId, userId);
   const allEmployees = listEmployees(businessId, userId, { isActive: true });
   const selectedEmployees = options.employeeIds && options.employeeIds.length > 0

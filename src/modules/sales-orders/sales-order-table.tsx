@@ -174,13 +174,13 @@ export function SalesOrderTable({
                     </Link>
                   </DropdownMenuItem>
                   {canEdit && (
-                    <DropdownMenuItem asChild>
+                    <DropdownMenuItem permission="edit" asChild>
                       <Link href={`/b/${order.businessId}/sales/orders/${order.id}/edit`}>
                         <FileEdit className="size-4 text-muted-foreground" /> Edit Order
                       </Link>
                     </DropdownMenuItem>
                   )}
-                  <DropdownMenuItem asChild>
+                  <DropdownMenuItem permission="export" asChild>
                     <a href={`/api/businesses/${order.businessId}/documents/sales-order/${order.id}/pdf`} target="_blank" rel="noreferrer">
                       <Download className="size-4 text-muted-foreground" /> Download PDF
                     </a>
@@ -188,12 +188,12 @@ export function SalesOrderTable({
                   {canInvoice && (
                     <>
                       <DropdownMenuSeparator />
-                      <DropdownMenuItem asChild>
+                      <DropdownMenuItem permission="create" asChild>
                         <Link href={`/b/${order.businessId}/sales/invoices/new?orderId=${order.id}`}>
                           <FileText className="size-4 text-muted-foreground" /> Create Invoice
                         </Link>
                       </DropdownMenuItem>
-                      <DropdownMenuItem asChild>
+                      <DropdownMenuItem permission="create" asChild>
                         <Link href={`/b/${order.businessId}/sales/delivery-notes/new?orderId=${order.id}`}>
                           <PackageCheck className="size-4 text-muted-foreground" /> Create Delivery Note
                         </Link>

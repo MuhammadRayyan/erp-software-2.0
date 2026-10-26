@@ -1,3 +1,4 @@
+import { assertMutationPermission, assertSavePermission } from "@/core/permissions/mutation-permissions";
 import { randomUUID } from "node:crypto";
 import { asc, eq } from "drizzle-orm";
 import { getBusinessDb } from "@/core/db/business";
@@ -147,6 +148,7 @@ export function getCreditNote(businessId: string, userId: string, noteId: string
 }
 
 export function saveCreditNote(businessId: string, userId: string, input: CreditNoteInput, intent: CreditNoteIntent, noteId?: string) {
+  assertSavePermission(businessId, userId, "sales", noteId, intent);
   const data = creditNoteInputSchema.parse(input);
   const context = getBusinessDb(businessId, userId);
   if (noteId) {
@@ -206,6 +208,7 @@ export function saveCreditNote(businessId: string, userId: string, input: Credit
       `).run(id, number, data.customerId, data.projectId || null, data.sourceInvoiceId, data.date, taxDate, data.supplyEmirate || null, data.reference || null, data.reason || null, amounts.subtotalMinor, amounts.taxMinor, amounts.totalMinor, rate.currencyCode, rate.exchangeRateToBase, rate.exchangeRateDate, rate.exchangeRateSource, base.baseSubtotalMinor, base.baseTaxMinor, baseCarryingAmountReleased, userId, now, now);
     }
     insertLines(context.db, id, lines);
+    if (shouldPost) assertMutationPermission(businessId, userId, "sales", "post");
     if (shouldPost) {
       assertDateNotLocked(context.sqlite, data.date, "Sales credit note");
       assertVatDateUnlocked(context.sqlite, taxDate, lines.map((line) => line.taxCodeId));
@@ -239,6 +242,7 @@ export function saveCreditNote(businessId: string, userId: string, input: Credit
 }
 
 export function duplicateCreditNote(businessId: string, userId: string, noteId: string) {
+  assertMutationPermission(businessId, userId, "sales", "create");
   const record = getCreditNote(businessId, userId, noteId);
   if (!record) throw new Error("Credit note not found.");
   const rate = storedRateSnapshot(getBusinessDb(businessId, userId).sqlite, record.note);
@@ -246,6 +250,7 @@ export function duplicateCreditNote(businessId: string, userId: string, noteId: 
 }
 
 export function deleteCreditNote(businessId: string, userId: string, noteId: string) {
+  assertMutationPermission(businessId, userId, "sales", "delete");
   const context = getBusinessDb(businessId, userId); const note = context.db.select().from(salesCreditNotes).where(eq(salesCreditNotes.id, noteId)).get();
   if (!note) throw new Error("Credit note not found."); if (note.documentStatus !== "draft") throw new Error("Only draft credit notes can be deleted.");
   context.db.delete(salesCreditNotes).where(eq(salesCreditNotes.id, noteId)).run();
@@ -266,6 +271,7 @@ export function deleteCreditNote(businessId: string, userId: string, noteId: str
 }
 
 export function voidCreditNote(businessId: string, userId: string, noteId: string) {
+  assertMutationPermission(businessId, userId, "sales", "delete");
   const context = getBusinessDb(businessId, userId); const note = context.db.select().from(salesCreditNotes).where(eq(salesCreditNotes.id, noteId)).get();
   if (!note) throw new Error("Credit note not found."); if (note.documentStatus !== "posted") throw new Error("Only posted credit notes can be voided.");
   const now = new Date().toISOString();

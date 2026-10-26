@@ -54,7 +54,7 @@ export default async function SuppliersPage({
         title="Suppliers"
         description="Supplier records, payable balances, and purchase activity."
       >
-        <Button asChild>
+        <Button permission="create" asChild>
           <Link href={`/b/${businessId}/suppliers/new`}>
             <Plus className="size-4" /> New Supplier
           </Link>
@@ -86,7 +86,7 @@ export default async function SuppliersPage({
           title="No suppliers yet"
           description="Add a supplier to begin the purchase workflow."
           action={
-            <Button asChild>
+            <Button permission="create" asChild>
               <Link href={`/b/${businessId}/suppliers/new`}>
                 <Plus className="size-4" /> New Supplier
               </Link>

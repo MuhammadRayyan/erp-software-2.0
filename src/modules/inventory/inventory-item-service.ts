@@ -1,3 +1,4 @@
+import { assertSavePermission } from "@/core/permissions/mutation-permissions";
 import { cache } from "react";
 import { randomUUID } from "node:crypto";
 import { getBusinessDb } from "@/core/db/business";
@@ -133,6 +134,7 @@ export function getInventoryItem(businessId: string, userId: string, itemId: str
 }
 
 export function saveInventoryItem(businessId: string, userId: string, input: InventoryItemInput, itemId?: string) {
+  assertSavePermission(businessId, userId, "inventory", itemId, "draft");
   const data = inventoryItemInputSchema.parse(input);
   const { sqlite } = getBusinessDb(businessId, userId);
   validateAccounts(sqlite, data);

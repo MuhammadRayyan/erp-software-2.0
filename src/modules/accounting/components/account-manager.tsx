@@ -138,14 +138,14 @@ export function AccountManager({
                           <DropdownMenu>
                             <DropdownMenuTrigger asChild><Button variant="ghost" size="icon" aria-label={`Actions for ${account.name}`}><MoreHorizontal className="size-4" /></Button></DropdownMenuTrigger>
                             <DropdownMenuContent align="end">
-                              <DropdownMenuItem onSelect={() => openEditor(account)}><Pencil className="size-4" /> Edit</DropdownMenuItem>
+                              <DropdownMenuItem permission="edit" onSelect={() => openEditor(account)}><Pencil className="size-4" /> Edit</DropdownMenuItem>
                               <DropdownMenuItem asChild>
                                 <Link href={`/b/${businessId}/reports/general-ledger?accountId=${account.id}`}>
                                   <BookOpenText className="size-4" /> General Ledger
                                 </Link>
                               </DropdownMenuItem>
                               <DropdownMenuSeparator />
-                              <DropdownMenuItem disabled={account.isSystem} title={account.isSystem ? "System accounts cannot be deleted" : undefined} className="text-danger focus:text-danger" onSelect={() => { setServerError(""); setDeleting(account); }}><Trash2 className="size-4" /> Delete</DropdownMenuItem>
+                              <DropdownMenuItem permission="delete" disabled={account.isSystem} title={account.isSystem ? "System accounts cannot be deleted" : undefined} className="text-danger focus:text-danger" onSelect={() => { setServerError(""); setDeleting(account); }}><Trash2 className="size-4" /> Delete</DropdownMenuItem>
                             </DropdownMenuContent>
                           </DropdownMenu>
                         </td>
@@ -170,7 +170,7 @@ export function AccountManager({
             <label className="flex min-h-9 items-center gap-2 text-sm sm:col-span-2"><input type="checkbox" checked={values.isActive} disabled={!!editing?.isSystem} onChange={(event) => setValues((current) => ({ ...current, isActive: event.target.checked }))} className="size-4 accent-[var(--primary)]" /> Active account</label>
           </div>
           {serverError && <FormError message={serverError} />}
-          <div className="mt-5 flex justify-end gap-2"><Button variant="ghost" onClick={() => setEditing(undefined)}>Cancel</Button><Button onClick={save} disabled={pending}>{editing ? "Save changes" : "Create account"}</Button></div>
+          <div className="mt-5 flex justify-end gap-2"><Button variant="ghost" onClick={() => setEditing(undefined)}>Cancel</Button><Button permission={"save"} onClick={save} disabled={pending}>{editing ? "Save changes" : "Create account"}</Button></div>
         </DialogContent>
       </DialogRoot>
 
@@ -179,7 +179,7 @@ export function AccountManager({
           <DialogTitle>Delete {deleting?.name}?</DialogTitle>
           <DialogDescription>The account can only be deleted when it is not configured or used by any transaction.</DialogDescription>
           {serverError && <FormError message={serverError} />}
-          <div className="mt-5 flex justify-end gap-2"><Button variant="secondary" onClick={() => setDeleting(null)}>Cancel</Button><Button variant="danger" onClick={remove} disabled={pending}>Delete account</Button></div>
+          <div className="mt-5 flex justify-end gap-2"><Button variant="secondary" onClick={() => setDeleting(null)}>Cancel</Button><Button permission={"delete"} variant="danger" onClick={remove} disabled={pending}>Delete account</Button></div>
         </DialogContent>
       </DialogRoot>
     </>

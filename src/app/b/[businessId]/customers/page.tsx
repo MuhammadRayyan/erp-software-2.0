@@ -57,7 +57,7 @@ export default async function CustomersPage({
         title="Customers"
         description="Contacts stored only in this business database."
       >
-        <Button asChild>
+        <Button permission="create" asChild>
           <Link href={`/b/${businessId}/customers/new`}>
             <Plus className="size-4" /> New Customer
           </Link>
@@ -88,7 +88,7 @@ export default async function CustomersPage({
           title="No customers yet"
           description="Create your first customer to start billing."
           action={
-            <Button asChild>
+            <Button permission="create" asChild>
               <Link href={`/b/${businessId}/customers/new`}>
                 <Plus className="size-4" /> New Customer
               </Link>

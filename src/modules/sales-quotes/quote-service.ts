@@ -1,3 +1,4 @@
+import { assertSavePermission, assertMutationPermission } from "@/core/permissions/mutation-permissions";
 import { createDocumentRevision, deleteDraftRevision } from "@/core/versioning/revision-engine";
 import { randomUUID } from "node:crypto";
 import { asc, eq } from "drizzle-orm";
@@ -117,6 +118,7 @@ export function getSalesQuote(businessId: string, userId: string, quoteId: strin
 }
 
 export function saveSalesQuote(businessId: string, userId: string, input: SalesQuoteInput, intent: SalesQuoteIntent, quoteId?: string) {
+  assertSavePermission(businessId, userId, "sales", quoteId, intent);
   const data = salesQuoteInputSchema.parse(input);
   const context = getBusinessDb(businessId, userId);
   const customer = context.db.select().from(customers).where(eq(customers.id, data.customerId)).get();
@@ -145,6 +147,7 @@ export function saveSalesQuote(businessId: string, userId: string, input: SalesQ
       }
       recordedNumber = current.quoteNumber;
       const nextStatus = current.documentStatus === "sent" || intent === "issue" ? "sent" : "draft";
+      if (nextStatus !== "draft") assertMutationPermission(businessId, userId, "sales", "approve");
       context.sqlite.prepare(`UPDATE sales_quotes SET customer_id = ?, project_id = ?, quote_date = ?, expiry_date = ?, reference = ?, document_status = ?, amounts_include_tax = ?, subtotal_minor = ?, tax_minor = ?, total_minor = ?, currency_code = ?, exchange_rate_to_base = ?, exchange_rate_date = ?, exchange_rate_source = ?, base_subtotal_minor = ?, base_tax_minor = ?, base_total_minor = ?, notes = ?, terms = ?, updated_at = ? WHERE id = ?`)
         .run(data.customerId, data.projectId || null, data.date, data.expectedDate || "", data.reference || null, nextStatus, data.amountsIncludeTax ? 1 : 0, amounts.subtotalMinor, amounts.taxMinor, amounts.totalMinor, rate.currencyCode, rate.exchangeRateToBase, rate.exchangeRateDate, rate.exchangeRateSource, base.baseSubtotalMinor, base.baseTaxMinor, base.baseTotalMinor, data.notes || null, data.terms || null, now, quoteId);
       context.sqlite.prepare("DELETE FROM sales_quote_lines WHERE quote_id = ?").run(quoteId);
@@ -177,6 +180,7 @@ export function saveSalesQuote(businessId: string, userId: string, input: SalesQ
 }
 
 export function issueSalesQuote(businessId: string, userId: string, quoteId: string) {
+  assertMutationPermission(businessId, userId, "sales", "approve");
   const context = getBusinessDb(businessId, userId);
   const quote = context.db.select().from(salesQuotes).where(eq(salesQuotes.id, quoteId)).get();
   if (!quote) throw new Error("Sales quote not found.");
@@ -201,6 +205,7 @@ export function issueSalesQuote(businessId: string, userId: string, quoteId: str
 }
 
 export function closeSalesQuote(businessId: string, userId: string, quoteId: string) {
+  assertMutationPermission(businessId, userId, "sales", "edit");
   const context = getBusinessDb(businessId, userId);
   const quote = context.db.select().from(salesQuotes).where(eq(salesQuotes.id, quoteId)).get();
   if (!quote) throw new Error("Sales quote not found.");
@@ -225,6 +230,7 @@ export function closeSalesQuote(businessId: string, userId: string, quoteId: str
 }
 
 export function cancelSalesQuote(businessId: string, userId: string, quoteId: string) {
+  assertMutationPermission(businessId, userId, "sales", "delete");
   const context = getBusinessDb(businessId, userId);
   const quote = context.db.select().from(salesQuotes).where(eq(salesQuotes.id, quoteId)).get();
   if (!quote) throw new Error("Sales quote not found.");
@@ -258,6 +264,7 @@ const revisionConfig = {
 };
 
 export function deleteSalesQuote(businessId: string, userId: string, quoteId: string) {
+  assertMutationPermission(businessId, userId, "sales", "delete");
   const context = getBusinessDb(businessId, userId);
   const quote = context.sqlite.prepare("SELECT quote_number FROM sales_quotes WHERE id = ?").get(quoteId) as { quote_number: string } | undefined;
   deleteDraftRevision(context.sqlite, revisionConfig, quoteId);
@@ -280,6 +287,7 @@ export function deleteSalesQuote(businessId: string, userId: string, quoteId: st
 }
 
 export function createSalesQuoteRevision(businessId: string, userId: string, sourceQuoteId: string): string {
+  assertMutationPermission(businessId, userId, "sales", "create");
   const context = getBusinessDb(businessId, userId);
   const newId = createDocumentRevision(context.sqlite, revisionConfig, userId, sourceQuoteId);
   const rev = context.sqlite.prepare("SELECT quote_number, revision_number FROM sales_quotes WHERE id = ?").get(newId) as { quote_number: string; revision_number: number } | undefined;

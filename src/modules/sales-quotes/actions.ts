@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
-import { requireModule, requirePermission } from "@/core/permissions/require-module";
+import { requirePermission, requireSavePermission } from "@/core/permissions/require-module";
 import { salesQuoteInputSchema } from "./quote-input";
 import { cancelSalesQuote, closeSalesQuote, deleteSalesQuote, getSalesQuote, issueSalesQuote, saveSalesQuote, type SalesQuoteIntent } from "./quote-service";
 import { saveSalesOrder } from "@/modules/sales-orders/sales-order-service";
@@ -11,7 +11,7 @@ import { saveSalesOrder } from "@/modules/sales-orders/sales-order-service";
 export type SalesQuoteActionResult = { error?: string; fieldErrors?: Record<string, string[]> };
 
 export async function saveSalesQuoteAction(businessId: string, quoteId: string | null, input: unknown, intent: SalesQuoteIntent): Promise<SalesQuoteActionResult> {
-  const { user } = await requireModule(businessId, "sales");
+  const { user } = await requireSavePermission(businessId, "sales", quoteId, intent);
   const parsed = salesQuoteInputSchema.safeParse(input);
   if (!parsed.success) return { error: "Check the sales quote fields and lines.", fieldErrors: z.flattenError(parsed.error).fieldErrors };
   let id: string;
@@ -24,7 +24,7 @@ export async function saveSalesQuoteAction(businessId: string, quoteId: string |
 }
 
 async function runStatusAction(businessId: string, quoteId: string, action: "close" | "cancel" | "delete") {
-  const { user } = await requireModule(businessId, "sales");
+  const { user } = await requirePermission(businessId, "sales", action === "close" ? "edit" : "delete");
   try {
     if (action === "close") closeSalesQuote(businessId, user.id, quoteId);
     else if (action === "cancel") cancelSalesQuote(businessId, user.id, quoteId);
@@ -68,7 +68,7 @@ import { quantityMicrosToInput } from "@/modules/accounting/calculations/money";
 import { minorToDecimalString } from "@/core/format";
 
 export async function convertSalesQuoteToOrderAction(businessId: string, quoteId: string) {
-  const { user } = await requireModule(businessId, "sales");
+  const { user } = await requirePermission(businessId, "sales", "create");
   try {
     const quoteData = getSalesQuote(businessId, user.id, quoteId);
     if (!quoteData) return { error: "Quote not found." };
@@ -129,7 +129,7 @@ export async function convertSalesQuoteToOrderAction(businessId: string, quoteId
 }
 
 export async function createSalesQuoteRevisionAction(businessId: string, quoteId: string) {
-  const { user } = await requireModule(businessId, "sales");
+  const { user } = await requirePermission(businessId, "sales", "create");
   try {
     const { createSalesQuoteRevision } = await import("./quote-service");
     const newQuoteId = createSalesQuoteRevision(businessId, user.id, quoteId);

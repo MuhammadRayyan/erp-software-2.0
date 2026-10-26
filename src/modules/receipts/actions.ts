@@ -2,7 +2,7 @@
 
 import { redirect } from "next/navigation";
 import { z } from "zod";
-import { requireModule } from "@/core/permissions/require-module";
+import { requirePermission } from "@/core/permissions/require-module";
 import { receiptInputSchema, applyReceiptCreditInputSchema } from "./receipt-input";
 import { createReceipt, voidReceipt, applyReceiptCredit } from "./receipt-service";
 import { revalidatePath } from "next/cache";
@@ -13,7 +13,7 @@ export async function createReceiptAction(
   businessId: string,
   input: unknown,
 ): Promise<ReceiptActionResult> {
-  const { user } = await requireModule(businessId, "sales");
+  const { user } = await requirePermission(businessId, "sales", "create");
   const parsed = receiptInputSchema.safeParse(input);
   if (!parsed.success) {
     return {
@@ -40,7 +40,7 @@ export async function applyReceiptCreditAction(
   businessId: string,
   input: unknown,
 ) {
-  const { user } = await requireModule(businessId, "sales");
+  const { user } = await requirePermission(businessId, "sales", "post");
   const parsed = applyReceiptCreditInputSchema.safeParse(input);
   if (!parsed.success) {
     return {
@@ -60,7 +60,7 @@ export async function applyReceiptCreditAction(
 }
 
 export async function voidReceiptAction(businessId: string, receiptId: string) {
-  const { user } = await requireModule(businessId, "sales");
+  const { user } = await requirePermission(businessId, "sales", "delete");
   try {
     voidReceipt(businessId, user.id, receiptId);
     revalidatePath(`/b/${businessId}/sales/receipts`);

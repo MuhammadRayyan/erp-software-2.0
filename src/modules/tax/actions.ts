@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
-import { requireModule } from "@/core/permissions/require-module";
+import { requirePermission } from "@/core/permissions/require-module";
 import { taxSettingsInputSchema } from "./tax-settings-input";
 import { updateTaxSettings } from "./tax-settings-service";
 import {
@@ -27,7 +27,7 @@ function message(error: unknown, fallback: string) {
 }
 
 async function requireTaxAdmin(businessId: string) {
-  const context = await requireModule(businessId, "settings");
+  const context = await requirePermission(businessId, "settings", "edit");
   if (context.access.membership.role !== "administrator") throw new Error("Only a business Administrator can perform this VAT action.");
   return context;
 }
@@ -45,7 +45,7 @@ export async function saveTaxSettingsAction(businessId: string, input: unknown):
 }
 
 export async function createVatPeriodAction(businessId: string, input: unknown): Promise<TaxActionResult> {
-  const { user } = await requireModule(businessId, "reports");
+  const { user } = await requireTaxAdmin(businessId);
   const parsed = vatPeriodInputSchema.safeParse(input);
   if (!parsed.success) return { error: "Check the explicit VAT period dates.", fieldErrors: z.flattenError(parsed.error).fieldErrors };
   try {
@@ -56,7 +56,7 @@ export async function createVatPeriodAction(businessId: string, input: unknown):
 }
 
 export async function prepareVatPeriodAction(businessId: string, periodId: string): Promise<TaxActionResult> {
-  const { user } = await requireModule(businessId, "reports");
+  const { user } = await requireTaxAdmin(businessId);
   try { markVatPeriodPrepared(businessId, user.id, periodId); revalidatePath(`/b/${businessId}/tax/vat/periods/${periodId}`); return {}; }
   catch (error) { return { error: message(error, "The VAT period could not be prepared.") }; }
 }

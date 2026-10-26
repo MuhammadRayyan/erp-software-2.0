@@ -1,7 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import Link from "next/link";
 import { Plus, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -9,6 +8,11 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { SelectNative } from "@/components/ui/select-native";
 import { formatMoney } from "@/core/format";
+import { addMinor, minorToInput } from "@/modules/accounting/calculations/money";
+import { parseCurrencyAmountToMinor } from "@/modules/currency/conversion";
+import { FormError } from "@/components/form-error";
+import { DocumentFormFooter } from "@/components/document-form-footer";
+import { useRouter } from "next/navigation";
 import {
   type EmployeeRecord,
   type PayslipItemRecord,
@@ -32,6 +36,7 @@ interface PayslipFormProps {
   items: PayslipItemRecord[];
   accounts: Array<{ id: string; name: string; type: string }>;
   currency?: string;
+  currencyMinorUnit?: number;
   initialPayslip?: PayslipRecord | null;
   initialLines?: PayslipLineRecord[];
   prefill?: {
@@ -48,12 +53,14 @@ export function PayslipForm({
   items,
   accounts,
   currency = "AED",
+  currencyMinorUnit = 2,
   initialPayslip,
   initialLines,
   prefill,
 }: PayslipFormProps) {
   const isEdit = Boolean(initialPayslip?.id);
   const [loading, setLoading] = useState(false);
+  const router = useRouter();
   const [error, setError] = useState<string | null>(null);
 
   const [employeeId, setEmployeeId] = useState<string>(
@@ -88,7 +95,7 @@ export function PayslipForm({
         type: l.type,
         description: l.description,
         accountId: l.accountId,
-        amount: (l.amountMinor / 100).toFixed(2),
+        amount: minorToInput(l.amountMinor, currencyMinorUnit),
       }));
     }
 
@@ -276,16 +283,12 @@ export function PayslipForm({
     );
   };
 
-  // Live Totals calculation
-  const grossTotal = lines
-    .filter((l) => l.type === "earnings")
-    .reduce((sum, l) => sum + (parseFloat(l.amount) || 0), 0);
-
-  const deductionsTotal = lines
-    .filter((l) => l.type === "deduction")
-    .reduce((sum, l) => sum + (parseFloat(l.amount) || 0), 0);
-
-  const netPay = grossTotal - deductionsTotal;
+  function previewMinor(value: string) {
+    try { return parseCurrencyAmountToMinor(value || "0", currencyMinorUnit); } catch { return 0; }
+  }
+  const grossTotal = addMinor(lines.filter(line => line.type === "earnings").map(line => previewMinor(line.amount)));
+  const deductionsTotal = addMinor(lines.filter(line => line.type === "deduction").map(line => previewMinor(line.amount)));
+  const netPay = addMinor([grossTotal, -deductionsTotal]);
 
   const handleSubmit = async (autoPost: boolean) => {
     setError(null);
@@ -307,6 +310,7 @@ export function PayslipForm({
 
     setLoading(true);
 
+    try {
     const payload = {
       id: initialPayslip?.id,
       payslipNumber: payslipNumber.trim() || undefined,
@@ -321,12 +325,11 @@ export function PayslipForm({
         type: l.type,
         description: l.description.trim() || (l.type === "earnings" ? "Earnings" : "Deduction"),
         accountId: l.accountId,
-        amountMinor: Math.round((parseFloat(l.amount) || 0) * 100),
+        amountMinor: parseCurrencyAmountToMinor(l.amount, currencyMinorUnit, `Line ${pos + 1} amount`),
         position: pos + 1,
       })),
     };
 
-    try {
       const res = await savePayslipAction(businessId, payload);
       if (res?.error) {
         setError(res.error);
@@ -356,11 +359,7 @@ export function PayslipForm({
 
   return (
     <div className="space-y-6">
-      {error && (
-        <div className="p-3 text-sm rounded bg-danger/10 border border-danger/30 text-danger">
-          {error}
-        </div>
-      )}
+      <FormError message={error} />
 
       {/* Header Form Card */}
       <div className="rounded-lg border border-border bg-surface-raised p-5 space-y-4">
@@ -512,7 +511,7 @@ export function PayslipForm({
                     <td>
                       <Input
                         type="number"
-                        step="0.01"
+                        step={1 / 10 ** currencyMinorUnit}
                         min="0"
                         value={line.amount}
                         onChange={(e) => updateLine(originalIndex, { amount: e.target.value })}
@@ -620,7 +619,7 @@ export function PayslipForm({
                     <td>
                       <Input
                         type="number"
-                        step="0.01"
+                        step={1 / 10 ** currencyMinorUnit}
                         min="0"
                         value={line.amount}
                         onChange={(e) => updateLine(originalIndex, { amount: e.target.value })}
@@ -658,33 +657,28 @@ export function PayslipForm({
             <div className="flex justify-between text-sm text-foreground">
               <span>Gross Earnings:</span>
               <span className="font-medium money">
-                {formatMoney(Math.round(grossTotal * 100), currency)}
+                {formatMoney(grossTotal, currency, currencyMinorUnit)}
               </span>
             </div>
             <div className="flex justify-between text-sm text-muted-foreground">
               <span>Total Deductions:</span>
               <span className="font-medium money">
-                {deductionsTotal > 0 ? `-${formatMoney(Math.round(deductionsTotal * 100), currency)}` : formatMoney(0, currency)}
+                {deductionsTotal > 0 ? `-${formatMoney(deductionsTotal, currency, currencyMinorUnit)}` : formatMoney(0, currency, currencyMinorUnit)}
               </span>
             </div>
             <div className="pt-2 border-t border-border flex justify-between text-base font-bold text-foreground">
               <span>Net Pay:</span>
               <span className="text-primary text-lg money font-black">
-                {formatMoney(Math.round(netPay * 100), currency)}
+                {formatMoney(netPay, currency, currencyMinorUnit)}
               </span>
             </div>
           </div>
         </div>
       </div>
 
-      {/* Action Buttons */}
-      <div className="flex items-center justify-between pt-2">
-        <Button asChild variant="secondary">
-          <Link href={`/b/${businessId}/payroll/payslips`}>Cancel</Link>
-        </Button>
-
+      <DocumentFormFooter onCancel={() => router.push(`/b/${businessId}/payroll/payslips`)} status="draft">
         <div className="flex items-center gap-2">
-          <Button
+          <Button permission={"save"}
             type="button"
             variant="secondary"
             onClick={() => handleSubmit(false)}
@@ -692,7 +686,7 @@ export function PayslipForm({
           >
             {loading ? "Saving..." : "Save as Draft"}
           </Button>
-          <Button
+          <Button permission={["save", "post"]}
             type="button"
             onClick={() => handleSubmit(true)}
             disabled={loading}
@@ -700,7 +694,7 @@ export function PayslipForm({
             {loading ? "Saving..." : "Save & Post to Ledger"}
           </Button>
         </div>
-      </div>
+      </DocumentFormFooter>
     </div>
   );
 }

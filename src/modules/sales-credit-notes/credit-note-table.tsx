@@ -191,13 +191,13 @@ export function CreditNoteTable({
                     </Link>
                   </DropdownMenuItem>
                   {canEdit && (
-                    <DropdownMenuItem asChild>
+                    <DropdownMenuItem permission="edit" asChild>
                       <Link href={`/b/${cn.businessId}/sales/credit-notes/${cn.id}/edit`}>
                         <FileEdit className="size-4 text-muted-foreground" /> Edit Credit Note
                       </Link>
                     </DropdownMenuItem>
                   )}
-                  <DropdownMenuItem asChild>
+                  <DropdownMenuItem permission="export" asChild>
                     <a href={`/api/businesses/${cn.businessId}/documents/sales-credit-note/${cn.id}/pdf`} target="_blank" rel="noreferrer">
                       <Download className="size-4 text-muted-foreground" /> Download PDF
                     </a>

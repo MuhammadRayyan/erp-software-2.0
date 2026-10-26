@@ -186,7 +186,7 @@ test("Top-Down Verification: Settings Changes Trigger Downstream Business Logic 
   assert.equal(formattedCustomDate, "14/10/2026", "formatDate should reflect the custom DD/MM/YYYY localization");
 
   // 5. Payment Terms Presets & Due Date Calculation
-  const newTerm = createPaymentTerm(businessId, {
+  const newTerm = createPaymentTerm(businessId, adminId, {
     name: "Net 45 End of Month",
     term_type: "end_of_month",
     days: 45,
@@ -420,7 +420,7 @@ test("Top-Down Verification: Multi-Tenant Connection LRU Cache, SQLite Pragmas &
   assert.equal(journalMode.toLowerCase(), "wal", "Journal mode must be WAL");
 
   const synchronous = (sqlite.prepare("PRAGMA synchronous;").get() as any).synchronous;
-  assert.equal(synchronous, 1, "Synchronous pragma must be NORMAL (1)");
+  assert.equal(synchronous, 2, "Synchronous pragma must be FULL (2)");
 
   const busyTimeout = (sqlite.prepare("PRAGMA busy_timeout;").get() as any).timeout;
   assert.equal(busyTimeout, 5000, "Busy timeout must be 5000ms");
@@ -433,9 +433,9 @@ test("Top-Down Verification: Multi-Tenant Connection LRU Cache, SQLite Pragmas &
   assert.equal(healthRes.status, 200);
   const healthData = await healthRes.json();
   assert.equal(healthData.status, "ok");
-  assert.equal(healthData.database.status, "connected");
-  assert.ok(healthData.database.latencyMs >= 0);
-  assert.ok(healthData.memory.heapUsedMb > 0);
+  assert.equal(typeof healthData.revision, "string");
+  assert.equal(healthData.database, undefined);
+  assert.equal(healthData.memory, undefined);
 
   // 3. Correlated Structured Logger & system_logs Persistence
   logger.info("Top-Down Diagnostic Test Log", {

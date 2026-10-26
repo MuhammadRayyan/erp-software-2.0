@@ -2,6 +2,10 @@ import * as Sentry from "@sentry/nextjs";
 
 export async function register() {
   if (process.env.NEXT_RUNTIME === "nodejs") {
+    const { resolveBetterAuthSecret } = await import("@/core/auth/auth-config");
+    const { getTrustedOrigins } = await import("@/core/config/app-url");
+    resolveBetterAuthSecret();
+    getTrustedOrigins();
     await import("./sentry.server.config");
   }
   if (process.env.NEXT_RUNTIME === "edge") {

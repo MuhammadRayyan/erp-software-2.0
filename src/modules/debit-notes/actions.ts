@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
-import { requireModule } from "@/core/permissions/require-module";
+import { requireSavePermission, requirePermission } from "@/core/permissions/require-module";
 import { debitNoteInputSchema } from "./debit-note-input";
 import { deleteDebitNote, duplicateDebitNote, saveDebitNote, voidDebitNote } from "./debit-note-service";
 
@@ -14,7 +14,7 @@ export async function saveDebitNoteAction(
   input: unknown,
   intent: "draft" | "post"
 ): Promise<DebitNoteActionResult> {
-  const { user } = await requireModule(businessId, "purchases");
+  const { user } = await requireSavePermission(businessId, "purchases", noteId, intent);
   const parsed = debitNoteInputSchema.safeParse(input);
   if (!parsed.success) {
     return {
@@ -41,7 +41,7 @@ export async function saveDebitNoteAction(
 }
 
 export async function duplicateDebitNoteAction(businessId: string, noteId: string) {
-  const { user } = await requireModule(businessId, "purchases");
+  const { user } = await requirePermission(businessId, "purchases", "create");
   let id: string;
   try {
     id = duplicateDebitNote(businessId, user.id, noteId);
@@ -56,7 +56,7 @@ export async function duplicateDebitNoteAction(businessId: string, noteId: strin
 }
 
 export async function deleteDebitNoteAction(businessId: string, noteId: string) {
-  const { user } = await requireModule(businessId, "purchases");
+  const { user } = await requirePermission(businessId, "purchases", "delete");
   try {
     deleteDebitNote(businessId, user.id, noteId);
     revalidatePath(`/b/${businessId}/purchases/debit-notes`);
@@ -69,7 +69,7 @@ export async function deleteDebitNoteAction(businessId: string, noteId: string) 
 }
 
 export async function voidDebitNoteAction(businessId: string, noteId: string) {
-  const { user } = await requireModule(businessId, "purchases");
+  const { user } = await requirePermission(businessId, "purchases", "delete");
   try {
     voidDebitNote(businessId, user.id, noteId);
     revalidatePath(`/b/${businessId}/purchases/debit-notes`);

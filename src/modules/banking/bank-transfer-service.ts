@@ -1,3 +1,4 @@
+import { assertMutationPermission } from "@/core/permissions/mutation-permissions";
 import { randomUUID } from "node:crypto";
 import { getBusinessDb } from "@/core/db/business";
 import { parseMoneyToMinor } from "@/modules/accounting/calculations/money";
@@ -7,6 +8,7 @@ import { assertDateNotLocked } from "@/modules/accounting/services/financial-loc
 import { bankTransferInputSchema, type BankTransferInput } from "./bank-transfer-input";
 
 export function createBankTransfer(businessId: string, userId: string, input: BankTransferInput) {
+  assertMutationPermission(businessId, userId, "banking", "create", "post");
   const data = bankTransferInputSchema.parse(input);
   const context = getBusinessDb(businessId, userId);
   const id = randomUUID();
@@ -69,6 +71,7 @@ export function getBankTransfer(businessId: string, userId: string, transferId: 
 }
 
 export function voidBankTransfer(businessId: string, userId: string, transferId: string) {
+  assertMutationPermission(businessId, userId, "banking", "delete");
   const context = getBusinessDb(businessId, userId);
   const now = new Date().toISOString();
   context.sqlite.transaction(() => {

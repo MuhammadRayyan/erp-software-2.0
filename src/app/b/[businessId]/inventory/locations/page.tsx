@@ -26,7 +26,7 @@ export default async function InventoryLocationsPage({ params }: { params: Promi
         title="Inventory Locations"
         description="Simple stock locations without bins or warehouse routing."
       >
-        <Button asChild>
+        <Button permission="create" asChild>
           <Link href={`/b/${businessId}/inventory/locations/new`}>
             <Plus className="size-4" /> New Location
           </Link>
@@ -85,7 +85,7 @@ export default async function InventoryLocationsPage({ params }: { params: Promi
           title="No locations yet"
           description="Create your first location to track inventory."
           action={
-            <Button asChild>
+            <Button permission="create" asChild>
               <Link href={`/b/${businessId}/inventory/locations/new`}>Create first Location</Link>
             </Button>
           }

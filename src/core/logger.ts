@@ -17,6 +17,8 @@ export type LogContext = {
   userId?: string;
   error?: unknown;
   metadata?: Record<string, unknown>;
+  traceId?: string;
+  spanId?: string;
   [key: string]: unknown;
 };
 
@@ -151,6 +153,8 @@ function logMessage(
 ) {
   const { context, error } = normalizeContext(contextOrError, maybeContext);
   const trace = getTraceContext();
+  if (context.traceId && /^[a-f0-9]{32}$/i.test(context.traceId)) trace.traceId = context.traceId;
+  if (context.spanId && /^[a-f0-9]{16}$/i.test(context.spanId)) trace.spanId = context.spanId;
   const timestamp = new Date().toISOString();
 
   const businessId = context.businessId;

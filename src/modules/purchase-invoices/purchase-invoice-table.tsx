@@ -245,13 +245,13 @@ export function PurchaseInvoiceTable({
                     </Link>
                   </DropdownMenuItem>
                   {canEdit && (
-                    <DropdownMenuItem asChild>
+                    <DropdownMenuItem permission="edit" asChild>
                       <Link href={`/b/${bill.businessId}/purchases/invoices/${bill.id}/edit`}>
                         <FileEdit className="size-4 text-muted-foreground" /> Edit Bill
                       </Link>
                     </DropdownMenuItem>
                   )}
-                  <DropdownMenuItem asChild>
+                  <DropdownMenuItem permission="export" asChild>
                     <a href={`/api/businesses/${bill.businessId}/documents/purchase-invoice/${bill.id}/pdf`} target="_blank" rel="noreferrer">
                       <Download className="size-4 text-muted-foreground" /> Download PDF
                     </a>
@@ -259,7 +259,7 @@ export function PurchaseInvoiceTable({
                   {canPay && (
                     <>
                       <DropdownMenuSeparator />
-                      <DropdownMenuItem asChild>
+                      <DropdownMenuItem permission="create" asChild>
                         <Link href={`/b/${bill.businessId}/purchases/payments/new?invoiceId=${bill.id}`}>
                           <CircleDollarSign className="size-4 text-muted-foreground" /> Record Payment
                         </Link>
@@ -267,7 +267,7 @@ export function PurchaseInvoiceTable({
                     </>
                   )}
                   {bill.document_status === "posted" && (
-                    <DropdownMenuItem asChild>
+                    <DropdownMenuItem permission="create" asChild>
                       <Link href={`/b/${bill.businessId}/purchases/debit-notes/new?invoiceId=${bill.id}`}>
                         <BookOpenText className="size-4 text-muted-foreground" /> Debit Note
                       </Link>
@@ -556,7 +556,7 @@ export function PurchaseInvoiceTable({
                 <FileArchive className="size-3.5" /> Download ZIP
               </Button>
 
-              <Button
+              <Button permission={"delete"}
                 type="button"
                 variant="secondary"
                 size="sm"

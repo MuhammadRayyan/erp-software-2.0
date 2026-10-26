@@ -1,3 +1,4 @@
+import { assertMutationPermission } from "@/core/permissions/mutation-permissions";
 import { createSettlement, voidSettlement, applySettlementCredit, type SettlementConfig } from "@/modules/settlement/settlement-service";
 import { getBusinessDb } from "@/core/db/business";
 import { postReceipt } from "@/modules/accounting/services/receipt-posting-service";
@@ -49,6 +50,7 @@ export const receiptConfig: SettlementConfig = {
 
 
 export function createReceipt(businessId: string, userId: string, input: ReceiptInput) {
+  assertMutationPermission(businessId, userId, "sales", "create", "post");
   const data = receiptInputSchema.parse(input);
   const context = getBusinessDb(businessId, userId);
   let result!: ReturnType<typeof createSettlement>;
@@ -293,6 +295,7 @@ export function getReceipt(businessId: string, userId: string, receiptId: string
 }
 
 export function voidReceipt(businessId: string, userId: string, receiptId: string) {
+  assertMutationPermission(businessId, userId, "sales", "delete");
   const context = getBusinessDb(businessId, userId);
   const receipt = context.sqlite
     .prepare("SELECT receipt_number, customer_id FROM receipts WHERE id = ?")
@@ -430,6 +433,7 @@ export function applyReceiptCredit(
   userId: string,
   input: ApplyReceiptCreditInput,
 ) {
+  assertMutationPermission(businessId, userId, "sales", "post");
   const data = applyReceiptCreditInputSchema.parse(input);
   const context = getBusinessDb(businessId, userId);
   let result!: ReturnType<typeof applySettlementCredit>;

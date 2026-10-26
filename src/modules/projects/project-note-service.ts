@@ -1,3 +1,4 @@
+import { assertMutationPermission } from "@/core/permissions/mutation-permissions";
 import { randomUUID } from "node:crypto";
 import { getBusinessDb } from "@/core/db/business";
 
@@ -7,6 +8,7 @@ export function createProjectNote(
   projectId: string,
   body: string,
 ) {
+  assertMutationPermission(businessId, userId, "projects", "create");
   const { sqlite } = getBusinessDb(businessId, userId);
   if (!sqlite.prepare("SELECT 1 FROM projects WHERE id = ?").get(projectId)) {
     throw new Error("Project not found.");
@@ -23,6 +25,7 @@ export function deleteProjectNote(
   projectId: string,
   noteId: string,
 ) {
+  assertMutationPermission(businessId, userId, "projects", "delete");
   const { sqlite } = getBusinessDb(businessId, userId);
   const result = sqlite.prepare(
     "DELETE FROM project_notes WHERE id = ? AND project_id = ?",

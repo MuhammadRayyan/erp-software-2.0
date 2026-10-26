@@ -5,18 +5,27 @@ import { runMigrations } from "./migrations/runner";
 import { systemMigrations } from "./migrations/system";
 import { detectAndValidateSystemBaseline } from "./migrations/system-baseline";
 import * as schema from "./system-schema";
+import { readMigrationState } from "./migrations/runner";
 
 let systemSqlite: Database.Database | undefined;
 
 export function getSystemSqlite() {
   if (!systemSqlite) {
     ensureDataDirectories();
-    systemSqlite = new Database(SYSTEM_DB_PATH, { timeout: 5000 });
-    systemSqlite.pragma("journal_mode = WAL");
-    systemSqlite.pragma("busy_timeout = 5000");
-    systemSqlite.pragma("synchronous = NORMAL");
-    systemSqlite.pragma("foreign_keys = ON");
-    migrateSystemDatabase(systemSqlite);
+    const sqlite = new Database(SYSTEM_DB_PATH, { timeout: 5000, fileMustExist: process.env.ERP_MIGRATION_MODE === "external" });
+    try {
+      sqlite.pragma("journal_mode = WAL");
+      sqlite.pragma("busy_timeout = 5000");
+      sqlite.pragma("synchronous = FULL");
+      sqlite.pragma("foreign_keys = ON");
+      if (process.env.ERP_MIGRATION_MODE === "external") {
+        if (!readMigrationState(sqlite, systemMigrations, "system database").current) throw new Error("System migrations are pending.");
+      } else migrateSystemDatabase(sqlite);
+      systemSqlite = sqlite;
+    } catch (error) {
+      sqlite.close();
+      throw error;
+    }
   }
   return systemSqlite;
 }

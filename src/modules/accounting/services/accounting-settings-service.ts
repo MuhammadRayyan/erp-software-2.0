@@ -1,3 +1,4 @@
+import { assertMutationPermission } from "@/core/permissions/mutation-permissions";
 import { eq } from "drizzle-orm";
 import { cache } from "react";
 import { getBusinessDb } from "@/core/db/business";
@@ -22,6 +23,7 @@ export function updateInvoiceNumbering(
   userId: string,
   input: InvoiceNumberingInput,
 ) {
+  assertMutationPermission(businessId, userId, "settings", "edit");
   const data = invoiceNumberingInputSchema.parse(input);
   getBusinessDb(businessId, userId).db
     .update(accountingSettings)
