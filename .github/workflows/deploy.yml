@@ -28,7 +28,7 @@ jobs:
       - name: Validate CI and deployment failure recovery
         run: |
           docker run --rm -v "$PWD:/repo" -w /repo rhysd/actionlint@sha256:b1934ee5f1c509618f2508e6eb47ee0d3520686341fec936f3b79331f9315667 -color -shellcheck=
-          bash -n scripts/deploy.sh scripts/ci-image-smoke.sh
+          bash -n scripts/deploy.sh scripts/deploy-from-ci.sh scripts/ci-image-smoke.sh
           bash scripts/test-deployment-flow.sh
       - run: npm ci --legacy-peer-deps
       - run: npm run typecheck
@@ -130,9 +130,9 @@ jobs:
           options=(-o BatchMode=yes -o StrictHostKeyChecking=yes -o ConnectTimeout=15 -i "$HOME/.ssh/erp_deploy")
           destination="$SERVER_USER@$SERVER_HOST"
           ssh "${options[@]}" "$destination" "umask 077; mkdir -p /opt/modern-erp/releases/$GITHUB_SHA"
-          scp "${options[@]}" scripts/deploy.sh docker-compose.yml Caddyfile "$destination:/opt/modern-erp/releases/$GITHUB_SHA/"
+          scp "${options[@]}" scripts/deploy.sh scripts/deploy-from-ci.sh docker-compose.yml Caddyfile "$destination:/opt/modern-erp/releases/$GITHUB_SHA/"
           # A job-scoped token is streamed to a private temporary Docker config; it is never stored on the host permanently.
-          printf '%s' "$REGISTRY_TOKEN" | ssh "${options[@]}" "$destination" "set -eu; export DOCKER_CONFIG=\$(mktemp -d /tmp/erp-registry.XXXXXX); trap 'rm -f -- \"\$DOCKER_CONFIG/config.json\"; rmdir -- \"\$DOCKER_CONFIG\"' EXIT; docker login ghcr.io -u '$GITHUB_ACTOR' --password-stdin; bash /opt/modern-erp/releases/$GITHUB_SHA/deploy.sh '$RELEASE_IMAGE' '$GITHUB_SHA'"
+          printf '%s' "$REGISTRY_TOKEN" | ssh "${options[@]}" "$destination" "bash /opt/modern-erp/releases/$GITHUB_SHA/deploy-from-ci.sh '$GITHUB_SHA' '$RELEASE_IMAGE' '$GITHUB_ACTOR'"
       - name: Remove runner SSH material
         if: always()
         run: rm -f -- ~/.ssh/erp_deploy
