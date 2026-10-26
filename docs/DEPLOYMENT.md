@@ -16,6 +16,8 @@ The workflow uses the existing `SERVER_HOST`, `SERVER_USER`, and `SSH_PRIVATE_KE
 
 Each image includes `tools/release.json` with application/revision/schema versions and `tools/production-dependencies.cdx.json`, a CycloneDX inventory of locked production npm dependencies. CI validates and retains both as release evidence for 30 days. The inventory describes the production dependency graph; it is not a complete operating-system package inventory or proof that every dependency is traced into the standalone runtime.
 
+The image test also invokes the application's actual HTML-template PDF renderer in an isolated, non-root, read-only container with no network, a writable temporary filesystem and bounded memory/PIDs. Chromium's XDG config/cache directories live under `/tmp`, allowing its profile/crash-report initialization without a writable application filesystem. `node tools/verify-html-pdf.cjs` runs the same synthetic render diagnostic manually.
+
 Builds can fail. The guarantee provided by the workflow is that an unverified build is not promoted, and a deployment failure is reported as a failure. A single application instance has a short maintenance interval; measure it rather than claiming zero downtime.
 
 ## Runtime secrets
