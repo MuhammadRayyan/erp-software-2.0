@@ -15,6 +15,7 @@ caddy_image="$(ERP_IMAGE="$image" ERP_RUNTIME_ENV_FILE="$runtime" docker compose
 docker run --rm --network none -v "$PWD/Caddyfile:/etc/caddy/Caddyfile:ro" "$caddy_image" caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile
 [[ "$(docker image inspect "$image" --format '{{.Architecture}}')" == arm64 ]]
 [[ "$(docker image inspect "$image" --format '{{index .Config.Labels "org.opencontainers.image.revision"}}')" == "$revision" ]]
+[[ "$(docker run --rm --entrypoint cat "$image" .next/BUILD_ID)" == "$revision" ]]
 [[ "$(docker image inspect "$image" --format '{{.Config.User}}')" == 10001:10001 ]]
 docker run --rm --entrypoint sh "$image" -c 'test ! -f /app/.env && test ! -f /app/.env.local && test ! -f /app/manager_backup_file.manager'
 if docker run --rm --network none -e NODE_ENV=production -e BETTER_AUTH_SECRET=ledgerly-secret-change-in-production --entrypoint node "$image" tools/ops.cjs validate-env; then
