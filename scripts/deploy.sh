@@ -41,13 +41,26 @@ if [[ -f "$root/.release.env" ]]; then cp "$root/.release.env" "$release/previou
 if [[ -n "$previous" ]]; then docker tag "$previous" "modern-erp:rollback-$stamp"; fi
 
 compose() { ERP_RUNTIME_ENV_FILE="$root/runtime.env" docker compose --project-name modern-erp --env-file "$root/runtime.env" --env-file "$root/.release.env" -f "$root/docker-compose.yml" "$@"; }
-ops() { docker run --rm --user 0:0 --network none --env-file "$root/runtime.env" -v "$root/data:/app/data" --entrypoint node "$image" tools/ops.cjs "$@"; }
+operation="erp-operation-${revision:0:12}-$$"
+run_operation() {
+  local limit="$1" status=0
+  shift
+  timeout --foreground --kill-after=5s "$limit" docker run --rm --name "$operation" "$@" || status=$?
+  if [[ "$status" != 0 ]]; then docker rm -f "$operation" >/dev/null 2>&1 || true; fi
+  return "$status"
+}
+ops() {
+  local limit=120s
+  if [[ "$1" == migrate ]]; then limit=300s; fi
+  run_operation "$limit" --user 0:0 --network none --env-file "$root/runtime.env" -v "$root/data:/app/data" --entrypoint node "$image" tools/ops.cjs "$@"
+}
 before_schema=""
 stopped=false
 success=false
 migration_started=false
 on_exit() {
   status=$?
+  docker rm -f "$operation" >/dev/null 2>&1 || true
   if [[ "$success" != true && "$stopped" == true && -n "$previous" ]]; then
     set +e
     echo "Deployment failed; checking whether the previous image can safely restart." >&2
@@ -56,7 +69,7 @@ on_exit() {
     if [[ "$migration_started" == false ]]; then compatible=true; fi
     if [[ -n "$before_schema" && "$before_schema" == "$after_schema" ]]; then compatible=true; fi
     if [[ "$compatible" != true ]]; then
-      if docker run --rm --user 0:0 --network none --env-file "$root/runtime.env" -v "$root/data:/app/data:ro" --entrypoint node "$previous" tools/ops.cjs compatible; then compatible=true; fi
+      if run_operation 120s --user 0:0 --network none --env-file "$root/runtime.env" -v "$root/data:/app/data:ro" --entrypoint node "$previous" tools/ops.cjs compatible; then compatible=true; fi
     fi
     if [[ "$compatible" == true ]]; then
       cp "$release/previous-compose.yml" "$root/docker-compose.yml"
@@ -75,16 +88,18 @@ on_exit() {
   exit "$status"
 }
 trap on_exit EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM HUP
 
 # SIGTERM drains in-flight work; no new app process can write during the snapshot/migration window.
 if [[ -n "$previous" ]]; then docker stop --time 30 modern-erp >/dev/null; fi
 stopped=true
 before_schema="$(ops schema-fingerprint)"
-docker run --rm --user 0:0 --network none --env-file "$root/runtime.env" -e ERP_BACKUP_QUIESCED=true \
+run_operation "${ERP_BACKUP_TIMEOUT:-60s}" --user 0:0 --network none --env-file "$root/runtime.env" -e ERP_BACKUP_QUIESCED=true \
   -v "$root/data:/app/data:ro" -v "$root/backups:/backups" --entrypoint node "$image" \
   tools/ops.cjs backup "/backups/$(basename "$backup")"
-docker run --rm --user 0:0 --network none -v "$backup:/backup:ro" --entrypoint node "$image" tools/ops.cjs verify-backup /backup
-docker run --rm --user 0:0 --network none --env-file "$root/runtime.env" -v "$backup:/backup:ro" --entrypoint node "$image" tools/ops.cjs rehearse /backup
+run_operation 60s --user 0:0 --network none -v "$backup:/backup:ro" --entrypoint node "$image" tools/ops.cjs verify-backup /backup
+run_operation 120s --user 0:0 --network none --env-file "$root/runtime.env" -v "$backup:/backup:ro" --entrypoint node "$image" tools/ops.cjs rehearse /backup
 migration_started=true
 ops migrate
 ops check

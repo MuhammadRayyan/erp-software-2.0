@@ -6,7 +6,7 @@ The supported production path is a pull request to `main`, required verification
 
 1. Create a short branch from current `main`, make the change, and open a pull request.
 2. The **Verify source and financial regressions** check validates the workflow and deployment failure recovery, performs a locked install, typechecks, lints, tests, audits production dependencies, builds production, and runs isolated browser scenarios.
-3. **Verify ARM64 production image** builds the actual Linux ARM64 image and exercises its runtime validation, migrations, checks, readiness, login route, non-root user, and secret-file exclusions.
+3. **Verify ARM64 production image** builds the actual Linux ARM64 image and exercises its runtime validation, migrations, checks, readiness, login route, non-root user, and secret-file exclusions. A deliberately interrupted synthetic process leaves committed system/tenant WAL files; CI snapshots the read-only source, checksums the backup, confirms committed rows/attachments survived, and rehearses restoration/migration.
 4. Merge only after both required checks pass. A push to `main` repeats verification, publishes the tested image to GHCR, then deploys its exact digest. The image carries the Git revision in its labels and health response.
 5. Deployment is serialized by GitHub concurrency and a host `flock`. It pulls before maintenance, retains the prior image/assets, stops and drains the app, snapshots data, verifies checksums, rehearses restore/migration on a copy, migrates production, starts the release, and verifies every registered tenant plus public HTTPS/revision.
 
@@ -29,6 +29,8 @@ Next.js Server Action encryption is separate from authentication. Each promoted 
 ## Rollback and backups
 
 The release directory stores the deployed digest and previous configuration; the prior image is tagged locally for recovery. No automatic image pruning runs during deployment. Backup directories contain SQLite snapshots, attachments, and a SHA-256 manifest.
+
+The stopped application's database files and SQLite sidecars are first copied to a private writable staging directory. SQLite recovers/checks that copy and consolidates each database through its backup API; the original read-only data mount is untouched. Snapshot databases use DELETE journal mode so a read-only restore source does not need new WAL/SHM sidecars. Temporary snapshot/rehearsal data is removed. Deployment bounds backup/checksum operations to 60 seconds, restoration rehearsal to 120 seconds, and migration to 300 seconds, with named-container cleanup and the same compatibility-aware failure recovery. Investigate a timeout before increasing limits for larger data.
 
 Failure before production migration restarts the previous release. After a migration, automatic fallback requires an unchanged schema fingerprint or a successful compatibility check by the old image. An incompatible schema stops automatic fallback and reports the backup location. Do not automatically restore a database after users have resumed writing: that can discard new transactions. Use a tested forward repair or an explicit coordinated restore.
 

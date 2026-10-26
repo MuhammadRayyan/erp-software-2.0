@@ -27,6 +27,8 @@ Production Compose requires an explicit ERP_IMAGE digest in .release.env. Supply
 
 Full backups require a coordinated write stop. Never tar the active SQLite directory as the default online backup procedure. Deployment snapshots include databases and attachments plus checksums. Local snapshots are not offsite disaster recovery; scheduled offsite backups and a replacement-host restore drill remain separate work.
 
+Snapshotting uses a private writable copy of the stopped application's database files and WAL/SHM sidecars, then SQLite's backup API. Do not run that API directly against the production read-only bind mount. CI verifies committed system/tenant WAL and attachment recovery on Linux ARM64. Backup/checksum, rehearsal and migration operations have bounded execution and named-container cleanup; timeout remains a failed release and invokes compatibility-aware recovery.
+
 After failure, restart the old image only when schema compatibility is verified. Never automatically restore a database after users have resumed writes. If compatibility fails, stop for a forward repair or explicitly coordinated restore. Report the failed release and backup location; a successful fallback must not turn a failed deployment green.
 
 ## DNS and TLS

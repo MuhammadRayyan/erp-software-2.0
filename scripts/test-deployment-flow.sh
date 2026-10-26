@@ -15,6 +15,7 @@ if [[ "$1" == compose && "$*" == *'config --images'* ]]; then printf 'caddy:2-al
 if [[ "$*" == *'tools/ops.cjs schema-fingerprint'* ]]; then
   if [[ "$TEST_CASE" == incompatible-schema && -f "$TEST_ROOT/migrated" ]]; then echo new-schema; else echo old-schema; fi
 elif [[ "$*" == *'tools/ops.cjs backup '* && "$TEST_CASE" == backup-failure ]]; then exit 32
+elif [[ "$*" == *'tools/ops.cjs backup '* && "$TEST_CASE" == backup-timeout ]]; then sleep 3
 elif [[ "$*" == *'tools/ops.cjs rehearse '* && "$TEST_CASE" == rehearsal-failure ]]; then exit 33
 elif [[ "$*" == *'tools/ops.cjs migrate'* ]]; then
   touch "$TEST_ROOT/migrated"
@@ -42,8 +43,9 @@ export PATH="$temporary/bin:$PATH"
 export TEST_REVISION=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
 image="ghcr.io/example/erp@sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
 
-for scenario in success pull-failure backup-failure rehearsal-failure migration-failure health-failure incompatible-schema; do
+for scenario in success pull-failure backup-failure backup-timeout rehearsal-failure migration-failure health-failure incompatible-schema; do
   export TEST_CASE="$scenario" TEST_ROOT="$temporary/$scenario" ERP_DEPLOY_ROOT="$temporary/$scenario"
+  export ERP_BACKUP_TIMEOUT=1s
   mkdir -p "$TEST_ROOT/releases/$TEST_REVISION" "$TEST_ROOT/data"
   printf 'previous configuration\n' > "$TEST_ROOT/docker-compose.yml"
   printf 'previous caddy\n' > "$TEST_ROOT/Caddyfile"
@@ -60,6 +62,7 @@ for scenario in success pull-failure backup-failure rehearsal-failure migration-
     if [[ "$scenario" != pull-failure && "$scenario" != incompatible-schema ]]; then
       grep -q 'previous configuration' "$TEST_ROOT/docker-compose.yml"
       grep -q 'Previous release restored' "$TEST_ROOT/output.log"
+      if [[ "$scenario" == backup-timeout ]]; then grep -q '^rm -f erp-operation-' "$TEST_ROOT/docker-calls.log"; fi
     fi
     if [[ "$scenario" == incompatible-schema ]]; then
       grep -q 'schema is incompatible' "$TEST_ROOT/output.log"
