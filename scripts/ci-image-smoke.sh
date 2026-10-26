@@ -20,6 +20,9 @@ docker run --rm --network none -v "$PWD/Caddyfile:/etc/caddy/Caddyfile:ro" "$cad
 [[ "$(docker run --rm --entrypoint cat "$image" .next/BUILD_ID)" == "$revision" ]]
 [[ "$(docker image inspect "$image" --format '{{.Config.User}}')" == 10001:10001 ]]
 docker run --rm --network none --entrypoint node "$image" -e 'const fs=require("fs"),r=JSON.parse(fs.readFileSync("tools/release.json")),s=JSON.parse(fs.readFileSync("tools/production-dependencies.cdx.json")); if(r.revision!==process.env.APP_REVISION||!r.version||r.systemSchema<1||r.businessSchema<1||s.bomFormat!=="CycloneDX"||!s.components.length) process.exit(1);'
+timeout --foreground --kill-after=5s 45s docker run --rm --name "$operation" --init --read-only \
+  --tmpfs /tmp:rw,size=512m,mode=1777 --memory 1g --pids-limit 256 --cap-drop ALL --security-opt no-new-privileges \
+  --network none --entrypoint node "$image" tools/verify-html-pdf.cjs
 docker run --rm --entrypoint sh "$image" -c 'test ! -f /app/.env && test ! -f /app/.env.local && test ! -f /app/manager_backup_file.manager'
 if docker run --rm --network none -e NODE_ENV=production -e BETTER_AUTH_SECRET=ledgerly-secret-change-in-production --entrypoint node "$image" tools/ops.cjs validate-env; then
   echo "Placeholder secret unexpectedly accepted" >&2; exit 1
@@ -64,4 +67,4 @@ done
 python3 -c 'import json,sys; j=json.load(open("/tmp/erp-smoke-health.json")); assert j["status"]=="ok" and j["revision"]==sys.argv[1]' "$revision"
 curl --fail --silent http://localhost:3300/login > /dev/null
 curl --fail --silent http://localhost:3300/api/live > /dev/null
-echo "ARM64 image, configuration, committed-WAL backup/restore, tenant migrations, readiness and login verified."
+echo "ARM64 image, real HTML PDF render, committed-WAL backup/restore, tenant migrations, readiness and login verified."
