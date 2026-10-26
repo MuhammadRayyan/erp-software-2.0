@@ -11,6 +11,7 @@ printf '%s\n' "$*" >> "$TEST_ROOT/docker-calls.log"
 if [[ "$1" == pull && "$TEST_CASE" == pull-failure ]]; then exit 31; fi
 if [[ "$1 $2" == 'inspect modern-erp' ]]; then echo previous-image; exit 0; fi
 if [[ "$1 $2" == 'image inspect' ]]; then echo "$TEST_REVISION"; exit 0; fi
+if [[ "$1" == compose && "$*" == *'config --images'* ]]; then printf 'caddy:2-alpine@sha256:%064d\n' 0; exit 0; fi
 if [[ "$*" == *'tools/ops.cjs schema-fingerprint'* ]]; then
   if [[ "$TEST_CASE" == incompatible-schema && -f "$TEST_ROOT/migrated" ]]; then echo new-schema; else echo old-schema; fi
 elif [[ "$*" == *'tools/ops.cjs backup '* && "$TEST_CASE" == backup-failure ]]; then exit 32

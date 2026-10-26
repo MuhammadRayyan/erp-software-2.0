@@ -9,6 +9,10 @@ cleanup() { docker rm -f "$container" >/dev/null 2>&1 || true; docker volume rm 
 trap cleanup EXIT
 chmod 600 "$runtime"
 printf 'BETTER_AUTH_SECRET=%s\nSETUP_KEY=%s\nAPP_DOMAIN=localhost:3300\nBETTER_AUTH_URL=http://localhost:3300\n' "$(openssl rand -hex 48)" "$(openssl rand -hex 48)" > "$runtime"
+ERP_IMAGE="$image" ERP_RUNTIME_ENV_FILE="$runtime" docker compose -f docker-compose.yml config --quiet
+caddy_image="$(ERP_IMAGE="$image" ERP_RUNTIME_ENV_FILE="$runtime" docker compose -f docker-compose.yml config --images | awk '/^caddy:/{print; exit}')"
+[[ "$caddy_image" =~ ^caddy:.*@sha256:[a-f0-9]{64}$ ]]
+docker run --rm --network none -v "$PWD/Caddyfile:/etc/caddy/Caddyfile:ro" "$caddy_image" caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile
 [[ "$(docker image inspect "$image" --format '{{.Architecture}}')" == arm64 ]]
 [[ "$(docker image inspect "$image" --format '{{index .Config.Labels "org.opencontainers.image.revision"}}')" == "$revision" ]]
 [[ "$(docker image inspect "$image" --format '{{.Config.User}}')" == 10001:10001 ]]

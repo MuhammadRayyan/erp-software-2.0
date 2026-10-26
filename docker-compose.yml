@@ -6,7 +6,7 @@ services:
     restart: unless-stopped
     stop_grace_period: 30s
     env_file:
-      - ./runtime.env
+      - ${ERP_RUNTIME_ENV_FILE:-/opt/modern-erp/runtime.env}
     environment:
       NODE_ENV: production
       PORT: 3000

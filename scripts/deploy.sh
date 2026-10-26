@@ -16,7 +16,11 @@ test -f "$release/Caddyfile"
 test -r "$root/runtime.env"
 [[ "$(df --output=avail -k "$root" | tail -1 | tr -d ' ')" -gt 5242880 ]] || { echo "At least 5 GiB free disk is required" >&2; exit 1; }
 docker pull "$image"
-docker pull caddy:2-alpine@sha256:eb4d35b7452d1ab6171fbdbe8d9275b2301dad6dad92115d91e19fb9b24d510f
+ERP_IMAGE="$image" ERP_RUNTIME_ENV_FILE="$root/runtime.env" docker compose --env-file "$root/runtime.env" -f "$release/docker-compose.yml" config --quiet
+caddy_image="$(ERP_IMAGE="$image" ERP_RUNTIME_ENV_FILE="$root/runtime.env" docker compose --env-file "$root/runtime.env" -f "$release/docker-compose.yml" config --images | awk '/^caddy:/{print; exit}')"
+[[ "$caddy_image" =~ ^caddy:.*@sha256:[a-f0-9]{64}$ ]] || { echo "Caddy must be pinned by digest" >&2; exit 1; }
+docker pull "$caddy_image"
+docker run --rm --network none --env-file "$root/runtime.env" -v "$release/Caddyfile:/etc/caddy/Caddyfile:ro" "$caddy_image" caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile
 [[ "$(docker image inspect "$image" --format '{{index .Config.Labels "org.opencontainers.image.revision"}}')" == "$revision" ]] || { echo "Image revision mismatch" >&2; exit 1; }
 docker run --rm --network none --env-file "$root/runtime.env" --entrypoint node "$image" tools/ops.cjs validate-env
 docker run --rm --network none --entrypoint sh "$image" -c 'test ! -f /app/.env && test ! -f /app/.env.local && test ! -f /app/manager_backup_file.manager'
@@ -36,7 +40,7 @@ cp "$root/Caddyfile" "$release/previous-Caddyfile"
 if [[ -f "$root/.release.env" ]]; then cp "$root/.release.env" "$release/previous-release.env"; fi
 if [[ -n "$previous" ]]; then docker tag "$previous" "modern-erp:rollback-$stamp"; fi
 
-compose() { docker compose --project-name modern-erp --env-file "$root/runtime.env" --env-file "$root/.release.env" -f "$root/docker-compose.yml" "$@"; }
+compose() { ERP_RUNTIME_ENV_FILE="$root/runtime.env" docker compose --project-name modern-erp --env-file "$root/runtime.env" --env-file "$root/.release.env" -f "$root/docker-compose.yml" "$@"; }
 ops() { docker run --rm --user 0:0 --network none --env-file "$root/runtime.env" -v "$root/data:/app/data" --entrypoint node "$image" tools/ops.cjs "$@"; }
 before_schema=""
 stopped=false
