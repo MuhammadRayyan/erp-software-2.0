@@ -519,7 +519,7 @@ export function runActivityLogCleanup(
   const deleteResult = sqlite
     .prepare(`
       DELETE FROM activity_logs
-      WHERE business_id = ? AND created_at < ?
+      WHERE business_id = ? AND created_at < ? AND entity_type <> 'business_profile'
     `)
     .run(businessId, cutoffDate);
 

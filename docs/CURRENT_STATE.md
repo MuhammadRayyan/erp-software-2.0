@@ -1,12 +1,12 @@
 # Current state — Ledgerly ERP
 
-Updated **26 October 2026** from source, release evidence and authenticated operational checks. Historical implementation narratives remain in [CHANGELOG.md](CHANGELOG.md), [history](history/README.md) and Git history.
+Updated **29 October 2026** from source, release evidence and authenticated operational checks. Historical implementation narratives remain in [CHANGELOG.md](CHANGELOG.md), [history](history/README.md) and Git history.
 
 ## Release and scope
 
-- Package **2.7.0**; verified deployment baseline before the acceptance-gate rollout: `32df273e5eeecec3db15f95bd8ba8d0f1cc1cd93`. For the current live revision, query [public health](https://erp-portal.rapidtss.com/api/health) and compare with the latest successful [release run](https://github.com/MuhammadRayyan/erp-software-2.0/actions/workflows/deploy.yml).
-- Image: `ghcr.io/muhammadrayyan/erp-software-2.0@sha256:c7a9083dc40d93dcb27141318cba16f809d8a2e86cc593b317e29a59e819d4dc`.
-- Successful release [run 40325451736](https://github.com/MuhammadRayyan/erp-software-2.0/actions/runs/40325451736). HTTPS health was rechecked during this documentation update and returned that revision.
+- Package **2.7.0**; verified live deployment baseline: `f97c287031d2c823f4b305af5b6a76a8bc59c186`. For the current live revision, query [public health](https://erp-portal.rapidtss.com/api/health) and compare with the latest successful [release run](https://github.com/MuhammadRayyan/erp-software-2.0/actions/workflows/deploy.yml).
+- Image: `ghcr.io/muhammadrayyan/erp-software-2.0@sha256:ed27b5ca3a0e62dbd9ce2130f4f9194d37d60b63988767d7411921cd70f4690b`.
+- Successful release verified live on Oracle Cloud VM. HTTPS health returned that revision.
 - Closed testing: a few businesses, **5–10 users**. Keep the public repository, current architecture and implemented checks. Additional hardening/backlog is owner-deferred.
 
 ## Implemented architecture
@@ -45,10 +45,10 @@ Local snapshots are under `/opt/modern-erp/backups`. Scheduled offsite recovery 
 - Sentry token in `~/.sentryclirc`: alerts/event/org/project read scopes. Project `personal-bv0 / erp-20`, historical events, three enabled monitors and one email workflow were verified. Current-release ingestion/association, source maps and delivered notifications remain unproven.
 - SSH/GitHub work. OCI/Sentry credentials stay outside the repository and are separate from deployment credentials. Trial credit was observed; settled billing/free-tier entitlement is unestablished. Kernel reboot remains pending/unperformed.
 
-Read [operations evidence](TESTING_PHASE_OPERATIONS_2026-10-26.md), [hardening outcome](HARDENING_OUTCOME_2026-10-26.md) and [next steps](NEXT_STEPS.md). The already tracked real Manager.io backup remains public under the owner's ignore-only decision.
+Read [operations evidence](history/TESTING_PHASE_OPERATIONS_2026-10-26.md), [hardening outcome](history/HARDENING_OUTCOME_2026-10-26.md) and [next steps](NEXT_STEPS.md). The already tracked real Manager.io backup remains public under the owner's ignore-only decision.
 
 ## Local acceptance and cleanup follow-up
 
-The requested synthetic acceptance round passed **341 service/regression checks across 45 suites** and **11 production-build browser scenarios** on Node 22.23.4/npm 10.9.4. The real-data Manager.io import suite was excluded. Direct Server Action permission denial, quote/order/invoice/settlement linkage and journals, payroll post/void reconciliation, error recovery, keyboard interaction, mobile containment and invoice PDFs were exercised. The actual HTML PDF renderer also passed. See [the verification and cleanup report](FLOW_VERIFICATION_AND_CLEANUP_2026-10-26.md) for scope and limits.
+The requested synthetic acceptance round passed **341 service/regression checks across 45 suites** and **11 production-build browser scenarios** on Node 22.23.4/npm 10.9.4. The real-data Manager.io import suite was excluded. Direct Server Action permission denial, quote/order/invoice/settlement linkage and journals, payroll post/void reconciliation, error recovery, keyboard interaction, mobile containment and invoice PDFs were exercised. The actual HTML PDF renderer also passed. See [the verification and cleanup report](history/FLOW_VERIFICATION_AND_CLEANUP_2026-10-26.md) for scope and limits.
 
 Service tests now have a shared isolation preload; the default browser command uses temporary synthetic fixtures. Historical logs are under `docs/history`; generated screenshots, old source archive, obsolete Bun lockfile and inactive build/pnpm cache are retained locally in ignored folders. All **656 existing local SQLite files** matched their pre-run hashes, with none added or removed under local `data/`. These are local development files, not a count of production businesses. Real Manager.io backups were retained. Cleanup did not reclaim quarantined cache space and was not deployed.

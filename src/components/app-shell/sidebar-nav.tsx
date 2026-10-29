@@ -32,7 +32,11 @@ export function SidebarNav({ businessId, modules, isSuperAdmin, onNavigate }: { 
     <nav aria-label="Business modules" className="flex min-h-0 flex-1 flex-col px-2.5 pb-3">
       <div className="space-y-4 overflow-y-auto py-3 no-scrollbar">
         {primaryNav.map((group, index) => {
-          const items = group.items.filter((item) => !item.module || modules.includes(item.module));
+          const items = group.items.filter((item) => {
+            if (item.modules) return item.modules.some((m) => modules.includes(m));
+            if (item.module) return modules.includes(item.module);
+            return true;
+          });
           if (!items.length) return null;
           return (
             <section key={group.label ?? index}>

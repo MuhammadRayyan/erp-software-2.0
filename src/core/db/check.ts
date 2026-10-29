@@ -1,8 +1,7 @@
-import { existsSync, readdirSync } from "node:fs";
-import path from "node:path";
+import { existsSync } from "node:fs";
 import Database from "better-sqlite3";
 import { businessMigrations } from "./business-migrations";
-import { BUSINESSES_DIRECTORY, getBusinessPaths, SYSTEM_DB_PATH } from "./paths";
+import { getBusinessPaths, SYSTEM_DB_PATH } from "./paths";
 import { readMigrationState } from "./migrations/runner";
 import { systemMigrations } from "./migrations/system";
 import { reconcileBusinessDatabase } from "./reconciliation";
@@ -20,22 +19,13 @@ function checkForeignKeys(sqlite: Database.Database, label: string) {
 }
 
 function discoverBusinessDatabases(registry: readonly RegistryBusiness[]) {
-  const discovered = new Map<string, { id?: string; database: string }>();
+  const discovered = new Map<string, { id: string; database: string }>();
   for (const business of registry) {
     const database = getBusinessPaths(business.directory_key).database;
     if (!existsSync(database)) {
       throw new Error(`Registered business ${business.id} is missing ${database}.`);
     }
     discovered.set(business.directory_key, { id: business.id, database });
-  }
-
-  if (!existsSync(BUSINESSES_DIRECTORY)) return discovered;
-  for (const entry of readdirSync(BUSINESSES_DIRECTORY, { withFileTypes: true })) {
-    if (!entry.isDirectory()) continue;
-    const database = path.join(BUSINESSES_DIRECTORY, entry.name, "business.sqlite");
-    if (!existsSync(database)) continue;
-    const current = discovered.get(entry.name);
-    discovered.set(entry.name, { id: current?.id, database });
   }
   return discovered;
 }
@@ -61,17 +51,15 @@ export function checkDatabases(options: { deep?: boolean } = { deep: true }) {
       if (systemSqlite.pragma("integrity_check", { simple: true }) !== "ok") throw new Error("System integrity check failed.");
     }
     registry = systemSqlite
-      .prepare("SELECT id, directory_key FROM businesses ORDER BY id")
+      .prepare("SELECT id, directory_key FROM businesses WHERE (status IS NULL OR status != 'trash') ORDER BY id")
       .all() as RegistryBusiness[];
   } finally {
     systemSqlite.close();
   }
 
   const businesses = [] as { label: string; version: number }[];
-  for (const [directoryKey, business] of discoverBusinessDatabases(registry)) {
-    const label = business.id
-      ? `business ${business.id}`
-      : `unregistered business directory ${directoryKey}`;
+  for (const [, business] of discoverBusinessDatabases(registry)) {
+    const label = `business ${business.id}`;
     const sqlite = new Database(business.database, { readonly: true, fileMustExist: true });
     try {
       const state = readMigrationState(sqlite, businessMigrations, label);
