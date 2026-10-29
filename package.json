@@ -29,7 +29,7 @@
     "@react-pdf/renderer": "^4.6.1",
     "@sentry/nextjs": "10.75.2",
     "@tanstack/react-table": "^9.2.4",
-    "better-auth": "1.6.26",
+    "better-auth": "1.7.14",
     "better-sqlite3": "13.0.3",
     "class-variance-authority": "0.7.1",
     "clsx": "2.1.1",
