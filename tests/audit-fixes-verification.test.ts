@@ -26,6 +26,7 @@ const { getRelatedDocumentPath } = await import("../src/app/b/[businessId]/email
 const { primaryNav } = await import("../src/components/app-shell/nav-items");
 const {
   installPostedCurrencyImmutabilityTriggers,
+  synchronizeBusinessBaseCurrency,
 } = await import("../src/modules/currency/exchange-rate");
 const { runActivityLogCleanup } = await import("../src/modules/activity-log/activity-log-service");
 
@@ -397,6 +398,11 @@ test("Audited Architectural & Functional Fixes Verification Suite", async (suite
     assert.equal(getRelatedDocumentPath(bId, "delivery-note", "dn-2"), "/b/test-biz/sales/delivery-notes/dn-2");
     assert.equal(getRelatedDocumentPath(bId, "goods-receipt", "gr-1"), "/b/test-biz/purchases/goods-receipts/gr-1");
     assert.equal(getRelatedDocumentPath(bId, "supplier-payment", "pay-1"), "/b/test-biz/purchases/payments/pay-1");
+
+    // Case-insensitivity and whitespace trimming
+    assert.equal(getRelatedDocumentPath(bId, "  SALES-INVOICE  ", "inv-2"), "/b/test-biz/sales/invoices/inv-2");
+    assert.equal(getRelatedDocumentPath(bId, "DEBIT_NOTE", "dn-2"), "/b/test-biz/purchases/debit-notes/dn-2");
+    assert.equal(getRelatedDocumentPath(bId, "Receipt", "rcv-3"), "/b/test-biz/sales/receipts/rcv-3");
   });
 
   await suite.test("11. P1: installPostedCurrencyImmutabilityTriggers is idempotent", () => {
@@ -404,5 +410,108 @@ test("Audited Architectural & Functional Fixes Verification Suite", async (suite
     // Running install multiple times should not throw
     installPostedCurrencyImmutabilityTriggers(context.sqlite);
     installPostedCurrencyImmutabilityTriggers(context.sqlite);
+  });
+
+  await suite.test("12. P1: reconcileBusinessDatabase gracefully tolerates partial databases without missing tables error", () => {
+    // A fresh in-memory database with no tables
+    const memDb = new Database(":memory:");
+    try {
+      const result = reconcileBusinessDatabase(memDb);
+      assert.equal(result.unbalancedJournals, 0);
+      assert.equal(result.invalidPostedPayslips, 0);
+      assert.equal(result.invalidPayslipTotals, 0);
+      assert.equal(result.missingDocumentJournals, 0);
+    } finally {
+      memDb.close();
+    }
+  });
+
+  await suite.test("13. P1: Currency synchronization updates debit_notes, sales_quotes, and purchase_quotes", () => {
+    const context = getBusinessDb(businessId, adminId);
+    const sqlite = context.sqlite;
+    const now = new Date().toISOString();
+    const customerId = (sqlite.prepare("SELECT id FROM customers LIMIT 1").get() as { id: string }).id;
+    const supplierId = (sqlite.prepare("SELECT id FROM suppliers LIMIT 1").get() as { id: string }).id;
+
+    const sqId = randomUUID();
+    const pqId = randomUUID();
+    const dnId = randomUUID();
+
+    // Insert draft documents with base currency AED, rate 1, source Base
+    sqlite.prepare(`
+      INSERT INTO sales_quotes (
+        id, quote_number, customer_id, quote_date, expiry_date,
+        subtotal_minor, tax_minor, total_minor,
+        currency_code, exchange_rate_to_base, exchange_rate_date, exchange_rate_source,
+        base_subtotal_minor, base_tax_minor, base_total_minor,
+        created_by, created_at, updated_at
+      ) VALUES (
+        ?, 'SQ-SYNC-TEST', ?, '2026-10-29', '2026-11-29',
+        1000, 50, 1050,
+        'AED', '1', '2026-10-29', 'Base',
+        1000, 50, 1050,
+        ?, ?, ?
+      )
+    `).run(sqId, customerId, adminId, now, now);
+
+    sqlite.prepare(`
+      INSERT INTO purchase_quotes (
+        id, quote_number, supplier_id, quote_date, expiry_date,
+        subtotal_minor, tax_minor, total_minor,
+        currency_code, exchange_rate_to_base, exchange_rate_date, exchange_rate_source,
+        base_subtotal_minor, base_tax_minor, base_total_minor,
+        created_by, created_at, updated_at
+      ) VALUES (
+        ?, 'PQ-SYNC-TEST', ?, '2026-10-29', '2026-11-29',
+        1000, 50, 1050,
+        'AED', '1', '2026-10-29', 'Base',
+        1000, 50, 1050,
+        ?, ?, ?
+      )
+    `).run(pqId, supplierId, adminId, now, now);
+
+    sqlite.prepare(`
+      INSERT INTO debit_notes (
+        id, debit_note_number, supplier_id, debit_note_date, tax_date,
+        subtotal_minor, tax_minor, total_minor,
+        currency_code, exchange_rate_to_base, exchange_rate_date, exchange_rate_source,
+        base_subtotal_minor, base_tax_minor, base_total_minor,
+        created_by, created_at, updated_at
+      ) VALUES (
+        ?, 'DN-SYNC-TEST', ?, '2026-10-29', '2026-10-29',
+        1000, 50, 1050,
+        'AED', '1', '2026-10-29', 'Base',
+        1000, 50, 1050,
+        ?, ?, ?
+      )
+    `).run(dnId, supplierId, adminId, now, now);
+
+    try {
+      // Simulate registry currency synchronization to EUR
+      sqlite.prepare(`
+        UPDATE business_currency_settings SET metadata_source = 'migration_default' WHERE id = 'default'
+      `).run();
+
+      synchronizeBusinessBaseCurrency(sqlite, "EUR");
+
+      // Verify debit_notes, sales_quotes, and purchase_quotes were updated to EUR
+      const sq = sqlite.prepare("SELECT currency_code FROM sales_quotes WHERE id = ?").get(sqId) as { currency_code: string };
+      const pq = sqlite.prepare("SELECT currency_code FROM purchase_quotes WHERE id = ?").get(pqId) as { currency_code: string };
+      const dn = sqlite.prepare("SELECT currency_code FROM debit_notes WHERE id = ?").get(dnId) as { currency_code: string };
+
+      assert.equal(sq.currency_code, "EUR", "Sales quote currency must be updated to new base");
+      assert.equal(pq.currency_code, "EUR", "Purchase quote currency must be updated to new base");
+      assert.equal(dn.currency_code, "EUR", "Debit note currency must be updated to new base");
+
+      // Synchronize back to AED
+      sqlite.prepare(`
+        UPDATE business_currency_settings SET metadata_source = 'migration_default' WHERE id = 'default'
+      `).run();
+      synchronizeBusinessBaseCurrency(sqlite, "AED");
+    } finally {
+      sqlite.prepare("DELETE FROM sales_quotes WHERE id = ?").run(sqId);
+      sqlite.prepare("DELETE FROM purchase_quotes WHERE id = ?").run(pqId);
+      sqlite.prepare("DELETE FROM debit_notes WHERE id = ?").run(dnId);
+    }
   });
 });

@@ -37,28 +37,39 @@ function hasBaseCurrencyActivity(sqlite: Database.Database) {
 
 function updateBaseCurrencyFacts(sqlite: Database.Database, fromCode: string, toCode: string) {
   const documentTables = [
-    "sales_invoices", "sales_credit_notes", "purchase_orders", "purchase_invoices",
-    "receipts", "supplier_payments",
+    "sales_invoices", "sales_credit_notes", "sales_quotes", "purchase_orders", "purchase_invoices",
+    "purchase_quotes", "debit_notes", "receipts", "supplier_payments",
   ];
   for (const table of documentTables) {
+    if (!sqliteTableExists(sqlite, table)) continue;
     sqlite.prepare(`
       UPDATE ${table} SET currency_code = ?
       WHERE currency_code = ? AND exchange_rate_to_base = '1' AND exchange_rate_source = 'Base'
     `).run(toCode, fromCode);
   }
-  sqlite.prepare(`
-    UPDATE tax_entries SET document_currency = ?
-    WHERE document_currency = ? AND exchange_rate_to_base = '1' AND rate_source = 'Base'
-  `).run(toCode, fromCode);
-  sqlite.prepare("UPDATE bank_accounts SET currency_code = ? WHERE currency_code = ?")
-    .run(toCode, fromCode);
-  sqlite.prepare("UPDATE customers SET default_currency_code = ? WHERE default_currency_code = ?")
-    .run(toCode, fromCode);
-  sqlite.prepare("UPDATE suppliers SET default_currency_code = ? WHERE default_currency_code = ?")
-    .run(toCode, fromCode);
+  if (sqliteTableExists(sqlite, "tax_entries")) {
+    sqlite.prepare(`
+      UPDATE tax_entries SET document_currency = ?
+      WHERE document_currency = ? AND exchange_rate_to_base = '1' AND rate_source = 'Base'
+    `).run(toCode, fromCode);
+  }
+  if (sqliteTableExists(sqlite, "bank_accounts")) {
+    sqlite.prepare("UPDATE bank_accounts SET currency_code = ? WHERE currency_code = ?")
+      .run(toCode, fromCode);
+  }
+  if (sqliteTableExists(sqlite, "customers")) {
+    sqlite.prepare("UPDATE customers SET default_currency_code = ? WHERE default_currency_code = ?")
+      .run(toCode, fromCode);
+  }
+  if (sqliteTableExists(sqlite, "suppliers")) {
+    sqlite.prepare("UPDATE suppliers SET default_currency_code = ? WHERE default_currency_code = ?")
+      .run(toCode, fromCode);
+  }
   // Every stored rate is defined relative to the former base and cannot survive
   // a base-currency change without changing its meaning.
-  sqlite.prepare("DELETE FROM exchange_rates").run();
+  if (sqliteTableExists(sqlite, "exchange_rates")) {
+    sqlite.prepare("DELETE FROM exchange_rates").run();
+  }
 }
 
 export function dropPostedCurrencyImmutabilityTriggers(sqlite: Database.Database) {
@@ -73,38 +84,56 @@ export function dropPostedCurrencyImmutabilityTriggers(sqlite: Database.Database
 }
 
 export function installPostedCurrencyImmutabilityTriggers(sqlite: Database.Database) {
-  sqlite.exec(`
-    CREATE TRIGGER IF NOT EXISTS posted_sales_invoice_currency_immutable
-    BEFORE UPDATE OF currency_code, exchange_rate_to_base, exchange_rate_date, exchange_rate_source
-    ON sales_invoices WHEN OLD.document_status = 'posted' AND (
-      NEW.currency_code <> OLD.currency_code OR NEW.exchange_rate_to_base <> OLD.exchange_rate_to_base
-      OR NEW.exchange_rate_date <> OLD.exchange_rate_date OR NEW.exchange_rate_source <> OLD.exchange_rate_source)
-    BEGIN SELECT RAISE(ABORT, 'Posted document currency and exchange rate are immutable'); END;
-    CREATE TRIGGER IF NOT EXISTS posted_purchase_invoice_currency_immutable
-    BEFORE UPDATE OF currency_code, exchange_rate_to_base, exchange_rate_date, exchange_rate_source
-    ON purchase_invoices WHEN OLD.document_status = 'posted' AND (
-      NEW.currency_code <> OLD.currency_code OR NEW.exchange_rate_to_base <> OLD.exchange_rate_to_base
-      OR NEW.exchange_rate_date <> OLD.exchange_rate_date OR NEW.exchange_rate_source <> OLD.exchange_rate_source)
-    BEGIN SELECT RAISE(ABORT, 'Posted document currency and exchange rate are immutable'); END;
-    CREATE TRIGGER IF NOT EXISTS posted_credit_note_currency_immutable
-    BEFORE UPDATE OF currency_code, exchange_rate_to_base, exchange_rate_date, exchange_rate_source
-    ON sales_credit_notes WHEN OLD.document_status = 'posted' AND (
-      NEW.currency_code <> OLD.currency_code OR NEW.exchange_rate_to_base <> OLD.exchange_rate_to_base
-      OR NEW.exchange_rate_date <> OLD.exchange_rate_date OR NEW.exchange_rate_source <> OLD.exchange_rate_source)
-    BEGIN SELECT RAISE(ABORT, 'Posted document currency and exchange rate are immutable'); END;
-    CREATE TRIGGER IF NOT EXISTS posted_receipt_currency_immutable
-    BEFORE UPDATE OF currency_code, exchange_rate_to_base, exchange_rate_date, exchange_rate_source
-    ON receipts WHEN OLD.document_status = 'posted' AND (
-      NEW.currency_code <> OLD.currency_code OR NEW.exchange_rate_to_base <> OLD.exchange_rate_to_base
-      OR NEW.exchange_rate_date <> OLD.exchange_rate_date OR NEW.exchange_rate_source <> OLD.exchange_rate_source)
-    BEGIN SELECT RAISE(ABORT, 'Posted document currency and exchange rate are immutable'); END;
-    CREATE TRIGGER IF NOT EXISTS posted_supplier_payment_currency_immutable
-    BEFORE UPDATE OF currency_code, exchange_rate_to_base, exchange_rate_date, exchange_rate_source
-    ON supplier_payments WHEN OLD.document_status = 'posted' AND (
-      NEW.currency_code <> OLD.currency_code OR NEW.exchange_rate_to_base <> OLD.exchange_rate_to_base
-      OR NEW.exchange_rate_date <> OLD.exchange_rate_date OR NEW.exchange_rate_source <> OLD.exchange_rate_source)
-    BEGIN SELECT RAISE(ABORT, 'Posted document currency and exchange rate are immutable'); END;
-  `);
+  if (sqliteTableExists(sqlite, "sales_invoices")) {
+    sqlite.exec(`
+      CREATE TRIGGER IF NOT EXISTS posted_sales_invoice_currency_immutable
+      BEFORE UPDATE OF currency_code, exchange_rate_to_base, exchange_rate_date, exchange_rate_source
+      ON sales_invoices WHEN OLD.document_status = 'posted' AND (
+        NEW.currency_code <> OLD.currency_code OR NEW.exchange_rate_to_base <> OLD.exchange_rate_to_base
+        OR NEW.exchange_rate_date <> OLD.exchange_rate_date OR NEW.exchange_rate_source <> OLD.exchange_rate_source)
+      BEGIN SELECT RAISE(ABORT, 'Posted document currency and exchange rate are immutable'); END;
+    `);
+  }
+  if (sqliteTableExists(sqlite, "purchase_invoices")) {
+    sqlite.exec(`
+      CREATE TRIGGER IF NOT EXISTS posted_purchase_invoice_currency_immutable
+      BEFORE UPDATE OF currency_code, exchange_rate_to_base, exchange_rate_date, exchange_rate_source
+      ON purchase_invoices WHEN OLD.document_status = 'posted' AND (
+        NEW.currency_code <> OLD.currency_code OR NEW.exchange_rate_to_base <> OLD.exchange_rate_to_base
+        OR NEW.exchange_rate_date <> OLD.exchange_rate_date OR NEW.exchange_rate_source <> OLD.exchange_rate_source)
+      BEGIN SELECT RAISE(ABORT, 'Posted document currency and exchange rate are immutable'); END;
+    `);
+  }
+  if (sqliteTableExists(sqlite, "sales_credit_notes")) {
+    sqlite.exec(`
+      CREATE TRIGGER IF NOT EXISTS posted_credit_note_currency_immutable
+      BEFORE UPDATE OF currency_code, exchange_rate_to_base, exchange_rate_date, exchange_rate_source
+      ON sales_credit_notes WHEN OLD.document_status = 'posted' AND (
+        NEW.currency_code <> OLD.currency_code OR NEW.exchange_rate_to_base <> OLD.exchange_rate_to_base
+        OR NEW.exchange_rate_date <> OLD.exchange_rate_date OR NEW.exchange_rate_source <> OLD.exchange_rate_source)
+      BEGIN SELECT RAISE(ABORT, 'Posted document currency and exchange rate are immutable'); END;
+    `);
+  }
+  if (sqliteTableExists(sqlite, "receipts")) {
+    sqlite.exec(`
+      CREATE TRIGGER IF NOT EXISTS posted_receipt_currency_immutable
+      BEFORE UPDATE OF currency_code, exchange_rate_to_base, exchange_rate_date, exchange_rate_source
+      ON receipts WHEN OLD.document_status = 'posted' AND (
+        NEW.currency_code <> OLD.currency_code OR NEW.exchange_rate_to_base <> OLD.exchange_rate_to_base
+        OR NEW.exchange_rate_date <> OLD.exchange_rate_date OR NEW.exchange_rate_source <> OLD.exchange_rate_source)
+      BEGIN SELECT RAISE(ABORT, 'Posted document currency and exchange rate are immutable'); END;
+    `);
+  }
+  if (sqliteTableExists(sqlite, "supplier_payments")) {
+    sqlite.exec(`
+      CREATE TRIGGER IF NOT EXISTS posted_supplier_payment_currency_immutable
+      BEFORE UPDATE OF currency_code, exchange_rate_to_base, exchange_rate_date, exchange_rate_source
+      ON supplier_payments WHEN OLD.document_status = 'posted' AND (
+        NEW.currency_code <> OLD.currency_code OR NEW.exchange_rate_to_base <> OLD.exchange_rate_to_base
+        OR NEW.exchange_rate_date <> OLD.exchange_rate_date OR NEW.exchange_rate_source <> OLD.exchange_rate_source)
+      BEGIN SELECT RAISE(ABORT, 'Posted document currency and exchange rate are immutable'); END;
+    `);
+  }
   if (sqliteTableExists(sqlite, "debit_notes")) {
     sqlite.exec(`
       CREATE TRIGGER IF NOT EXISTS posted_debit_note_currency_immutable

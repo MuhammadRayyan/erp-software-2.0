@@ -11,7 +11,7 @@ Updated **29 October 2026** from source, release evidence and authenticated oper
 
 ## Implemented architecture
 
-Node **22**, npm **10.9.4**, Next.js **16.4.3**, React **19.2.8**, TypeScript **6.0.3**, Tailwind **4.3.3**, Better Auth **1.6.26**, better-sqlite3 **13.0.3**, Drizzle **0.45.2**, decimal.js **10.6.0**, Sentry SDK **10.75.2**. Pins/lockfile and Docker/workflow are authoritative when versions change.
+Node **22**, npm **10.9.4**, Next.js **16.4.3**, React **19.2.8**, TypeScript **6.0.3**, Tailwind **4.3.3**, Better Auth **1.7.14**, better-sqlite3 **13.0.3**, Drizzle **0.45.2**, decimal.js **10.6.0**, Sentry SDK **10.75.2**. Pins/lockfile and Docker/workflow are authoritative when versions change.
 
 One application owns UI, actions/routes, domain services, databases, attachments and React PDF/Chromium rendering. Production is a native ARM64 standalone image, non-root UID/GID 10001, read-only root, writable temporary/cache/data mounts, 3 GiB app memory, PID limit 256 and bounded logs. There is no separate backend, Redis, queue or database cluster.
 

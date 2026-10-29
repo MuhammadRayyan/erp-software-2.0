@@ -188,7 +188,7 @@ export function importManagerBackupToNewBusiness(
 
   const nameToUse = options.overrideBusinessName?.trim() || extracted.business.name;
 
-  // 1. Create new isolated business workspace (automatically runs all migrations up to 33)
+  // 1. Create new isolated business workspace (automatically runs all latest business migrations)
   const { id: businessId, directoryKey } = createBusiness(
     {
       name: nameToUse,
@@ -1095,15 +1095,25 @@ export function importManagerBackupToNewBusiness(
           ?, ?, ?, ?, ?, ?
         )
       `);
+      const defaultEarningsAccountId = (context.sqlite.prepare(`
+        SELECT id FROM accounts WHERE id = 'acct-salaries-expense-6100' OR (type = 'expense' AND is_active = 1)
+        ORDER BY (id = 'acct-salaries-expense-6100') DESC, created_at ASC LIMIT 1
+      `).get() as { id: string } | undefined)?.id || "acct-salaries-expense-6100";
+
+      const defaultDeductionsAccountId = (context.sqlite.prepare(`
+        SELECT id FROM accounts WHERE id = 'acct-payroll-payable-2200' OR (type = 'liability' AND is_active = 1)
+        ORDER BY (id = 'acct-payroll-payable-2200') DESC, created_at ASC LIMIT 1
+      `).get() as { id: string } | undefined)?.id || "acct-payroll-payable-2200";
+
       const insertEarningsLine = context.sqlite.prepare(`
         INSERT INTO payslip_lines (
           id, payslip_id, item_id, type, description, account_id, amount_minor, position
-        ) VALUES (?, ?, NULL, 'earnings', 'Basic Salary', 'acct-salaries-expense-6100', ?, 1)
+        ) VALUES (?, ?, NULL, 'earnings', 'Basic Salary', ?, ?, 1)
       `);
       const insertDeductionLine = context.sqlite.prepare(`
         INSERT INTO payslip_lines (
           id, payslip_id, item_id, type, description, account_id, amount_minor, position
-        ) VALUES (?, ?, NULL, 'deduction', 'Payroll Deductions', 'acct-payroll-payable-2200', ?, 2)
+        ) VALUES (?, ?, NULL, 'deduction', 'Payroll Deductions', ?, ?, 2)
       `);
       const defaultEmpId = extracted.employees[0]?.id || "default-emp";
       for (let i = 0; i < extracted.payslips.length; i++) {
@@ -1139,6 +1149,7 @@ export function importManagerBackupToNewBusiness(
           insertEarningsLine.run(
             randomUUID(),
             slip.id,
+            defaultEarningsAccountId,
             grossMinor,
           );
         }
@@ -1146,6 +1157,7 @@ export function importManagerBackupToNewBusiness(
           insertDeductionLine.run(
             randomUUID(),
             slip.id,
+            defaultDeductionsAccountId,
             deductionsMinor,
           );
         }
