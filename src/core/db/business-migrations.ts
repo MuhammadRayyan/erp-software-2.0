@@ -1795,9 +1795,21 @@ function upgradeToPhase9(sqlite: Database.Database) {
       NEW.currency_code <> OLD.currency_code OR NEW.exchange_rate_to_base <> OLD.exchange_rate_to_base
       OR NEW.exchange_rate_date <> OLD.exchange_rate_date OR NEW.exchange_rate_source <> OLD.exchange_rate_source)
     BEGIN SELECT RAISE(ABORT, 'Posted document currency and exchange rate are immutable'); END;
-    CREATE TRIGGER posted_credit_note_currency_immutable
+    CREATE TRIGGER IF NOT EXISTS posted_credit_note_currency_immutable
     BEFORE UPDATE OF currency_code, exchange_rate_to_base, exchange_rate_date, exchange_rate_source
     ON sales_credit_notes WHEN OLD.document_status = 'posted' AND (
+      NEW.currency_code <> OLD.currency_code OR NEW.exchange_rate_to_base <> OLD.exchange_rate_to_base
+      OR NEW.exchange_rate_date <> OLD.exchange_rate_date OR NEW.exchange_rate_source <> OLD.exchange_rate_source)
+    BEGIN SELECT RAISE(ABORT, 'Posted document currency and exchange rate are immutable'); END;
+    CREATE TRIGGER IF NOT EXISTS posted_receipt_currency_immutable
+    BEFORE UPDATE OF currency_code, exchange_rate_to_base, exchange_rate_date, exchange_rate_source
+    ON receipts WHEN OLD.document_status = 'posted' AND (
+      NEW.currency_code <> OLD.currency_code OR NEW.exchange_rate_to_base <> OLD.exchange_rate_to_base
+      OR NEW.exchange_rate_date <> OLD.exchange_rate_date OR NEW.exchange_rate_source <> OLD.exchange_rate_source)
+    BEGIN SELECT RAISE(ABORT, 'Posted document currency and exchange rate are immutable'); END;
+    CREATE TRIGGER IF NOT EXISTS posted_supplier_payment_currency_immutable
+    BEFORE UPDATE OF currency_code, exchange_rate_to_base, exchange_rate_date, exchange_rate_source
+    ON supplier_payments WHEN OLD.document_status = 'posted' AND (
       NEW.currency_code <> OLD.currency_code OR NEW.exchange_rate_to_base <> OLD.exchange_rate_to_base
       OR NEW.exchange_rate_date <> OLD.exchange_rate_date OR NEW.exchange_rate_source <> OLD.exchange_rate_source)
     BEGIN SELECT RAISE(ABORT, 'Posted document currency and exchange rate are immutable'); END;
@@ -3011,6 +3023,13 @@ export function upgradeToPhase15(db: Database.Database) {
       position INTEGER NOT NULL
     );
     CREATE INDEX IF NOT EXISTS debit_note_lines_note_idx ON debit_note_lines(debit_note_id);
+
+    CREATE TRIGGER IF NOT EXISTS posted_debit_note_currency_immutable
+    BEFORE UPDATE OF currency_code, exchange_rate_to_base, exchange_rate_date, exchange_rate_source
+    ON debit_notes WHEN OLD.document_status = 'posted' AND (
+      NEW.currency_code <> OLD.currency_code OR NEW.exchange_rate_to_base <> OLD.exchange_rate_to_base
+      OR NEW.exchange_rate_date <> OLD.exchange_rate_date OR NEW.exchange_rate_source <> OLD.exchange_rate_source)
+    BEGIN SELECT RAISE(ABORT, 'Posted document currency and exchange rate are immutable'); END;
   `);
 }
 

@@ -43,7 +43,7 @@ const nextConfig: NextConfig = {
               "style-src 'self' 'unsafe-inline'",
               "font-src 'self' data:",
               "img-src 'self' data: blob:",
-              "connect-src 'self'",
+              "connect-src 'self' https://*.ingest.de.sentry.io https://*.sentry.io",
               "frame-src 'self' blob: data:",
               "frame-ancestors 'self'",
               "base-uri 'self'",

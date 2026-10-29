@@ -31,6 +31,7 @@ export type NavItem = {
   path: string;
   icon: typeof LayoutDashboard;
   module?: ModuleKey;
+  modules?: readonly ModuleKey[];
 };
 
 export const primaryNav: { label?: string; items: NavItem[] }[] = [
@@ -58,6 +59,7 @@ export const primaryNav: { label?: string; items: NavItem[] }[] = [
       { label: "Supplier Payments", path: "/purchases/payments", icon: HandCoins, module: "purchases" },
       { label: "Debit Notes", path: "/purchases/debit-notes", icon: ReceiptText, module: "purchases" },
       { label: "Goods Receipts", path: "/purchases/goods-receipts", icon: PackageCheck, module: "purchases" },
+      { label: "Sent Emails", path: "/emails", icon: Mail, module: "purchases" },
     ],
   },
   {

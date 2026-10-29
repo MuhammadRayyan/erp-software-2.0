@@ -1095,14 +1095,27 @@ export function importManagerBackupToNewBusiness(
           ?, ?, ?, ?, ?, ?
         )
       `);
+      const insertEarningsLine = context.sqlite.prepare(`
+        INSERT INTO payslip_lines (
+          id, payslip_id, item_id, type, description, account_id, amount_minor, position
+        ) VALUES (?, ?, NULL, 'earnings', 'Basic Salary', 'acct-salaries-expense-6100', ?, 1)
+      `);
+      const insertDeductionLine = context.sqlite.prepare(`
+        INSERT INTO payslip_lines (
+          id, payslip_id, item_id, type, description, account_id, amount_minor, position
+        ) VALUES (?, ?, NULL, 'deduction', 'Payroll Deductions', 'acct-payroll-payable-2200', ?, 2)
+      `);
       const defaultEmpId = extracted.employees[0]?.id || "default-emp";
       for (let i = 0; i < extracted.payslips.length; i++) {
         const slip = extracted.payslips[i];
         const targetEmpId =
           (slip.employeeId && employeeMap.has(slip.employeeId) && slip.employeeId) ||
           defaultEmpId;
-        const grossMinor = Math.round(slip.grossAmount * 100);
-        const netMinor = Math.round(slip.netAmount * 100);
+        const rawGrossMinor = Math.round(slip.grossAmount * 100);
+        const rawNetMinor = Math.round(slip.netAmount * 100);
+        const deductionsMinor = Math.max(0, rawGrossMinor - rawNetMinor);
+        const grossMinor = Math.max(rawGrossMinor, rawNetMinor + deductionsMinor);
+        const netMinor = grossMinor - deductionsMinor;
         const postedAtVal = docStatus === "posted" ? slip.date : null;
 
         insertPayslip.run(
@@ -1112,7 +1125,7 @@ export function importManagerBackupToNewBusiness(
           slip.date,
           slip.periodDescription || null,
           grossMinor,
-          0,
+          deductionsMinor,
           netMinor,
           docStatus,
           slip.notes || null,
@@ -1121,6 +1134,21 @@ export function importManagerBackupToNewBusiness(
           postedAtVal,
           now,
         );
+
+        if (grossMinor > 0) {
+          insertEarningsLine.run(
+            randomUUID(),
+            slip.id,
+            grossMinor,
+          );
+        }
+        if (deductionsMinor > 0) {
+          insertDeductionLine.run(
+            randomUUID(),
+            slip.id,
+            deductionsMinor,
+          );
+        }
       }
 
       // 4.19 Insert Journal Entries & Lines
@@ -1162,7 +1190,7 @@ export function importManagerBackupToNewBusiness(
     })();
 
     // 5. Restore SQLite pragmas to production defaults
-    context.sqlite.pragma("synchronous = NORMAL");
+    context.sqlite.pragma("synchronous = FULL");
     context.sqlite.pragma("journal_mode = WAL");
 
     // 6. Log migration event in the new business activity log
@@ -1172,6 +1200,7 @@ export function importManagerBackupToNewBusiness(
       entityId: businessId,
       entityNumber: nameToUse,
       action: "created",
+      createdAt: now,
       summary: `Imported business '${nameToUse}' from Manager.io (${docStatus} mode) with ${extracted.customers.length} customers, ${extracted.suppliers.length} suppliers, ${extracted.salesInvoices.length} invoices, ${extracted.purchaseInvoices.length} bills, and ${extracted.employees.length} employees.`,
       details: {
         source: "manager.io",
@@ -1226,7 +1255,7 @@ export function importManagerBackupToNewBusiness(
     };
   } catch (err) {
     try {
-      context.sqlite.pragma("synchronous = NORMAL");
+      context.sqlite.pragma("synchronous = FULL");
       context.sqlite.pragma("journal_mode = WAL");
     } catch {}
     closeBusinessConnection(directoryKey);

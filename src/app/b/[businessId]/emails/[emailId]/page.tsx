@@ -3,11 +3,12 @@ import { FileText, Paperclip } from "lucide-react";
 import { notFound } from "next/navigation";
 import { StatusBadge } from "@/components/status-badge";
 import { Button } from "@/components/ui/button";
-import { requireModule } from "@/core/permissions/require-module";
+import { requireAnyModule } from "@/core/permissions/require-module";
 import { formatBytes, formatDateTime } from "@/core/format";
 import { getSentEmail } from "@/modules/email/email-service";
 import { parseMailboxes } from "@/modules/email/email-driver";
 import { BackLink } from "@/components/back-link";
+import { getRelatedDocumentPath } from "../page";
 
 export const metadata = { title: "Sent Email" };
 
@@ -20,11 +21,12 @@ function displayMailbox(mailboxes: ReturnType<typeof parseMailboxes>): string {
 
 export default async function SentEmailViewPage({ params }: { params: Promise<{ businessId: string; emailId: string }> }) {
   const { businessId, emailId } = await params;
-  const { user } = await requireModule(businessId, "sales");
+  const { user } = await requireAnyModule(businessId, ["sales", "purchases"]);
   const email = getSentEmail(businessId, user.id, emailId);
   if (!email) notFound();
   const to = parseMailboxes(email.toAddresses);
   const cc = parseMailboxes(email.ccAddresses);
+  const documentPath = getRelatedDocumentPath(businessId, email.relatedEntityType, email.relatedEntityId);
 
   return (
     <div className="page-container">
@@ -43,9 +45,9 @@ export default async function SentEmailViewPage({ params }: { params: Promise<{ 
             <p className="mt-2 text-sm text-danger">Error: {email.errorMessage}</p>
           )}
         </div>
-        {email.relatedEntityType === "sales_invoice" && email.relatedEntityId && email.relatedDocumentNumber && (
-          <Button permission={"export"} asChild variant="secondary">
-            <Link href={`/b/${businessId}/sales/invoices/${email.relatedEntityId}`}>
+        {documentPath && email.relatedDocumentNumber && (
+          <Button permission={"view"} asChild variant="secondary">
+            <Link href={documentPath}>
               <FileText className="size-4" /> View {email.relatedDocumentNumber}
             </Link>
           </Button>

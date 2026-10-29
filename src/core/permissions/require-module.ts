@@ -20,6 +20,15 @@ export async function requireModule(businessId: string, module: ModuleKey) {
   return { user, access };
 }
 
+export async function requireAnyModule(businessId: string, modules: readonly ModuleKey[]) {
+  const user = await requireUser();
+  const access = getBusinessAccess(businessId, user.id);
+  if (!access) redirect("/businesses");
+  const hasAny = modules.some((m) => hasActionPermission(businessId, user.id, m, "view"));
+  if (!hasAny) redirect(`/b/${businessId}/forbidden?module=${modules.join(",")}`);
+  return { user, access };
+}
+
 /**
  * Standardized server-side guard to enforce fine-grained action permissions on a business module.
  *
