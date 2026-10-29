@@ -16,7 +16,7 @@ export function getRelatedDocumentPath(
   entityId: string | null | undefined,
 ): string | null {
   if (!entityType || !entityId) return null;
-  const normalized = entityType.replace(/-/g, "_");
+  const normalized = entityType.trim().toLowerCase().replace(/-/g, "_");
   switch (normalized) {
     case "sales_invoice":
       return `/b/${businessId}/sales/invoices/${entityId}`;
