@@ -26,7 +26,7 @@ function isFontKey(value: string): value is FontKey {
 }
 
 export const metadata: Metadata = {
-  title: { default: "Ledgerly ERP", template: "%s · Ledgerly ERP" },
+  title: { default: "UAE Manager", template: "%s · UAE Manager" },
   description: "Compact, modern accounting for real businesses.",
 };
 

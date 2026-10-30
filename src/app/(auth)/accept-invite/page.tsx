@@ -6,7 +6,7 @@ import { verifyInvitationToken } from "@/core/permissions/invitation-service";
 import { AcceptInviteForm } from "./accept-invite-form";
 
 export const metadata = {
-  title: "Accept Invitation · Ledgerly ERP",
+  title: "Accept Invitation · UAE Manager",
 };
 
 export default async function AcceptInvitePage({

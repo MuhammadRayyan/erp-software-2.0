@@ -1,6 +1,6 @@
 ---
 name: oracle-cloud-deployment
-description: "Operational runbook for Ledgerly ERP on Oracle Cloud: verified immutable releases, Docker, Caddy, GitHub Actions, backups and recovery."
+description: "Operational runbook for UAE Manager on Oracle Cloud: verified immutable releases, Docker, Caddy, GitHub Actions, backups and recovery."
 ---
 
 # Oracle production operations

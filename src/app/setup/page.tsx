@@ -4,7 +4,7 @@ import { BrandMark } from "@/components/brand-mark";
 import { isSetupComplete } from "@/core/auth/setup-service";
 import { SetupForm } from "./setup-form";
 
-export const metadata = { title: "Platform Setup | Ledgerly ERP" };
+export const metadata = { title: "Platform Setup | UAE Manager" };
 
 export default async function SetupPage({
   searchParams,
@@ -31,7 +31,7 @@ export default async function SetupPage({
               Initialize your root workspace.
             </h2>
             <p className="mt-4 text-[14px] leading-6 text-muted-foreground">
-              Welcome to Ledgerly ERP. Before entering the application, you must establish the permanent Super-Admin
+              Welcome to UAE Manager. Before entering the application, you must establish the permanent Super-Admin
               account.
             </p>
             <div className="mt-6 space-y-3 rounded-lg border border-border bg-surface/60 p-4 text-xs text-muted-foreground">
@@ -48,7 +48,7 @@ export default async function SetupPage({
             </div>
           </div>
           <p className="text-xs text-muted-foreground">
-            Ledgerly ERP · Self-Hosted Accounting & Workspace Infrastructure
+            UAE Manager · Self-Hosted Accounting & Workspace Infrastructure
           </p>
         </section>
 

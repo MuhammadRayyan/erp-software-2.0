@@ -10,11 +10,14 @@ import { LoginForm } from "./login-form";
 export const metadata = { title: "Sign in" };
 
 /** Served from public/downloads when a source archive is present (delivery convenience; auto-hides otherwise). */
-const SOURCE_ARCHIVE_URL = "/downloads/ledgerly-erp-v2.1.1-source.zip";
+const SOURCE_ARCHIVE_URL = "/downloads/uae-manager-source.zip";
 
 function sourceArchiveAvailable() {
   try {
-    return existsSync(path.join(process.cwd(), "public", "downloads", "ledgerly-erp-v2.1.1-source.zip"));
+    return (
+      existsSync(path.join(process.cwd(), "public", "downloads", "uae-manager-source.zip")) ||
+      existsSync(path.join(process.cwd(), "public", "downloads", "ledgerly-erp-v2.1.1-source.zip"))
+    );
   } catch {
     return false;
   }
@@ -106,7 +109,7 @@ export default async function LoginPage({
             )}
             <LoginForm redirectTo={redirectTo} initialEmail={params.email || ""} />
             <p className="mt-7 text-center text-xs leading-5 text-muted-foreground">
-              Ledgerly ERP · Local accounting build · Your business files stay isolated.
+              UAE Manager · Local accounting build · Your business files stay isolated.
             </p>
             {showArchiveLink ? (
               <a

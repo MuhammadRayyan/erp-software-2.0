@@ -9,7 +9,7 @@ export function BrandMark({ compact = false, className }: { compact?: boolean; c
         <span className="rounded-[1px] bg-primary-foreground/65" />
         <span className="rounded-[1px] bg-primary-foreground/95" />
       </span>
-      {!compact && <span className="text-[15px] font-semibold tracking-[-0.02em]">Ledgerly</span>}
+      {!compact && <span className="text-[15px] font-semibold tracking-[-0.02em]">UAE Manager</span>}
     </div>
   );
 }

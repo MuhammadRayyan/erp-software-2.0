@@ -45,7 +45,7 @@ export function CreateTenantDialog({
   }
 
   async function handleCopyCredentials() {
-    const text = `Ledgerly ERP Account\nName: ${name}\nEmail: ${email}\nPassword: ${password}`;
+    const text = `UAE Manager Account\nName: ${name}\nEmail: ${email}\nPassword: ${password}`;
     const ok = await copyToClipboard(text);
     if (ok) {
       setCopied(true);

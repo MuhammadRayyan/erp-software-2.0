@@ -175,7 +175,7 @@ export function ImportDialog() {
       <DialogContent className="max-w-xl">
         <DialogTitle>Import Business Backup</DialogTitle>
         <DialogDescription>
-          Restore an existing Ledgerly (<code className="text-xs">.erpbackup</code>) or migrate a Manager.io (<code className="text-xs">.manager</code>) backup into a fresh workspace.
+          Restore an existing UAE Manager (<code className="text-xs">.erpbackup</code>) or migrate a Manager.io (<code className="text-xs">.manager</code>) backup into a fresh workspace.
         </DialogDescription>
         <form ref={formRef} onSubmit={submit} className="mt-5 space-y-4">
           <div className="rounded-lg border border-dashed border-border-strong bg-surface p-4">
@@ -375,7 +375,7 @@ export function ImportDialog() {
             <div className="rounded-lg border border-emerald-500/30 bg-emerald-500/5 p-4 space-y-2">
               <div className="flex items-center gap-2 text-emerald-600 dark:text-emerald-400 font-medium text-sm">
                 <CheckCircle2 className="size-4" />
-                <span>Ledgerly Native Backup Verified</span>
+                <span>UAE Manager Native Backup Verified</span>
               </div>
               <p className="text-xs text-muted-foreground">
                 Original Workspace: <span className="font-semibold text-foreground">{inspection.manifest.originalBusinessName}</span>

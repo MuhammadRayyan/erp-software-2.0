@@ -196,7 +196,7 @@ export async function verifyAndSendTestEmail(
   const user = input.smtpUser?.trim() || existing.smtpUser;
   const pass = (input.smtpPass && input.smtpPass.trim()) || existing.smtpPass;
   const senderEmail = input.senderEmail?.trim() || existing.senderEmail || user;
-  const senderName = input.senderName?.trim() || existing.senderName || "Ledgerly ERP";
+  const senderName = input.senderName?.trim() || existing.senderName || "UAE Manager";
 
   if (!host) {
     return { success: false, error: "SMTP Host is required to test email delivery." };
@@ -228,13 +228,13 @@ export async function verifyAndSendTestEmail(
     await transporter.sendMail({
       from: fromAddress,
       to: recipient,
-      subject: `[Test] Ledgerly ERP Outbound Delivery Test (${now.slice(0, 10)})`,
-      text: `Hello,\n\nThis is a verification test email from your Ledgerly ERP workspace.\n\nConnection Details:\n- SMTP Host: ${host}\n- SMTP Port: ${port}\n- Security: ${secure ? "SSL/TLS (Port 465)" : "STARTTLS (Port 587)"}\n- Authenticated User: ${user || "None"}\n- Timestamp: ${now}\n\nYour outbound email service is functioning properly.\n\nRegards,\nLedgerly ERP System`,
+      subject: `[Test] UAE Manager Outbound Delivery Test (${now.slice(0, 10)})`,
+      text: `Hello,\n\nThis is a verification test email from your UAE Manager workspace.\n\nConnection Details:\n- SMTP Host: ${host}\n- SMTP Port: ${port}\n- Security: ${secure ? "SSL/TLS (Port 465)" : "STARTTLS (Port 587)"}\n- Authenticated User: ${user || "None"}\n- Timestamp: ${now}\n\nYour outbound email service is functioning properly.\n\nRegards,\nUAE Manager System`,
       html: `
         <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 580px; margin: 0 auto; padding: 24px; border: 1px solid #e2e8f0; border-radius: 12px; background: #ffffff;">
           <h2 style="color: #0f172a; margin-top: 0; font-size: 20px;">✓ Outbound Email Delivery Verified</h2>
           <p style="color: #475569; font-size: 14px; line-height: 1.6;">
-            This email confirms that your outgoing SMTP server credentials in <strong>Ledgerly ERP</strong> are successfully configured and active.
+            This email confirms that your outgoing SMTP server credentials in <strong>UAE Manager</strong> are successfully configured and active.
           </p>
           <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 16px; margin: 20px 0; font-size: 13px; color: #334155;">
             <div><strong>SMTP Host:</strong> ${host}</div>
@@ -244,7 +244,7 @@ export async function verifyAndSendTestEmail(
             <div style="margin-top: 6px;"><strong>Timestamp:</strong> ${now}</div>
           </div>
           <p style="color: #64748b; font-size: 12px; margin-bottom: 0;">
-            Sent automatically via Ledgerly ERP Email Configuration.
+            Sent automatically via UAE Manager Email Configuration.
           </p>
         </div>
       `,

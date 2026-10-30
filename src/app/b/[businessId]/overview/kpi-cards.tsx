@@ -34,7 +34,7 @@ export type KpiCardData = {
 /**
  * Client wrapper around the overview KPI cards. Card visibility is toggled via
  * the "Cards" dropdown and persisted with the shared column-visibility hook
- * (localStorage key `ledgerly.cols.overview-cards`). When `serverSnapshot`
+ * (localStorage key `uaemanager.cols.overview-cards`). When `serverSnapshot`
  * + `businessId` are passed, toggles also sync to the per-account
  * preferences API so card visibility follows the user across devices.
  */

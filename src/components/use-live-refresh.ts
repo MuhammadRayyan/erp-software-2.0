@@ -3,7 +3,7 @@
 import { useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 
-const LIVE_REFRESH_CHANNEL = "ledgerly-live-sync";
+const LIVE_REFRESH_CHANNEL = "uae-manager-live-sync";
 
 /**
  * Broadcast an immediate invalidation message across all open browser tabs

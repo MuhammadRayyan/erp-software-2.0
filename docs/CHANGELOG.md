@@ -1,4 +1,4 @@
-# Changelog — Ledgerly ERP
+# Changelog — UAE Manager
 
 All notable changes since the original `erp-software-2.0-antigravity-edits` upload. Grouped by development wave, newest last. Dates use the development environment calendar (August 2026 demo data).
 

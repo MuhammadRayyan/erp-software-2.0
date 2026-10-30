@@ -24,7 +24,7 @@ import { BusinessTable, type AdminBusinessRow } from "./business-table";
 import { AuditLogTable } from "./audit-log-table";
 import { CreateTenantDialog } from "./create-tenant-dialog";
 
-export const metadata = { title: "Admin Control Panel | Ledgerly ERP" };
+export const metadata = { title: "Admin Control Panel | UAE Manager" };
 
 export default async function AdminPage({
   searchParams,
