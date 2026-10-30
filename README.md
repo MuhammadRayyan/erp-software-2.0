@@ -2,7 +2,7 @@
 
 A Manager.io-inspired accounting/ERP application: one Next.js modular monolith with an independent SQLite database for each business.
 
-Package version **2.7.0**. Verified application release: `32df273e5eeecec3db15f95bd8ba8d0f1cc1cd93`, 26 October 2026. The owner is testing with a few businesses and **5–10 users**, keeping the repository public and deferring additional hardening.
+Package version **2.7.0**. Verified application release: `252093a78db7df9afd9810e96344c1bd237829a9`, 29 October 2026. The owner is testing with a few businesses and **5–10 users**, keeping the repository public and deferring additional hardening.
 
 ## Documentation
 
@@ -12,10 +12,10 @@ Package version **2.7.0**. Verified application release: `32df273e5eeecec3db15f9
 | [System dossier](SYSTEM_DOSSIER.md) | Architecture and operational specification |
 | [Deployment](docs/DEPLOYMENT.md) | Remote work, automated releases and recovery |
 | [Next steps](docs/NEXT_STEPS.md) | Testing checklist and deferred decisions |
-| [Operations verification](docs/TESTING_PHASE_OPERATIONS_2026-10-26.md) | Actual server/OCI/Sentry observations and access |
-| [Hardening outcome](docs/HARDENING_OUTCOME_2026-10-26.md) | Implemented fixes, tests and rollout evidence |
+| [Operations verification](docs/history/TESTING_PHASE_OPERATIONS_2026-10-26.md) | Actual server/OCI/Sentry observations and access |
+| [Hardening outcome](docs/history/HARDENING_OUTCOME_2026-10-26.md) | Implemented fixes, tests and rollout evidence |
 | [Theme](docs/THEME.md) | Shared UI tokens and layout rules |
-| [Flow verification and cleanup](docs/FLOW_VERIFICATION_AND_CLEANUP_2026-10-26.md) | Current acceptance results, isolation and retained/archived files |
+| [Flow verification and cleanup](docs/history/FLOW_VERIFICATION_AND_CLEANUP_2026-10-26.md) | Current acceptance results, isolation and retained/archived files |
 | [Changelog](docs/CHANGELOG.md) | Feature/release history |
 
 Historical worklogs, branch notes and the 25 October review describe earlier releases. Follow the current state and deployment guide for operational commands. A historical backlog is not authorization to execute it.

@@ -1,6 +1,6 @@
 # Ledgerly ERP — architecture and operations dossier
 
-Verified baseline: package **2.7.0**, application revision `32df273e5eeecec3db15f95bd8ba8d0f1cc1cd93`, **26 October 2026**. This replaces the older build-on-server specification, runtime mismatch and unverified zero-downtime/free-tier/compliance claims. [Current state](docs/CURRENT_STATE.md) owns release facts, [deployment](docs/DEPLOYMENT.md) owns procedures, and [next steps](docs/NEXT_STEPS.md) owns the testing plan.
+Verified baseline: package **2.7.0**, application revision `252093a78db7df9afd9810e96344c1bd237829a9`, **29 October 2026**. This replaces the older build-on-server specification, runtime mismatch and unverified zero-downtime/free-tier/compliance claims. [Current state](docs/CURRENT_STATE.md) owns release facts, [deployment](docs/DEPLOYMENT.md) owns procedures, and [next steps](docs/NEXT_STEPS.md) owns the testing plan.
 
 ## Architecture and data
 
@@ -81,6 +81,6 @@ Sentry project `personal-bv0 / erp-20`, historical events, three monitors and on
 
 The last app release passed **345 unit/integration**, **5 isolated browser** and **8 deployment recovery** scenarios plus native image/PDF/WAL gates. This is not exhaustive load, penetration, UX/accessibility or regulatory certification. Large reports/imports and concurrent Chromium work are areas to measure if usage grows. The pending kernel reboot has not been performed; additional maintenance automation remains deferred.
 
-Proceed with [closed user acceptance testing](docs/NEXT_STEPS.md), defect-driven fixes and the existing PR flow. Offsite recovery, SMTP, import/quota redesign, broader audit controls, deployment privilege reduction, dependency cleanup and load testing remain deferred. The real Manager.io backup remains tracked/public under the owner's ignore-only decision; ignore rules do not remove existing data/history. The [operations report](docs/TESTING_PHASE_OPERATIONS_2026-10-26.md) records dated observations and limits.
+Proceed with [closed user acceptance testing](docs/NEXT_STEPS.md), defect-driven fixes and the existing PR flow. Offsite recovery, SMTP, import/quota redesign, broader audit controls, deployment privilege reduction, dependency cleanup and load testing remain deferred. The real Manager.io backup remains tracked/public under the owner's ignore-only decision; ignore rules do not remove existing data/history. The [operations report](docs/history/TESTING_PHASE_OPERATIONS_2026-10-26.md) records dated observations and limits.
 
-The subsequent local [acceptance and cleanup round](docs/FLOW_VERIFICATION_AND_CLEANUP_2026-10-26.md) passed 341 synthetic service/regression checks and eleven production-build browser scenarios. It adds an isolated default test harness and expands the local workflow's browser gate; those edits have not been deployed. Historical records are now indexed under [docs/history](docs/history/README.md).
+The subsequent local [acceptance and cleanup round](docs/history/FLOW_VERIFICATION_AND_CLEANUP_2026-10-26.md) passed 341 synthetic service/regression checks and eleven production-build browser scenarios. It adds an isolated default test harness and expands the local workflow's browser gate; those edits have not been deployed. Historical records are now indexed under [docs/history](docs/history/README.md).

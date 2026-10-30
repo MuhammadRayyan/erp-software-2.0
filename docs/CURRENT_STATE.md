@@ -4,8 +4,8 @@ Updated **29 October 2026** from source, release evidence and authenticated oper
 
 ## Release and scope
 
-- Package **2.7.0**; verified live deployment baseline: `f97c287031d2c823f4b305af5b6a76a8bc59c186`. For the current live revision, query [public health](https://erp-portal.rapidtss.com/api/health) and compare with the latest successful [release run](https://github.com/MuhammadRayyan/erp-software-2.0/actions/workflows/deploy.yml).
-- Image: `ghcr.io/muhammadrayyan/erp-software-2.0@sha256:ed27b5ca3a0e62dbd9ce2130f4f9194d37d60b63988767d7411921cd70f4690b`.
+- Package **2.7.0**; verified live deployment baseline: `252093a78db7df9afd9810e96344c1bd237829a9`. For the current live revision, query [public health](https://erp-portal.rapidtss.com/api/health) and compare with the latest successful [release run](https://github.com/MuhammadRayyan/erp-software-2.0/actions/workflows/deploy.yml).
+- Image: `ghcr.io/muhammadrayyan/erp-software-2.0@sha256:4d0a94e8eb49e34e93ca3a43b5c93fd859b59832532cabfe49cb7bce6461be50`.
 - Successful release verified live on Oracle Cloud VM. HTTPS health returned that revision.
 - Closed testing: a few businesses, **5–10 users**. Keep the public repository, current architecture and implemented checks. Additional hardening/backlog is owner-deferred.
 
