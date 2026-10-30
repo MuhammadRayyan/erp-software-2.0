@@ -52,7 +52,7 @@ export async function POST(request: Request) {
     }
     const manifest = JSON.parse(await manifestFile.async("string"));
     return NextResponse.json({
-      type: "ledgerly",
+      type: "uaemanager",
       manifest,
     });
   } catch {

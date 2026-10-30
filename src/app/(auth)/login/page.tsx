@@ -10,16 +10,17 @@ import { LoginForm } from "./login-form";
 export const metadata = { title: "Sign in" };
 
 /** Served from public/downloads when a source archive is present (delivery convenience; auto-hides otherwise). */
-const SOURCE_ARCHIVE_URL = "/downloads/uae-manager-source.zip";
-
-function sourceArchiveAvailable() {
+function getSourceArchiveUrl(): string | null {
   try {
-    return (
-      existsSync(path.join(process.cwd(), "public", "downloads", "uae-manager-source.zip")) ||
-      existsSync(path.join(process.cwd(), "public", "downloads", "ledgerly-erp-v2.1.1-source.zip"))
-    );
+    if (existsSync(path.join(process.cwd(), "public", "downloads", "uae-manager-source.zip"))) {
+      return "/downloads/uae-manager-source.zip";
+    }
+    if (existsSync(path.join(process.cwd(), "public", "downloads", "ledgerly-erp-v2.1.1-source.zip"))) {
+      return "/downloads/ledgerly-erp-v2.1.1-source.zip";
+    }
+    return null;
   } catch {
-    return false;
+    return null;
   }
 }
 
@@ -39,7 +40,7 @@ export default async function LoginPage({
   const showSuspendedNotice = params.suspended === "1";
   const showResetSuccess = params.reset === "1";
   const showRegisteredSuccess = params.registered === "1";
-  const showArchiveLink = sourceArchiveAvailable();
+  const sourceArchiveUrl = getSourceArchiveUrl();
   return (
     <main className="grid min-h-dvh place-items-center p-4 sm:p-8">
       <div className="grid w-full max-w-[980px] overflow-hidden rounded-xl border border-border bg-surface-raised shadow-2xl dark:shadow-none md:grid-cols-[1.05fr_0.95fr]">
@@ -111,9 +112,9 @@ export default async function LoginPage({
             <p className="mt-7 text-center text-xs leading-5 text-muted-foreground">
               UAE Manager · Local accounting build · Your business files stay isolated.
             </p>
-            {showArchiveLink ? (
+            {sourceArchiveUrl ? (
               <a
-                href={SOURCE_ARCHIVE_URL}
+                href={sourceArchiveUrl}
                 download
                 className="group mx-auto mt-3 flex min-h-11 w-fit items-center gap-2 rounded-md border border-border bg-surface-raised px-4 py-2 text-xs font-medium text-foreground transition-colors hover:border-border-strong hover:bg-surface-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
               >

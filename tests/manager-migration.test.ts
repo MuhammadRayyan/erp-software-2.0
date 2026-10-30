@@ -19,7 +19,7 @@ test("Manager.io Universal Migration & Contracting Architecture Suite", async (t
   systemDb.insert(users).values({
     id: testUserId,
     name: "Migration Test Admin",
-    email: "migration-test@ledgerly.internal",
+    email: "migration-test@uaemanager.internal",
     emailVerified: true,
     createdAt: new Date(),
     updatedAt: new Date(),

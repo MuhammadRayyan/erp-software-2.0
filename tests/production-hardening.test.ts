@@ -195,7 +195,12 @@ test("Production hardening: permissions, financial state, recovery and startup",
     } finally {
       for (const [key, value] of Object.entries(prior)) { if (value === undefined) delete process.env[key]; else process.env[key] = value; }
     }
-    for (const secret of ["short", "ledgerly-secret-change-in-production-random-key-64chars", "replace-with-a-long-random-secret"]) {
+    for (const secret of [
+      "short",
+      "ledgerly-secret-change-in-production-random-key-64chars",
+      "uae-manager-secret-change-in-production-random-key-64chars",
+      "replace-with-a-long-random-secret",
+    ]) {
       assert.throws(() => resolveBetterAuthSecret({ NODE_ENV: "production", BETTER_AUTH_SECRET: secret }), /32 random characters/);
     }
     assert.equal(resolveBetterAuthSecret({ NODE_ENV: "production", BETTER_AUTH_SECRET: "a-random-test-only-secret-with-at-least-thirty-two-characters" }).length > 32, true);
