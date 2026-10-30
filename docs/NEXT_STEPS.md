@@ -10,11 +10,11 @@ Updated **26 October 2026**. Audience: a few businesses and 5–10 users. Keep t
 - GitHub/SSH work; private read-only Sentry access and OCI profile **ERP_OPERATIONS** are configured. OCI verification passed 13 checks, zero failures.
 - Current documentation and the deployment skill are synchronized; credentials remain outside Git.
 
-See [current state](CURRENT_STATE.md), [hardening outcome](HARDENING_OUTCOME_2026-10-26.md) and [operations evidence](TESTING_PHASE_OPERATIONS_2026-10-26.md).
+See [current state](CURRENT_STATE.md), [hardening outcome](history/HARDENING_OUTCOME_2026-10-26.md) and [operations evidence](history/TESTING_PHASE_OPERATIONS_2026-10-26.md).
 
 ## Next: one small acceptance round
 
-**Automated round completed:** 341 service/regression checks and 11 production-build browser scenarios passed using isolated synthetic businesses. [Results and cleanup](FLOW_VERIFICATION_AND_CLEANUP_2026-10-26.md) records layer-by-layer evidence and exclusions. The table below remains useful for representative human-user testing; automated checks do not establish that every screen or interaction has been reviewed.
+**Automated round completed:** 341 service/regression checks and 11 production-build browser scenarios passed using isolated synthetic businesses. [Results and cleanup](history/FLOW_VERIFICATION_AND_CLEANUP_2026-10-26.md) records layer-by-layer evidence and exclusions. The table below remains useful for representative human-user testing; automated checks do not establish that every screen or interaction has been reviewed.
 
 Use an identified disposable test business with synthetic records. Assign Administrator and restricted-user testers. Do not run destructive scenarios or fixture scripts in customer businesses.
 

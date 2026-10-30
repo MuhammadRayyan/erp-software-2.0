@@ -33,7 +33,7 @@ GitHub and verified SSH access work. The owner workstation also has separately a
 - **Sentry:** private `~/.sentryclirc`, project `personal-bv0 / erp-20`, scopes `alerts:read`, `event:read`, `org:read`, `project:read`. Project/historical events and existing monitors/email workflow were verified. Current-release ingestion/association, source-map upload and notification delivery remain unproven. The DSN is not a management token, and the read-only token is not a CI write credential.
 - Private keys/tokens remain outside Git and have restricted Windows ACLs. Never copy them into a report, workflow, image or production environment merely to run operational checks. Do not widen permissions to resolve a read error without identifying the missing operation first.
 
-The verified VM is A1 Flex ARM64, 2 OCPUs/12 GB RAM, with a 100 GB boot volume at 10 VPUs/GB. No boot-volume backup policy/backups, VNIC NSGs or root alarms were returned by the scoped checks. These are separate from local application deployment snapshots. Trial credit was observed; settled billing/free-tier eligibility remains unestablished. See [dated operations evidence](TESTING_PHASE_OPERATIONS_2026-10-26.md) for limits and the pending reboot.
+The verified VM is A1 Flex ARM64, 2 OCPUs/12 GB RAM, with a 100 GB boot volume at 10 VPUs/GB. No boot-volume backup policy/backups, VNIC NSGs or root alarms were returned by the scoped checks. These are separate from local application deployment snapshots. Trial credit was observed; settled billing/free-tier eligibility remains unestablished. See [dated operations evidence](history/TESTING_PHASE_OPERATIONS_2026-10-26.md) for limits and the pending reboot.
 
 ## Runtime secrets
 
