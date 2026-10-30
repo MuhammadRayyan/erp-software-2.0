@@ -2,7 +2,7 @@ import { BrandMark } from "@/components/brand-mark";
 import { ForgotPasswordForm } from "./forgot-password-form";
 
 export const metadata = {
-  title: "Forgot Password · Ledgerly ERP",
+  title: "Forgot Password · UAE Manager",
 };
 
 export default function ForgotPasswordPage() {

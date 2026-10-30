@@ -5,7 +5,8 @@ import { useCallback, useEffect, useRef, useSyncExternalStore } from "react";
 /** Column/card visibility map shared by list tables and dashboard widgets. */
 export type ColumnVisibility = Record<string, boolean>;
 
-const STORAGE_PREFIX = "ledgerly.cols.";
+const STORAGE_PREFIX = "uaemanager.cols.";
+const LEGACY_STORAGE_PREFIX = "ledgerly.cols.";
 
 type StoreEntry = { initial: ColumnVisibility; value: ColumnVisibility };
 
@@ -17,7 +18,9 @@ const listeners = new Map<string, Set<() => void>>();
 function readStoredVisibility(storageKey: string, initial: ColumnVisibility): ColumnVisibility {
   if (typeof window === "undefined") return initial;
   try {
-    const raw = window.localStorage.getItem(`${STORAGE_PREFIX}${storageKey}`);
+    const raw =
+      window.localStorage.getItem(`${STORAGE_PREFIX}${storageKey}`) ??
+      window.localStorage.getItem(`${LEGACY_STORAGE_PREFIX}${storageKey}`);
     if (!raw) return initial;
     const parsed: unknown = JSON.parse(raw);
     if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) return initial;
@@ -118,7 +121,7 @@ function useDebouncedServerSync(businessId: string, storageKey: string, enabled:
 
 /**
  * Column visibility state persisted to localStorage under
- * `ledgerly.cols.${storageKey}` (fast hydration cache) and, optionally,
+ * `uaemanager.cols.${storageKey}` (fast hydration cache) and, optionally,
  * to the per-account server-side preferences store for cross-device sync.
  * Falls back to `initial` when nothing is stored or the stored payload is
  * malformed.

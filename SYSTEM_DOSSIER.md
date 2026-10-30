@@ -1,4 +1,4 @@
-# Ledgerly ERP — architecture and operations dossier
+# UAE Manager — architecture and operations dossier
 
 Verified baseline: package **2.7.0**, application revision `252093a78db7df9afd9810e96344c1bd237829a9`, **29 October 2026**. This replaces the older build-on-server specification, runtime mismatch and unverified zero-downtime/free-tier/compliance claims. [Current state](docs/CURRENT_STATE.md) owns release facts, [deployment](docs/DEPLOYMENT.md) owns procedures, and [next steps](docs/NEXT_STEPS.md) owns the testing plan.
 

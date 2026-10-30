@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { requireSuperAdmin } from "@/core/auth/session";
 
 export const metadata = {
-  title: "Admin Control Panel | Ledgerly ERP",
+  title: "Admin Control Panel | UAE Manager",
 };
 
 export default async function AdminLayout({ children }: { children: React.ReactNode }) {

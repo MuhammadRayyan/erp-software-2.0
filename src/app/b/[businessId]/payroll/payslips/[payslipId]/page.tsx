@@ -55,7 +55,7 @@ export default async function PayslipDetailPage({
         <div className="flex flex-col sm:flex-row justify-between items-start gap-4 border-b border-border pb-6">
           <div>
             <h1 className="text-xl font-bold text-foreground">
-              {profile?.tradingName || profile?.legalName || "Ledgerly Business"}
+              {profile?.tradingName || profile?.legalName || "UAE Manager Business"}
             </h1>
             <div className="text-xs text-muted-foreground mt-1 space-y-0.5">
               {profile?.addressLine1 && <div>{profile.addressLine1}</div>}

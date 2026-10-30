@@ -5,7 +5,8 @@ import { useCallback, useRef, useSyncExternalStore } from "react";
 
 export type TableDensity = "compact" | "default" | "comfortable";
 
-const STORAGE_KEY = "ledgerly.density";
+const STORAGE_KEY = "uaemanager.density";
+const LEGACY_STORAGE_KEY = "ledgerly.density";
 const SERVER_DEBOUNCE_MS = 500;
 
 let currentDensity: TableDensity = "default";
@@ -14,7 +15,7 @@ const listeners = new Set<() => void>();
 function readStoredDensity(): TableDensity {
   if (typeof window === "undefined") return "default";
   try {
-    const raw = window.localStorage.getItem(STORAGE_KEY);
+    const raw = window.localStorage.getItem(STORAGE_KEY) ?? window.localStorage.getItem(LEGACY_STORAGE_KEY);
     if (raw === "compact" || raw === "default" || raw === "comfortable") return raw;
   } catch {}
   return "default";

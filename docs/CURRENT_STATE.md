@@ -1,4 +1,4 @@
-# Current state — Ledgerly ERP
+# Current state — UAE Manager
 
 Updated **29 October 2026** from source, release evidence and authenticated operational checks. Historical implementation narratives remain in [CHANGELOG.md](CHANGELOG.md), [history](history/README.md) and Git history.
 

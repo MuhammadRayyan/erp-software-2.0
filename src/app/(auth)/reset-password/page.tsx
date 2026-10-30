@@ -6,7 +6,7 @@ import { verifyPasswordResetToken } from "@/core/permissions/invitation-service"
 import { ResetPasswordForm } from "./reset-password-form";
 
 export const metadata = {
-  title: "Reset Password · Ledgerly ERP",
+  title: "Reset Password · UAE Manager",
 };
 
 export default async function ResetPasswordPage({

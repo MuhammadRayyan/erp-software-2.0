@@ -1,4 +1,4 @@
-# Ledgerly ERP
+# UAE Manager
 
 A Manager.io-inspired accounting/ERP application: one Next.js modular monolith with an independent SQLite database for each business.
 

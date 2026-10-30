@@ -188,7 +188,7 @@ export function EngineHealthView({ initialData }: { initialData: EngineDiagnosti
               <p className="mt-1.5 text-lg font-bold font-mono text-foreground">
                 {formatBytes(data.database.systemDbSizeBytes)}
               </p>
-              <p className="text-xs text-muted-foreground">ledgerly-system.db</p>
+              <p className="text-xs text-muted-foreground">system.sqlite</p>
             </div>
             <div className="rounded-lg border border-border bg-surface/60 p-3.5">
               <p className="text-xs font-medium text-muted-foreground">WAL Journal File</p>
@@ -282,7 +282,7 @@ export function EngineHealthView({ initialData }: { initialData: EngineDiagnosti
               <p className="mt-1.5 text-lg font-bold font-mono text-foreground">
                 {data.processInfo.nodeVersion}
               </p>
-              <p className="text-xs text-muted-foreground">Ledgerly v{data.processInfo.version}</p>
+              <p className="text-xs text-muted-foreground">UAE Manager v{data.processInfo.version}</p>
             </div>
             <div className="rounded-lg border border-border bg-surface/60 p-3.5">
               <p className="text-xs font-medium text-muted-foreground">Host Architecture</p>

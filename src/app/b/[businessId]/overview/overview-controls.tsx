@@ -5,7 +5,8 @@ import { usePathname, useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 
-const RANGE_STORAGE_KEY = "ledgerly.overview.range";
+const RANGE_STORAGE_KEY = "uaemanager.overview.range";
+const LEGACY_RANGE_STORAGE_KEY = "ledgerly.overview.range";
 const RANGE_PREFERENCE_KEY = "overview.range";
 const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -58,7 +59,7 @@ const presets: { label: string; range: () => DateRange }[] = [
 function readStoredRange(): DateRange | null {
   if (typeof window === "undefined") return null;
   try {
-    const raw = window.localStorage.getItem(RANGE_STORAGE_KEY);
+    const raw = window.localStorage.getItem(RANGE_STORAGE_KEY) ?? window.localStorage.getItem(LEGACY_RANGE_STORAGE_KEY);
     if (!raw) return null;
     const parsed: unknown = JSON.parse(raw);
     if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) return null;
@@ -95,7 +96,7 @@ function applyRange(router: ReturnType<typeof useRouter>, pathname: string, rang
  * every change writes search params (server-side filtering of period KPIs).
  *
  * Persistence uses two layers:
- *  - localStorage (`ledgerly.overview.range`) for fast first-paint hydration
+ *  - localStorage (`uaemanager.overview.range`) for fast first-paint hydration
  *    on a returning device (no network wait).
  *  - The per-account server preferences store (`overview.range` key) so the
  *    last choice syncs across devices and survives a browser-data clear.

@@ -23,7 +23,7 @@ function clientIpFromRequest(request: Request): string {
 }
 
 export const auth = betterAuth({
-  appName: "Ledgerly ERP",
+  appName: "UAE Manager",
   database: getSystemSqlite(),
   secret: resolveBetterAuthSecret(),
   baseURL: getAppBaseUrl(),

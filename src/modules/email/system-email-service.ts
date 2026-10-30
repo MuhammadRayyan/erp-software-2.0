@@ -17,7 +17,7 @@ export interface SendSystemEmailResult {
  */
 function resolveEmailTransport(businessId?: string) {
   let customSettings: SmtpTransportConfig | null = null;
-  let senderName = "Ledgerly ERP";
+  let senderName = "UAE Manager";
   let senderEmail = `noreply@${getAppDomain().split(":")[0]}`;
 
   if (businessId) {
@@ -51,7 +51,7 @@ export async function sendInvitationEmail(options: {
   const actionUrl = `${baseUrl}/accept-invite?token=${encodeURIComponent(options.inviteToken)}`;
   const { driver, senderName, senderEmail } = resolveEmailTransport(options.businessId);
 
-  const subject = `You're invited to join ${options.businessName} on Ledgerly ERP`;
+  const subject = `You're invited to join ${options.businessName} on UAE Manager`;
   const from = { name: senderName, email: senderEmail };
   const to = [{ email: options.to.trim().toLowerCase() }];
 
@@ -73,7 +73,7 @@ export async function sendInvitationEmail(options: {
               <tr>
                 <td style="padding: 32px 32px 24px; text-align: left; border-bottom: 1px solid #f1f5f9;">
                   <div style="font-size: 20px; font-weight: 700; color: #0f172a; letter-spacing: -0.02em;">
-                    Ledgerly ERP
+                    UAE Manager
                   </div>
                 </td>
               </tr>
@@ -83,7 +83,7 @@ export async function sendInvitationEmail(options: {
                     You've been invited to join ${options.businessName}
                   </h1>
                   <p style="margin: 0 0 20px; font-size: 15px; line-height: 1.6; color: #475569;">
-                    ${inviterText} to collaborate on <strong>${options.businessName}</strong> using Ledgerly ERP.
+                    ${inviterText} to collaborate on <strong>${options.businessName}</strong> using UAE Manager.
                   </p>
                   <p style="margin: 0 0 28px; font-size: 15px; line-height: 1.6; color: #475569;">
                     Please click the button below to set up your account username and choose your password.
@@ -106,7 +106,7 @@ export async function sendInvitationEmail(options: {
               </tr>
               <tr>
                 <td style="padding: 20px 32px; background-color: #f8fafc; border-top: 1px solid #f1f5f9; text-align: center; font-size: 12px; color: #94a3b8;">
-                  Ledgerly ERP · Fast, reliable accounting for growing teams
+                  UAE Manager · Fast, reliable accounting for growing teams
                 </td>
               </tr>
             </table>
@@ -118,7 +118,7 @@ export async function sendInvitationEmail(options: {
   `;
 
   const bodyText = `
-You've been invited to join ${options.businessName} on Ledgerly ERP.
+You've been invited to join ${options.businessName} on UAE Manager.
 
 ${inviterText} to collaborate on ${options.businessName}.
 
@@ -171,7 +171,7 @@ export async function sendPasswordResetEmail(options: {
   const actionUrl = `${baseUrl}/reset-password?token=${encodeURIComponent(options.resetToken)}`;
   const { driver, senderName, senderEmail } = resolveEmailTransport(options.businessId);
 
-  const subject = "Reset your password for Ledgerly ERP";
+  const subject = "Reset your password for UAE Manager";
   const from = { name: senderName, email: senderEmail };
   const to = [{ email: options.to.trim().toLowerCase() }];
   const greeting = options.userName ? `Hello ${options.userName},` : "Hello,";
@@ -192,7 +192,7 @@ export async function sendPasswordResetEmail(options: {
               <tr>
                 <td style="padding: 32px 32px 24px; text-align: left; border-bottom: 1px solid #f1f5f9;">
                   <div style="font-size: 20px; font-weight: 700; color: #0f172a; letter-spacing: -0.02em;">
-                    Ledgerly ERP
+                    UAE Manager
                   </div>
                 </td>
               </tr>
@@ -205,7 +205,7 @@ export async function sendPasswordResetEmail(options: {
                     ${greeting}
                   </p>
                   <p style="margin: 0 0 28px; font-size: 15px; line-height: 1.6; color: #475569;">
-                    A request was made to reset the password for your Ledgerly ERP account (<strong>${options.to}</strong>). Click the button below to choose a new password.
+                    A request was made to reset the password for your UAE Manager account (<strong>${options.to}</strong>). Click the button below to choose a new password.
                   </p>
                   <div style="text-align: center; margin: 32px 0;">
                     <a href="${actionUrl}" style="display: inline-block; background-color: #0f172a; color: #ffffff; padding: 14px 28px; font-size: 14px; font-weight: 600; text-decoration: none; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
@@ -225,7 +225,7 @@ export async function sendPasswordResetEmail(options: {
               </tr>
               <tr>
                 <td style="padding: 20px 32px; background-color: #f8fafc; border-top: 1px solid #f1f5f9; text-align: center; font-size: 12px; color: #94a3b8;">
-                  Ledgerly ERP · Security Notification
+                  UAE Manager · Security Notification
                 </td>
               </tr>
             </table>
@@ -239,7 +239,7 @@ export async function sendPasswordResetEmail(options: {
   const bodyText = `
 ${greeting}
 
-A request was made to reset the password for your Ledgerly ERP account (${options.to}).
+A request was made to reset the password for your UAE Manager account (${options.to}).
 
 To reset your password, visit the following link:
 ${actionUrl}
@@ -291,7 +291,7 @@ export async function sendAccessGrantedEmail(options: {
   const actionUrl = `${baseUrl}/b/${options.businessId}/overview`;
   const { driver, senderName, senderEmail } = resolveEmailTransport(options.businessId);
 
-  const subject = `You've been added to ${options.businessName} on Ledgerly ERP`;
+  const subject = `You've been added to ${options.businessName} on UAE Manager`;
   const from = { name: senderName, email: senderEmail };
   const to = [{ email: options.to.trim().toLowerCase() }];
 

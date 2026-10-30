@@ -26,7 +26,7 @@ export function LoginForm({
 
   useEffect(() => {
     try {
-      const saved = localStorage.getItem("ledgerly_remember_me");
+      const saved = localStorage.getItem("uae_manager_remember_me") ?? localStorage.getItem("ledgerly_remember_me");
       if (saved !== null) {
         setRememberMe(saved === "true");
       }
@@ -42,7 +42,7 @@ export function LoginForm({
     const form = new FormData(event.currentTarget);
 
     try {
-      localStorage.setItem("ledgerly_remember_me", String(rememberMe));
+      localStorage.setItem("uae_manager_remember_me", String(rememberMe));
     } catch {
       // LocalStorage write ignored
     }

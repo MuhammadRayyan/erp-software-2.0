@@ -164,7 +164,7 @@ export function AppShell({ children, business, modules, user }: ShellProps) {
       <DialogRoot open={helpOpen} onOpenChange={setHelpOpen}>
         <DialogContent>
           <DialogTitle>Help</DialogTitle>
-          <DialogDescription>The essentials for getting around Ledgerly.</DialogDescription>
+          <DialogDescription>The essentials for getting around UAE Manager.</DialogDescription>
           <div className="mt-4 space-y-4 text-sm">
             <section>
               <h3 className="font-semibold">Getting started</h3>
