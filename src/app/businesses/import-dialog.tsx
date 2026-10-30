@@ -50,7 +50,7 @@ interface ManagerSummary {
 }
 
 interface InspectionResult {
-  type: "manager" | "ledgerly";
+  type: "manager" | "uaemanager" | "ledgerly";
   summary?: ManagerSummary;
   manifest?: {
     originalBusinessName: string;
@@ -106,7 +106,7 @@ export function ImportDialog() {
         setInspection(data);
         if (data.type === "manager" && data.summary) {
           setBusinessName(data.summary.businessName);
-        } else if (data.type === "ledgerly" && data.manifest) {
+        } else if ((data.type === "uaemanager" || data.type === "ledgerly") && data.manifest) {
           setBusinessName(`${data.manifest.originalBusinessName} (Imported)`);
         }
       }
@@ -371,7 +371,7 @@ export function ImportDialog() {
             </div>
           )}
 
-          {inspection?.type === "ledgerly" && inspection.manifest && (
+          {(inspection?.type === "uaemanager" || inspection?.type === "ledgerly") && inspection.manifest && (
             <div className="rounded-lg border border-emerald-500/30 bg-emerald-500/5 p-4 space-y-2">
               <div className="flex items-center gap-2 text-emerald-600 dark:text-emerald-400 font-medium text-sm">
                 <CheckCircle2 className="size-4" />

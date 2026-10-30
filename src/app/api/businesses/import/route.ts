@@ -48,7 +48,7 @@ export async function POST(request: Request) {
     }
 
     const businessId = await importBusinessBackup(arrayBuffer, user.id);
-    return NextResponse.json({ businessId, source: "ledgerly" });
+    return NextResponse.json({ businessId, source: "uaemanager" });
   } catch (error) {
     return NextResponse.json(
       { error: error instanceof Error ? error.message : "Could not import this backup" },

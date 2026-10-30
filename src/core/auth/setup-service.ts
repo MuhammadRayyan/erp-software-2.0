@@ -20,7 +20,7 @@ export function resolveSetupKey(): string {
   const envKey = process.env.SETUP_KEY?.trim();
   if (envKey) return envKey;
   if (process.env.NODE_ENV !== "production") {
-    return "ledgerly-dev-setup-key";
+    return "uae-manager-dev-setup-key";
   }
   throw new Error("SETUP_KEY environment variable is not configured on the production host.");
 }
@@ -29,7 +29,13 @@ export function verifySetupKey(providedKey: string): boolean {
   try {
     const expected = resolveSetupKey();
     if (!providedKey || !expected) return false;
-    const providedBuffer = Buffer.from(providedKey.trim());
+    const trimmed = providedKey.trim();
+    if (process.env.NODE_ENV !== "production" && !process.env.SETUP_KEY?.trim()) {
+      if (trimmed === "uae-manager-dev-setup-key" || trimmed === "ledgerly-dev-setup-key") {
+        return true;
+      }
+    }
+    const providedBuffer = Buffer.from(trimmed);
     const expectedBuffer = Buffer.from(expected.trim());
     if (providedBuffer.length !== expectedBuffer.length) return false;
     return crypto.timingSafeEqual(providedBuffer, expectedBuffer);

@@ -24,6 +24,9 @@ timeout --foreground --kill-after=5s 45s docker run --rm --name "$operation" --i
   --tmpfs /tmp:rw,size=512m,mode=1777 --memory 1g --pids-limit 256 --cap-drop ALL --security-opt no-new-privileges \
   --network none --entrypoint node "$image" tools/verify-html-pdf.cjs
 docker run --rm --entrypoint sh "$image" -c 'test ! -f /app/.env && test ! -f /app/.env.local && test ! -f /app/manager_backup_file.manager'
+if docker run --rm --network none -e NODE_ENV=production -e BETTER_AUTH_SECRET=uae-manager-secret-change-in-production --entrypoint node "$image" tools/ops.cjs validate-env; then
+  echo "Placeholder secret unexpectedly accepted" >&2; exit 1
+fi
 if docker run --rm --network none -e NODE_ENV=production -e BETTER_AUTH_SECRET=ledgerly-secret-change-in-production --entrypoint node "$image" tools/ops.cjs validate-env; then
   echo "Placeholder secret unexpectedly accepted" >&2; exit 1
 fi
