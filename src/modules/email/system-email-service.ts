@@ -1,5 +1,5 @@
 import { getAppBaseUrl, getAppDomain } from "@/core/config/app-url";
-import { getEmailDriver, type SmtpTransportConfig } from "./email-driver";
+import { getEmailDriver, parseMailboxes, type SmtpTransportConfig } from "./email-driver";
 import { getEmailSettings } from "./email-settings-service";
 
 export interface SendSystemEmailResult {
@@ -12,13 +12,25 @@ export interface SendSystemEmailResult {
 /**
  * Resolve the best available SMTP configuration:
  * 1. Active business-level custom SMTP
- * 2. Active global environment SMTP
+ * 2. Active global environment SMTP (honoring SMTP_FROM if defined)
  * 3. Fallback log driver
  */
 function resolveEmailTransport(businessId?: string) {
   let customSettings: SmtpTransportConfig | null = null;
   let senderName = "UAE Manager";
   let senderEmail = `noreply@${getAppDomain().split(":")[0]}`;
+
+  if (process.env.SMTP_FROM) {
+    const parsed = parseMailboxes(process.env.SMTP_FROM)[0];
+    if (parsed) {
+      if (parsed.name) senderName = parsed.name;
+      if (parsed.email) senderEmail = parsed.email;
+    } else if (process.env.SMTP_FROM.includes("@")) {
+      senderEmail = process.env.SMTP_FROM.trim();
+    }
+  } else if (process.env.SMTP_USER && process.env.SMTP_USER.includes("@")) {
+    senderEmail = process.env.SMTP_USER.trim();
+  }
 
   if (businessId) {
     try {

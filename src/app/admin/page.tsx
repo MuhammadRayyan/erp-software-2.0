@@ -25,6 +25,7 @@ import { TenantsTable } from "./tenants-table";
 import { BusinessTable, type AdminBusinessRow } from "./business-table";
 import { AuditLogTable } from "./audit-log-table";
 import { CreateTenantDialog } from "./create-tenant-dialog";
+import { AdminNavTabs } from "./admin-nav-tabs";
 
 export const metadata = { title: "Admin Control Panel | UAE Manager" };
 
@@ -199,47 +200,14 @@ export default async function AdminPage({
       </div>
 
       {/* Navigation View Tabs */}
-      <div className="border-b border-border">
-        <div className="flex gap-6 text-sm font-medium">
-          <Link
-            href="/admin?tab=tenants"
-            className={`pb-3 -mb-px transition-colors ${
-              currentTab === "tenants"
-                ? "border-b-2 border-primary text-foreground font-semibold"
-                : "border-b-2 border-transparent text-muted-foreground hover:text-foreground"
-            }`}
-          >
-            Account Holders (Tenants) ({tenantRows.length})
-          </Link>
-          <Link
-            href="/admin?tab=businesses"
-            className={`pb-3 -mb-px transition-colors ${
-              currentTab === "businesses"
-                ? "border-b-2 border-primary text-foreground font-semibold"
-                : "border-b-2 border-transparent text-muted-foreground hover:text-foreground"
-            }`}
-          >
-            All Workspaces ({businessRows.length})
-          </Link>
-          <Link
-            href="/admin?tab=audit"
-            className={`pb-3 -mb-px transition-colors ${
-              currentTab === "audit"
-                ? "border-b-2 border-primary text-foreground font-semibold"
-                : "border-b-2 border-transparent text-muted-foreground hover:text-foreground"
-            }`}
-          >
-            Platform Audit Log ({auditLogs.length})
-          </Link>
-          <Link
-            href="/admin/engine-health"
-            className="pb-3 -mb-px border-b-2 border-transparent text-muted-foreground hover:text-foreground transition-colors flex items-center gap-1.5"
-          >
-            <Activity className="size-4 text-emerald-600 dark:text-emerald-400" />
-            Engine Health
-          </Link>
-        </div>
-      </div>
+      <AdminNavTabs
+        currentTab={currentTab as "tenants" | "businesses" | "audit"}
+        counts={{
+          tenants: tenantRows.length,
+          businesses: businessRows.length,
+          audit: auditLogs.length,
+        }}
+      />
 
       {/* Tab Contents */}
       <section className="space-y-4">

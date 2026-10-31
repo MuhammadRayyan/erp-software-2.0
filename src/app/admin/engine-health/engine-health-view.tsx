@@ -3,7 +3,6 @@
 import { useState, useTransition } from "react";
 import Link from "next/link";
 import {
-  Activity,
   AlertCircle,
   ArrowLeft,
   CheckCircle2,
@@ -11,14 +10,22 @@ import {
   Cpu,
   Database,
   ExternalLink,
+  LoaderCircle,
   Mail,
   RefreshCw,
+  Send,
   Server,
   Zap,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { formatBytes } from "@/core/format";
-import { getEngineDiagnosticsAction, type EngineDiagnostics } from "./actions";
+import {
+  getEngineDiagnosticsAction,
+  testGlobalEmailDeliveryAction,
+  type EngineDiagnostics,
+} from "./actions";
+import { AdminNavTabs } from "../admin-nav-tabs";
 import { toast } from "sonner";
 
 function formatUptime(seconds: number): string {
@@ -38,6 +45,63 @@ export function EngineHealthView({ initialData }: { initialData: EngineDiagnosti
   const [data, setData] = useState<EngineDiagnostics>(initialData);
   const [isPending, startTransition] = useTransition();
   const [lastPingMs, setLastPingMs] = useState<number | null>(data.database.latencyMs);
+
+  const [testEmail, setTestEmail] = useState("");
+  const [isTestingEmail, setIsTestingEmail] = useState(false);
+  const [testFeedback, setTestFeedback] = useState<{
+    type: "success" | "error";
+    message: string;
+  } | null>(null);
+
+  function handleVerifyConnection() {
+    setIsTestingEmail(true);
+    setTestFeedback(null);
+    startTransition(async () => {
+      try {
+        const res = await testGlobalEmailDeliveryAction();
+        if (res.ok) {
+          setTestFeedback({ type: "success", message: res.message });
+          toast.success("SMTP Connection Verified: " + res.message);
+        } else {
+          setTestFeedback({ type: "error", message: res.message });
+          toast.error("SMTP Check Failed: " + res.message);
+        }
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : "SMTP verification failed.";
+        setTestFeedback({ type: "error", message: msg });
+        toast.error(msg);
+      } finally {
+        setIsTestingEmail(false);
+      }
+    });
+  }
+
+  function handleSendTestEmail() {
+    if (!testEmail.trim() || !testEmail.includes("@")) {
+      toast.error("Please enter a valid recipient email address.");
+      return;
+    }
+    setIsTestingEmail(true);
+    setTestFeedback(null);
+    startTransition(async () => {
+      try {
+        const res = await testGlobalEmailDeliveryAction(testEmail.trim());
+        if (res.ok) {
+          setTestFeedback({ type: "success", message: res.message });
+          toast.success(res.message);
+        } else {
+          setTestFeedback({ type: "error", message: res.message });
+          toast.error(res.message);
+        }
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : "Failed to dispatch test email.";
+        setTestFeedback({ type: "error", message: msg });
+        toast.error(msg);
+      } finally {
+        setIsTestingEmail(false);
+      }
+    });
+  }
 
   function handleRefresh() {
     startTransition(async () => {
@@ -97,35 +161,7 @@ export function EngineHealthView({ initialData }: { initialData: EngineDiagnosti
       </div>
 
       {/* Navigation View Tabs */}
-      <div className="border-b border-border">
-        <div className="flex gap-6 text-sm font-medium">
-          <Link
-            href="/admin?tab=tenants"
-            className="pb-3 -mb-px border-b-2 border-transparent text-muted-foreground hover:text-foreground transition-colors"
-          >
-            Account Holders (Tenants)
-          </Link>
-          <Link
-            href="/admin?tab=businesses"
-            className="pb-3 -mb-px border-b-2 border-transparent text-muted-foreground hover:text-foreground transition-colors"
-          >
-            All Workspaces
-          </Link>
-          <Link
-            href="/admin?tab=audit"
-            className="pb-3 -mb-px border-b-2 border-transparent text-muted-foreground hover:text-foreground transition-colors"
-          >
-            Platform Audit Log
-          </Link>
-          <Link
-            href="/admin/engine-health"
-            className="pb-3 -mb-px border-b-2 border-primary text-foreground font-semibold transition-colors flex items-center gap-1.5"
-          >
-            <Activity className="size-4 text-emerald-600 dark:text-emerald-400" />
-            Engine Health
-          </Link>
-        </div>
-      </div>
+      <AdminNavTabs currentTab="engine-health" />
 
       {/* Primary KPI Grid */}
       <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-6">
@@ -347,22 +383,22 @@ export function EngineHealthView({ initialData }: { initialData: EngineDiagnosti
 
         {/* Email Delivery Subsystem & SMTP Status */}
         <div className="rounded-xl border border-border bg-surface-raised p-6 shadow-xs space-y-5 lg:col-span-2">
-          <div className="flex items-center justify-between border-b border-border pb-4">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between border-b border-border pb-4">
             <div className="flex items-center gap-2.5">
               <Mail className="size-5 text-primary" />
               <div>
                 <h2 className="text-base font-semibold text-foreground">Email Delivery Subsystem</h2>
                 <p className="text-xs text-muted-foreground">
-                  Outbound SMTP status for invitations, password resets, and notifications.
+                  Outbound SMTP telemetry and transactional delivery for platform invitations and resets.
                 </p>
               </div>
             </div>
             {data.emailSystem?.configured ? (
-              <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2.5 py-0.5 text-xs font-semibold text-emerald-700 dark:border-emerald-500/40 dark:bg-emerald-500/20 dark:text-emerald-300">
+              <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2.5 py-0.5 text-xs font-semibold text-emerald-700 dark:border-emerald-500/40 dark:bg-emerald-500/20 dark:text-emerald-300 self-start sm:self-auto">
                 <CheckCircle2 className="size-3.5" /> Configured & Active
               </span>
             ) : (
-              <span className="inline-flex items-center gap-1.5 rounded-full border border-amber-500/30 bg-amber-500/10 px-2.5 py-0.5 text-xs font-semibold text-amber-700 dark:border-amber-500/40 dark:bg-amber-500/20 dark:text-amber-300">
+              <span className="inline-flex items-center gap-1.5 rounded-full border border-amber-500/30 bg-amber-500/10 px-2.5 py-0.5 text-xs font-semibold text-amber-700 dark:border-amber-500/40 dark:bg-amber-500/20 dark:text-amber-300 self-start sm:self-auto">
                 <AlertCircle className="size-3.5" /> Unconfigured (Disabled in Prod)
               </span>
             )}
@@ -404,12 +440,75 @@ export function EngineHealthView({ initialData }: { initialData: EngineDiagnosti
             </div>
 
             <div className="rounded-lg border border-border bg-surface/60 p-3.5">
-              <p className="text-xs font-medium text-muted-foreground">Workspace Custom SMTP</p>
-              <p className="mt-1.5 text-lg font-bold text-foreground">
-                Supported
+              <p className="text-xs font-medium text-muted-foreground">Configured Sender Address</p>
+              <p className="mt-1.5 text-lg font-bold font-mono text-foreground truncate" title={data.emailSystem?.fromEmail || "noreply default"}>
+                {data.emailSystem?.fromEmail || "noreply default"}
               </p>
-              <p className="text-xs text-muted-foreground">Per-business outgoing mail supported</p>
+              <p className="text-xs text-muted-foreground">From / Reply-To identity</p>
             </div>
+          </div>
+
+          {/* Interactive Delivery Verification & Diagnostic Action */}
+          <div className="rounded-lg border border-border bg-surface/60 p-4 space-y-3">
+            <div className="flex flex-col gap-1">
+              <h3 className="text-sm font-semibold text-foreground flex items-center gap-1.5">
+                <Send className="size-4 text-primary" /> Test Outbound Delivery & Connectivity
+              </h3>
+              <p className="text-xs text-muted-foreground">
+                Verify transport connection to the SMTP server, or dispatch a live verification email to test deliverability.
+              </p>
+            </div>
+
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5">
+              <Input
+                type="email"
+                placeholder="Recipient email address for test (e.g. admin@example.com)"
+                value={testEmail}
+                onChange={(e) => setTestEmail(e.target.value)}
+                className="h-9 text-sm max-w-md"
+              />
+              <div className="flex items-center gap-2">
+                <Button
+                  type="button"
+                  variant="secondary"
+                  size="sm"
+                  onClick={handleVerifyConnection}
+                  disabled={isTestingEmail}
+                  className="gap-1.5 text-xs h-9"
+                >
+                  {isTestingEmail ? <LoaderCircle className="size-3.5 animate-spin" /> : <CheckCircle2 className="size-3.5" />}
+                  Verify Connection
+                </Button>
+                <Button
+                  type="button"
+                  variant="primary"
+                  size="sm"
+                  onClick={handleSendTestEmail}
+                  disabled={isTestingEmail || !testEmail.trim()}
+                  className="gap-1.5 text-xs h-9"
+                >
+                  {isTestingEmail ? <LoaderCircle className="size-3.5 animate-spin" /> : <Send className="size-3.5" />}
+                  Send Test Email
+                </Button>
+              </div>
+            </div>
+
+            {testFeedback && (
+              <div
+                className={`rounded-md p-3 text-xs flex items-start gap-2 ${
+                  testFeedback.type === "success"
+                    ? "bg-emerald-500/10 border border-emerald-500/30 text-emerald-700 dark:border-emerald-500/40 dark:bg-emerald-500/20 dark:text-emerald-300"
+                    : "bg-red-500/10 border border-red-500/30 text-red-700 dark:border-red-500/40 dark:bg-red-500/20 dark:text-red-300"
+                }`}
+              >
+                {testFeedback.type === "success" ? (
+                  <CheckCircle2 className="size-4 shrink-0 mt-0.5" />
+                ) : (
+                  <AlertCircle className="size-4 shrink-0 mt-0.5" />
+                )}
+                <span className="leading-relaxed">{testFeedback.message}</span>
+              </div>
+            )}
           </div>
 
           <div className="rounded-lg border border-border bg-surface/40 p-4 text-xs text-muted-foreground leading-relaxed">
@@ -423,7 +522,7 @@ export function EngineHealthView({ initialData }: { initialData: EngineDiagnosti
                   How to configure system email delivery:
                 </p>
                 <p>
-                  To enable platform-wide transactional emails in production, set <code className="rounded bg-surface-muted px-1.5 py-0.5 font-mono text-[11px] text-foreground">SMTP_HOST</code>, <code className="rounded bg-surface-muted px-1.5 py-0.5 font-mono text-[11px] text-foreground">SMTP_PORT</code>, <code className="rounded bg-surface-muted px-1.5 py-0.5 font-mono text-[11px] text-foreground">SMTP_USER</code>, and <code className="rounded bg-surface-muted px-1.5 py-0.5 font-mono text-[11px] text-foreground">SMTP_PASS</code> in <code className="rounded bg-surface-muted px-1.5 py-0.5 font-mono text-[11px] text-foreground">/opt/modern-erp/runtime.env</code>. Individual workspaces can also configure custom outgoing SMTP in Business Settings → Email.
+                  To enable platform-wide transactional emails in production, set <code className="rounded bg-surface-muted px-1.5 py-0.5 font-mono text-[11px] text-foreground">SMTP_HOST</code>, <code className="rounded bg-surface-muted px-1.5 py-0.5 font-mono text-[11px] text-foreground">SMTP_PORT</code>, <code className="rounded bg-surface-muted px-1.5 py-0.5 font-mono text-[11px] text-foreground">SMTP_USER</code>, <code className="rounded bg-surface-muted px-1.5 py-0.5 font-mono text-[11px] text-foreground">SMTP_PASS</code>, and <code className="rounded bg-surface-muted px-1.5 py-0.5 font-mono text-[11px] text-foreground">SMTP_FROM</code> in <code className="rounded bg-surface-muted px-1.5 py-0.5 font-mono text-[11px] text-foreground">/opt/modern-erp/runtime.env</code>. Individual workspaces can also configure custom outgoing SMTP in Business Settings → Email.
                 </p>
               </div>
             )}

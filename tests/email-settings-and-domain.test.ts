@@ -19,7 +19,12 @@ import {
   getAppBaseUrl,
   getTrustedOrigins,
 } from "../src/core/config/app-url";
-import { getGlobalEmailConfigStatus, getEmailDriver } from "../src/modules/email/email-driver";
+import {
+  getGlobalEmailConfigStatus,
+  getEmailDriver,
+  verifyGlobalEmailConnection,
+  sendGlobalTestEmail,
+} from "../src/modules/email/email-driver";
 import { formatBytes as tenantFormatBytes } from "../src/core/admin/tenant-service";
 import { formatBytes as coreFormatBytes } from "../src/core/format";
 
@@ -311,12 +316,13 @@ test("Email Settings & Unified Domain Configuration Suite", async (t) => {
     assert.equal(typeof initialStatus.configured, "boolean");
     assert.equal(typeof initialStatus.driverName, "string");
 
-    // 6b. With SMTP_HOST & SMTP_PORT configured
+    // 6b. With SMTP_HOST & SMTP_PORT configured and SMTP_FROM
     const oldHost = process.env.SMTP_HOST;
     const oldPort = process.env.SMTP_PORT;
     const oldSecure = process.env.SMTP_SECURE;
     const oldUser = process.env.SMTP_USER;
     const oldPass = process.env.SMTP_PASS;
+    const oldFrom = process.env.SMTP_FROM;
 
     try {
       process.env.SMTP_HOST = "mail.test.internal";
@@ -324,6 +330,7 @@ test("Email Settings & Unified Domain Configuration Suite", async (t) => {
       process.env.SMTP_SECURE = "false";
       process.env.SMTP_USER = "synthetic-test-user";
       process.env.SMTP_PASS = "synthetic-mock-pass";
+      process.env.SMTP_FROM = "UAE Manager Support <support@uaemanager.ae>";
 
       const smtpStatus = getGlobalEmailConfigStatus();
       assert.equal(smtpStatus.configured, true);
@@ -331,15 +338,27 @@ test("Email Settings & Unified Domain Configuration Suite", async (t) => {
       assert.equal(smtpStatus.host, "mail.test.internal");
       assert.equal(smtpStatus.port, 587);
       assert.equal(smtpStatus.hasAuth, true);
+      assert.equal(smtpStatus.fromEmail, "UAE Manager Support <support@uaemanager.ae>");
 
       const driver = getEmailDriver();
       assert.equal(driver.name, "smtp");
+
+      // 6b.2. Default port fallback when SMTP_PORT is omitted
+      delete process.env.SMTP_PORT;
+      const defaultPortStatus = getGlobalEmailConfigStatus();
+      assert.equal(defaultPortStatus.configured, true);
+      assert.equal(defaultPortStatus.port, 587);
+
+      process.env.SMTP_SECURE = "true";
+      const securePortStatus = getGlobalEmailConfigStatus();
+      assert.equal(securePortStatus.port, 465);
     } finally {
       process.env.SMTP_HOST = oldHost;
       process.env.SMTP_PORT = oldPort;
       process.env.SMTP_SECURE = oldSecure;
       process.env.SMTP_USER = oldUser;
       process.env.SMTP_PASS = oldPass;
+      process.env.SMTP_FROM = oldFrom;
     }
 
     // 6c. In production without SMTP, driver reports disabled
@@ -364,5 +383,49 @@ test("Email Settings & Unified Domain Configuration Suite", async (t) => {
     assert.equal(tenantFormatBytes(1024), coreFormatBytes(1024));
     assert.equal(tenantFormatBytes(1048576), coreFormatBytes(1048576));
     assert.equal(tenantFormatBytes(0), coreFormatBytes(0));
+  });
+
+  // -------------------------------------------------------------
+  // TEST 7: Global Diagnostic Verification & Outbound Test Mail
+  // -------------------------------------------------------------
+  await t.test("7. Global Diagnostic Verification & Outbound Test Mail", async () => {
+    // 7a. Validation guard rejects invalid email
+    const invalidRes = await sendGlobalTestEmail("not-an-email");
+    assert.equal(invalidRes.ok, false);
+    assert.match(invalidRes.message, /valid recipient/i);
+
+    // 7b. In non-production (log driver), connection verification succeeds gracefully
+    const devVerify = await verifyGlobalEmailConnection();
+    assert.equal(devVerify.ok, true);
+    assert.equal(devVerify.driver, "log");
+
+    // 7c. In non-production, test email simulation succeeds
+    const devSend = await sendGlobalTestEmail("admin.test@example.com");
+    assert.equal(devSend.ok, true);
+    assert.ok(devSend.messageId);
+
+    // 7d. In production without SMTP, delivery failure is clearly reported
+    const envObj = process.env as Record<string, string | undefined>;
+    const oldEnv = envObj.NODE_ENV;
+    const oldHost = process.env.SMTP_HOST;
+    const oldPort = process.env.SMTP_PORT;
+
+    try {
+      delete process.env.SMTP_HOST;
+      delete process.env.SMTP_PORT;
+      envObj.NODE_ENV = "production";
+
+      const prodVerify = await verifyGlobalEmailConnection();
+      assert.equal(prodVerify.ok, false);
+      assert.match(prodVerify.message, /not configured/i);
+
+      const prodSend = await sendGlobalTestEmail("admin.test@example.com");
+      assert.equal(prodSend.ok, false);
+      assert.match(prodSend.message, /disabled in production/i);
+    } finally {
+      envObj.NODE_ENV = oldEnv;
+      process.env.SMTP_HOST = oldHost;
+      process.env.SMTP_PORT = oldPort;
+    }
   });
 });

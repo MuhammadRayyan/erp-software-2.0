@@ -62,7 +62,8 @@ export function LoginForm({
 
       // Full document navigation ensures the newly set session cookie is immediately
       // committed and applied across all server components and layouts.
-      window.location.href = redirectTo;
+      const safeRedirect = redirectTo.startsWith("/") && !redirectTo.startsWith("//") ? redirectTo : "/businesses";
+      window.location.href = safeRedirect;
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Sign in failed. Check your network or credentials.");
       setPending(false);
