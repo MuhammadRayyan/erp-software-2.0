@@ -5,7 +5,7 @@ description: "Operational runbook for UAE Manager on Oracle Cloud: verified immu
 
 # Oracle production operations
 
-Use the canonical [deployment guide](../../../docs/DEPLOYMENT.md). Host: ubuntu@84.235.255.173; application: https://erp-portal.rapidtss.com; root: /opt/modern-erp; data: /opt/modern-erp/data. Verified 26 October 2026: ARM64 A1 Flex, 2 OCPUs/12 GB RAM, 100 GB boot volume at 10 VPUs/GB. Settled billing/free-tier entitlement remains unverified.
+Use the canonical [deployment guide](../../../docs/DEPLOYMENT.md). Host: ubuntu@193.123.65.48; application: https://erp-portal.rapidtss.com; root: /opt/modern-erp; data: /opt/modern-erp/data. Verified 31 October 2026: ARM64 A1 Flex, 1 OCPU/6 GB RAM, 100 GB boot volume at 10 VPUs/GB. Settled billing/free-tier entitlement remains unverified.
 
 ## Current scope and existing access
 

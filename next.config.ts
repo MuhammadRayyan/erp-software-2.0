@@ -3,6 +3,12 @@ import { randomUUID } from "node:crypto";
 import { withSentryConfig } from "@sentry/nextjs/config";
 
 const nextConfig: NextConfig = {
+  // Allow ngrok and local dev origins for dev server & HMR
+  allowedDevOrigins: [
+    "wildlife-envelope-cryptic.ngrok-free.dev",
+    "localhost:3000",
+    "127.0.0.1:3000",
+  ],
   // Standalone output for container deployment (server.js + traced node_modules).
   output: "standalone",
   // Caddy owns gzip/zstd compression in production.
@@ -43,7 +49,7 @@ const nextConfig: NextConfig = {
               "style-src 'self' 'unsafe-inline'",
               "font-src 'self' data:",
               "img-src 'self' data: blob:",
-              "connect-src 'self' https://*.ingest.de.sentry.io https://*.sentry.io",
+              "connect-src 'self' https://*.ingest.de.sentry.io https://*.sentry.io ws: wss:",
               "frame-src 'self' blob: data:",
               "frame-ancestors 'self'",
               "base-uri 'self'",

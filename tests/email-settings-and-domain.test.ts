@@ -19,6 +19,9 @@ import {
   getAppBaseUrl,
   getTrustedOrigins,
 } from "../src/core/config/app-url";
+import { getGlobalEmailConfigStatus, getEmailDriver } from "../src/modules/email/email-driver";
+import { formatBytes as tenantFormatBytes } from "../src/core/admin/tenant-service";
+import { formatBytes as coreFormatBytes } from "../src/core/format";
 
 test("Email Settings & Unified Domain Configuration Suite", async (t) => {
   const systemDb = getSystemDb();
@@ -297,5 +300,69 @@ test("Email Settings & Unified Domain Configuration Suite", async (t) => {
       process.env.APP_DOMAIN = prevAppDomain;
       process.env.BETTER_AUTH_URL = prevAuthUrl;
     }
+  });
+
+  // -------------------------------------------------------------
+  // TEST 6: Global Email Status & Deduplication Verification
+  // -------------------------------------------------------------
+  await t.test("6. Global Email Config Status & Deduplication", () => {
+    // 6a. Default non-production fallback returns log driver
+    const initialStatus = getGlobalEmailConfigStatus();
+    assert.equal(typeof initialStatus.configured, "boolean");
+    assert.equal(typeof initialStatus.driverName, "string");
+
+    // 6b. With SMTP_HOST & SMTP_PORT configured
+    const oldHost = process.env.SMTP_HOST;
+    const oldPort = process.env.SMTP_PORT;
+    const oldSecure = process.env.SMTP_SECURE;
+    const oldUser = process.env.SMTP_USER;
+    const oldPass = process.env.SMTP_PASS;
+
+    try {
+      process.env.SMTP_HOST = "mail.test.internal";
+      process.env.SMTP_PORT = "587";
+      process.env.SMTP_SECURE = "false";
+      process.env.SMTP_USER = "synthetic-test-user";
+      process.env.SMTP_PASS = "synthetic-mock-pass";
+
+      const smtpStatus = getGlobalEmailConfigStatus();
+      assert.equal(smtpStatus.configured, true);
+      assert.equal(smtpStatus.driverName, "smtp");
+      assert.equal(smtpStatus.host, "mail.test.internal");
+      assert.equal(smtpStatus.port, 587);
+      assert.equal(smtpStatus.hasAuth, true);
+
+      const driver = getEmailDriver();
+      assert.equal(driver.name, "smtp");
+    } finally {
+      process.env.SMTP_HOST = oldHost;
+      process.env.SMTP_PORT = oldPort;
+      process.env.SMTP_SECURE = oldSecure;
+      process.env.SMTP_USER = oldUser;
+      process.env.SMTP_PASS = oldPass;
+    }
+
+    // 6c. In production without SMTP, driver reports disabled
+    const envObj = process.env as Record<string, string | undefined>;
+    const oldEnv = envObj.NODE_ENV;
+    try {
+      delete process.env.SMTP_HOST;
+      delete process.env.SMTP_PORT;
+      envObj.NODE_ENV = "production";
+
+      const prodStatus = getGlobalEmailConfigStatus();
+      assert.equal(prodStatus.configured, false);
+      assert.equal(prodStatus.driverName, "disabled");
+
+      const driver = getEmailDriver();
+      assert.equal(driver.name, "disabled");
+    } finally {
+      envObj.NODE_ENV = oldEnv;
+    }
+
+    // 6d. Deduplicated formatBytes in tenant-service matches core/format
+    assert.equal(tenantFormatBytes(1024), coreFormatBytes(1024));
+    assert.equal(tenantFormatBytes(1048576), coreFormatBytes(1048576));
+    assert.equal(tenantFormatBytes(0), coreFormatBytes(0));
   });
 });

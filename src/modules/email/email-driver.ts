@@ -87,38 +87,79 @@ export function createNodemailerTransporter(config: SmtpTransportConfig) {
   });
 }
 
+async function dispatchNodemailerMail(
+  transporter: ReturnType<typeof createNodemailerTransporter>,
+  input: SendEmailInput,
+  driverLabel: "Business SMTP" | "SMTP",
+): Promise<{ ok: true; messageId: string } | { ok: false; error: string }> {
+  try {
+    const info = await transporter.sendMail({
+      from: formatMailbox(input.from),
+      to: joinMailboxes(input.to),
+      cc: input.cc ? joinMailboxes(input.cc) : undefined,
+      replyTo: input.replyTo
+        ? typeof input.replyTo === "string"
+          ? input.replyTo
+          : formatMailbox(input.replyTo)
+        : undefined,
+      subject: input.subject,
+      text: input.bodyText,
+      html: input.bodyHtml,
+      attachments: input.attachments?.map((att) => ({
+        filename: att.filename,
+        content: Buffer.from(att.data),
+        contentType: att.contentType,
+      })),
+    });
+    return { ok: true, messageId: (info as { messageId?: string }).messageId || randomUUID() };
+  } catch (error) {
+    if (driverLabel === "Business SMTP") {
+      console.error("[Business SMTP] send error:", error);
+    } else {
+      console.error("SMTP send error:", error);
+    }
+    return { ok: false, error: error instanceof Error ? error.message : "Unknown SMTP error" };
+  }
+}
+
+export interface GlobalEmailConfigStatus {
+  configured: boolean;
+  driverName: "smtp" | "log" | "disabled";
+  host: string | null;
+  port: number | null;
+  secure: boolean;
+  hasAuth: boolean;
+}
+
+export function getGlobalEmailConfigStatus(): GlobalEmailConfigStatus {
+  const host = process.env.SMTP_HOST || null;
+  const port = process.env.SMTP_PORT ? Number(process.env.SMTP_PORT) : null;
+  const configured = Boolean(host && port);
+  const secure = process.env.SMTP_SECURE === "true";
+  const hasAuth = Boolean(process.env.SMTP_USER && process.env.SMTP_PASS);
+  const driverName = configured
+    ? "smtp"
+    : process.env.NODE_ENV === "production"
+      ? "disabled"
+      : "log";
+
+  return {
+    configured,
+    driverName,
+    host,
+    port,
+    secure,
+    hasAuth,
+  };
+}
+
 export function getEmailDriver(customSettings?: SmtpTransportConfig | null): EmailDriver {
   // 1. Business custom SMTP settings (if active and host/port provided)
   if (customSettings && customSettings.isActive && customSettings.smtpHost && customSettings.smtpPort) {
     const transporter = createNodemailerTransporter(customSettings);
     return {
       name: "business-smtp",
-      async send(input: SendEmailInput) {
-        try {
-          const info = await transporter.sendMail({
-            from: formatMailbox(input.from),
-            to: joinMailboxes(input.to),
-            cc: input.cc ? joinMailboxes(input.cc) : undefined,
-            replyTo: input.replyTo
-              ? typeof input.replyTo === "string"
-                ? input.replyTo
-                : formatMailbox(input.replyTo)
-              : undefined,
-            subject: input.subject,
-            text: input.bodyText,
-            html: input.bodyHtml,
-            attachments: input.attachments?.map((att) => ({
-              filename: att.filename,
-              content: Buffer.from(att.data),
-              contentType: att.contentType,
-            })),
-          });
-          return { ok: true, messageId: (info as any).messageId || randomUUID() };
-        } catch (error) {
-          console.error("[Business SMTP] send error:", error);
-          return { ok: false, error: error instanceof Error ? error.message : "Unknown SMTP error" };
-        }
-      },
+      send: (input) => dispatchNodemailerMail(transporter, input, "Business SMTP"),
     };
   }
 
@@ -134,37 +175,20 @@ export function getEmailDriver(customSettings?: SmtpTransportConfig | null): Ema
 
     return {
       name: "smtp",
-      async send(input: SendEmailInput) {
-        try {
-          const info = await transporter.sendMail({
-            from: formatMailbox(input.from),
-            to: joinMailboxes(input.to),
-            cc: input.cc ? joinMailboxes(input.cc) : undefined,
-            replyTo: input.replyTo
-              ? typeof input.replyTo === "string"
-                ? input.replyTo
-                : formatMailbox(input.replyTo)
-              : undefined,
-            subject: input.subject,
-            text: input.bodyText,
-            html: input.bodyHtml,
-            attachments: input.attachments?.map((att) => ({
-              filename: att.filename,
-              content: Buffer.from(att.data),
-              contentType: att.contentType,
-            })),
-          });
-          return { ok: true, messageId: (info as any).messageId || randomUUID() };
-        } catch (error) {
-          console.error("SMTP send error:", error);
-          return { ok: false, error: error instanceof Error ? error.message : "Unknown SMTP error" };
-        }
-      },
+      send: (input) => dispatchNodemailerMail(transporter, input, "SMTP"),
     };
   }
 
   if (process.env.NODE_ENV === "production") {
-    return { name: "disabled", async send() { return { ok: false, error: "Email delivery is not configured. Ask an administrator to configure and test SMTP settings." }; } };
+    return {
+      name: "disabled",
+      async send() {
+        return {
+          ok: false,
+          error: "Email delivery is not configured. Ask an administrator to configure and test SMTP settings.",
+        };
+      },
+    };
   }
   return logDriver;
 }

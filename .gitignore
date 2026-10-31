@@ -57,6 +57,9 @@ prompt
 server.log
 # Skills directory
 /skills/
+skills-lock.json
+.agents/skills/*
+!.agents/skills/oracle-cloud-deployment/
 .npm-cache
 .node-gyp
 .pnpm-store

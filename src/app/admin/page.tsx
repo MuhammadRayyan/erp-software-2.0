@@ -4,6 +4,7 @@ import {
   Activity,
   Building2,
   HardDrive,
+  Mail,
   PauseCircle,
   Shield,
   UserCheck,
@@ -19,6 +20,7 @@ import {
   listSystemAuditLogs,
   listTenantsWithStats,
 } from "@/core/admin/tenant-service";
+import { getGlobalEmailConfigStatus } from "@/modules/email/email-driver";
 import { TenantsTable } from "./tenants-table";
 import { BusinessTable, type AdminBusinessRow } from "./business-table";
 import { AuditLogTable } from "./audit-log-table";
@@ -86,6 +88,7 @@ export default async function AdminPage({
   const activeTenantsCount = tenantRows.filter((t) => t.status === "active").length;
   const suspendedTenantsCount = tenantRows.filter((t) => t.status === "suspended").length;
   const auditLogs = listSystemAuditLogs(100);
+  const emailStatus = getGlobalEmailConfigStatus();
 
   return (
     <main className="page-container max-w-7xl py-6 space-y-6">
@@ -101,6 +104,22 @@ export default async function AdminPage({
         </div>
 
         <div className="flex items-center gap-3">
+          <Link
+            href="/admin/engine-health"
+            className={`inline-flex items-center gap-1.5 rounded-lg border px-3 py-2 text-xs font-medium transition-colors ${
+              emailStatus.configured
+                ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:border-emerald-500/40 dark:bg-emerald-500/20 dark:text-emerald-300"
+                : "border-amber-500/30 bg-amber-500/10 text-amber-700 dark:border-amber-500/40 dark:bg-amber-500/20 dark:text-amber-300"
+            }`}
+            title={
+              emailStatus.configured
+                ? "Global SMTP active"
+                : "Global SMTP unconfigured (click for details)"
+            }
+          >
+            <Mail className="size-3.5" />
+            <span>Email: {emailStatus.configured ? "Active" : "Unconfigured"}</span>
+          </Link>
           <CreateTenantDialog />
           <Button asChild variant="secondary" className="gap-2 text-sm font-medium">
             <Link href="/admin/engine-health">

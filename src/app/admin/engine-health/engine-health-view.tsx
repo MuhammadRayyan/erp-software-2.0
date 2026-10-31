@@ -3,12 +3,15 @@
 import { useState, useTransition } from "react";
 import Link from "next/link";
 import {
+  Activity,
+  AlertCircle,
   ArrowLeft,
   CheckCircle2,
   Clock,
   Cpu,
   Database,
   ExternalLink,
+  Mail,
   RefreshCw,
   Server,
   Zap,
@@ -90,6 +93,37 @@ export function EngineHealthView({ initialData }: { initialData: EngineDiagnosti
               Raw JSON API <ExternalLink className="size-3.5" />
             </Link>
           </Button>
+        </div>
+      </div>
+
+      {/* Navigation View Tabs */}
+      <div className="border-b border-border">
+        <div className="flex gap-6 text-sm font-medium">
+          <Link
+            href="/admin?tab=tenants"
+            className="pb-3 -mb-px border-b-2 border-transparent text-muted-foreground hover:text-foreground transition-colors"
+          >
+            Account Holders (Tenants)
+          </Link>
+          <Link
+            href="/admin?tab=businesses"
+            className="pb-3 -mb-px border-b-2 border-transparent text-muted-foreground hover:text-foreground transition-colors"
+          >
+            All Workspaces
+          </Link>
+          <Link
+            href="/admin?tab=audit"
+            className="pb-3 -mb-px border-b-2 border-transparent text-muted-foreground hover:text-foreground transition-colors"
+          >
+            Platform Audit Log
+          </Link>
+          <Link
+            href="/admin/engine-health"
+            className="pb-3 -mb-px border-b-2 border-primary text-foreground font-semibold transition-colors flex items-center gap-1.5"
+          >
+            <Activity className="size-4 text-emerald-600 dark:text-emerald-400" />
+            Engine Health
+          </Link>
         </div>
       </div>
 
@@ -308,6 +342,91 @@ export function EngineHealthView({ initialData }: { initialData: EngineDiagnosti
                 {data.tenancy.totalTenants} Account Holders • {data.tenancy.totalBusinesses} Workspaces • {data.tenancy.totalUsers} Platform Users
               </span>
             </div>
+          </div>
+        </div>
+
+        {/* Email Delivery Subsystem & SMTP Status */}
+        <div className="rounded-xl border border-border bg-surface-raised p-6 shadow-xs space-y-5 lg:col-span-2">
+          <div className="flex items-center justify-between border-b border-border pb-4">
+            <div className="flex items-center gap-2.5">
+              <Mail className="size-5 text-primary" />
+              <div>
+                <h2 className="text-base font-semibold text-foreground">Email Delivery Subsystem</h2>
+                <p className="text-xs text-muted-foreground">
+                  Outbound SMTP status for invitations, password resets, and notifications.
+                </p>
+              </div>
+            </div>
+            {data.emailSystem?.configured ? (
+              <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2.5 py-0.5 text-xs font-semibold text-emerald-700 dark:border-emerald-500/40 dark:bg-emerald-500/20 dark:text-emerald-300">
+                <CheckCircle2 className="size-3.5" /> Configured & Active
+              </span>
+            ) : (
+              <span className="inline-flex items-center gap-1.5 rounded-full border border-amber-500/30 bg-amber-500/10 px-2.5 py-0.5 text-xs font-semibold text-amber-700 dark:border-amber-500/40 dark:bg-amber-500/20 dark:text-amber-300">
+                <AlertCircle className="size-3.5" /> Unconfigured (Disabled in Prod)
+              </span>
+            )}
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            <div className="rounded-lg border border-border bg-surface/60 p-3.5">
+              <p className="text-xs font-medium text-muted-foreground">Active Email Driver</p>
+              <p className="mt-1.5 text-lg font-bold font-mono text-foreground uppercase">
+                {data.emailSystem?.driverName ?? "none"}
+              </p>
+              <p className="text-xs text-muted-foreground">
+                {data.emailSystem?.driverName === "smtp"
+                  ? "Real SMTP delivery active"
+                  : data.emailSystem?.driverName === "log"
+                    ? "Development local logger"
+                    : "Delivery disabled in production"}
+              </p>
+            </div>
+
+            <div className="rounded-lg border border-border bg-surface/60 p-3.5">
+              <p className="text-xs font-medium text-muted-foreground">SMTP Outgoing Server</p>
+              <p className="mt-1.5 text-lg font-bold font-mono text-foreground">
+                {data.emailSystem?.host || "Not Set"}
+              </p>
+              <p className="text-xs text-muted-foreground">
+                {data.emailSystem?.port ? `Port ${data.emailSystem.port}` : "No outbound host defined"}
+              </p>
+            </div>
+
+            <div className="rounded-lg border border-border bg-surface/60 p-3.5">
+              <p className="text-xs font-medium text-muted-foreground">Transport Security</p>
+              <p className="mt-1.5 text-lg font-bold font-mono text-foreground">
+                {data.emailSystem?.secure ? "SSL/TLS (Port 465)" : "STARTTLS / Standard"}
+              </p>
+              <p className="text-xs text-muted-foreground">
+                {data.emailSystem?.hasAuth ? "Authenticated with credentials" : "No credentials configured"}
+              </p>
+            </div>
+
+            <div className="rounded-lg border border-border bg-surface/60 p-3.5">
+              <p className="text-xs font-medium text-muted-foreground">Workspace Custom SMTP</p>
+              <p className="mt-1.5 text-lg font-bold text-foreground">
+                Supported
+              </p>
+              <p className="text-xs text-muted-foreground">Per-business outgoing mail supported</p>
+            </div>
+          </div>
+
+          <div className="rounded-lg border border-border bg-surface/40 p-4 text-xs text-muted-foreground leading-relaxed">
+            {data.emailSystem?.configured ? (
+              <p>
+                Platform-wide SMTP is active. System invitations, verification links, and password reset tokens are delivered directly to user mailboxes.
+              </p>
+            ) : (
+              <div className="space-y-1">
+                <p className="font-medium text-foreground">
+                  How to configure system email delivery:
+                </p>
+                <p>
+                  To enable platform-wide transactional emails in production, set <code className="rounded bg-surface-muted px-1.5 py-0.5 font-mono text-[11px] text-foreground">SMTP_HOST</code>, <code className="rounded bg-surface-muted px-1.5 py-0.5 font-mono text-[11px] text-foreground">SMTP_PORT</code>, <code className="rounded bg-surface-muted px-1.5 py-0.5 font-mono text-[11px] text-foreground">SMTP_USER</code>, and <code className="rounded bg-surface-muted px-1.5 py-0.5 font-mono text-[11px] text-foreground">SMTP_PASS</code> in <code className="rounded bg-surface-muted px-1.5 py-0.5 font-mono text-[11px] text-foreground">/opt/modern-erp/runtime.env</code>. Individual workspaces can also configure custom outgoing SMTP in Business Settings → Email.
+                </p>
+              </div>
+            )}
           </div>
         </div>
       </div>
