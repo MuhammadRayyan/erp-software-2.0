@@ -179,7 +179,24 @@ export function TenantsTable({ initialTenants }: { initialTenants: TenantSummary
               {filtered.length === 0 ? (
                 <tr>
                   <td colSpan={6} className="py-12 text-center text-sm text-muted-foreground">
-                    No account holders matching the current filter.
+                    <p>
+                      {search || statusFilter !== "all"
+                        ? "No account holders matching the current filter or search query."
+                        : "No account holders registered yet."}
+                    </p>
+                    {(search || statusFilter !== "all") && (
+                      <Button
+                        variant="secondary"
+                        size="sm"
+                        onClick={() => {
+                          setSearch("");
+                          setStatusFilter("all");
+                        }}
+                        className="mt-3 text-xs"
+                      >
+                        Clear filters
+                      </Button>
+                    )}
                   </td>
                 </tr>
               ) : (

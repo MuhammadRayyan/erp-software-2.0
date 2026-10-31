@@ -24,6 +24,12 @@ function getSourceArchiveUrl(): string | null {
   }
 }
 
+function safeRedirect(url?: string): string {
+  if (!url || typeof url !== "string") return "/businesses";
+  if (url.startsWith("/") && !url.startsWith("//")) return url;
+  return "/businesses";
+}
+
 export default async function LoginPage({
   searchParams,
 }: {
@@ -34,7 +40,7 @@ export default async function LoginPage({
   }
 
   const params = searchParams ? await searchParams : {};
-  const redirectTo = params.redirect || "/businesses";
+  const redirectTo = safeRedirect(params.redirect);
   if (await getCurrentSession()) redirect(redirectTo);
   const showSetupSuccess = params.setup === "success";
   const showSuspendedNotice = params.suspended === "1";

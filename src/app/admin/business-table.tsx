@@ -201,7 +201,24 @@ export function BusinessTable({ initialBusinesses }: { initialBusinesses: AdminB
               {filtered.length === 0 ? (
                 <tr>
                   <td colSpan={6} className="py-12 text-center text-sm text-muted-foreground">
-                    No businesses matching the current filter.
+                    <p>
+                      {search || statusFilter !== "all"
+                        ? "No workspaces matching the current filter or search query."
+                        : "No workspaces created yet."}
+                    </p>
+                    {(search || statusFilter !== "all") && (
+                      <Button
+                        variant="secondary"
+                        size="sm"
+                        onClick={() => {
+                          setSearch("");
+                          setStatusFilter("all");
+                        }}
+                        className="mt-3 text-xs"
+                      >
+                        Clear filters
+                      </Button>
+                    )}
                   </td>
                 </tr>
               ) : (

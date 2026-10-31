@@ -9,6 +9,8 @@ import { businesses, users } from "@/core/db/system-schema";
 import { getSystemDb } from "@/core/db/system";
 import {
   getGlobalEmailConfigStatus,
+  verifyGlobalEmailConnection,
+  sendGlobalTestEmail,
   type GlobalEmailConfigStatus,
 } from "@/modules/email/email-driver";
 
@@ -139,4 +141,12 @@ export async function getEngineDiagnosticsAction(): Promise<EngineDiagnostics> {
     },
     emailSystem: getGlobalEmailConfigStatus(),
   };
+}
+
+export async function testGlobalEmailDeliveryAction(recipientEmail?: string) {
+  await requireSuperAdmin();
+  if (recipientEmail && recipientEmail.trim()) {
+    return sendGlobalTestEmail(recipientEmail);
+  }
+  return verifyGlobalEmailConnection();
 }
