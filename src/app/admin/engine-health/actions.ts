@@ -7,6 +7,10 @@ import { getSystemSqlite } from "@/core/db/system";
 import { SYSTEM_DB_PATH } from "@/core/db/paths";
 import { businesses, users } from "@/core/db/system-schema";
 import { getSystemDb } from "@/core/db/system";
+import {
+  getGlobalEmailConfigStatus,
+  type GlobalEmailConfigStatus,
+} from "@/modules/email/email-driver";
 
 export type EngineDiagnostics = {
   status: "ok" | "degraded" | "error";
@@ -47,6 +51,7 @@ export type EngineDiagnostics = {
     totalTenants: number;
     totalUsers: number;
   };
+  emailSystem: GlobalEmailConfigStatus;
 };
 
 export async function getEngineDiagnosticsAction(): Promise<EngineDiagnostics> {
@@ -132,5 +137,6 @@ export async function getEngineDiagnosticsAction(): Promise<EngineDiagnostics> {
       totalTenants,
       totalUsers,
     },
+    emailSystem: getGlobalEmailConfigStatus(),
   };
 }

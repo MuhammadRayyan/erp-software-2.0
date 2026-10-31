@@ -61,7 +61,7 @@ After merge, Actions transfers the exact revision's configuration over verified 
 
 ## Production and recovery
 
-Oracle `modern-erp`: **me-dubai-1**, A1 Flex ARM64, **2 OCPUs / 12 GB RAM**, Ubuntu 24.04, public host `84.235.255.173`, application https://erp-portal.rapidtss.com. Attached boot volume is **100 GB, 10 VPUs/GB**, no autotune policy, with attachment encryption enabled; IMDSv2-only is verified. Public-subnet security lists permit TCP 22/80/443, VNIC has no NSGs, and app port 3000 is internal. Trial credit was observed; settled billing/Always Free entitlement is not independently established.
+Oracle `modern-erp`: **me-dubai-1**, A1 Flex ARM64, **1 OCPU / 6 GB RAM**, Ubuntu 24.04, reserved public host `193.123.65.48`, application https://erp-portal.rapidtss.com. Attached boot volume is **100 GB, 10 VPUs/GB**, no autotune policy, with attachment encryption enabled; IMDSv2-only is verified. Public-subnet security lists permit TCP 22/80/443, VNIC has no NSGs, and app port 3000 is internal. Trial credit was observed; settled billing/Always Free entitlement is not independently established.
 
 Production Compose uses an immutable standalone image, UID/GID 10001, read-only root, writable temporary/cache/data mounts, 3 GiB app memory, PID limit 256 and bounded logs. Chromium config/cache uses `/tmp`. Runtime secrets are `/opt/modern-erp/runtime.env`, mode 0600. Persistent data, release configuration and snapshots live under `/opt/modern-erp/data`, `/opt/modern-erp/releases` and `/opt/modern-erp/backups`.
 

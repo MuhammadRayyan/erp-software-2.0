@@ -27,7 +27,7 @@
 }
 
 # HTTP IP access is restricted to readiness probes; login uses the configured HTTPS origin.
-http://84.235.255.173, http://localhost {
+http://193.123.65.48, http://localhost {
     handle /api/health {
         reverse_proxy modern-erp:3000
     }

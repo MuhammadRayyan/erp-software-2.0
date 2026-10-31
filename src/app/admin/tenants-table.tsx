@@ -12,6 +12,7 @@ import {
   Search,
   ShieldCheck,
   Users,
+  X,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -145,8 +146,18 @@ export function TenantsTable({ initialTenants }: { initialTenants: TenantSummary
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Search account holders by name or email..."
-            className="pl-9 h-9 text-sm"
+            className="pl-9 pr-8 h-9 text-sm"
           />
+          {search && (
+            <button
+              type="button"
+              onClick={() => setSearch("")}
+              className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground p-0.5 rounded"
+              aria-label="Clear search"
+            >
+              <X className="size-3.5" />
+            </button>
+          )}
         </div>
       </div>
 
