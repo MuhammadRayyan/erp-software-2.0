@@ -166,10 +166,24 @@ export function savePurchaseOrder(businessId: string, userId: string, input: Pur
       const orderNumber = allocateNumber(context.sqlite, "purchaseOrder");
       recordedOrderNumber = orderNumber;
       const status = intent === "issue" ? "issued" : "draft";
+      if (resolvedQuoteId) {
+        const parentQuote = context.sqlite.prepare(
+          "SELECT document_status FROM purchase_quotes WHERE id = ?"
+        ).get(resolvedQuoteId) as { document_status: string } | undefined;
+        if (parentQuote && (parentQuote.document_status === "accepted" || parentQuote.document_status === "cancelled")) {
+          throw new Error("Cannot create a purchase order for an accepted or cancelled purchase quote.");
+        }
+      }
       context.sqlite.prepare(`INSERT INTO purchase_orders (id, order_number, supplier_id, project_id, purchase_quote_id, date, expected_date, reference, notes, terms, status, subtotal_minor, tax_minor, total_minor, currency_code, exchange_rate_to_base, exchange_rate_date, exchange_rate_source, base_subtotal_minor, base_tax_minor, base_total_minor, created_by, created_at, updated_at, issued_at, closed_at, cancelled_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL)`)
         .run(id, orderNumber, data.supplierId, data.projectId || null, resolvedQuoteId || null, data.date, data.expectedDate || null, data.reference || null, data.notes || null, data.terms || null, status, amounts.subtotalMinor, amounts.taxMinor, amounts.totalMinor, rate.currencyCode, rate.exchangeRateToBase, rate.exchangeRateDate, rate.exchangeRateSource, base.baseSubtotalMinor, base.baseTaxMinor, base.baseTotalMinor, userId, now, now, status === "issued" ? now : null);
     }
     insertLines(context.db, id, lines);
+
+    if (resolvedQuoteId) {
+      context.sqlite.prepare(
+        "UPDATE purchase_quotes SET document_status = 'accepted' WHERE id = ? AND document_status = 'sent'"
+      ).run(resolvedQuoteId);
+    }
   }).immediate();
 
   try {
@@ -278,18 +292,33 @@ const revisionConfig = {
 export function deletePurchaseOrder(businessId: string, userId: string, orderId: string) {
   assertMutationPermission(businessId, userId, "purchases", "delete");
   const context = getBusinessDb(businessId, userId);
-  const order = context.sqlite.prepare("SELECT order_number FROM purchase_orders WHERE id = ?").get(orderId) as { order_number: string } | undefined;
-  deleteDraftRevision(context.sqlite, revisionConfig, orderId);
+  let orderNumber = "";
+  context.sqlite.transaction(() => {
+    const order = context.sqlite.prepare("SELECT order_number, purchase_quote_id FROM purchase_orders WHERE id = ?").get(orderId) as { order_number: string; purchase_quote_id: string | null } | undefined;
+    if (order) orderNumber = order.order_number;
+    deleteDraftRevision(context.sqlite, revisionConfig, orderId);
 
-  if (order) {
+    if (order?.purchase_quote_id) {
+      const remainingCount = context.sqlite.prepare(
+        "SELECT COUNT(*) as c FROM purchase_orders WHERE purchase_quote_id = ? AND id != ? AND status NOT IN ('cancelled', 'superseded')"
+      ).get(order.purchase_quote_id, orderId) as { c: number };
+      if (remainingCount.c === 0) {
+        context.sqlite.prepare(
+          "UPDATE purchase_quotes SET document_status = 'sent' WHERE id = ? AND document_status = 'accepted'"
+        ).run(order.purchase_quote_id);
+      }
+    }
+  })();
+
+  if (orderNumber) {
     try {
       recordActivity(businessId, {
         userId,
         action: "deleted",
         entityType: "purchase_order",
         entityId: orderId,
-        entityNumber: order.order_number,
-        summary: `Deleted draft purchase order ${order.order_number}`,
+        entityNumber: orderNumber,
+        summary: `Deleted draft purchase order ${orderNumber}`,
         sqlite: context.sqlite,
       });
     } catch (e) {

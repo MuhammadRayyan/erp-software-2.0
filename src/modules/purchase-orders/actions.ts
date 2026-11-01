@@ -2,17 +2,18 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { z } from "zod";
 import { requireSavePermission, requirePermission } from "@/core/permissions/require-module";
 import { purchaseOrderInputSchema } from "./purchase-order-input";
 import { cancelPurchaseOrder, closePurchaseOrder, deletePurchaseOrder, issuePurchaseOrder, savePurchaseOrder, type PurchaseOrderIntent } from "./purchase-order-service";
+
+import { formatZodFieldErrors } from "@/lib/zod-errors";
 
 export type PurchaseOrderActionResult = { error?: string; fieldErrors?: Record<string, string[]> };
 
 export async function savePurchaseOrderAction(businessId: string, orderId: string | null, input: unknown, intent: PurchaseOrderIntent): Promise<PurchaseOrderActionResult> {
   const { user } = await requireSavePermission(businessId, "purchases", orderId, intent);
   const parsed = purchaseOrderInputSchema.safeParse(input);
-  if (!parsed.success) return { error: "Check the purchase order fields and lines.", fieldErrors: z.flattenError(parsed.error).fieldErrors };
+  if (!parsed.success) return { error: "Check the purchase order fields and lines.", fieldErrors: formatZodFieldErrors(parsed.error) };
   let id: string;
   try { id = savePurchaseOrder(businessId, user.id, parsed.data, intent, orderId ?? undefined); }
   catch (error) { return { error: error instanceof Error ? error.message : "The purchase order could not be saved." }; }
@@ -72,15 +73,23 @@ export async function convertPurchaseOrderToInvoiceAction(businessId: string, or
     if (orderData.order.status !== "issued") {
       return { error: "Only issued orders can be converted." };
     }
+    if (orderData.relatedInvoices && orderData.relatedInvoices.length > 0) {
+      return { error: "This purchase order has already been converted to an invoice." };
+    }
+
+    const today = new Date().toISOString().split("T")[0];
+    const rawTerms = orderData.supplier?.paymentTermsDays;
+    const daysToAdd = (rawTerms !== null && rawTerms !== undefined) ? Number(rawTerms) : 30;
+    const dueDate = new Date(Date.now() + daysToAdd * 86400000).toISOString().split("T")[0];
 
     const input = {
       supplierId: orderData.order.supplierId,
       projectId: orderData.order.projectId || "",
       amountsIncludeTax: orderData.order.amountsIncludeTax,
       supplierInvoiceNumber: `INV-${orderData.order.orderNumber}`,
-      invoiceDate: new Date().toISOString().split("T")[0],
-      taxDate: new Date().toISOString().split("T")[0],
-      dueDate: new Date(Date.now() + 14 * 86400000).toISOString().split("T")[0], 
+      invoiceDate: today,
+      taxDate: today,
+      dueDate, 
       reference: orderData.order.orderNumber,
       purchaseOrderId: orderId,
       notes: orderData.order.notes || "",
@@ -105,16 +114,14 @@ export async function convertPurchaseOrderToInvoiceAction(businessId: string, or
     const invoiceId = savePurchaseInvoice(businessId, user.id, input, "draft");
 
     // Automated Status Trigger: Mark purchase order as closed
-    if (orderData.order.status === "issued") {
-      const { getBusinessDb } = await import("@/core/db/business");
-      const { purchaseOrders } = await import("@/core/db/business-schema");
-      const { eq } = await import("drizzle-orm");
-      const context = getBusinessDb(businessId, user.id);
-      context.db.update(purchaseOrders)
-        .set({ status: "closed" })
-        .where(eq(purchaseOrders.id, orderId))
-        .run();
-    }
+    const { getBusinessDb } = await import("@/core/db/business");
+    const { purchaseOrders } = await import("@/core/db/business-schema");
+    const { eq } = await import("drizzle-orm");
+    const context = getBusinessDb(businessId, user.id);
+    context.db.update(purchaseOrders)
+      .set({ status: "closed" })
+      .where(eq(purchaseOrders.id, orderId))
+      .run();
 
     revalidatePath(`/b/${businessId}/purchases/orders`);
     revalidatePath(`/b/${businessId}/purchases/orders/${orderId}`);

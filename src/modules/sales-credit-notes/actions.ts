@@ -2,10 +2,11 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { z } from "zod";
 import { requireSavePermission, requirePermission } from "@/core/permissions/require-module";
 import { creditNoteInputSchema } from "./credit-note-input";
 import { deleteCreditNote, duplicateCreditNote, saveCreditNote, voidCreditNote, type CreditNoteIntent } from "./credit-note-service";
+
+import { formatZodFieldErrors } from "@/lib/zod-errors";
 
 export type CreditNoteActionResult = { error?: string; fieldErrors?: Record<string, string[]> };
 
@@ -18,7 +19,7 @@ export async function saveCreditNoteAction(
   const { user } = await requireSavePermission(businessId, "sales", noteId, intent);
   const parsed = creditNoteInputSchema.safeParse(input);
   if (!parsed.success) {
-    return { error: "Check the credit note fields and lines.", fieldErrors: z.flattenError(parsed.error).fieldErrors };
+    return { error: "Check the credit note fields and lines.", fieldErrors: formatZodFieldErrors(parsed.error) };
   }
   let id: string;
   try {

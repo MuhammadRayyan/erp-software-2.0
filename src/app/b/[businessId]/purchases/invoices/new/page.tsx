@@ -13,6 +13,7 @@ import { listInventoryItemOptions } from "@/modules/inventory/inventory-item-ser
 import { minorToCurrencyInput } from "@/modules/currency/conversion";
 import { getCurrencySettings } from "@/modules/currency/exchange-rate";
 import { getAllSuppliersUnallocatedPrepayments } from "@/modules/supplier-payments/supplier-payment-service";
+import { getFormDefaults } from "@/modules/form-defaults/form-defaults-service";
 
 export default async function NewPurchaseInvoicePage({
   params,
@@ -24,6 +25,7 @@ export default async function NewPurchaseInvoicePage({
   const { businessId } = await params;
   const query = await searchParams;
   const { user, access } = await requireModule(businessId, "purchases");
+  const formDefaults = getFormDefaults(businessId, user.id, "purchase-invoice");
 
   const suppliers = listActiveSuppliers(businessId, user.id);
   const accounts = getExpenseAccountOptions(businessId, user.id);
@@ -40,19 +42,31 @@ export default async function NewPurchaseInvoicePage({
   const sourceOrder = query.orderId ? getPurchaseOrder(businessId, user.id, query.orderId) : null;
   const sourceQuote = query.quoteId ? getPurchaseQuote(businessId, user.id, query.quoteId) : null;
 
-  const today = new Date();
-  const due = new Date(today);
-  due.setDate(due.getDate() + 14);
-  const iso = (date: Date) => date.toISOString().slice(0, 10);
-  const defaultTax =
-    taxes.find((tax) => tax.vatCategory === "standard" && tax.rateBasisPoints === 500)?.id ??
-    taxes[0]?.id ??
-    "";
-
   const supplierId =
     sourceOrder?.order.supplierId ??
     sourceQuote?.quote.supplierId ??
     (suppliers.some((supplier) => supplier.id === query.supplierId) ? query.supplierId! : "");
+
+  const today = new Date();
+  const selectedSupplier = suppliers.find((supplier) => supplier.id === supplierId);
+  const rawSuppTerms = selectedSupplier?.paymentTermsDays ?? (selectedSupplier as any)?.payment_terms_days;
+  const rawDefTerms = formDefaults.defaultPaymentTermsDays;
+  const termDays = (rawSuppTerms !== null && rawSuppTerms !== undefined)
+    ? Number(rawSuppTerms)
+    : (rawDefTerms !== null && rawDefTerms !== undefined)
+      ? Number(rawDefTerms)
+      : 30;
+  const due = new Date(today);
+  due.setDate(due.getDate() + termDays);
+  const iso = (date: Date) => date.toISOString().slice(0, 10);
+  const defaultTax =
+    (formDefaults.defaultTaxCodeId ? taxes.find((t) => t.id === formDefaults.defaultTaxCodeId)?.id : undefined) ??
+    taxes.find((tax) => tax.vatCategory === "standard" && tax.rateBasisPoints === 500)?.id ??
+    taxes[0]?.id ??
+    "";
+  const defaultExpenseAccount =
+    (formDefaults.defaultExpenseAccountId ? accounts.find((a) => a.id === formDefaults.defaultExpenseAccountId)?.id : undefined) ??
+    settings.defaultPurchaseExpenseAccountId;
 
   const projectId =
     sourceOrder?.order.projectId ??
@@ -85,7 +99,7 @@ export default async function NewPurchaseInvoicePage({
           description: "",
           quantity: "1",
           unitPrice: "0.00",
-          expenseAccountId: settings.defaultPurchaseExpenseAccountId,
+          expenseAccountId: defaultExpenseAccount,
           taxCodeId: defaultTax,
           projectId: "",
         },
@@ -164,8 +178,8 @@ export default async function NewPurchaseInvoicePage({
             (sourceQuote?.quote.reference || sourceQuote?.quote.quoteNumber) ??
             "",
           purchaseOrderId: sourceOrder?.order.id ?? "",
-          notes: sourceOrder?.order.notes ?? sourceQuote?.quote.notes ?? "",
-          terms: sourceOrder?.order.terms ?? sourceQuote?.quote.terms ?? "",
+          notes: sourceOrder?.order.notes ?? sourceQuote?.quote.notes ?? formDefaults.defaultNotes ?? "",
+          terms: sourceOrder?.order.terms ?? sourceQuote?.quote.terms ?? formDefaults.defaultTerms ?? "",
           applyAvailablePrepayment: Boolean(
             supplierId && (availableSupplierPrepayments[supplierId]?.length ?? 0) > 0
           ),

@@ -47,6 +47,7 @@ export function createAccount(businessId: string, userId: string, input: Account
   } catch (e) {
     console.error("[ActivityLog] account create failed:", e);
   }
+  return id;
 }
 
 export function updateAccount(
@@ -61,6 +62,39 @@ export function updateAccount(
   const context = getBusinessDb(businessId, userId);
   const current = context.db.select().from(accounts).where(eq(accounts.id, accountId)).get();
   if (!current) throw new Error("Account not found.");
+  if (data.type !== current.type || data.subtype !== current.subtype) {
+    if (current.isSystem) {
+      throw new Error("Cannot change account type or subtype for a system account.");
+    }
+    const existingTables = new Set(
+      (context.sqlite.prepare("SELECT name FROM sqlite_master WHERE type = 'table'").all() as { name: string }[]).map((r) => r.name),
+    );
+    if (existingTables.has("journal_lines")) {
+      const hasJournals = context.sqlite.prepare("SELECT 1 FROM journal_lines WHERE account_id = ? LIMIT 1").get(accountId);
+      if (hasJournals) {
+        throw new Error("Cannot change account type or subtype because journal entries exist for this account.");
+      }
+    }
+    if (existingTables.has("bank_accounts")) {
+      const isBankLedger = context.sqlite.prepare("SELECT 1 FROM bank_accounts WHERE ledger_account_id = ? LIMIT 1").get(accountId);
+      if (isBankLedger) {
+        throw new Error("Cannot change account type or subtype for a bank ledger account.");
+      }
+    }
+    if (existingTables.has("business_accounting_settings")) {
+      const isConfiguredSetting = context.sqlite.prepare(`
+        SELECT 1 FROM business_accounting_settings
+        WHERE accounts_receivable_account_id = ? OR default_sales_account_id = ?
+           OR default_bank_account_id = ? OR vat_output_account_id = ?
+           OR accounts_payable_account_id = ? OR input_vat_account_id = ?
+           OR default_purchase_expense_account_id = ? OR default_inventory_asset_account_id = ?
+           OR default_cost_of_sales_account_id = ? OR inventory_adjustment_account_id = ? LIMIT 1
+      `).get(...Array(10).fill(accountId));
+      if (isConfiguredSetting) {
+        throw new Error("Cannot change account type or subtype for an account configured in business accounting settings.");
+      }
+    }
+  }
   const next = current.isSystem
     ? { name: data.name, isActive: true }
     : data;
@@ -96,31 +130,47 @@ export function deleteAccount(businessId: string, userId: string, accountId: str
     if (account.isSystem) throw new Error("System accounts cannot be deleted.");
     deletedAccountName = account.name;
 
-    const usageQueries = [
-      "SELECT 1 FROM journal_lines WHERE account_id = ? LIMIT 1",
-      "SELECT 1 FROM sales_invoice_lines WHERE sales_account_id = ? LIMIT 1",
-      "SELECT 1 FROM receipts WHERE bank_account_id = ? LIMIT 1",
-      "SELECT 1 FROM tax_codes WHERE sales_tax_account_id = ? LIMIT 1",
-      "SELECT 1 FROM tax_codes WHERE purchase_tax_account_id = ? LIMIT 1",
-      "SELECT 1 FROM purchase_order_lines WHERE expense_account_id = ? LIMIT 1",
-      "SELECT 1 FROM purchase_invoice_lines WHERE expense_account_id = ? LIMIT 1",
-      "SELECT 1 FROM supplier_payments WHERE bank_account_id = ? LIMIT 1",
-      "SELECT 1 FROM bank_accounts WHERE ledger_account_id = ? LIMIT 1",
-      "SELECT 1 FROM bank_transaction_lines WHERE account_id = ? LIMIT 1",
-      "SELECT 1 FROM sales_credit_note_lines WHERE sales_account_id = ? LIMIT 1",
-      `SELECT 1 FROM inventory_items
+    const existingTables = new Set(
+      (context.sqlite.prepare("SELECT name FROM sqlite_master WHERE type = 'table'").all() as { name: string }[]).map((r) => r.name),
+    );
+
+    const usageQueries: { table: string; query: string }[] = [
+      { table: "journal_lines", query: "SELECT 1 FROM journal_lines WHERE account_id = ? LIMIT 1" },
+      { table: "sales_invoice_lines", query: "SELECT 1 FROM sales_invoice_lines WHERE sales_account_id = ? LIMIT 1" },
+      { table: "receipts", query: "SELECT 1 FROM receipts WHERE bank_account_id = ? LIMIT 1" },
+      { table: "tax_codes", query: "SELECT 1 FROM tax_codes WHERE sales_tax_account_id = ? OR purchase_tax_account_id = ? LIMIT 1" },
+      { table: "purchase_order_lines", query: "SELECT 1 FROM purchase_order_lines WHERE expense_account_id = ? LIMIT 1" },
+      { table: "purchase_invoice_lines", query: "SELECT 1 FROM purchase_invoice_lines WHERE expense_account_id = ? LIMIT 1" },
+      { table: "supplier_payments", query: "SELECT 1 FROM supplier_payments WHERE bank_account_id = ? LIMIT 1" },
+      { table: "bank_accounts", query: "SELECT 1 FROM bank_accounts WHERE ledger_account_id = ? LIMIT 1" },
+      { table: "bank_transaction_lines", query: "SELECT 1 FROM bank_transaction_lines WHERE account_id = ? LIMIT 1" },
+      { table: "sales_credit_note_lines", query: "SELECT 1 FROM sales_credit_note_lines WHERE sales_account_id = ? LIMIT 1" },
+      { table: "sales_quote_lines", query: "SELECT 1 FROM sales_quote_lines WHERE sales_account_id = ? LIMIT 1" },
+      { table: "sales_order_lines", query: "SELECT 1 FROM sales_order_lines WHERE sales_account_id = ? LIMIT 1" },
+      { table: "purchase_quote_lines", query: "SELECT 1 FROM purchase_quote_lines WHERE expense_account_id = ? LIMIT 1" },
+      { table: "debit_note_lines", query: "SELECT 1 FROM debit_note_lines WHERE expense_account_id = ? LIMIT 1" },
+      { table: "bank_rules", query: "SELECT 1 FROM bank_rules WHERE target_account_id = ? LIMIT 1" },
+      {
+        table: "inventory_items",
+        query: `SELECT 1 FROM inventory_items
          WHERE sales_account_id = ? OR inventory_asset_account_id = ?
             OR cost_of_sales_account_id = ? LIMIT 1`,
-      `SELECT 1 FROM business_accounting_settings
+      },
+      {
+        table: "business_accounting_settings",
+        query: `SELECT 1 FROM business_accounting_settings
          WHERE accounts_receivable_account_id = ? OR default_sales_account_id = ?
             OR default_bank_account_id = ? OR vat_output_account_id = ?
             OR accounts_payable_account_id = ? OR input_vat_account_id = ?
             OR default_purchase_expense_account_id = ? OR default_inventory_asset_account_id = ?
             OR default_cost_of_sales_account_id = ? OR inventory_adjustment_account_id = ? LIMIT 1`,
-      "SELECT 1 FROM payslip_items WHERE account_id = ? LIMIT 1",
-      "SELECT 1 FROM payslip_lines WHERE account_id = ? LIMIT 1",
+      },
+      { table: "payslip_items", query: "SELECT 1 FROM payslip_items WHERE account_id = ? LIMIT 1" },
+      { table: "payslip_lines", query: "SELECT 1 FROM payslip_lines WHERE account_id = ? LIMIT 1" },
     ];
-    const used = usageQueries.some((query) => {
+
+    const used = usageQueries.some(({ table, query }) => {
+      if (!existingTables.has(table)) return false;
       const values = Array.from({ length: query.match(/\?/g)?.length ?? 0 }, () => accountId);
       return Boolean(context.sqlite.prepare(query).get(...values));
     });

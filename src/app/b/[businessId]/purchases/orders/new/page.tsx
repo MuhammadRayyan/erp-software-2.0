@@ -11,6 +11,7 @@ import { listActiveSuppliers } from "@/modules/suppliers/supplier-service";
 import { listProjectOptions } from "@/modules/projects/project-service";
 import { listInventoryItemOptions } from "@/modules/inventory/inventory-item-service";
 import { BackLink } from "@/components/back-link";
+import { getFormDefaults } from "@/modules/form-defaults/form-defaults-service";
 
 export default async function NewPurchaseOrderPage({
   params,
@@ -22,6 +23,7 @@ export default async function NewPurchaseOrderPage({
   const { businessId } = await params;
   const query = await searchParams;
   const { user, access } = await requireModule(businessId, "purchases");
+  const formDefaults = getFormDefaults(businessId, user.id, "purchase-order");
 
   const sourceQuote = query.quoteId ? getPurchaseQuote(businessId, user.id, query.quoteId) : null;
   const sourceSalesOrder = query.salesOrderId ? getSalesOrder(businessId, user.id, query.salesOrderId) : null;
@@ -38,7 +40,14 @@ export default async function NewPurchaseOrderPage({
 
   const today = new Date().toISOString().slice(0, 10);
   const defaultTax =
-    taxes.find((tax) => tax.rateBasisPoints === 500 && tax.vatCategory === "standard")?.id ?? taxes[0]?.id ?? "";
+    (formDefaults.defaultTaxCodeId ? taxes.find((tax) => tax.id === formDefaults.defaultTaxCodeId)?.id : undefined) ??
+    taxes.find((tax) => tax.rateBasisPoints === 500 && tax.vatCategory === "standard")?.id ??
+    taxes[0]?.id ??
+    "";
+  const defaultExpenseAccount =
+    (formDefaults.defaultExpenseAccountId ? accounts.find((a) => a.id === formDefaults.defaultExpenseAccountId)?.id : undefined) ??
+    accounts[0]?.id ??
+    "";
 
   const projectId =
     sourceQuote?.quote.projectId ??
@@ -86,7 +95,7 @@ export default async function NewPurchaseOrderPage({
           description: "",
           quantity: "1",
           unitPrice: "0.00",
-          expenseAccountId: accounts[0]?.id ?? "",
+          expenseAccountId: defaultExpenseAccount,
           taxCodeId: defaultTax,
           projectId: "",
         },
@@ -151,8 +160,9 @@ export default async function NewPurchaseOrderPage({
           date: today,
           expectedDate: sourceQuote?.quote.expiryDate ?? "",
           reference,
-          notes,
-          terms: sourceQuote?.quote.terms ?? "",
+          notes: notes || formDefaults.defaultNotes || "",
+          terms: sourceQuote?.quote.terms ?? formDefaults.defaultTerms ?? "",
+          amountsIncludeTax: sourceQuote ? Boolean(sourceQuote.quote.amountsIncludeTax) : Boolean(formDefaults.amountsIncludeTax),
           lines,
         }}
       />

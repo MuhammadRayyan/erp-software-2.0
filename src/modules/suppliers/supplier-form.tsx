@@ -56,6 +56,11 @@ export function SupplierForm({ businessId, supplierId, currencies, initial, cust
         <div className="space-y-1.5"><Label htmlFor="taxReference">TRN / tax reference <span className="font-normal text-muted-foreground">(optional)</span></Label><Input id="taxReference" {...register("taxReference")} aria-invalid={!!errors.taxReference} />{errors.taxReference && <p className="field-error">{errors.taxReference.message}</p>}</div>
         <div className="space-y-1.5"><Label htmlFor="address">Address <span className="font-normal text-muted-foreground">(optional)</span></Label><Input id="address" {...register("address")} aria-invalid={!!errors.address} />{errors.address && <p className="field-error">{errors.address.message}</p>}</div>
         <div className="space-y-1.5"><Label htmlFor="defaultCurrencyCode">Default document currency</Label><select id="defaultCurrencyCode" className="h-9 w-full rounded-[6px] border border-border-strong bg-surface-raised px-3 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-ring/25" {...register("defaultCurrencyCode")}>{currencies.map((currency) => <option key={currency.code} value={currency.code}>{currency.code} — {currency.name}</option>)}</select></div>
+        <div className="space-y-1.5">
+          <Label htmlFor="paymentTermsDays">Payment terms (days) <span className="font-normal text-muted-foreground">(optional)</span></Label>
+          <Input id="paymentTermsDays" type="number" min={0} max={365} placeholder="0" {...register("paymentTermsDays")} aria-invalid={!!errors.paymentTermsDays} />
+          {errors.paymentTermsDays && <p className="field-error">{errors.paymentTermsDays.message}</p>}
+        </div>
         <div className="space-y-1.5 md:col-span-2"><Label htmlFor="notes">Notes <span className="font-normal text-muted-foreground">(optional)</span></Label><Textarea id="notes" rows={4} {...register("notes")} aria-invalid={!!errors.notes} />{errors.notes && <p className="field-error">{errors.notes.message}</p>}</div>
         <label className="flex min-h-9 items-center gap-2 text-sm"><input type="checkbox" className="size-4 accent-[var(--primary)]" {...register("isActive")} /> Active supplier</label>
       </div>

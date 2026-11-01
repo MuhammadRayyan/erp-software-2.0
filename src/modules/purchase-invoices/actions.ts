@@ -2,7 +2,6 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { z } from "zod";
 import { requireSavePermission, requirePermission } from "@/core/permissions/require-module";
 import { purchaseInvoiceInputSchema } from "./purchase-invoice-input";
 import {
@@ -18,12 +17,14 @@ import {
   type BatchPurchaseActionResult,
 } from "./purchase-invoice-service";
 
+import { formatZodFieldErrors } from "@/lib/zod-errors";
+
 export type PurchaseInvoiceActionResult = { error?: string; fieldErrors?: Record<string, string[]> };
 
 export async function savePurchaseInvoiceAction(businessId: string, invoiceId: string | null, input: unknown, intent: PurchaseInvoiceIntent): Promise<PurchaseInvoiceActionResult> {
   const { user } = await requireSavePermission(businessId, "purchases", invoiceId, intent);
   const parsed = purchaseInvoiceInputSchema.safeParse(input);
-  if (!parsed.success) return { error: "Check the purchase invoice fields and lines.", fieldErrors: z.flattenError(parsed.error).fieldErrors };
+  if (!parsed.success) return { error: "Check the purchase invoice fields and lines.", fieldErrors: formatZodFieldErrors(parsed.error) };
   let id: string;
   try { id = savePurchaseInvoice(businessId, user.id, parsed.data, intent, invoiceId ?? undefined); }
   catch (error) { return { error: error instanceof Error ? error.message : "The purchase invoice could not be saved." }; }

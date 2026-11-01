@@ -460,6 +460,12 @@ export const salesInvoices = sqliteTable(
     amountsIncludeTax: integer("amounts_include_tax", { mode: "boolean" }).notNull().default(false),
     salesOrderId: text("sales_order_id"),
     quoteId: text("quote_id"),
+    sellerLegalName: text("seller_legal_name"),
+    sellerTrn: text("seller_trn"),
+    sellerAddress: text("seller_address"),
+    customerLegalName: text("customer_legal_name"),
+    customerTrn: text("customer_trn"),
+    customerAddress: text("customer_address"),
   },
   (table) => [
     uniqueIndex("sales_invoice_number_idx").on(table.invoiceNumber),
@@ -848,7 +854,14 @@ export const salesCreditNotes = sqliteTable(
     postedAt: text("posted_at"),
     voidedAt: text("voided_at"),
   
-    amountsIncludeTax: integer("amounts_include_tax", { mode: "boolean" }).notNull().default(false),},
+    amountsIncludeTax: integer("amounts_include_tax", { mode: "boolean" }).notNull().default(false),
+    sellerLegalName: text("seller_legal_name"),
+    sellerTrn: text("seller_trn"),
+    sellerAddress: text("seller_address"),
+    customerLegalName: text("customer_legal_name"),
+    customerTrn: text("customer_trn"),
+    customerAddress: text("customer_address"),
+  },
   (table) => [
     uniqueIndex("sales_credit_note_number_idx").on(table.creditNoteNumber),
     index("sales_credit_note_customer_idx").on(table.customerId),

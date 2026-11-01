@@ -250,17 +250,18 @@ export function duplicateDebitNote(businessId: string, userId: string, noteId: s
   const record = getDebitNote(businessId, userId, noteId);
   if (!record) throw new Error("Debit note not found.");
   const rate = storedRateSnapshot(getBusinessDb(businessId, userId).sqlite, record.note);
+  const today = new Date().toISOString().split("T")[0];
   return saveDebitNote(businessId, userId, { 
     currencyCode: rate.currencyCode, 
     exchangeRateToBase: rate.exchangeRateToBase, 
-    exchangeRateDate: rate.exchangeRateDate, 
+    exchangeRateDate: today, 
     exchangeRateSource: rate.exchangeRateSource, 
     supplierId: record.note.supplierId, 
     projectId: record.note.projectId ?? "", 
     purchaseInvoiceId: record.note.purchaseInvoiceId, 
     amountsIncludeTax: record.note.amountsIncludeTax, 
-    date: record.note.debitNoteDate, 
-    taxDate: record.note.taxDate, 
+    date: today, 
+    taxDate: today, 
     reference: record.note.reference ?? "", 
     lines: record.lines.map((line: any) => ({ 
       description: line.description, 

@@ -2,18 +2,19 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { z } from "zod";
 import { requirePermission, requireSavePermission } from "@/core/permissions/require-module";
 import { salesQuoteInputSchema } from "./quote-input";
 import { cancelSalesQuote, closeSalesQuote, deleteSalesQuote, getSalesQuote, issueSalesQuote, saveSalesQuote, type SalesQuoteIntent } from "./quote-service";
 import { saveSalesOrder } from "@/modules/sales-orders/sales-order-service";
+
+import { formatZodFieldErrors } from "@/lib/zod-errors";
 
 export type SalesQuoteActionResult = { error?: string; fieldErrors?: Record<string, string[]> };
 
 export async function saveSalesQuoteAction(businessId: string, quoteId: string | null, input: unknown, intent: SalesQuoteIntent): Promise<SalesQuoteActionResult> {
   const { user } = await requireSavePermission(businessId, "sales", quoteId, intent);
   const parsed = salesQuoteInputSchema.safeParse(input);
-  if (!parsed.success) return { error: "Check the sales quote fields and lines.", fieldErrors: z.flattenError(parsed.error).fieldErrors };
+  if (!parsed.success) return { error: "Check the sales quote fields and lines.", fieldErrors: formatZodFieldErrors(parsed.error) };
   let id: string;
   try { id = saveSalesQuote(businessId, user.id, parsed.data, intent, quoteId ?? undefined); }
   catch (error) { return { error: error instanceof Error ? error.message : "The sales quote could not be saved." }; }
@@ -72,8 +73,11 @@ export async function convertSalesQuoteToOrderAction(businessId: string, quoteId
   try {
     const quoteData = getSalesQuote(businessId, user.id, quoteId);
     if (!quoteData) return { error: "Quote not found." };
-    if (quoteData.quote.documentStatus !== "sent" && quoteData.quote.documentStatus !== "accepted") {
-      return { error: "Only sent or accepted quotes can be converted." };
+    if (quoteData.quote.documentStatus !== "sent") {
+      return { error: "Only sent quotes can be converted." };
+    }
+    if (quoteData.linkedOrders && quoteData.linkedOrders.length > 0) {
+      return { error: "This sales quote has already been converted to an order." };
     }
 
     const input = {

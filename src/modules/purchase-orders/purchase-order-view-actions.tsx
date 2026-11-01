@@ -13,9 +13,9 @@ import { DocumentEmailDialog, type DocumentEmailDefaults } from "@/modules/email
 import { broadcastLiveRefresh } from "@/components/use-live-refresh";
 
 export function PurchaseOrderViewActions({
-  businessId, orderId, orderNumber, status, inventoryEnabled, hasReceivableItems, emailDefaults
+  businessId, orderId, orderNumber, status, inventoryEnabled, hasReceivableItems, emailDefaults, linkedInvoice
 }: {
-  businessId: string; orderId: string; orderNumber: string; status: PurchaseOrderStatus; inventoryEnabled: boolean; hasReceivableItems: boolean; emailDefaults: DocumentEmailDefaults;
+  businessId: string; orderId: string; orderNumber: string; status: PurchaseOrderStatus; inventoryEnabled: boolean; hasReceivableItems: boolean; emailDefaults: DocumentEmailDefaults; linkedInvoice?: { id: string; invoice_number: string };
 }) {
   const router = useRouter();
   const editable = status === "draft" || status === "issued";
@@ -74,11 +74,11 @@ export function PurchaseOrderViewActions({
         pdfHref={`/api/businesses/${businessId}/documents/purchase-order/${orderId}/pdf`}
         onEmail={() => setEmailOpen(true)}
         copyToActions={status !== "cancelled" && status !== "superseded" ? [
-          {
+          ...(status !== "closed" && !linkedInvoice ? [{
             label: "Purchase Invoice",
             href: `/b/${businessId}/purchases/invoices/new?orderId=${orderId}`,
             icon: ReceiptText,
-          },
+          }] : []),
           ...(inventoryEnabled ? [
             {
               label: "Goods Receipt",
@@ -137,12 +137,19 @@ export function PurchaseOrderViewActions({
                 <Link href={`/b/${businessId}/purchases/goods-receipts/new?orderId=${orderId}`}><PackagePlus className="size-4 mr-2" /> Receive Goods</Link>
               </Button>
             )}
-            {status === "issued" && (
+            {linkedInvoice || status === "closed" ? (
+              <Button asChild variant="secondary" className="gap-1.5 border-primary/30 text-primary hover:bg-primary/5">
+                <Link href={linkedInvoice ? `/b/${businessId}/purchases/invoices/${linkedInvoice.id}` : `/b/${businessId}/purchases/invoices`}>
+                  <ReceiptText className="size-4 text-primary" />
+                  {linkedInvoice ? `Bill: ${linkedInvoice.invoice_number}` : "View Linked Bill"}
+                </Link>
+              </Button>
+            ) : status === "issued" ? (
               <Button variant="secondary" onClick={handleConvert} disabled={converting}>
                 <RefreshCw className={`size-4 ${converting ? "animate-spin" : ""}`} /> 
                 Create Invoice
               </Button>
-            )}
+            ) : null}
           </>
         }
       />
