@@ -2,10 +2,11 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { z } from "zod";
 import { requireSavePermission, requirePermission } from "@/core/permissions/require-module";
 import { debitNoteInputSchema } from "./debit-note-input";
 import { deleteDebitNote, duplicateDebitNote, saveDebitNote, voidDebitNote } from "./debit-note-service";
+
+import { formatZodFieldErrors } from "@/lib/zod-errors";
 
 export type DebitNoteActionResult = { error?: string; fieldErrors?: Record<string, string[]> };
 export async function saveDebitNoteAction(
@@ -19,7 +20,7 @@ export async function saveDebitNoteAction(
   if (!parsed.success) {
     return {
       error: "Check the debit note fields and lines.",
-      fieldErrors: z.flattenError(parsed.error).fieldErrors,
+      fieldErrors: formatZodFieldErrors(parsed.error),
     };
   }
   let id: string;

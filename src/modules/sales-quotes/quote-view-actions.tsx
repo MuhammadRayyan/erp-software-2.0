@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { GitBranch, ReceiptText, RefreshCw, Send, ShoppingCart } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
@@ -12,9 +13,10 @@ import { DocumentEmailDialog, type DocumentEmailDefaults } from "@/modules/email
 import { broadcastLiveRefresh } from "@/components/use-live-refresh";
 
 export function SalesQuoteViewActions({
-  businessId, quoteId, quoteNumber, documentStatus, emailDefaults
+  businessId, quoteId, quoteNumber, documentStatus, emailDefaults, linkedOrder
 }: {
   businessId: string; quoteId: string; quoteNumber: string; documentStatus: SalesQuoteStatus; emailDefaults: DocumentEmailDefaults;
+  linkedOrder?: { id: string; order_number: string };
 }) {
   const router = useRouter();
   const editable = documentStatus === "draft" || documentStatus === "sent";
@@ -75,11 +77,11 @@ export function SalesQuoteViewActions({
         pdfHref={`/api/businesses/${businessId}/documents/sales-quote/${quoteId}/pdf`}
         onEmail={() => setEmailOpen(true)}
         copyToActions={documentStatus !== "cancelled" && documentStatus !== "superseded" ? [
-          {
+          ...(documentStatus !== "accepted" && !linkedOrder ? [{
             label: "Sales Order",
             href: `/b/${businessId}/sales/orders/new?quoteId=${quoteId}`,
             icon: ShoppingCart,
-          },
+          }] : []),
           {
             label: "Sales Invoice",
             href: `/b/${businessId}/sales/invoices/new?quoteId=${quoteId}`,
@@ -133,12 +135,19 @@ export function SalesQuoteViewActions({
                 New Revision
               </Button>
             )}
-            {(documentStatus === "sent" || documentStatus === "accepted") && (
+            {linkedOrder || documentStatus === "accepted" ? (
+              <Button asChild variant="secondary" className="gap-1.5 border-primary/30 text-primary hover:bg-primary/5">
+                <Link href={linkedOrder ? `/b/${businessId}/sales/orders/${linkedOrder.id}` : `/b/${businessId}/sales/orders`}>
+                  <ShoppingCart className="size-4 text-primary" />
+                  {linkedOrder ? `Order: ${linkedOrder.order_number}` : "View Linked Order"}
+                </Link>
+              </Button>
+            ) : documentStatus === "sent" ? (
               <Button variant="secondary" onClick={handleConvert} disabled={converting}>
                 <RefreshCw className={`size-4 ${converting ? "animate-spin" : ""}`} /> 
                 Convert to Order
               </Button>
-            )}
+            ) : null}
           </>
         }
       />

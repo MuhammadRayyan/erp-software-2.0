@@ -149,6 +149,7 @@ export default async function PurchaseQuoteViewPage({
           quoteNumber={quote.quoteNumber}
           documentStatus={quote.documentStatus}
           emailDefaults={emailDefaults}
+          linkedOrder={linkedOrder ? { id: linkedOrder.id, order_number: linkedOrder.order_number } : undefined}
         />
       </div>
 

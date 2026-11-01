@@ -158,7 +158,7 @@ export function SalesOrderTable({
         cell: ({ row }: any) => {
           const order = row.original;
           const canEdit = order.documentStatus !== "completed" && order.documentStatus !== "cancelled" && order.documentStatus !== "superseded";
-          const canInvoice = order.documentStatus === "active" || order.documentStatus === "draft";
+          const canInvoice = order.documentStatus === "active";
           return (
             <div className="flex items-center justify-end gap-1">
               <DropdownMenu>

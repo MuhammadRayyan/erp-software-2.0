@@ -17,6 +17,8 @@ import { listInventoryItemOptions } from "@/modules/inventory/inventory-item-ser
 import { getCurrencySettings } from "@/modules/currency/exchange-rate";
 import { getAllCustomersUnallocatedCredit } from "@/modules/receipts/receipt-service";
 import { Breadcrumbs } from "@/components/breadcrumbs";
+import { getFormDefaults } from "@/modules/form-defaults/form-defaults-service";
+import { getTaxSettings } from "@/modules/tax/tax-settings-service";
 
 export default async function NewInvoicePage({
   params,
@@ -74,13 +76,32 @@ export default async function NewInvoicePage({
   const documentMinorUnit =
     currencySettings.currencies.find((c) => c.code === documentCurrency)?.minor_unit ?? 2;
 
+  const formDefaults = getFormDefaults(businessId, user.id, "sales-invoice");
+
   const today = new Date();
+  const selectedCustomer = customers.find((customer) => customer.id === selectedCustomerId);
+  const rawCustTerms = selectedCustomer?.paymentTermsDays;
+  const rawDefTerms = formDefaults.defaultPaymentTermsDays;
+  const termDays = (rawCustTerms !== null && rawCustTerms !== undefined)
+    ? Number(rawCustTerms)
+    : (rawDefTerms !== null && rawDefTerms !== undefined)
+      ? Number(rawDefTerms)
+      : 30;
   const due = new Date(today);
-  due.setDate(due.getDate() + 14);
+  due.setDate(due.getDate() + termDays);
   const iso = (date: Date) => date.toISOString().slice(0, 10);
+  const taxSettings = getTaxSettings(businessId, user.id);
+  const emirates = ["abu_dhabi", "dubai", "sharjah", "ajman", "umm_al_quwain", "ras_al_khaimah", "fujairah"] as const;
+  const rawSub = selectedCustomer?.countrySubdivision?.toLowerCase().trim().replace(/[\s-]+/g, "_");
+  const customerEmirate = emirates.find((e) => e === rawSub || (rawSub && rawSub.includes(e)));
+  const supplyEmirate = customerEmirate || (taxSettings.defaultSupplyEmirate as any) || "dubai";
   const defaultTaxCode =
+    (formDefaults.defaultTaxCodeId ? taxCodes.find((t) => t.id === formDefaults.defaultTaxCodeId) : undefined) ??
     taxCodes.find((taxCode) => taxCode.vatCategory === "standard" && taxCode.rateBasisPoints === 500) ??
     taxCodes[0];
+  const defaultSalesAccount =
+    (formDefaults.defaultSalesAccountId ? salesAccounts.find((a) => a.id === formDefaults.defaultSalesAccountId)?.id : undefined) ??
+    settings.defaultSalesAccountId;
 
   const sourceLines = sourceOrder?.lines ?? sourceQuote?.lines ?? [];
   const lines = sourceLines.length
@@ -91,7 +112,7 @@ export default async function NewInvoicePage({
         unitPrice: minorToCurrencyInput(line.unitPriceMinor, documentMinorUnit),
         discountType: ((line.discountType as any) ?? "none") as "none" | "percentage" | "fixed",
         discountValue: line.discountValue ?? "0",
-        salesAccountId: line.salesAccountId ?? settings.defaultSalesAccountId,
+        salesAccountId: line.salesAccountId ?? defaultSalesAccount,
         taxCodeId: line.taxCodeId ?? defaultTaxCode.id,
         projectId: line.projectId ?? "",
       }))
@@ -103,7 +124,7 @@ export default async function NewInvoicePage({
           unitPrice: "0.00",
           discountType: "none" as const,
           discountValue: "0",
-          salesAccountId: settings.defaultSalesAccountId,
+          salesAccountId: defaultSalesAccount,
           taxCodeId: defaultTaxCode.id,
           projectId: "",
         },
@@ -178,17 +199,19 @@ export default async function NewInvoicePage({
             projectId: selectedProject?.id ?? "",
             invoiceDate: iso(today),
             taxDate: iso(today),
-            supplyEmirate: "",
+            supplyEmirate,
             dueDate: iso(due),
             reference:
               sourceOrder?.order.orderNumber ??
               (sourceQuote?.quote.reference || sourceQuote?.quote.quoteNumber) ??
               "",
-            notes: sourceOrder?.order.notes ?? sourceQuote?.quote.notes ?? "",
-            terms: sourceOrder?.order.terms ?? sourceQuote?.quote.terms ?? "",
-            amountsIncludeTax: Boolean(
-              sourceOrder?.order.amountsIncludeTax ?? sourceQuote?.quote.amountsIncludeTax
-            ),
+            notes: sourceOrder?.order.notes ?? sourceQuote?.quote.notes ?? formDefaults.defaultNotes ?? "",
+            terms: sourceOrder?.order.terms ?? sourceQuote?.quote.terms ?? formDefaults.defaultTerms ?? "",
+            amountsIncludeTax: sourceOrder
+              ? Boolean(sourceOrder.order.amountsIncludeTax)
+              : sourceQuote
+              ? Boolean(sourceQuote.quote.amountsIncludeTax)
+              : Boolean(formDefaults.amountsIncludeTax),
             applyAvailableCredit: Boolean(
               selectedCustomerId && (availableCustomerCredits[selectedCustomerId]?.length ?? 0) > 0
             ),

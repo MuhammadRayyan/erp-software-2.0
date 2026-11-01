@@ -21,6 +21,7 @@ import { emirateLabels, emirates } from "@/modules/tax/uae-vat-config";
 import { DocumentFormFooter } from "@/components/document-form-footer";
 import { SelectNative } from "@/components/ui/select-native";
 import { DocumentLineTable, useDocumentTotals } from "@/components/documents";
+import { useUnsavedChanges } from "@/hooks/use-unsaved-changes";
 
 type CustomerOption = { id: string; name: string; defaultCurrencyCode: string | null; paymentTermsDays: number; creditLimitMinor: number | null };
 type AccountOption = { id: string; name: string };
@@ -80,12 +81,14 @@ export function InvoiceForm({
     }
     return initialCustomValues;
   });
+  const [globalTaxCodeId, setGlobalTaxCodeId] = useState(() => initial.lines[0]?.taxCodeId || taxCodes.find((taxCode) => taxCode.rateBasisPoints === 500)?.id || taxCodes[0]?.id || "");
   const form = useForm<InvoiceInput>({
     resolver: zodResolver(invoiceInputSchema),
     mode: "onTouched",
     defaultValues: initial,
   });
-  const { register, control, handleSubmit, setError, setValue, formState: { errors, isSubmitting } } = form;
+  const { register, control, handleSubmit, setError, setValue, formState: { errors, isSubmitting, isDirty, isSubmitSuccessful } } = form;
+  useUnsavedChanges(isDirty && !isSubmitSuccessful);
   const { fields, append, remove, insert, move } = useFieldArray({ control, name: "lines" });
   function duplicateLine(index: number) {
     const currentLine = form.getValues(`lines.${index}`);
@@ -127,7 +130,10 @@ export function InvoiceForm({
   }
   const cancelHref = invoiceId ? `/b/${businessId}/sales/invoices/${invoiceId}` : `/b/${businessId}/sales/invoices`;
   const defaultSalesAccountId = salesAccounts[0]?.id ?? "";
-  const defaultTaxCodeId = taxCodes.find((taxCode) => taxCode.rateBasisPoints === 500)?.id ?? taxCodes[0]?.id ?? "";
+  function updateGlobalTax(newTaxId: string) {
+    setGlobalTaxCodeId(newTaxId);
+    lines.forEach((_, i) => form.setValue(`lines.${i}.taxCodeId`, newTaxId, { shouldDirty: true }));
+  }
   function selectItem(index: number, itemId: string) {
     const item = items.find((entry) => entry.id === itemId);
     if (!item) { form.setValue(`lines.${index}.salesAccountId`, defaultSalesAccountId); return; }
@@ -148,7 +154,7 @@ export function InvoiceForm({
       const result = await onDefaultSave(values, customValues);
       if (result?.fieldErrors) {
         for (const [field, messages] of Object.entries(result.fieldErrors)) {
-          setError(field as keyof InvoiceInput, { message: (messages as string[])[0] });
+          setError(field as any, { message: (messages as string[])[0] });
         }
       }
       if (result?.error) setServerError(result.error);
@@ -160,7 +166,7 @@ export function InvoiceForm({
       : await createInvoiceAction(businessId, values, intent, customValues);
     if (result.fieldErrors) {
       for (const [field, messages] of Object.entries(result.fieldErrors)) {
-        setError(field as keyof InvoiceInput, { message: messages[0] });
+        setError(field as any, { message: messages[0] });
       }
     }
     if (result.error) setServerError(result.error);
@@ -322,6 +328,23 @@ export function InvoiceForm({
             <h2 className="text-base font-semibold">Line items</h2>
             <p className="mt-1 text-sm text-muted-foreground">Select an item for inventory sales, or leave it blank for a service line.</p>
           </div>
+          <div className="flex gap-4 items-center">
+            <div className="flex items-center gap-2">
+              <label htmlFor="globalTax" className="text-sm font-medium">Default Tax:</label>
+              <select
+                id="globalTax"
+                className="w-40 flex h-9 items-center justify-between rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-sm ring-offset-background placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
+                value={globalTaxCodeId}
+                onChange={(e) => updateGlobalTax(e.target.value)}
+              >
+                {taxCodes.map((taxCode) => (
+                  <option key={taxCode.id} value={taxCode.id}>
+                    {taxCode.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
         </div>
         <DocumentLineTable
           register={register}
@@ -335,7 +358,7 @@ export function InvoiceForm({
               quantity: "1",
               unitPrice: "0.00",
               salesAccountId: defaultSalesAccountId,
-              taxCodeId: defaultTaxCodeId,
+              taxCodeId: globalTaxCodeId,
               projectId: "",
               discountType: "none",
               discountValue: "0",

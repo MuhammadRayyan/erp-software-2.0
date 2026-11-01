@@ -7,11 +7,13 @@ import { listInventoryItemOptions } from "@/modules/inventory/inventory-item-ser
 import { getCurrencySettings } from "@/modules/currency/exchange-rate";
 import { SalesQuoteForm } from "@/modules/sales-quotes/quote-form";
 import { Breadcrumbs } from "@/components/breadcrumbs";
+import { getFormDefaults } from "@/modules/form-defaults/form-defaults-service";
 
 export default async function NewQuotePage({ params, searchParams }: { params: Promise<{ businessId: string }>; searchParams: Promise<{ customerId?: string; projectId?: string }> }) {
   const { businessId } = await params;
   const query = await searchParams;
   const { user, access } = await requireModule(businessId, "sales");
+  const formDefaults = getFormDefaults(businessId, user.id, "sales-quote");
 
   const customers = listCustomers(businessId, user.id);
   const accounts = getSalesAccountOptions(businessId, user.id);
@@ -24,7 +26,14 @@ export default async function NewQuotePage({ params, searchParams }: { params: P
 
   const today = new Date().toISOString().slice(0, 10);
   const defaultTax =
-    taxes.find((tax) => tax.rateBasisPoints === 500 && tax.vatCategory === "standard")?.id ?? taxes[0]?.id ?? "";
+    (formDefaults.defaultTaxCodeId ? taxes.find((tax) => tax.id === formDefaults.defaultTaxCodeId)?.id : undefined) ??
+    taxes.find((tax) => tax.rateBasisPoints === 500 && tax.vatCategory === "standard")?.id ??
+    taxes[0]?.id ??
+    "";
+  const defaultSalesAccount =
+    (formDefaults.defaultSalesAccountId ? accounts.find((a) => a.id === formDefaults.defaultSalesAccountId)?.id : undefined) ??
+    accounts[0]?.id ??
+    "";
   const projectId = projects.some((project) => project.id === query.projectId) ? query.projectId! : "";
   const customerId = customers.some((customer) => customer.id === query.customerId) ? query.customerId! : "";
   const documentCurrency =
@@ -78,9 +87,9 @@ export default async function NewQuotePage({ params, searchParams }: { params: P
           date: today,
           expectedDate: "",
           reference: "",
-          notes: "",
-          terms: "",
-          amountsIncludeTax: false,
+          notes: formDefaults.defaultNotes ?? "",
+          terms: formDefaults.defaultTerms ?? "",
+          amountsIncludeTax: Boolean(formDefaults.amountsIncludeTax),
           lines: [
             {
               itemId: "",
@@ -89,7 +98,7 @@ export default async function NewQuotePage({ params, searchParams }: { params: P
               unitPrice: "0.00",
               discountType: "none",
               discountValue: "0",
-              salesAccountId: "",
+              salesAccountId: defaultSalesAccount,
               taxCodeId: defaultTax,
               projectId: "",
             },

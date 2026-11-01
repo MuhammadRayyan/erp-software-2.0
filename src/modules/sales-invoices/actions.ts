@@ -21,7 +21,9 @@ import {
 
 export type InvoiceActionResult = { error?: string; fieldErrors?: Record<string, string[]> };
 
+import { formatZodFieldErrors } from "@/lib/zod-errors";
 const customFieldValuesSchema = z.record(z.string(), z.string()).optional();
+
 
 export async function createInvoiceAction(
   businessId: string,
@@ -32,7 +34,7 @@ export async function createInvoiceAction(
   const { user } = await requireSavePermission(businessId, "sales", undefined, intent);
   const parsed = invoiceInputSchema.safeParse(input);
   if (!parsed.success) {
-    return { error: "Check the invoice fields and line items.", fieldErrors: z.flattenError(parsed.error).fieldErrors };
+    return { error: "Check the invoice fields and line items.", fieldErrors: formatZodFieldErrors(parsed.error) };
   }
   const parsedCustomFields = customFieldValuesSchema.safeParse(customFieldValues);
   if (!parsedCustomFields.success) return { error: "Check the highlighted fields." };
@@ -63,7 +65,7 @@ export async function updateInvoiceAction(
   const { user } = await requireSavePermission(businessId, "sales", invoiceId, intent);
   const parsed = invoiceInputSchema.safeParse(input);
   if (!parsed.success) {
-    return { error: "Check the invoice fields and line items.", fieldErrors: z.flattenError(parsed.error).fieldErrors };
+    return { error: "Check the invoice fields and line items.", fieldErrors: formatZodFieldErrors(parsed.error) };
   }
   const parsedCustomFields = customFieldValuesSchema.safeParse(customFieldValues);
   if (!parsedCustomFields.success) return { error: "Check the highlighted fields." };

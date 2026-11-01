@@ -29,6 +29,8 @@ export const creditNoteInputSchema = z.object({
   supplyEmirate: z.union([z.literal(""), z.enum(emirates)]).optional().default(""),
   reference: z.string().trim().max(100).optional().default(""),
   reason: z.string().trim().max(500).optional().default(""),
+  notes: z.string().trim().max(2000).optional().default(""),
+  terms: z.string().trim().max(2000).optional().default(""),
   lines: z.array(creditNoteLineSchema).min(1, "Add at least one line").max(100),
 });
 

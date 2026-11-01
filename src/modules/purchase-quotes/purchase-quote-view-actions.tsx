@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
@@ -24,12 +25,14 @@ export function PurchaseQuoteViewActions({
   quoteNumber,
   documentStatus,
   emailDefaults,
+  linkedOrder,
 }: {
   businessId: string;
   quoteId: string;
   quoteNumber: string;
   documentStatus: PurchaseQuoteStatus;
   emailDefaults: DocumentEmailDefaults;
+  linkedOrder?: { id: string; order_number: string };
 }) {
   const router = useRouter();
   const editable = documentStatus === "draft" || documentStatus === "sent";
@@ -90,11 +93,11 @@ export function PurchaseQuoteViewActions({
         pdfHref={`/api/businesses/${businessId}/documents/purchase-quote/${quoteId}/pdf`}
         onEmail={() => setEmailOpen(true)}
         copyToActions={documentStatus !== "cancelled" && documentStatus !== "superseded" ? [
-          {
+          ...(documentStatus !== "accepted" && !linkedOrder ? [{
             label: "Purchase Order",
             href: `/b/${businessId}/purchases/orders/new?quoteId=${quoteId}`,
             icon: ShoppingCart,
-          },
+          }] : []),
           {
             label: "Purchase Invoice",
             href: `/b/${businessId}/purchases/invoices/new?quoteId=${quoteId}`,
@@ -161,12 +164,19 @@ export function PurchaseQuoteViewActions({
                 New Revision
               </Button>
             )}
-            {(documentStatus === "sent" || documentStatus === "accepted") && (
+            {linkedOrder || documentStatus === "accepted" ? (
+              <Button asChild variant="secondary" className="gap-1.5 border-primary/30 text-primary hover:bg-primary/5">
+                <Link href={linkedOrder ? `/b/${businessId}/purchases/orders/${linkedOrder.id}` : `/b/${businessId}/purchases/orders`}>
+                  <ShoppingCart className="size-4 text-primary" />
+                  {linkedOrder ? `Order: ${linkedOrder.order_number}` : "View Linked Order"}
+                </Link>
+              </Button>
+            ) : documentStatus === "sent" ? (
               <Button variant="secondary" onClick={handleConvert} disabled={converting}>
                 <RefreshCw className={`size-4 ${converting ? "animate-spin" : ""}`} />
                 Convert to Order
               </Button>
-            )}
+            ) : null}
           </>
         }
       />

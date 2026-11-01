@@ -138,7 +138,7 @@ export default async function QuoteViewPage({ params, searchParams }: { params: 
             <span className="money text-xl font-semibold">{formatMoney(quote.totalMinor, currency)}</span>
           </div>
         </div>
-        <SalesQuoteViewActions businessId={businessId} quoteId={quote.id} quoteNumber={quote.quoteNumber} documentStatus={quote.documentStatus} emailDefaults={emailDefaults} />
+        <SalesQuoteViewActions businessId={businessId} quoteId={quote.id} quoteNumber={quote.quoteNumber} documentStatus={quote.documentStatus} emailDefaults={emailDefaults} linkedOrder={linkedOrder ? { id: linkedOrder.id, order_number: linkedOrder.order_number } : undefined} />
       </div>
 
       <DocumentViewLayout

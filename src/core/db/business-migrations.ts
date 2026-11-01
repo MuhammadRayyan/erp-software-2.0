@@ -2835,6 +2835,33 @@ export const businessMigrations = [
         `);
       },
     },
+    {
+      version: 36,
+      name: "legal_entity_snapshotting",
+      up: (sqlite) => {
+        const tables = ["sales_invoices", "sales_credit_notes"];
+        const colsToAdd = [
+          { name: "seller_legal_name", type: "TEXT" },
+          { name: "seller_trn", type: "TEXT" },
+          { name: "seller_address", type: "TEXT" },
+          { name: "customer_legal_name", type: "TEXT" },
+          { name: "customer_trn", type: "TEXT" },
+          { name: "customer_address", type: "TEXT" },
+        ];
+        for (const tbl of tables) {
+          try {
+            const existing = (sqlite.prepare(`PRAGMA table_info(${tbl})`).all() as { name: string }[]).map((c) => c.name);
+            for (const col of colsToAdd) {
+              if (!existing.includes(col.name)) {
+                sqlite.exec(`ALTER TABLE ${tbl} ADD COLUMN ${col.name} ${col.type};`);
+              }
+            }
+          } catch {
+            // Table might not exist yet in certain test fixtures
+          }
+        }
+      },
+    },
   ] satisfies readonly SqliteMigration[];
 
 

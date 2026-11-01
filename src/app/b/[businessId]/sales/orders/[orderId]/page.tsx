@@ -116,7 +116,16 @@ export default async function OrderViewPage({ params, searchParams }: { params: 
       />
       <div className="mb-5 flex flex-col justify-between gap-4 lg:flex-row lg:items-start">
         <div><div className="flex flex-wrap items-center gap-2"><h1 className="page-title tabular">{order.orderNumber}</h1> <OrderRevisionSwitcher businessId={businessId} currentOrderId={order.id} revisions={revisions} /><StatusBadge status={order.documentStatus} /></div><p className="mt-2 text-base font-medium"><Link href={`/b/${businessId}/customers/${customer.id}`} className="hover:text-primary hover:underline transition-colors">{customer.name}</Link></p><p className="mt-1 text-sm text-muted-foreground">Order date: {formatDate(order.orderDate)}{order.deliveryDate ? ` — Delivery: ${formatDate(order.deliveryDate)}` : ""}</p><div className="mt-3 flex flex-wrap items-baseline gap-x-5 gap-y-1"><span className="money text-xl font-semibold">{formatMoney(order.totalMinor, currency)}</span><span className="text-sm text-muted-foreground">No ledger impact</span></div></div>
-        <SalesOrderViewActions businessId={businessId} orderId={order.id} orderNumber={order.orderNumber} documentStatus={order.documentStatus} inventoryEnabled={access.modules.includes("inventory")} hasDeliverableItems={lines.some((line) => Boolean(line.itemId) && line.remainingMicros > 0)} emailDefaults={emailDefaults} />
+        <SalesOrderViewActions
+          businessId={businessId}
+          orderId={order.id}
+          orderNumber={order.orderNumber}
+          documentStatus={order.documentStatus}
+          inventoryEnabled={access.modules.includes("inventory")}
+          hasDeliverableItems={lines.some((line) => Boolean(line.itemId) && line.remainingMicros > 0)}
+          emailDefaults={emailDefaults}
+          linkedInvoice={record.relatedInvoices[0] ? { id: record.relatedInvoices[0].id, invoice_number: record.relatedInvoices[0].invoice_number } : undefined}
+        />
       </div>
 
       <DocumentViewLayout

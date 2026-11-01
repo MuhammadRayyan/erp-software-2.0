@@ -200,7 +200,7 @@ export function SalesQuoteTable({
         cell: ({ row }: any) => {
           const quote = row.original;
           const canEdit = quote.documentStatus !== "accepted" && quote.documentStatus !== "rejected" && quote.documentStatus !== "cancelled" && quote.documentStatus !== "superseded";
-          const canConvert = quote.documentStatus === "sent" || quote.documentStatus === "accepted" || quote.documentStatus === "draft";
+          const canConvert = quote.documentStatus === "sent";
           return (
             <div className="flex items-center justify-end gap-1">
               <DropdownMenu>

@@ -13,7 +13,7 @@ import { DocumentEmailDialog, type DocumentEmailDefaults } from "@/modules/email
 import { broadcastLiveRefresh } from "@/components/use-live-refresh";
 
 export function SalesOrderViewActions({
-  businessId, orderId, orderNumber, documentStatus, inventoryEnabled, hasDeliverableItems, emailDefaults
+  businessId, orderId, orderNumber, documentStatus, inventoryEnabled, hasDeliverableItems, emailDefaults, linkedInvoice
 }: {
   businessId: string;
   orderId: string;
@@ -22,6 +22,7 @@ export function SalesOrderViewActions({
   inventoryEnabled: boolean;
   hasDeliverableItems: boolean;
   emailDefaults: DocumentEmailDefaults;
+  linkedInvoice?: { id: string; invoice_number: string };
 }) {
   const router = useRouter();
   const editable = documentStatus === "draft" || documentStatus === "active";
@@ -80,11 +81,11 @@ export function SalesOrderViewActions({
         pdfHref={`/api/businesses/${businessId}/documents/sales-order/${orderId}/pdf`}
         onEmail={() => setEmailOpen(true)}
         copyToActions={documentStatus !== "cancelled" && documentStatus !== "superseded" ? [
-          {
+          ...(documentStatus !== "completed" && !linkedInvoice ? [{
             label: "Sales Invoice",
             href: `/b/${businessId}/sales/invoices/new?orderId=${orderId}`,
             icon: ReceiptText,
-          },
+          }] : []),
           ...(inventoryEnabled ? [
             {
               label: "Delivery Note",
@@ -149,12 +150,19 @@ export function SalesOrderViewActions({
                 </Link>
               </Button>
             )}
-            {(documentStatus === "active" || documentStatus === "completed") && (
+            {linkedInvoice || documentStatus === "completed" ? (
+              <Button asChild variant="secondary" className="gap-1.5 border-primary/30 text-primary hover:bg-primary/5">
+                <Link href={linkedInvoice ? `/b/${businessId}/sales/invoices/${linkedInvoice.id}` : `/b/${businessId}/sales/invoices`}>
+                  <ReceiptText className="size-4 text-primary" />
+                  {linkedInvoice ? `Invoice: ${linkedInvoice.invoice_number}` : "View Linked Invoice"}
+                </Link>
+              </Button>
+            ) : documentStatus === "active" ? (
               <Button variant="secondary" onClick={handleConvert} disabled={converting}>
                 <RefreshCw className={`size-4 ${converting ? "animate-spin" : ""}`} />
                 Convert to Invoice
               </Button>
-            )}
+            ) : null}
           </>
         }
       />

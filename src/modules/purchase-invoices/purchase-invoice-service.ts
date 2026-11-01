@@ -369,6 +369,7 @@ export function savePurchaseInvoice(
     let internalNumber: string;
     let shouldPost = intent === "post";
     let replace = false;
+    let effectiveOrderId: string | null = null;
     if (invoiceId) {
       const current = currentHeader;
       if (!current) throw new Error("Purchase invoice not found.");
@@ -388,6 +389,7 @@ export function savePurchaseInvoice(
       assertSupplierInvoiceNumberAvailable(context.sqlite, data.supplierId, data.supplierInvoiceNumber, invoiceId);
       const resolvedOrderId = data.purchaseOrderId || resolvePurchaseOrderIdFromReference(context.sqlite, data.reference, data.supplierId);
       const effectivePurchaseOrderId = resolvedOrderId || ("purchaseOrderId" in input ? null : current.purchaseOrderId) || null;
+      effectiveOrderId = effectivePurchaseOrderId;
       context.sqlite.prepare(`
         UPDATE purchase_invoices SET supplier_id = ?, project_id = ?, supplier_invoice_number = ?,
           invoice_date = ?, tax_date = ?, due_date = ?, reference = ?, purchase_order_id = ?, subtotal_minor = ?,
@@ -401,6 +403,7 @@ export function savePurchaseInvoice(
       recordedNumber = internalNumber;
       assertSupplierInvoiceNumberAvailable(context.sqlite, data.supplierId, data.supplierInvoiceNumber);
       const resolvedOrderId = data.purchaseOrderId || resolvePurchaseOrderIdFromReference(context.sqlite, data.reference, data.supplierId);
+      effectiveOrderId = resolvedOrderId || null;
       context.sqlite.prepare(`
         INSERT INTO purchase_invoices (
           id, internal_number, supplier_id, project_id, supplier_invoice_number, invoice_date, tax_date,
@@ -412,6 +415,14 @@ export function savePurchaseInvoice(
       `).run(id, internalNumber, data.supplierId, data.projectId || null, data.supplierInvoiceNumber, data.invoiceDate, taxDate, data.dueDate, data.reference || null, resolvedOrderId || null, amounts.subtotalMinor, amounts.taxMinor, amounts.totalMinor, userId, now, now, rate.currencyCode, rate.exchangeRateToBase, rate.exchangeRateDate, rate.exchangeRateSource, base.baseSubtotalMinor, base.baseTaxMinor, base.baseTotalMinor, data.notes || null, data.terms || null);
     }
     insertLines(context.db, id, lines);
+    if (!invoiceId && effectiveOrderId) {
+      const parentOrder = context.sqlite.prepare(
+        "SELECT status FROM purchase_orders WHERE id = ?"
+      ).get(effectiveOrderId) as { status: string } | undefined;
+      if (parentOrder && (parentOrder.status === "closed" || parentOrder.status === "cancelled")) {
+        throw new Error("Cannot create an invoice for a closed or cancelled purchase order.");
+      }
+    }
     if (shouldPost) assertMutationPermission(businessId, userId, "purchases", "post");
     if (shouldPost) {
       assertDateNotLocked(context.sqlite, data.invoiceDate, "Purchase invoice");
@@ -489,14 +500,38 @@ export function duplicatePurchaseInvoice(businessId: string, userId: string, inv
   // Reuse the already-fetched DB context rather than calling getBusinessDb a second time.
   const context = getBusinessDb(businessId, userId);
   const minorUnit = getCurrency(context.sqlite, record.invoice.currencyCode).minor_unit;
+  const today = new Date().toISOString().split("T")[0];
+  const rawTerms = (record.supplier as any)?.paymentTermsDays;
+  const dueDays = (rawTerms !== null && rawTerms !== undefined) ? Number(rawTerms) : 30;
+  const dueDate = new Date(Date.now() + dueDays * 86400000).toISOString().split("T")[0];
+
   return savePurchaseInvoice(businessId, userId, {
-    supplierId: record.invoice.supplierId, projectId: record.invoice.projectId ?? "",
-    currencyCode: record.invoice.currencyCode, exchangeRateToBase: record.invoice.exchangeRateToBase,
-    exchangeRateDate: record.invoice.exchangeRateDate,
+    supplierId: record.invoice.supplierId,
+    projectId: record.invoice.projectId ?? "",
+    currencyCode: record.invoice.currencyCode,
+    exchangeRateToBase: record.invoice.exchangeRateToBase,
+    exchangeRateDate: today,
     exchangeRateSource: record.invoice.exchangeRateSource as "Base" | "Manual" | "CBUAE",
-    supplierInvoiceNumber: `${record.invoice.supplierInvoiceNumber}-COPY`, invoiceDate: record.invoice.invoiceDate, taxDate: record.invoice.taxDate,
-    dueDate: record.invoice.dueDate, reference: record.invoice.reference ?? "", purchaseOrderId: "",
-    lines: record.lines.map((line) => ({ itemId: line.itemId ?? "", description: line.description, quantity: quantityMicrosToInput(line.quantityMicros), unitPrice: minorToCurrencyInput(line.unitPriceMinor, minorUnit), expenseAccountId: line.expenseAccountId, taxCodeId: line.taxCodeId, projectId: line.projectId ?? "" })),
+    supplierInvoiceNumber: `${record.invoice.supplierInvoiceNumber}-COPY`,
+    invoiceDate: today,
+    taxDate: today,
+    dueDate,
+    reference: record.invoice.reference ?? "",
+    purchaseOrderId: "",
+    notes: record.invoice.notes ?? "",
+    terms: record.invoice.terms ?? "",
+    amountsIncludeTax: Boolean(record.invoice.amountsIncludeTax),
+    lines: record.lines.map((line) => ({
+      itemId: line.itemId ?? "",
+      description: line.description,
+      quantity: quantityMicrosToInput(line.quantityMicros),
+      unitPrice: minorToCurrencyInput(line.unitPriceMinor, minorUnit),
+      discountType: ((line as any).discountType as any) || "none",
+      discountValue: ((line as any).discountValue as any) || "0",
+      expenseAccountId: line.expenseAccountId,
+      taxCodeId: line.taxCodeId,
+      projectId: line.projectId ?? "",
+    })),
   }, "draft");
 }
 
@@ -508,6 +543,16 @@ export function deletePurchaseInvoice(businessId: string, userId: string, invoic
   if (invoice.documentStatus !== "draft") throw new Error("Only draft purchase invoices can be deleted.");
   context.sqlite.transaction(() => {
     context.db.delete(purchaseInvoices).where(eq(purchaseInvoices.id, invoiceId)).run();
+    if (invoice.purchaseOrderId) {
+      const remainingCount = context.sqlite.prepare(
+        "SELECT COUNT(*) as c FROM purchase_invoices WHERE purchase_order_id = ? AND id != ? AND document_status != 'void'"
+      ).get(invoice.purchaseOrderId, invoiceId) as { c: number };
+      if (remainingCount.c === 0) {
+        context.sqlite.prepare(
+          "UPDATE purchase_orders SET status = 'issued' WHERE id = ? AND status = 'closed'"
+        ).run(invoice.purchaseOrderId);
+      }
+    }
   }).immediate();
 
   recordActivity(businessId, {
@@ -541,6 +586,16 @@ export function voidPurchaseInvoice(businessId: string, userId: string, invoiceI
     reverseTransaction(context.sqlite, { originalSourceType: "purchase_invoice", originalSourceId: invoiceId, reversalSourceType: "purchase_invoice_void", reversalSourceId: invoiceId, date: now.slice(0, 10), description: `Void Purchase Invoice ${invoice.internalNumber}` });
     reverseTaxEntries(context.sqlite, { originalSourceType: "purchase_invoice", sourceId: invoiceId, reversalSourceType: "purchase_invoice_void", taxDate: invoice.taxDate });
     context.sqlite.prepare("UPDATE purchase_invoices SET document_status = 'void', voided_at = ?, updated_at = ? WHERE id = ?").run(now, now, invoiceId);
+    if (invoice.purchaseOrderId) {
+      const remainingCount = context.sqlite.prepare(
+        "SELECT COUNT(*) as c FROM purchase_invoices WHERE purchase_order_id = ? AND id != ? AND document_status != 'void'"
+      ).get(invoice.purchaseOrderId, invoiceId) as { c: number };
+      if (remainingCount.c === 0) {
+        context.sqlite.prepare(
+          "UPDATE purchase_orders SET status = 'issued' WHERE id = ? AND status = 'closed'"
+        ).run(invoice.purchaseOrderId);
+      }
+    }
   }).immediate();
 
   recordActivity(businessId, {

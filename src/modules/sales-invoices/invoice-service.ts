@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import { asc, eq } from "drizzle-orm";
 import { getBusinessDb } from "@/core/db/business";
 import {
+  businessTaxSettings,
   customers,
   salesInvoiceLines,
   salesInvoices,
@@ -24,6 +25,7 @@ import { calculateLines, totalsForLines, type StoredLine } from "@/modules/accou
 import { getCustomerUnallocatedCredit, receiptConfig } from "@/modules/receipts/receipt-service";
 import { applySettlementCredit } from "@/modules/settlement/settlement-service";
 import { recordActivity } from "@/modules/activity-log/activity-log-service";
+import { getBusinessProfile } from "@/modules/business-profile/business-profile-service";
 
 export type DocumentStatus = "draft" | "posted" | "void";
 export type PaymentStatus = "unpaid" | "partially_paid" | "paid" | "overdue";
@@ -536,6 +538,23 @@ export function createInvoice(
   const effectiveSalesOrderId = data.salesOrderId || autoRefs.orderId || null;
   const effectiveQuoteId = data.quoteId || autoRefs.quoteId || null;
 
+  const profileRow = context.sqlite.prepare("SELECT * FROM business_profile WHERE id = 'default'").get() as any;
+  const profile = getBusinessProfile(businessId, userId);
+  const taxSettings = context.db.select().from(businessTaxSettings).where(eq(businessTaxSettings.id, "default")).get();
+  const sellerLegalName = profileRow?.legal_name || profileRow?.trading_name || profile.legalName || profile.tradingName || "";
+  const sellerTrn = taxSettings?.trn || profileRow?.tax_id || profile.taxId || "";
+  const sellerAddress = [
+    profileRow?.address_line_1 ?? profile.addressLine1,
+    profileRow?.address_line_2 ?? profile.addressLine2,
+    profileRow?.city ?? profile.city,
+    profileRow?.state_or_emirate ?? profile.stateOrEmirate,
+    profileRow?.country ?? profile.country,
+  ].filter(Boolean).join(", ");
+
+  const customerLegalName = customer.legalName || customer.name || "";
+  const customerTrn = customer.trn || customer.taxReference || "";
+  const customerAddress = customer.billingAddress || [customer.addressLine1, customer.city, customer.countrySubdivision, customer.countryCode].filter(Boolean).join(", ");
+
   context.sqlite.transaction(() => {
     if (intent === "post") assertVatDateUnlocked(context.sqlite, taxDate, lines.map((line) => line.taxCodeId));
     const invoiceNumber = allocateNumber(context.sqlite, "invoice");
@@ -548,8 +567,10 @@ export function createInvoice(
           currency_code, exchange_rate_to_base, exchange_rate_date, exchange_rate_source,
           base_subtotal_minor, base_tax_minor, base_total_minor, notes, terms,
           sales_order_id, quote_id, amounts_include_tax,
+          seller_legal_name, seller_trn, seller_address,
+          customer_legal_name, customer_trn, customer_address,
           created_by, created_at, updated_at, posted_at, voided_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'draft', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL)
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'draft', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL)
       `)
       .run(
         id,
@@ -576,11 +597,34 @@ export function createInvoice(
         effectiveSalesOrderId,
         effectiveQuoteId,
         data.amountsIncludeTax ? 1 : 0,
+        sellerLegalName || null,
+        sellerTrn || null,
+        sellerAddress || null,
+        customerLegalName || null,
+        customerTrn || null,
+        customerAddress || null,
         userId,
         now,
         now,
       );
     insertLines(context.db, id, lines);
+
+    if (effectiveSalesOrderId) {
+      const parentOrder = context.sqlite.prepare(
+        "SELECT document_status FROM sales_orders WHERE id = ?"
+      ).get(effectiveSalesOrderId) as { document_status: string } | undefined;
+      if (parentOrder && (parentOrder.document_status === "completed" || parentOrder.document_status === "cancelled")) {
+        throw new Error("Cannot create an invoice for a completed or cancelled sales order.");
+      }
+      context.sqlite.prepare(
+        "UPDATE sales_orders SET document_status = 'completed' WHERE id = ? AND document_status = 'active'"
+      ).run(effectiveSalesOrderId);
+    }
+    if (effectiveQuoteId) {
+      context.sqlite.prepare(
+        "UPDATE sales_quotes SET document_status = 'accepted' WHERE id = ? AND document_status = 'sent'"
+      ).run(effectiveQuoteId);
+    }
     if (customFieldValues) {
 
       saveCustomFieldValuesInTransaction(context.sqlite, "sales_invoice", id, customFieldValues);
@@ -729,6 +773,24 @@ export function updateInvoice(
     const autoRefs = (!data.salesOrderId || !data.quoteId) ? resolveOrderAndQuoteFromReference(context.sqlite, data.reference, data.customerId) : { orderId: null, quoteId: null };
     const effectiveSalesOrderId = data.salesOrderId || autoRefs.orderId || ("salesOrderId" in input ? null : current.salesOrderId) || null;
     const effectiveQuoteId = data.quoteId || autoRefs.quoteId || ("quoteId" in input ? null : current.quoteId) || null;
+
+    const profileRow = context.sqlite.prepare("SELECT * FROM business_profile WHERE id = 'default'").get() as any;
+    const profile = getBusinessProfile(businessId, userId);
+    const taxSettings = context.db.select().from(businessTaxSettings).where(eq(businessTaxSettings.id, "default")).get();
+    const sellerLegalName = profileRow?.legal_name || profileRow?.trading_name || profile.legalName || profile.tradingName || "";
+    const sellerTrn = taxSettings?.trn || profileRow?.tax_id || profile.taxId || "";
+    const sellerAddress = [
+      profileRow?.address_line_1 ?? profile.addressLine1,
+      profileRow?.address_line_2 ?? profile.addressLine2,
+      profileRow?.city ?? profile.city,
+      profileRow?.state_or_emirate ?? profile.stateOrEmirate,
+      profileRow?.country ?? profile.country,
+    ].filter(Boolean).join(", ");
+
+    const customerLegalName = customer.legalName || customer.name || "";
+    const customerTrn = customer.trn || customer.taxReference || "";
+    const customerAddress = customer.billingAddress || [customer.addressLine1, customer.city, customer.countrySubdivision, customer.countryCode].filter(Boolean).join(", ");
+
     context.sqlite
       .prepare(`
         UPDATE sales_invoices
@@ -736,7 +798,14 @@ export function updateInvoice(
             subtotal_minor = ?, tax_minor = ?, total_minor = ?,
             currency_code = ?, exchange_rate_to_base = ?, exchange_rate_date = ?, exchange_rate_source = ?,
             base_subtotal_minor = ?, base_tax_minor = ?, base_total_minor = ?,
-            notes = ?, terms = ?, sales_order_id = ?, quote_id = ?, amounts_include_tax = ?, updated_at = ?
+            notes = ?, terms = ?, sales_order_id = ?, quote_id = ?, amounts_include_tax = ?,
+            seller_legal_name = CASE WHEN document_status = 'posted' AND seller_legal_name IS NOT NULL THEN seller_legal_name ELSE ? END,
+            seller_trn = CASE WHEN document_status = 'posted' AND seller_trn IS NOT NULL THEN seller_trn ELSE ? END,
+            seller_address = CASE WHEN document_status = 'posted' AND seller_address IS NOT NULL THEN seller_address ELSE ? END,
+            customer_legal_name = CASE WHEN document_status = 'posted' AND customer_legal_name IS NOT NULL THEN customer_legal_name ELSE ? END,
+            customer_trn = CASE WHEN document_status = 'posted' AND customer_trn IS NOT NULL THEN customer_trn ELSE ? END,
+            customer_address = CASE WHEN document_status = 'posted' AND customer_address IS NOT NULL THEN customer_address ELSE ? END,
+            updated_at = ?
         WHERE id = ?
       `)
       .run(
@@ -762,11 +831,28 @@ export function updateInvoice(
         effectiveSalesOrderId,
         effectiveQuoteId,
         data.amountsIncludeTax ? 1 : 0,
+        sellerLegalName || null,
+        sellerTrn || null,
+        sellerAddress || null,
+        customerLegalName || null,
+        customerTrn || null,
+        customerAddress || null,
         now,
         invoiceId,
       );
     context.sqlite.prepare("DELETE FROM sales_invoice_lines WHERE invoice_id = ?").run(invoiceId);
     insertLines(context.db, invoiceId, lines);
+
+    if (effectiveSalesOrderId) {
+      context.sqlite.prepare(
+        "UPDATE sales_orders SET document_status = 'completed' WHERE id = ? AND document_status = 'active'"
+      ).run(effectiveSalesOrderId);
+    }
+    if (effectiveQuoteId) {
+      context.sqlite.prepare(
+        "UPDATE sales_quotes SET document_status = 'accepted' WHERE id = ? AND document_status = 'sent'"
+      ).run(effectiveQuoteId);
+    }
     if (customFieldValues) {
 
       saveCustomFieldValuesInTransaction(context.sqlite, "sales_invoice", invoiceId, customFieldValues);
@@ -820,7 +906,34 @@ export function deleteInvoice(businessId: string, userId: string, invoiceId: str
   const invoice = context.db.select().from(salesInvoices).where(eq(salesInvoices.id, invoiceId)).get();
   if (!invoice) throw new Error("Invoice not found.");
   if (invoice.documentStatus !== "draft") throw new Error("Only draft invoices can be deleted.");
-  context.db.delete(salesInvoices).where(eq(salesInvoices.id, invoiceId)).run();
+
+  context.sqlite.transaction(() => {
+    context.db.delete(salesInvoices).where(eq(salesInvoices.id, invoiceId)).run();
+
+    if (invoice.salesOrderId) {
+      const remainingCount = context.sqlite.prepare(
+        "SELECT COUNT(*) as c FROM sales_invoices WHERE sales_order_id = ? AND id != ? AND document_status != 'void'"
+      ).get(invoice.salesOrderId, invoiceId) as { c: number };
+      if (remainingCount.c === 0) {
+        context.sqlite.prepare(
+          "UPDATE sales_orders SET document_status = 'active' WHERE id = ? AND document_status = 'completed'"
+        ).run(invoice.salesOrderId);
+      }
+    }
+    if (invoice.quoteId) {
+      const remainingCount = context.sqlite.prepare(
+        "SELECT COUNT(*) as c FROM sales_invoices WHERE quote_id = ? AND id != ? AND document_status != 'void'"
+      ).get(invoice.quoteId, invoiceId) as { c: number };
+      const remainingOrders = context.sqlite.prepare(
+        "SELECT COUNT(*) as c FROM sales_orders WHERE sales_quote_id = ? AND document_status NOT IN ('cancelled', 'superseded')"
+      ).get(invoice.quoteId) as { c: number };
+      if (remainingCount.c === 0 && remainingOrders.c === 0) {
+        context.sqlite.prepare(
+          "UPDATE sales_quotes SET document_status = 'sent' WHERE id = ? AND document_status = 'accepted'"
+        ).run(invoice.quoteId);
+      }
+    }
+  })();
 
   recordActivity(businessId, {
     userId,
@@ -836,9 +949,14 @@ export function duplicateInvoice(businessId: string, userId: string, invoiceId: 
   assertMutationPermission(businessId, userId, "sales", "create");
   const record = getInvoice(businessId, userId, invoiceId);
   if (!record) throw new Error("Invoice not found.");
-  // Reuse the already-fetched DB context (via the LRU pool) rather than calling getBusinessDb a second time.
   const context = getBusinessDb(businessId, userId);
   const minorUnit = getCurrency(context.sqlite, record.invoice.currencyCode).minor_unit;
+
+  const today = new Date().toISOString().split("T")[0];
+  const rawTerms = (record.customer as any)?.paymentTermsDays;
+  const dueDays = (rawTerms !== null && rawTerms !== undefined) ? Number(rawTerms) : 30;
+  const dueDate = new Date(Date.now() + dueDays * 86400000).toISOString().split("T")[0];
+
   return createInvoice(
     businessId,
     userId,
@@ -846,19 +964,24 @@ export function duplicateInvoice(businessId: string, userId: string, invoiceId: 
       customerId: record.invoice.customerId,
       currencyCode: record.invoice.currencyCode,
       exchangeRateToBase: record.invoice.exchangeRateToBase,
-      exchangeRateDate: record.invoice.exchangeRateDate,
+      exchangeRateDate: today,
       exchangeRateSource: record.invoice.exchangeRateSource as "Base" | "Manual" | "CBUAE",
       projectId: record.invoice.projectId ?? "",
-      invoiceDate: record.invoice.invoiceDate,
-      taxDate: record.invoice.taxDate,
+      invoiceDate: today,
+      taxDate: today,
       supplyEmirate: record.invoice.supplyEmirate ?? "",
-      dueDate: record.invoice.dueDate,
+      dueDate,
       reference: record.invoice.reference ?? "",
+      notes: record.invoice.notes ?? "",
+      terms: record.invoice.terms ?? "",
+      amountsIncludeTax: Boolean(record.invoice.amountsIncludeTax),
       lines: record.lines.map((line) => ({
         itemId: line.itemId ?? "",
         description: line.description,
         quantity: quantityMicrosToInput(line.quantityMicros),
         unitPrice: minorToCurrencyInput(line.unitPriceMinor, minorUnit),
+        discountType: ((line as any).discountType as any) || "none",
+        discountValue: String((line as any).discountValue ?? "0"),
         salesAccountId: line.salesAccountId,
         taxCodeId: line.taxCodeId,
         projectId: line.projectId ?? "",
@@ -900,6 +1023,30 @@ export function voidInvoice(businessId: string, userId: string, invoiceId: strin
     context.sqlite
       .prepare("UPDATE sales_invoices SET document_status = 'void', voided_at = ?, updated_at = ? WHERE id = ?")
       .run(now, now, invoiceId);
+
+    if (invoice.salesOrderId) {
+      const remainingCount = context.sqlite.prepare(
+        "SELECT COUNT(*) as c FROM sales_invoices WHERE sales_order_id = ? AND id != ? AND document_status != 'void'"
+      ).get(invoice.salesOrderId, invoiceId) as { c: number };
+      if (remainingCount.c === 0) {
+        context.sqlite.prepare(
+          "UPDATE sales_orders SET document_status = 'active' WHERE id = ? AND document_status = 'completed'"
+        ).run(invoice.salesOrderId);
+      }
+    }
+    if (invoice.quoteId) {
+      const remainingCount = context.sqlite.prepare(
+        "SELECT COUNT(*) as c FROM sales_invoices WHERE quote_id = ? AND id != ? AND document_status != 'void'"
+      ).get(invoice.quoteId, invoiceId) as { c: number };
+      const remainingOrders = context.sqlite.prepare(
+        "SELECT COUNT(*) as c FROM sales_orders WHERE sales_quote_id = ? AND document_status NOT IN ('cancelled', 'superseded')"
+      ).get(invoice.quoteId) as { c: number };
+      if (remainingCount.c === 0 && remainingOrders.c === 0) {
+        context.sqlite.prepare(
+          "UPDATE sales_quotes SET document_status = 'sent' WHERE id = ? AND document_status = 'accepted'"
+        ).run(invoice.quoteId);
+      }
+    }
   }).immediate();
 
   recordActivity(businessId, {

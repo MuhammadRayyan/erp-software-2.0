@@ -18,6 +18,7 @@ import { DocumentFormFooter } from "@/components/document-form-footer";
 import { SelectNative } from "@/components/ui/select-native";
 import { DocumentLineTable, useDocumentTotals } from "@/components/documents";
 import { broadcastLiveRefresh } from "@/components/use-live-refresh";
+import { useUnsavedChanges } from "@/hooks/use-unsaved-changes";
 
 type Option = { id: string; name: string; defaultCurrencyCode: string | null };
 type AccountOption = { id: string; name: string };
@@ -34,7 +35,8 @@ export function SalesQuoteForm({ businessId, quoteId, status = "draft", customer
     mode: "onTouched",
     defaultValues: initial,
   });
-  const { register, control, handleSubmit, setError, setValue, formState: { errors, isSubmitting } } = form;
+  const { register, control, handleSubmit, setError, setValue, formState: { errors, isSubmitting, isDirty, isSubmitSuccessful } } = form;
+  useUnsavedChanges(isDirty && !isSubmitSuccessful);
   const { fields, append, remove, insert, move } = useFieldArray({ control, name: "lines" });
   function duplicateLine(index: number) {
     const currentLine = form.getValues(`lines.${index}`);

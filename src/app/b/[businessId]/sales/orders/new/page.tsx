@@ -10,6 +10,7 @@ import { minorToCurrencyInput } from "@/modules/currency/conversion";
 import { getSalesQuote, listSalesQuotes } from "@/modules/sales-quotes/quote-service";
 import { SalesOrderForm } from "@/modules/sales-orders/sales-order-form";
 import { Breadcrumbs } from "@/components/breadcrumbs";
+import { getFormDefaults } from "@/modules/form-defaults/form-defaults-service";
 
 export default async function NewOrderPage({
   params,
@@ -21,6 +22,7 @@ export default async function NewOrderPage({
   const { businessId } = await params;
   const query = await searchParams;
   const { user, access } = await requireModule(businessId, "sales");
+  const formDefaults = getFormDefaults(businessId, user.id, "sales-order");
 
   const sourceQuote = query.quoteId ? getSalesQuote(businessId, user.id, query.quoteId) : null;
   const quotes = listSalesQuotes(businessId, user.id, { onlyLatest: true });
@@ -35,7 +37,14 @@ export default async function NewOrderPage({
 
   const today = new Date().toISOString().slice(0, 10);
   const defaultTax =
-    taxes.find((tax) => tax.rateBasisPoints === 500 && tax.vatCategory === "standard")?.id ?? taxes[0]?.id ?? "";
+    (formDefaults.defaultTaxCodeId ? taxes.find((tax) => tax.id === formDefaults.defaultTaxCodeId)?.id : undefined) ??
+    taxes.find((tax) => tax.rateBasisPoints === 500 && tax.vatCategory === "standard")?.id ??
+    taxes[0]?.id ??
+    "";
+  const defaultSalesAccount =
+    (formDefaults.defaultSalesAccountId ? accounts.find((a) => a.id === formDefaults.defaultSalesAccountId)?.id : undefined) ??
+    accounts[0]?.id ??
+    "";
   const projectId = sourceQuote?.quote.projectId ?? (projects.some((project) => project.id === query.projectId) ? query.projectId! : "");
   const customerId = sourceQuote?.quote.customerId ?? (customers.some((customer) => customer.id === query.customerId) ? query.customerId! : "");
   const documentCurrency =
@@ -65,7 +74,7 @@ export default async function NewOrderPage({
           unitPrice: "0.00",
           discountType: "none" as const,
           discountValue: "0",
-          salesAccountId: accounts[0]?.id ?? "",
+          salesAccountId: defaultSalesAccount,
           taxCodeId: defaultTax,
           projectId: "",
         },
@@ -121,9 +130,9 @@ export default async function NewOrderPage({
           date: today,
           expectedDate: sourceQuote?.quote.expiryDate ?? "",
           reference: sourceQuote?.quote.reference || sourceQuote?.quote.quoteNumber || "",
-          notes: sourceQuote?.quote.notes ?? "",
-          terms: sourceQuote?.quote.terms ?? "",
-          amountsIncludeTax: Boolean(sourceQuote?.quote.amountsIncludeTax),
+          notes: sourceQuote?.quote.notes ?? formDefaults.defaultNotes ?? "",
+          terms: sourceQuote?.quote.terms ?? formDefaults.defaultTerms ?? "",
+          amountsIncludeTax: sourceQuote ? Boolean(sourceQuote.quote.amountsIncludeTax) : Boolean(formDefaults.amountsIncludeTax),
           lines,
         }}
       />

@@ -9,22 +9,34 @@ import { supplierInputSchema, type SupplierInput } from "./supplier-input";
 import { getBaseCurrency, getCurrency } from "@/modules/currency/currency";
 import { recordActivity } from "@/modules/activity-log/activity-log-service";
 
-export function listSuppliers(businessId: string, userId: string) {
+export interface SupplierListRow {
+  id: string;
+  name: string;
+  email: string | null;
+  phone: string | null;
+  tax_reference: string | null;
+  address: string | null;
+  notes: string | null;
+  is_active: number;
+  payment_terms_days: number;
+  paymentTermsDays: number;
+  created_at: string;
+  updated_at: string;
+  total_purchased_minor: number;
+  total_paid_minor: number;
+}
+
+export function listSuppliers(businessId: string, userId: string): SupplierListRow[] {
   const { sqlite } = getBusinessDb(businessId, userId);
   return sqlite.prepare(`
-    SELECT s.*,
+    SELECT s.*, s.payment_terms_days AS paymentTermsDays,
       COALESCE((SELECT SUM(base_total_minor) FROM purchase_invoices pi
         WHERE pi.supplier_id = s.id AND pi.document_status = 'posted'), 0) AS total_purchased_minor,
       COALESCE((SELECT SUM(released_carrying_amount_minor) FROM supplier_payments sp
         WHERE sp.supplier_id = s.id AND sp.document_status = 'posted'), 0) AS total_paid_minor
     FROM suppliers s
     ORDER BY s.name
-  `).all() as {
-    id: string; name: string; email: string | null; phone: string | null;
-    tax_reference: string | null; address: string | null; notes: string | null;
-    is_active: number; created_at: string; updated_at: string;
-    total_purchased_minor: number; total_paid_minor: number;
-  }[];
+  `).all() as SupplierListRow[];
 }
 
 /** Result of `listSuppliersPaginated`. The `rows` slice is just the rows for the
@@ -76,7 +88,7 @@ export function listSuppliersPaginated(
   const effectivePage = Math.min(page, maxPage);
   const offset = (effectivePage - 1) * pageSize;
   const rows = sqlite.prepare(`
-    SELECT s.*,
+    SELECT s.*, s.payment_terms_days AS paymentTermsDays,
       COALESCE((SELECT SUM(base_total_minor) FROM purchase_invoices pi
         WHERE pi.supplier_id = s.id AND pi.document_status = 'posted'), 0) AS total_purchased_minor,
       COALESCE((SELECT SUM(released_carrying_amount_minor) FROM supplier_payments sp
@@ -84,12 +96,7 @@ export function listSuppliersPaginated(
     FROM suppliers s
     ORDER BY s.name
     LIMIT ? OFFSET ?
-  `).all(pageSize, offset) as {
-    id: string; name: string; email: string | null; phone: string | null;
-    tax_reference: string | null; address: string | null; notes: string | null;
-    is_active: number; created_at: string; updated_at: string;
-    total_purchased_minor: number; total_paid_minor: number;
-  }[];
+  `).all(pageSize, offset) as SupplierListRow[];
   return { rows, total, page: effectivePage, pageSize, totalPages: maxPage };
 }
 
@@ -127,6 +134,7 @@ export function createSupplier(
       registeredAddress: data.registeredAddress || null,
       countryCode: data.countryCode || null,
       defaultCurrencyCode,
+      paymentTermsDays: data.paymentTermsDays ?? 0,
       notes: data.notes || null,
       isActive: data.isActive,
       createdAt: now,
@@ -185,6 +193,7 @@ export function updateSupplier(
       registeredAddress: data.registeredAddress || null,
       countryCode: data.countryCode || null,
       defaultCurrencyCode,
+      paymentTermsDays: data.paymentTermsDays !== undefined ? data.paymentTermsDays : current.paymentTermsDays,
       notes: data.notes || null,
       isActive: data.isActive,
       updatedAt: new Date().toISOString(),

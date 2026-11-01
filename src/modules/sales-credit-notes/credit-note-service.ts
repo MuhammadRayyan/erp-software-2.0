@@ -2,7 +2,7 @@ import { assertMutationPermission, assertSavePermission } from "@/core/permissio
 import { randomUUID } from "node:crypto";
 import { asc, eq } from "drizzle-orm";
 import { getBusinessDb } from "@/core/db/business";
-import { customers, salesCreditNoteLines, salesCreditNotes, salesInvoices } from "@/core/db/business-schema";
+import { businessTaxSettings, customers, salesCreditNoteLines, salesCreditNotes, salesInvoices } from "@/core/db/business-schema";
 import {     quantityMicrosToInput } from "@/modules/accounting/calculations/money";
 import { postCreditNote } from "@/modules/accounting/services/credit-note-posting-service";
 import { allocateNumber } from "@/modules/accounting/services/numbering-service";
@@ -16,6 +16,7 @@ import { convertDocumentLinesToBase, minorToCurrencyInput,  proportionalCarrying
 import { storedRateSnapshot } from "@/modules/currency/validation";
 import { calculateLines, totalsForLines, type StoredLine } from "@/modules/accounting/services/document-line-calculator";
 import { recordActivity } from "@/modules/activity-log/activity-log-service";
+import { getBusinessProfile } from "@/modules/business-profile/business-profile-service";
 
 export type CreditNoteStatus = "draft" | "posted" | "void";
 export type CreditNoteIntent = "draft" | "post";
@@ -178,6 +179,25 @@ export function saveCreditNote(businessId: string, userId: string, input: Credit
   const id = noteId ?? randomUUID();
   const taxDate = data.taxDate || data.date;
   const customer = context.sqlite.prepare("SELECT name FROM customers WHERE id = ?").get(data.customerId) as { name: string };
+
+  const profileRow = context.sqlite.prepare("SELECT * FROM business_profile WHERE id = 'default'").get() as any;
+  const profile = getBusinessProfile(businessId, userId);
+  const taxSettings = context.db.select().from(businessTaxSettings).where(eq(businessTaxSettings.id, "default")).get();
+  const sellerLegalName = profileRow?.legal_name || profileRow?.trading_name || profile.legalName || profile.tradingName || "";
+  const sellerTrn = taxSettings?.trn || profileRow?.tax_id || profile.taxId || "";
+  const sellerAddress = [
+    profileRow?.address_line_1 ?? profile.addressLine1,
+    profileRow?.address_line_2 ?? profile.addressLine2,
+    profileRow?.city ?? profile.city,
+    profileRow?.state_or_emirate ?? profile.stateOrEmirate,
+    profileRow?.country ?? profile.country,
+  ].filter(Boolean).join(", ");
+
+  const customerRecord = context.db.select().from(customers).where(eq(customers.id, data.customerId)).get();
+  const customerLegalName = customerRecord?.legalName || customerRecord?.name || "";
+  const customerTrn = customerRecord?.trn || customerRecord?.taxReference || "";
+  const customerAddress = customerRecord?.billingAddress || [customerRecord?.addressLine1, customerRecord?.city, customerRecord?.countrySubdivision, customerRecord?.countryCode].filter(Boolean).join(", ");
+
   context.sqlite.transaction(() => {
     let number: string; let shouldPost = intent === "post"; let replace = false;
     if (noteId) {
@@ -190,7 +210,29 @@ export function saveCreditNote(businessId: string, userId: string, input: Credit
       }
       if (current.sourceInvoiceId !== data.sourceInvoiceId && current.documentStatus === "posted") throw new Error("Cannot change the source invoice after posting.");
       number = current.creditNoteNumber; shouldPost = current.documentStatus === "posted" || intent === "post"; replace = current.documentStatus === "posted";
-      context.sqlite.prepare(`UPDATE sales_credit_notes SET customer_id = ?, project_id = ?, source_invoice_id = ?, date = ?, tax_date = ?, supply_emirate = ?, reference = ?, reason = ?, subtotal_minor = ?, tax_minor = ?, total_minor = ?, currency_code = ?, exchange_rate_to_base = ?, exchange_rate_date = ?, exchange_rate_source = ?, base_subtotal_minor = ?, base_tax_minor = ?, base_total_minor = ?, updated_at = ? WHERE id = ?`).run(data.customerId, data.projectId || null, data.sourceInvoiceId, data.date, taxDate, data.supplyEmirate || null, data.reference || null, data.reason || null, amounts.subtotalMinor, amounts.taxMinor, amounts.totalMinor, rate.currencyCode, rate.exchangeRateToBase, rate.exchangeRateDate, rate.exchangeRateSource, base.baseSubtotalMinor, base.baseTaxMinor, baseCarryingAmountReleased, now, noteId);
+      context.sqlite.prepare(`
+        UPDATE sales_credit_notes
+        SET customer_id = ?, project_id = ?, source_invoice_id = ?, date = ?, tax_date = ?, supply_emirate = ?, reference = ?, reason = ?,
+            subtotal_minor = ?, tax_minor = ?, total_minor = ?, currency_code = ?, exchange_rate_to_base = ?, exchange_rate_date = ?, exchange_rate_source = ?,
+            base_subtotal_minor = ?, base_tax_minor = ?, base_total_minor = ?,
+            amounts_include_tax = ?, notes = ?, terms = ?,
+            seller_legal_name = CASE WHEN document_status = 'posted' AND seller_legal_name IS NOT NULL THEN seller_legal_name ELSE ? END,
+            seller_trn = CASE WHEN document_status = 'posted' AND seller_trn IS NOT NULL THEN seller_trn ELSE ? END,
+            seller_address = CASE WHEN document_status = 'posted' AND seller_address IS NOT NULL THEN seller_address ELSE ? END,
+            customer_legal_name = CASE WHEN document_status = 'posted' AND customer_legal_name IS NOT NULL THEN customer_legal_name ELSE ? END,
+            customer_trn = CASE WHEN document_status = 'posted' AND customer_trn IS NOT NULL THEN customer_trn ELSE ? END,
+            customer_address = CASE WHEN document_status = 'posted' AND customer_address IS NOT NULL THEN customer_address ELSE ? END,
+            updated_at = ?
+        WHERE id = ?
+      `).run(
+        data.customerId, data.projectId || null, data.sourceInvoiceId, data.date, taxDate, data.supplyEmirate || null, data.reference || null, data.reason || null,
+        amounts.subtotalMinor, amounts.taxMinor, amounts.totalMinor, rate.currencyCode, rate.exchangeRateToBase, rate.exchangeRateDate, rate.exchangeRateSource,
+        base.baseSubtotalMinor, base.baseTaxMinor, baseCarryingAmountReleased,
+        data.amountsIncludeTax ? 1 : 0, data.notes || null, data.terms || null,
+        sellerLegalName || null, sellerTrn || null, sellerAddress || null,
+        customerLegalName || null, customerTrn || null, customerAddress || null,
+        now, noteId
+      );
       context.sqlite.prepare("DELETE FROM sales_credit_note_lines WHERE credit_note_id = ?").run(noteId);
     } else {
       number = allocateNumber(context.sqlite, "creditNote");
@@ -200,12 +242,29 @@ export function saveCreditNote(businessId: string, userId: string, input: Credit
           tax_date, supply_emirate, reference, reason, document_status, subtotal_minor, tax_minor,
           total_minor, currency_code, exchange_rate_to_base, exchange_rate_date,
           exchange_rate_source, base_subtotal_minor, base_tax_minor, base_total_minor,
+          amounts_include_tax, notes, terms,
+          seller_legal_name, seller_trn, seller_address,
+          customer_legal_name, customer_trn, customer_address,
           created_by, created_at, updated_at, posted_at, voided_at
         ) VALUES (
           ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'draft',
-          ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL
+          ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+          ?, ?, ?,
+          ?, ?, ?,
+          ?, ?, ?,
+          ?, ?, ?, NULL, NULL
         )
-      `).run(id, number, data.customerId, data.projectId || null, data.sourceInvoiceId, data.date, taxDate, data.supplyEmirate || null, data.reference || null, data.reason || null, amounts.subtotalMinor, amounts.taxMinor, amounts.totalMinor, rate.currencyCode, rate.exchangeRateToBase, rate.exchangeRateDate, rate.exchangeRateSource, base.baseSubtotalMinor, base.baseTaxMinor, baseCarryingAmountReleased, userId, now, now);
+      `).run(
+        id, number, data.customerId, data.projectId || null, data.sourceInvoiceId, data.date,
+        taxDate, data.supplyEmirate || null, data.reference || null, data.reason || null,
+        amounts.subtotalMinor, amounts.taxMinor, amounts.totalMinor, rate.currencyCode,
+        rate.exchangeRateToBase, rate.exchangeRateDate, rate.exchangeRateSource,
+        base.baseSubtotalMinor, base.baseTaxMinor, baseCarryingAmountReleased,
+        data.amountsIncludeTax ? 1 : 0, data.notes || null, data.terms || null,
+        sellerLegalName || null, sellerTrn || null, sellerAddress || null,
+        customerLegalName || null, customerTrn || null, customerAddress || null,
+        userId, now, now
+      );
     }
     insertLines(context.db, id, lines);
     if (shouldPost) assertMutationPermission(businessId, userId, "sales", "post");
@@ -246,7 +305,32 @@ export function duplicateCreditNote(businessId: string, userId: string, noteId: 
   const record = getCreditNote(businessId, userId, noteId);
   if (!record) throw new Error("Credit note not found.");
   const rate = storedRateSnapshot(getBusinessDb(businessId, userId).sqlite, record.note);
-  return saveCreditNote(businessId, userId, { currencyCode: rate.currencyCode, exchangeRateToBase: rate.exchangeRateToBase, exchangeRateDate: rate.exchangeRateDate, exchangeRateSource: rate.exchangeRateSource, customerId: record.note.customerId, projectId: record.note.projectId ?? "", sourceInvoiceId: record.note.sourceInvoiceId, date: record.note.date, taxDate: record.note.taxDate, supplyEmirate: record.note.supplyEmirate ?? "", reference: record.note.reference ?? "", reason: record.note.reason ?? "", lines: record.lines.map((line) => ({ description: line.description, quantity: quantityMicrosToInput(line.quantityMicros), unitPrice: minorToCurrencyInput(line.unitPriceMinor, rate.currencyMinorUnit), salesAccountId: line.salesAccountId, taxCodeId: line.taxCodeId, projectId: line.projectId ?? "" })) }, "draft");
+  const today = new Date().toISOString().split("T")[0];
+  return saveCreditNote(businessId, userId, {
+    currencyCode: rate.currencyCode,
+    exchangeRateToBase: rate.exchangeRateToBase,
+    exchangeRateDate: today,
+    exchangeRateSource: rate.exchangeRateSource,
+    customerId: record.note.customerId,
+    projectId: record.note.projectId ?? "",
+    sourceInvoiceId: record.note.sourceInvoiceId,
+    amountsIncludeTax: Boolean(record.note.amountsIncludeTax),
+    date: today,
+    taxDate: today,
+    supplyEmirate: record.note.supplyEmirate ?? "",
+    reference: record.note.reference ?? "",
+    reason: record.note.reason ?? "",
+    lines: record.lines.map((line) => ({
+      description: line.description,
+      quantity: quantityMicrosToInput(line.quantityMicros),
+      unitPrice: minorToCurrencyInput(line.unitPriceMinor, rate.currencyMinorUnit),
+      discountType: ((line as any).discountType as any) || "none",
+      discountValue: String((line as any).discountValue ?? "0"),
+      salesAccountId: line.salesAccountId,
+      taxCodeId: line.taxCodeId,
+      projectId: line.projectId ?? "",
+    })),
+  }, "draft");
 }
 
 export function deleteCreditNote(businessId: string, userId: string, noteId: string) {

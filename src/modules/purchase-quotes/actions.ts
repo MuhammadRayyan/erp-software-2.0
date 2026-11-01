@@ -2,7 +2,6 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { z } from "zod";
 import { requireSavePermission, requirePermission } from "@/core/permissions/require-module";
 import { purchaseQuoteInputSchema } from "./purchase-quote-input";
 import {
@@ -18,6 +17,8 @@ import { savePurchaseOrder } from "@/modules/purchase-orders/purchase-order-serv
 import { quantityMicrosToInput } from "@/modules/accounting/calculations/money";
 import { minorToDecimalString } from "@/core/format";
 
+import { formatZodFieldErrors } from "@/lib/zod-errors";
+
 export type PurchaseQuoteActionResult = { error?: string; fieldErrors?: Record<string, string[]> };
 
 export async function savePurchaseQuoteAction(
@@ -29,7 +30,7 @@ export async function savePurchaseQuoteAction(
   const { user } = await requireSavePermission(businessId, "purchases", quoteId, intent);
   const parsed = purchaseQuoteInputSchema.safeParse(input);
   if (!parsed.success) {
-    return { error: "Check the purchase quote fields and lines.", fieldErrors: z.flattenError(parsed.error).fieldErrors };
+    return { error: "Check the purchase quote fields and lines.", fieldErrors: formatZodFieldErrors(parsed.error) };
   }
   let id: string;
   try {
@@ -86,8 +87,11 @@ export async function convertPurchaseQuoteToOrderAction(businessId: string, quot
   try {
     const quoteData = getPurchaseQuote(businessId, user.id, quoteId);
     if (!quoteData) return { error: "Purchase quote not found." };
-    if (quoteData.quote.documentStatus !== "sent" && quoteData.quote.documentStatus !== "accepted") {
-      return { error: "Only sent or accepted quotes can be converted." };
+    if (quoteData.quote.documentStatus !== "sent") {
+      return { error: "Only sent quotes can be converted." };
+    }
+    if (quoteData.linkedOrders && quoteData.linkedOrders.length > 0) {
+      return { error: "This purchase quote has already been converted to an order." };
     }
 
     const input = {
@@ -99,6 +103,7 @@ export async function convertPurchaseQuoteToOrderAction(businessId: string, quot
       reference: quoteData.quote.quoteNumber,
       purchaseQuoteId: quoteId,
       notes: quoteData.quote.notes || "",
+      terms: quoteData.quote.terms || "",
       currencyCode: quoteData.quote.currencyCode,
       exchangeRateToBase: String(quoteData.quote.exchangeRateToBase),
       exchangeRateDate: quoteData.quote.exchangeRateDate || "",
@@ -120,16 +125,14 @@ export async function convertPurchaseQuoteToOrderAction(businessId: string, quot
     const orderId = savePurchaseOrder(businessId, user.id, input, "draft");
 
     // Automated Status Trigger: Mark quote as accepted
-    if (quoteData.quote.documentStatus === "sent") {
-      const { getBusinessDb } = await import("@/core/db/business");
-      const { purchaseQuotes } = await import("@/core/db/business-schema");
-      const { eq } = await import("drizzle-orm");
-      const context = getBusinessDb(businessId, user.id);
-      context.db.update(purchaseQuotes)
-        .set({ documentStatus: "accepted" })
-        .where(eq(purchaseQuotes.id, quoteId))
-        .run();
-    }
+    const { getBusinessDb } = await import("@/core/db/business");
+    const { purchaseQuotes } = await import("@/core/db/business-schema");
+    const { eq } = await import("drizzle-orm");
+    const context = getBusinessDb(businessId, user.id);
+    context.db.update(purchaseQuotes)
+      .set({ documentStatus: "accepted" })
+      .where(eq(purchaseQuotes.id, quoteId))
+      .run();
 
     revalidatePath(`/b/${businessId}/purchases/quotes`);
     revalidatePath(`/b/${businessId}/purchases/quotes/${quoteId}`);

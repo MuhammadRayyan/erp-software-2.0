@@ -143,6 +143,7 @@ export default async function PurchaseOrderViewPage({
           inventoryEnabled={access.modules.includes("inventory")}
           hasReceivableItems={lines.some((line) => Boolean(line.itemId) && line.remainingMicros > 0)}
           emailDefaults={emailDefaults}
+          linkedInvoice={record.relatedInvoices[0] ? { id: record.relatedInvoices[0].id, invoice_number: record.relatedInvoices[0].internal_number } : undefined}
         />
       </div>
 

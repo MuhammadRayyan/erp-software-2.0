@@ -25,6 +25,7 @@ export const supplierInputSchema = z.object({
   registeredAddress: z.string().trim().max(500).optional().default(""),
   countryCode: z.string().trim().toUpperCase().regex(/^$|^[A-Z]{2}$/, "Use a two-letter country code").optional().default(""),
   notes: z.string().trim().max(1_000).optional().default(""),
+  paymentTermsDays: z.coerce.number().int().min(0).max(365).optional().default(0),
   isActive: z.boolean().default(true),
 }).refine((data) => !data.electronicAddress || Boolean(data.electronicAddressScheme), {
   message: "Enter the electronic address scheme",

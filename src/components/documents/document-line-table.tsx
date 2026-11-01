@@ -1,12 +1,13 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef, useEffect } from "react";
 import type { UseFormRegister, FieldErrors, UseFormRegisterReturn } from "react-hook-form";
 import { ArrowDown, ArrowUp, Copy, Plus, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { SelectNative } from "@/components/ui/select-native";
 import { formatMoney } from "@/core/format";
+import { cn } from "@/lib/cn";
 import type { DocumentLinePreview, DocumentLineTaxOption } from "./document-calculations";
 import { DocumentTotalsPanel } from "./document-totals-panel";
 import { DocumentColumnToggles } from "./document-column-toggles";
@@ -172,6 +173,23 @@ export function DocumentLineTable({
   const resolvedAccountAria =
     accountAriaLabel ?? (accountFieldName === "salesAccountId" ? "sales account" : "expense account");
 
+  const tbodyRef = useRef<HTMLTableSectionElement>(null);
+  const prevFieldsLength = useRef(fields.length);
+
+  useEffect(() => {
+    if (fields.length > prevFieldsLength.current) {
+      const lastRowIndex = fields.length - 1;
+      const row = tbodyRef.current?.querySelector(`tr[data-line-index="${lastRowIndex}"]`);
+      if (row) {
+        const target = row.querySelector<HTMLInputElement | HTMLButtonElement>(
+          'button[role="combobox"], input:not([type="hidden"])'
+        );
+        target?.focus();
+      }
+    }
+    prevFieldsLength.current = fields.length;
+  }, [fields.length]);
+
   return (
     <div>
       {typeof errors?.lines?.message === "string" && (
@@ -217,7 +235,7 @@ export function DocumentLineTable({
               </th>
             </tr>
           </thead>
-          <tbody>
+          <tbody ref={tbodyRef}>
             {fields.map((field, index) => {
               const line = lines[index];
               const preview = previews[index];
@@ -232,7 +250,7 @@ export function DocumentLineTable({
               };
 
               return (
-                <tr key={field.id}>
+                <tr key={field.id} data-line-index={index}>
                   {showLineNumber && (
                     <td className="text-center text-muted-foreground align-middle py-2 text-xs font-medium">
                       {index + 1}
@@ -260,9 +278,15 @@ export function DocumentLineTable({
                     <td className="align-top min-w-0">
                       <Input
                         aria-label={`Line ${index + 1} description`}
-                        className="w-full min-w-0 text-xs"
+                        className={cn("w-full min-w-0 text-xs", lineError?.description && "border-destructive focus-visible:ring-destructive")}
                         placeholder="Description..."
                         {...register(`lines.${index}.description`)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter" && !e.shiftKey) {
+                            e.preventDefault();
+                            if (isLastRow) onAppend();
+                          }
+                        }}
                       />
                       {lineError?.description && (
                         <p className="field-error">{lineError.description.message}</p>
@@ -272,18 +296,27 @@ export function DocumentLineTable({
 
                   <td className="align-top">
                     <Input
-                      className="money text-right w-full min-w-0 text-xs"
+                      className={cn("money text-right w-full min-w-0 text-xs", lineError?.quantity && "border-destructive focus-visible:ring-destructive")}
                       type="number"
                       step="0.0001"
                       min="0.0001"
                       aria-label={`Line ${index + 1} quantity`}
                       {...register(`lines.${index}.quantity`)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" && !e.shiftKey) {
+                          e.preventDefault();
+                          if (isLastRow) onAppend();
+                        }
+                      }}
                     />
+                    {lineError?.quantity && (
+                      <p className="field-error">{lineError.quantity.message}</p>
+                    )}
                   </td>
 
                   <td className="align-top">
                     <Input
-                      className="money text-right w-full min-w-0 text-xs"
+                      className={cn("money text-right w-full min-w-0 text-xs", lineError?.unitPrice && "border-destructive focus-visible:ring-destructive")}
                       type="number"
                       step="0.000001"
                       min="0"
@@ -309,6 +342,9 @@ export function DocumentLineTable({
                         }
                       }}
                     />
+                    {lineError?.unitPrice && (
+                      <p className="field-error">{lineError.unitPrice.message}</p>
+                    )}
                   </td>
 
                   {showDiscounts && (
@@ -358,7 +394,7 @@ export function DocumentLineTable({
                     ) : (
                       <SelectNative
                         aria-label={`Line ${index + 1} ${resolvedAccountAria}`}
-                        className="w-full text-xs"
+                        className={cn("w-full text-xs", lineError?.[accountFieldName] && "border-destructive focus-visible:ring-destructive")}
                         {...register(`lines.${index}.${accountFieldName}`)}
                         onKeyDown={(e) => {
                           if (!showLineTaxCodes && !showLineProjects) {
@@ -376,6 +412,9 @@ export function DocumentLineTable({
                         ))}
                       </SelectNative>
                     )}
+                    {lineError?.[accountFieldName] && (
+                      <p className="field-error">{lineError[accountFieldName].message}</p>
+                    )}
                     {!showLineTaxCodes && (
                       <input type="hidden" {...register(`lines.${index}.taxCodeId`)} />
                     )}
@@ -385,7 +424,7 @@ export function DocumentLineTable({
                     <td className="align-top">
                       <SelectNative
                         aria-label={`Line ${index + 1} tax code`}
-                        className="w-full text-xs"
+                        className={cn("w-full text-xs", lineError?.taxCodeId && "border-destructive focus-visible:ring-destructive")}
                         {...register(`lines.${index}.taxCodeId`)}
                         onKeyDown={(e) => {
                           if (!showLineProjects) {
@@ -399,6 +438,9 @@ export function DocumentLineTable({
                           </option>
                         ))}
                       </SelectNative>
+                      {lineError?.taxCodeId && (
+                        <p className="field-error">{lineError.taxCodeId.message}</p>
+                      )}
                     </td>
                   )}
 

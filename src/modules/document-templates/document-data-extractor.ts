@@ -117,23 +117,30 @@ export function buildDocumentTemplateData(
     project?: string;
   }> = [];
   let customFields: { name: string; value: string }[] = [];
+  let snapshotSellerName: string | undefined = undefined;
+  let snapshotSellerAddress: string | undefined = undefined;
+  let snapshotSellerTrn: string | undefined = undefined;
 
   if (documentType === "sales-invoice") {
     const record = getInvoice(businessId, userId, documentId);
     if (!record) throw new Error("Invoice not found");
+    snapshotSellerName = (record.invoice as any).sellerLegalName || undefined;
+    snapshotSellerAddress = (record.invoice as any).sellerAddress || undefined;
+    snapshotSellerTrn = (record.invoice as any).sellerTrn || undefined;
     currency = record.invoice.currencyCode;
     title = "INVOICE";
     number = record.invoice.invoiceNumber;
     status = record.invoice.documentStatus;
-    partyName = record.customer.name;
+    partyName = (record.invoice as any).customerLegalName || record.customer.legalName || record.customer.name;
     partyHref = `/b/${businessId}/customers/${record.customer.id}`;
     partyAddress =
+      (record.invoice as any).customerAddress ||
       record.customer.billingAddress ||
       [record.customer.addressLine1, record.customer.city, record.customer.countrySubdivision, record.customer.countryCode]
         .filter(Boolean)
         .join(", ") ||
       undefined;
-    partyTrn = record.customer.taxReference || record.customer.trn || undefined;
+    partyTrn = (record.invoice as any).customerTrn || record.customer.taxReference || record.customer.trn || undefined;
     partyEmail = record.customer.email || undefined;
     partyPhone = record.customer.phone || undefined;
     docNotes = record.invoice.notes || undefined;
@@ -243,20 +250,24 @@ export function buildDocumentTemplateData(
   } else if (documentType === "sales-credit-note") {
     const record = getCreditNote(businessId, userId, documentId);
     if (!record) throw new Error("Credit note not found");
+    snapshotSellerName = (record.note as any).sellerLegalName || undefined;
+    snapshotSellerAddress = (record.note as any).sellerAddress || undefined;
+    snapshotSellerTrn = (record.note as any).sellerTrn || undefined;
     currency = record.note.currencyCode;
     title = "SALES CREDIT NOTE";
     number = record.note.creditNoteNumber;
     status = (record.note as any).documentStatus;
     partyLabel = "CREDIT TO";
-    partyName = record.customer.name;
+    partyName = (record.note as any).customerLegalName || record.customer.legalName || record.customer.name;
     partyHref = `/b/${businessId}/customers/${record.customer.id}`;
     partyAddress =
+      (record.note as any).customerAddress ||
       record.customer.billingAddress ||
       [record.customer.addressLine1, record.customer.city, record.customer.countrySubdivision, record.customer.countryCode]
         .filter(Boolean)
         .join(", ") ||
       undefined;
-    partyTrn = record.customer.taxReference || record.customer.trn || undefined;
+    partyTrn = (record.note as any).customerTrn || record.customer.taxReference || record.customer.trn || undefined;
     partyEmail = record.customer.email || undefined;
     partyPhone = record.customer.phone || undefined;
     docNotes = (record.note as any).notes || undefined;
@@ -653,6 +664,10 @@ export function buildDocumentTemplateData(
   } catch {
     /* fallback to businessName */
   }
+
+  if (snapshotSellerName) resolvedCompanyName = snapshotSellerName;
+  if (snapshotSellerAddress) resolvedCompanyAddress = snapshotSellerAddress;
+  if (snapshotSellerTrn) resolvedSellerTrn = snapshotSellerTrn;
 
   const data: DocumentTemplateData = {
     companyName: resolvedCompanyName,
