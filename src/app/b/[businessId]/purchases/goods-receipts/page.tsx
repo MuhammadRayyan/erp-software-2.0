@@ -1,14 +1,13 @@
 import Link from "next/link";
 import { ArrowLeft, Plus } from "lucide-react";
 import { EmptyState } from "@/components/empty-state";
-import { ListDateFilter } from "@/components/list-date-filter";
 import { PageHeader } from "@/components/page-header";
 import { StatusBadge } from "@/components/status-badge";
 import { DensityToggle } from "@/components/density-toggle";
 import { Button } from "@/components/ui/button";
 import { formatDate, formatMoney } from "@/core/format";
 import { requireModule } from "@/core/permissions/require-module";
-import { buildDateSearchParams, DATE_PATTERN } from "@/lib/params";
+import { DATE_PATTERN } from "@/lib/params";
 import { listGoodsReceipts } from "@/modules/inventory/goods-receipt-service";
 import { formatQuantityMicros } from "@/modules/inventory/inventory-valuation";
 import { GoodsReceiptRowActions } from "@/modules/inventory/goods-receipt-row-actions";
@@ -29,7 +28,6 @@ export default async function GoodsReceiptsPage({
   const to = DATE_PATTERN.test(sp.to ?? "") ? sp.to : undefined;
 
   const rows = listGoodsReceipts(businessId, user.id, { from, to });
-  const searchParamsUrl = buildDateSearchParams({ from, to });
 
   return (
     <div className="page-container">
@@ -53,14 +51,6 @@ export default async function GoodsReceiptsPage({
       
       {rows.length ? (
         <div className="data-panel overflow-hidden">
-          <ListDateFilter
-            pathname={`/b/${businessId}/purchases/goods-receipts`}
-            searchParams={searchParamsUrl}
-            initialFrom={from ?? ""}
-            initialTo={to ?? ""}
-            fromLabel="Receipt from"
-            toLabel="Receipt to"
-          />
           <div className="overflow-x-auto">
             <table className="data-table min-w-[800px]">
               <thead>

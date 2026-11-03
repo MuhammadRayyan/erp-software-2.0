@@ -1,11 +1,10 @@
 import Link from "next/link";
 import { Plus, ReceiptText } from "lucide-react";
 import { EmptyState } from "@/components/empty-state";
-import { ListDateFilter } from "@/components/list-date-filter";
 import { PageHeader } from "@/components/page-header";
 import { Button } from "@/components/ui/button";
 import { requireModule } from "@/core/permissions/require-module";
-import { buildDateSearchParams, DATE_PATTERN } from "@/lib/params";
+import { DATE_PATTERN } from "@/lib/params";
 import { listPreferences } from "@/modules/preferences/preference-service";
 import { decodeColumnSnapshots } from "@/modules/preferences/snapshot-codec";
 import { SalesOrderTable } from "@/modules/sales-orders/sales-order-table";
@@ -30,7 +29,6 @@ export default async function OrderListPage({
   const orders = listSalesOrders(businessId, user.id, { from, to });
   const preferences = listPreferences(businessId, user.id);
   const columnSnapshots = decodeColumnSnapshots(preferences);
-  const searchParamsUrl = buildDateSearchParams({ from, to });
 
   return (
     <div className="page-container">
@@ -44,14 +42,6 @@ export default async function OrderListPage({
       </PageHeader>
       {orders.length ? (
         <div className="data-panel overflow-hidden">
-          <ListDateFilter
-            pathname={`/b/${businessId}/sales/orders`}
-            searchParams={searchParamsUrl}
-            initialFrom={from ?? ""}
-            initialTo={to ?? ""}
-            fromLabel="Order from"
-            toLabel="Order to"
-          />
           <SalesOrderTable
             businessId={businessId}
             orders={orders}

@@ -141,15 +141,15 @@ test("Audited Architectural & Functional Fixes Verification Suite", async (suite
     const salesGroup = primaryNav.find((g) => g.label === "Sales");
     assert.ok(salesGroup, "Sales nav group must exist");
     assert.ok(
-      salesGroup.items.some((i) => i.path === "/emails" && i.module === "sales"),
-      "Sales nav group must have Sent Emails"
+      salesGroup.items.some((i) => i.path === "/emails" && (i.module === "sales" || i.modules?.includes("purchases"))),
+      "Sales nav group must have Sent Emails accessible to sales and purchases users"
     );
 
     const purchasesGroup = primaryNav.find((g) => g.label === "Purchases");
     assert.ok(purchasesGroup, "Purchases nav group must exist");
     assert.ok(
-      purchasesGroup.items.some((i) => i.path === "/emails" && i.module === "purchases"),
-      "Purchases nav group must have Sent Emails accessible to purchases users"
+      !purchasesGroup.items.some((i) => i.path === "/emails"),
+      "Purchases nav group must not duplicate Sent Emails"
     );
 
     // Test getRelatedDocumentPath for all 6 document types + purchases invoice

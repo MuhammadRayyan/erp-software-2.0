@@ -1,7 +1,6 @@
 import Link from "next/link";
 import { Plus, ReceiptText } from "lucide-react";
 import { EmptyState } from "@/components/empty-state";
-import { ListDateFilter } from "@/components/list-date-filter";
 import { ListPagination } from "@/components/list-pagination";
 import { PageHeader } from "@/components/page-header";
 import { Button } from "@/components/ui/button";
@@ -64,14 +63,6 @@ export default async function InvoiceListPage({
       </PageHeader>
       {invoices.length || pagination.total > 0 ? (
         <div className="data-panel overflow-hidden">
-          <ListDateFilter
-            pathname={`/b/${businessId}/sales/invoices`}
-            searchParams={searchParamsUrl}
-            initialFrom={from ?? ""}
-            initialTo={to ?? ""}
-            fromLabel="Invoice from"
-            toLabel="Invoice to"
-          />
           {invoices.length ? (
             <InvoiceTable
               businessId={businessId}

@@ -1,7 +1,6 @@
 import Link from "next/link";
 import { Plus } from "lucide-react";
 import { EmptyState } from "@/components/empty-state";
-import { ListDateFilter } from "@/components/list-date-filter";
 import { ListPagination } from "@/components/list-pagination";
 import { PageHeader } from "@/components/page-header";
 import { StatusBadge } from "@/components/status-badge";
@@ -59,14 +58,6 @@ export default async function SupplierPaymentsPage({
       </PageHeader>
       {payments.length || pagination.total > 0 ? (
         <div className="data-panel overflow-hidden">
-          <ListDateFilter
-            pathname={`/b/${businessId}/purchases/payments`}
-            searchParams={searchParamsUrl}
-            initialFrom={from ?? ""}
-            initialTo={to ?? ""}
-            fromLabel="Payment from"
-            toLabel="Payment to"
-          />
           {payments.length ? (
             <div className="overflow-x-auto">
               <table className="data-table min-w-[1000px]">

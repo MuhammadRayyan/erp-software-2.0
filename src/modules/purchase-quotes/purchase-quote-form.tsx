@@ -187,6 +187,18 @@ export function PurchaseQuoteForm({
             </Label>
             <Input id="expiryDate" type="date" {...register("expiryDate")} />
           </div>
+          <DocumentCurrencyFields
+            baseCurrencyCode={currency}
+            currencies={currencies}
+            rates={rates}
+            currencyCode={currencyCode}
+            exchangeRateToBase={exchangeRateToBase}
+            exchangeRateDate={exchangeRateDate}
+            exchangeRateSource={exchangeRateSource}
+            relevantDate={quoteDate}
+            disabled={status === "sent"}
+            onChange={(field, value) => setValue(field, value)}
+          />
           <div className="space-y-1.5">
             <Label htmlFor="projectId">
               Project <span className="font-normal text-muted-foreground">(optional)</span>
@@ -221,25 +233,6 @@ export function PurchaseQuoteForm({
             </div>
           </div>
         </div>
-      </section>
-
-      <section className="form-section">
-        <h2 className="mb-4 text-base font-semibold">Commitment currency</h2>
-        <DocumentCurrencyFields
-          baseCurrencyCode={currency}
-          currencies={currencies}
-          rates={rates}
-          currencyCode={currencyCode}
-          exchangeRateToBase={exchangeRateToBase}
-          exchangeRateDate={exchangeRateDate}
-          exchangeRateSource={exchangeRateSource}
-          relevantDate={quoteDate}
-          disabled={status === "sent"}
-          onChange={(field, value) => setValue(field, value)}
-        />
-        <p className="mt-3 text-xs text-muted-foreground">
-          This is an operational commitment snapshot only. A later Purchase Invoice uses its own posting and VAT rate.
-        </p>
       </section>
 
       <section className="form-section">

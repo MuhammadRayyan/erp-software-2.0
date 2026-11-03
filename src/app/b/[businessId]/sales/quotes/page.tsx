@@ -1,11 +1,10 @@
 import Link from "next/link";
 import { Plus, ReceiptText } from "lucide-react";
 import { EmptyState } from "@/components/empty-state";
-import { ListDateFilter } from "@/components/list-date-filter";
 import { PageHeader } from "@/components/page-header";
 import { Button } from "@/components/ui/button";
 import { requireModule } from "@/core/permissions/require-module";
-import { buildDateSearchParams, DATE_PATTERN } from "@/lib/params";
+import { DATE_PATTERN } from "@/lib/params";
 import { listPreferences } from "@/modules/preferences/preference-service";
 import { decodeColumnSnapshots } from "@/modules/preferences/snapshot-codec";
 import { LiveRefresh } from "@/components/live-refresh";
@@ -30,7 +29,6 @@ export default async function QuoteListPage({
   const quotes = listSalesQuotes(businessId, user.id, { from, to });
   const preferences = listPreferences(businessId, user.id);
   const columnSnapshots = decodeColumnSnapshots(preferences);
-  const searchParamsUrl = buildDateSearchParams({ from, to });
 
   return (
     <div className="page-container">
@@ -44,14 +42,6 @@ export default async function QuoteListPage({
       </PageHeader>
       {quotes.length ? (
         <div className="data-panel overflow-hidden">
-          <ListDateFilter
-            pathname={`/b/${businessId}/sales/quotes`}
-            searchParams={searchParamsUrl}
-            initialFrom={from ?? ""}
-            initialTo={to ?? ""}
-            fromLabel="Quote from"
-            toLabel="Quote to"
-          />
           <SalesQuoteTable
             businessId={businessId}
             quotes={quotes}

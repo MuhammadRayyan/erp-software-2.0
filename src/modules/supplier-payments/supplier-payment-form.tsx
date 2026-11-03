@@ -279,6 +279,19 @@ export function SupplierPaymentForm({
             {errors.bankAccountId && <p className="field-error">{errors.bankAccountId.message}</p>}
           </div>
 
+          <DocumentCurrencyFields
+            baseCurrencyCode={currency}
+            currencies={currencies}
+            rates={rates}
+            currencyCode={currencyCode}
+            exchangeRateToBase={exchangeRateToBase}
+            exchangeRateDate={exchangeRateDate}
+            exchangeRateSource={exchangeRateSource}
+            relevantDate={paymentDate}
+            lockCurrency={false}
+            onChange={(field, val) => setValue(field, val)}
+          />
+
           <div className="space-y-1.5">
             <Label htmlFor="date">Payment Date</Label>
             <Input id="date" type="date" {...register("date")} aria-invalid={!!errors.date} />
@@ -516,26 +529,6 @@ export function SupplierPaymentForm({
             </span>
           </div>
         )}
-      </section>
-
-      {/* Currency Section */}
-      <section className="border-b border-border pb-7">
-        <h2 className="mb-4 text-base font-semibold">Settlement Currency</h2>
-        <DocumentCurrencyFields
-          baseCurrencyCode={currency}
-          currencies={currencies}
-          rates={rates}
-          currencyCode={currencyCode}
-          exchangeRateToBase={exchangeRateToBase}
-          exchangeRateDate={exchangeRateDate}
-          exchangeRateSource={exchangeRateSource}
-          relevantDate={paymentDate}
-          lockCurrency={false}
-          onChange={(field, val) => setValue(field, val)}
-        />
-        <p className="mt-3 text-xs text-muted-foreground">
-          Payments record in the settlement currency. The Bank/Cash account and General Ledger entries reflect base currency equivalent; any FX differences post to Realized FX Gain/Loss.
-        </p>
       </section>
 
       <div className="flex justify-end gap-2">

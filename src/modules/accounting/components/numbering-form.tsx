@@ -6,7 +6,6 @@ import { LoaderCircle } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { updateInvoiceNumberingAction } from "../actions";
 import type { InvoiceNumberingInput } from "../numbering-input";
 
@@ -77,80 +76,83 @@ export function NumberingForm({ businessId, initial }: { businessId: string; ini
       </div>
 
       {groups.map((group) => (
-        <section key={group.title} className="rounded-lg border border-border bg-surface-raised p-5 shadow-xs">
+        <section key={group.title} className="rounded-lg border border-border bg-surface-raised p-5 shadow-xs space-y-3">
           <div className="border-b border-border pb-3">
             <h2 className="text-base font-semibold text-foreground">{group.title}</h2>
             <p className="text-xs text-muted-foreground">{group.description}</p>
           </div>
-          <div className="divide-y divide-border/60">
-            {group.items.map((sequence) => {
-              const prefix = String(values[sequence.prefixKey as keyof typeof values] ?? "");
-              const next = Number(values[sequence.nextKey as keyof typeof values] ?? 1);
-              const pKey = sequence.paddingKey as keyof InvoiceNumberingInput;
-              const padValue = pKey && values[pKey] != null ? Number(values[pKey]) : 4;
-              const sample = `${prefix}${String(next).padStart(Math.max(1, padValue), "0")}`;
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-xs">
+              <thead>
+                <tr className="border-b border-border text-muted-foreground">
+                  <th className="py-2 pr-4 font-semibold">Document Sequence</th>
+                  <th className="py-2 px-3 font-semibold w-40">Prefix</th>
+                  <th className="py-2 px-3 font-semibold w-28">Next Number</th>
+                  <th className="py-2 px-3 font-semibold w-24">Padding</th>
+                  <th className="py-2 pl-3 font-semibold w-36">Preview</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-border/60">
+                {group.items.map((sequence) => {
+                  const prefix = String(values[sequence.prefixKey as keyof typeof values] ?? "");
+                  const next = Number(values[sequence.nextKey as keyof typeof values] ?? 1);
+                  const pKey = sequence.paddingKey as keyof InvoiceNumberingInput;
+                  const padValue = pKey && values[pKey] != null ? Number(values[pKey]) : 4;
+                  const sample = `${prefix}${String(next).padStart(Math.max(1, padValue), "0")}`;
 
-              return (
-                <div key={sequence.label} className="py-4 first:pt-4 last:pb-0">
-                  <div className="grid gap-3 sm:grid-cols-[1.5fr_1fr_1fr_1.2fr] sm:items-end">
-                    <div className="space-y-1">
-                      <Label htmlFor={sequence.prefixKey} className="text-xs font-medium text-foreground">
-                        {sequence.label} Prefix
-                      </Label>
-                      <Input
-                        id={sequence.prefixKey}
-                        value={prefix}
-                        onChange={(e) => setValues((c) => ({ ...c, [sequence.prefixKey]: e.target.value }))}
-                        aria-invalid={!!errors[sequence.prefixKey]}
-                        className="h-9 font-mono text-sm"
-                      />
-                      {errors[sequence.prefixKey] && <p className="field-error">{errors[sequence.prefixKey][0]}</p>}
-                    </div>
-
-                    <div className="space-y-1">
-                      <Label htmlFor={sequence.nextKey} className="text-xs font-medium text-foreground">
-                        Next Number
-                      </Label>
-                      <Input
-                        id={sequence.nextKey}
-                        type="number"
-                        min="1"
-                        value={next}
-                        onChange={(e) => setValues((c) => ({ ...c, [sequence.nextKey]: Number(e.target.value) }))}
-                        aria-invalid={!!errors[sequence.nextKey]}
-                        className="h-9 font-mono text-sm"
-                      />
-                      {errors[sequence.nextKey] && <p className="field-error">{errors[sequence.nextKey][0]}</p>}
-                    </div>
-
-                    <div className="space-y-1">
-                      <Label htmlFor={pKey} className="text-xs font-medium text-foreground">
-                        Digits (Padding)
-                      </Label>
-                      <Input
-                        id={pKey}
-                        type="number"
-                        min="1"
-                        max="10"
-                        value={padValue}
-                        onChange={(e) => setValues((c) => ({ ...c, [pKey]: Number(e.target.value) }))}
-                        aria-invalid={!!errors[pKey]}
-                        className="h-9 font-mono text-sm"
-                      />
-                      {errors[pKey] && <p className="field-error">{errors[pKey][0]}</p>}
-                    </div>
-
-                    <div className="space-y-1">
-                      <span className="block text-[11px] font-medium text-muted-foreground">Preview Next</span>
-                      <div className="flex h-9 items-center justify-between rounded-md border border-border bg-surface-muted/60 px-3 font-mono text-xs font-medium text-foreground">
-                        <span>{sample}</span>
-                        <span className="text-[10px] text-muted-foreground uppercase">live</span>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              );
-            })}
+                  return (
+                    <tr key={sequence.label} className="hover:bg-surface-muted/30">
+                      <td className="py-2 pr-4 font-medium text-foreground">
+                        {sequence.label}
+                      </td>
+                      <td className="py-2 px-3 align-top">
+                        <Input
+                          id={sequence.prefixKey}
+                          aria-label={`${sequence.label} Prefix`}
+                          value={prefix}
+                          onChange={(e) => setValues((c) => ({ ...c, [sequence.prefixKey]: e.target.value }))}
+                          aria-invalid={!!errors[sequence.prefixKey]}
+                          className="h-8 font-mono text-xs"
+                        />
+                        {errors[sequence.prefixKey] && <p className="field-error text-[11px] mt-1">{errors[sequence.prefixKey][0]}</p>}
+                      </td>
+                      <td className="py-2 px-3 align-top">
+                        <Input
+                          id={sequence.nextKey}
+                          aria-label={`${sequence.label} Next Number`}
+                          type="number"
+                          min="1"
+                          value={next}
+                          onChange={(e) => setValues((c) => ({ ...c, [sequence.nextKey]: Number(e.target.value) }))}
+                          aria-invalid={!!errors[sequence.nextKey]}
+                          className="h-8 font-mono text-xs"
+                        />
+                        {errors[sequence.nextKey] && <p className="field-error text-[11px] mt-1">{errors[sequence.nextKey][0]}</p>}
+                      </td>
+                      <td className="py-2 px-3 align-top">
+                        <Input
+                          id={pKey}
+                          aria-label={`${sequence.label} Digits (Padding)`}
+                          type="number"
+                          min="1"
+                          max="10"
+                          value={padValue}
+                          onChange={(e) => setValues((c) => ({ ...c, [pKey]: Number(e.target.value) }))}
+                          aria-invalid={!!errors[pKey]}
+                          className="h-8 font-mono text-xs"
+                        />
+                        {errors[pKey] && <p className="field-error text-[11px] mt-1">{errors[pKey][0]}</p>}
+                      </td>
+                      <td className="py-2 pl-3 align-top">
+                        <div className="flex h-8 items-center px-2.5 rounded-md border border-border bg-surface-muted/60 font-mono text-xs font-medium text-foreground truncate">
+                          {sample}
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
           </div>
         </section>
       ))}

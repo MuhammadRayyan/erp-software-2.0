@@ -371,6 +371,18 @@ export function PurchaseInvoiceForm({
               <p className="field-error">{errors.dueDate.message}</p>
             )}
           </div>
+          <DocumentCurrencyFields
+            baseCurrencyCode={currency}
+            currencies={currencies}
+            rates={rates}
+            currencyCode={currencyCode}
+            exchangeRateToBase={exchangeRateToBase}
+            exchangeRateDate={exchangeRateDate}
+            exchangeRateSource={exchangeRateSource}
+            relevantDate={taxDate || invoiceDate}
+            disabled={documentStatus === "posted"}
+            onChange={(field, value) => setValue(field, value)}
+          />
           <div className="space-y-1.5">
             <Label htmlFor="reference">
               Reference{" "}
@@ -397,31 +409,10 @@ export function PurchaseInvoiceForm({
         </div>
       </section>
       <section className="form-section">
-        <h2 className="mb-4 text-base font-semibold">Document currency</h2>
-        <DocumentCurrencyFields
-          baseCurrencyCode={currency}
-          currencies={currencies}
-          rates={rates}
-          currencyCode={currencyCode}
-          exchangeRateToBase={exchangeRateToBase}
-          exchangeRateDate={exchangeRateDate}
-          exchangeRateSource={exchangeRateSource}
-          relevantDate={taxDate || invoiceDate}
-          disabled={documentStatus === "posted"}
-          onChange={(field, value) => setValue(field, value)}
-        />
-        {currencyCode !== currency && (
-          <p className="mt-3 text-xs text-muted-foreground">
-            Posting converts expenses, inventory, Input VAT, and Accounts
-            Payable to {currency} using this exact rate snapshot.
-          </p>
-        )}
-      </section>
-      <section className="form-section">
         <div className="mb-3 flex flex-wrap items-end justify-between gap-3">
           <div>
             <h2 className="text-base font-semibold">Line items</h2>
-            <p className="mt-1 text-sm text-muted-foreground">Select an item for inventory sales, or leave it blank for a service line.</p>
+            <p className="mt-1 text-sm text-muted-foreground">Select an item or service, or leave it blank for a service line.</p>
           </div>
           <div className="flex items-center gap-2">
             <Label htmlFor="globalTax" className="text-sm font-medium">Default Tax:</Label>
