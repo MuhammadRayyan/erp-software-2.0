@@ -100,6 +100,7 @@ export function PurchaseOrderForm({ businessId, orderId, status = "draft", suppl
         <div className="space-y-1.5"><Label htmlFor="purchaseQuoteId">Purchase quote <span className="font-normal text-muted-foreground">(optional)</span></Label><SelectNative id="purchaseQuoteId" {...register("purchaseQuoteId", { onChange: (e) => { const q = quotes?.find((item) => item.id === e.target.value); if (q) { if (!form.getValues("supplierId")) { form.setValue("supplierId", q.supplierId); } if (!form.getValues("reference")) { form.setValue("reference", `Quote ${q.quoteNumber}`); } } } })}><option value="">No linked quote</option>{availableQuotes.map((q) => <option key={q.id} value={q.id}>{q.quoteNumber}{q.date ? ` — ${q.date}` : ""}</option>)}</SelectNative></div>
       <div className="space-y-1.5"><Label htmlFor="date">Order date</Label><Input id="date" type="date" {...register("date")} aria-invalid={!!errors.date} />{errors.date && <p className="field-error">{errors.date.message}</p>}</div>
       <div className="space-y-1.5"><Label htmlFor="expectedDate">Expected date <span className="font-normal text-muted-foreground">(optional)</span></Label><Input id="expectedDate" type="date" {...register("expectedDate")} /></div>
+      <DocumentCurrencyFields baseCurrencyCode={currency} currencies={currencies} rates={rates} currencyCode={currencyCode} exchangeRateToBase={exchangeRateToBase} exchangeRateDate={exchangeRateDate} exchangeRateSource={exchangeRateSource} relevantDate={orderDate} disabled={status === "issued"} onChange={(field, value) => setValue(field, value)} />
       <div className="space-y-1.5"><Label htmlFor="projectId">Project <span className="font-normal text-muted-foreground">(optional)</span></Label><SelectNative id="projectId"  {...register("projectId")}><option value="">No project</option>{projects.map((project) => <option key={project.id} value={project.id}>{project.code} — {project.name}</option>)}</SelectNative></div>
       <div className="space-y-1.5"><Label htmlFor="reference">Reference <span className="font-normal text-muted-foreground">(optional)</span></Label><Input id="reference" {...register("reference")} /></div>
       <div className="space-y-1.5 md:col-span-3 grid md:grid-cols-2 gap-5">
@@ -113,12 +114,11 @@ export function PurchaseOrderForm({ businessId, orderId, status = "draft", suppl
         </div>
       </div>
     </div></section>
-    <section className="form-section"><h2 className="mb-4 text-base font-semibold">Commitment currency</h2><DocumentCurrencyFields baseCurrencyCode={currency} currencies={currencies} rates={rates} currencyCode={currencyCode} exchangeRateToBase={exchangeRateToBase} exchangeRateDate={exchangeRateDate} exchangeRateSource={exchangeRateSource} relevantDate={orderDate} disabled={status === "issued"} onChange={(field, value) => setValue(field, value)} /><p className="mt-3 text-xs text-muted-foreground">This is an operational commitment snapshot only. A later Purchase Invoice uses its own posting and VAT rate.</p></section>
     <section className="form-section">
       <div className="mb-3 flex flex-wrap items-end justify-between gap-3">
         <div>
           <h2 className="text-base font-semibold">Line items</h2>
-          <p className="mt-1 text-sm text-muted-foreground">Select an item for inventory sales, or leave it blank for a service line.</p>
+          <p className="mt-1 text-sm text-muted-foreground">Select an item or service, or leave it blank for a service line.</p>
         </div>
         <div className="flex items-center gap-2">
           <Label htmlFor="globalTax" className="text-sm font-medium">Default Tax:</Label>

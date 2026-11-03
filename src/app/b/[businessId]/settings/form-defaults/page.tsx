@@ -48,30 +48,30 @@ export default async function FormDefaultsListPage({ params }: { params: Promise
     >
       <div className="space-y-6">
         {FORM_GROUPS.map((group) => (
-          <div key={group.category} className="rounded-xl border border-border bg-surface-raised shadow-xs overflow-hidden">
-            <div className="border-b border-border bg-surface-muted/50 px-5 py-3">
-              <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">{group.category}</h2>
+          <section key={group.category} className="rounded-xl border border-border bg-surface-raised p-4 sm:p-5 shadow-xs space-y-3">
+            <div className="border-b border-border/60 pb-2">
+              <h2 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">{group.category}</h2>
             </div>
-            <ul className="divide-y divide-border">
+            <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
               {group.forms.map((form) => (
-                <li key={form.id}>
-                  <Link
-                    href={`/b/${businessId}/settings/form-defaults/${form.id}`}
-                    className="flex items-center gap-4 p-4 sm:p-5 hover:bg-surface-muted/50 transition-colors"
-                  >
-                    <div className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
-                      <form.icon className="size-5" />
+                <Link
+                  key={form.id}
+                  href={`/b/${businessId}/settings/form-defaults/${form.id}`}
+                  className="group relative flex h-11 items-center justify-between rounded-lg border border-border/70 bg-surface px-3 transition-all duration-150 hover:border-primary/50 hover:bg-surface-muted/50 hover:shadow-xs"
+                >
+                  <div className="flex items-center gap-2.5 min-w-0 pr-1">
+                    <div className="flex size-7 shrink-0 items-center justify-center rounded-md bg-primary/10 text-primary group-hover:bg-primary group-hover:text-primary-foreground transition-colors">
+                      <form.icon className="size-3.5" />
                     </div>
-                    <div className="flex-1">
-                      <h3 className="text-sm sm:text-base font-semibold text-foreground">{form.label}</h3>
-                      <p className="mt-0.5 text-xs sm:text-sm text-muted-foreground">{form.description}</p>
-                    </div>
-                    <ChevronRight className="size-5 text-muted-foreground" />
-                  </Link>
-                </li>
+                    <span className="text-xs sm:text-sm font-medium text-foreground group-hover:text-primary transition-colors truncate">
+                      {form.label}
+                    </span>
+                  </div>
+                  <ChevronRight className="size-4 shrink-0 text-muted-foreground/60 transition-transform group-hover:text-primary group-hover:translate-x-0.5" />
+                </Link>
               ))}
-            </ul>
-          </div>
+            </div>
+          </section>
         ))}
       </div>
     </SettingsShell>

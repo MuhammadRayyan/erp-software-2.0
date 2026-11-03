@@ -2,13 +2,12 @@ import Link from "next/link";
 import { Plus } from "lucide-react";
 import { BackLink } from "@/components/back-link";
 import { EmptyState } from "@/components/empty-state";
-import { ListDateFilter } from "@/components/list-date-filter";
 import { PageHeader } from "@/components/page-header";
 import { StatusBadge } from "@/components/status-badge";
 import { Button } from "@/components/ui/button";
 import { requireModule } from "@/core/permissions/require-module";
 import { formatDate, formatMoney } from "@/core/format";
-import { buildDateSearchParams, DATE_PATTERN } from "@/lib/params";
+import { DATE_PATTERN } from "@/lib/params";
 import { listDeliveryNotes } from "@/modules/inventory/delivery-note-service";
 import { formatQuantityMicros } from "@/modules/inventory/inventory-valuation";
 import { DeliveryNoteRowActions } from "@/modules/inventory/delivery-note-row-actions";
@@ -29,7 +28,6 @@ export default async function DeliveryNotesPage({
   const to = DATE_PATTERN.test(sp.to ?? "") ? sp.to : undefined;
 
   const rows = listDeliveryNotes(businessId, user.id, { from, to });
-  const searchParamsUrl = buildDateSearchParams({ from, to });
 
   return (
     <div className="page-container">
@@ -43,14 +41,6 @@ export default async function DeliveryNotesPage({
       </PageHeader>
       {rows.length ? (
         <div className="data-panel overflow-hidden">
-          <ListDateFilter
-            pathname={`/b/${businessId}/sales/delivery-notes`}
-            searchParams={searchParamsUrl}
-            initialFrom={from ?? ""}
-            initialTo={to ?? ""}
-            fromLabel="Delivery from"
-            toLabel="Delivery to"
-          />
           <div className="overflow-x-auto">
             <table className="data-table min-w-[800px]">
               <thead>

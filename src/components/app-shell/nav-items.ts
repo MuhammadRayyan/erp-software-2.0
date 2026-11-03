@@ -46,7 +46,7 @@ export const primaryNav: { label?: string; items: NavItem[] }[] = [
       { label: "Receipts", path: "/sales/receipts", icon: Receipt, module: "sales" },
       { label: "Credit Notes", path: "/sales/credit-notes", icon: ReceiptText, module: "sales" },
       { label: "Delivery Notes", path: "/sales/delivery-notes", icon: Truck, module: "sales" },
-      { label: "Sent Emails", path: "/emails", icon: Mail, module: "sales" },
+      { label: "Sent Emails", path: "/emails", icon: Mail, modules: ["sales", "purchases"] as const },
     ],
   },
   {
@@ -59,7 +59,6 @@ export const primaryNav: { label?: string; items: NavItem[] }[] = [
       { label: "Supplier Payments", path: "/purchases/payments", icon: HandCoins, module: "purchases" },
       { label: "Debit Notes", path: "/purchases/debit-notes", icon: ReceiptText, module: "purchases" },
       { label: "Goods Receipts", path: "/purchases/goods-receipts", icon: PackageCheck, module: "purchases" },
-      { label: "Sent Emails", path: "/emails", icon: Mail, module: "purchases" },
     ],
   },
   {

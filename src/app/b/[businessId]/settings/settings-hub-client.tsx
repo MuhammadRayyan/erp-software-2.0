@@ -12,7 +12,6 @@ import {
   FileInput,
   FileText,
   History,
-  Layers,
   LayoutGrid,
   ListOrdered,
   ListPlus,
@@ -58,7 +57,6 @@ export function SettingsHubClient({
   vatRegistered,
   isSuperAdmin = false,
   isAdmin = true,
-  initialTab,
   initialQuery,
 }: {
   businessId: string;
@@ -70,7 +68,6 @@ export function SettingsHubClient({
   initialQuery?: string;
 }) {
   const [query, setQuery] = useState(initialQuery ?? "");
-  const [activeTab, setActiveTab] = useState<string>(initialTab || "all");
 
   const groups: SettingGroup[] = useMemo(
     () => [
@@ -304,29 +301,8 @@ export function SettingsHubClient({
     [businessId, profile, vatRegistered, isSuperAdmin, isAdmin],
   );
 
-  const totalAllItems = useMemo(
-    () => groups.reduce((acc, g) => acc + g.items.length, 0),
-    [groups],
-  );
-
-  const tabs = useMemo(
-    () => [
-      { id: "all", label: "All Settings", icon: Layers, count: totalAllItems },
-      ...groups.map((g) => ({
-        id: g.id,
-        label: g.shortLabel,
-        icon: g.icon,
-        count: g.items.length,
-      })),
-    ],
-    [groups, totalAllItems],
-  );
-
   const visibleGroups = useMemo(() => {
     let result = groups;
-    if (activeTab !== "all") {
-      result = result.filter((g) => g.id === activeTab);
-    }
     if (query.trim()) {
       const q = query.toLowerCase().trim();
       result = result
@@ -342,128 +318,42 @@ export function SettingsHubClient({
         .filter((group) => group.items.length > 0);
     }
     return result;
-  }, [groups, activeTab, query]);
+  }, [groups, query]);
 
   const totalResults = visibleGroups.reduce((acc, g) => acc + g.items.length, 0);
 
   return (
     <div className="space-y-5">
-      {/* Top Organization Compact Snapshot Bar */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 rounded-xl border border-border bg-surface-raised px-4 py-3 shadow-xs">
-        <div className="flex items-center gap-3">
-          <div className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary font-bold text-sm">
-            {(profile.tradingName || profile.legalName || "ERP").slice(0, 2).toUpperCase()}
-          </div>
-          <div>
-            <h2 className="text-sm font-semibold tracking-tight text-foreground">
-              {profile.tradingName || profile.legalName || "Business Settings"}
-            </h2>
-            <p className="text-xs text-muted-foreground">
-              {[profile.city, profile.stateOrEmirate, profile.country].filter(Boolean).join(", ") ||
-                "UAE Accounting & Document Configuration"}
-            </p>
-          </div>
-        </div>
-
-        <div className="flex flex-wrap items-center gap-2">
-          <Badge tone="info" className="text-xs font-medium px-2 py-0.5">
-            Base: {profile.baseCurrency}
-          </Badge>
-          <Badge tone={vatRegistered ? "success" : "neutral"} className="text-xs font-medium px-2 py-0.5">
-            {vatRegistered ? `TRN: ${profile.taxId || "Registered"}` : "Non-VAT"}
-          </Badge>
-          <Badge tone="neutral" className="text-xs font-medium px-2 py-0.5">
-            {profile.dateFormat}
-          </Badge>
-          <span className="text-xs text-muted-foreground ml-1">
-            {totalAllItems} options
-          </span>
-        </div>
-      </div>
-
-      {/* Search & Subpage Filter Toolbar */}
-      <div className="space-y-3">
-        <div className="relative">
-          <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-          <input
-            type="text"
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder="Search settings (e.g. TRN, logo, numbering, date format, VAT, email, bank rules, users)…"
-            className="h-10 w-full rounded-lg border border-border bg-surface-raised pl-9 pr-9 text-sm text-foreground placeholder:text-muted-foreground shadow-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-          />
-          {query && (
-            <button
-              type="button"
-              onClick={() => setQuery("")}
-              className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
-            >
-              <X className="size-4" />
-            </button>
-          )}
-        </div>
-
-        {/* Manager.io-Style Compact Category Subpage Pills */}
-        <div
-          role="tablist"
-          aria-label="Settings subpages"
-          className="flex flex-wrap items-center gap-1.5 border-b border-border/80 pb-2.5"
-        >
-          {tabs.map((tab) => {
-            const isActive = activeTab === tab.id;
-            return (
-              <button
-                key={tab.id}
-                type="button"
-                role="tab"
-                aria-selected={isActive}
-                onClick={() => {
-                  setActiveTab(tab.id);
-                  if (typeof window !== "undefined") {
-                    const url = new URL(window.location.href);
-                    if (tab.id === "all") {
-                      url.searchParams.delete("tab");
-                    } else {
-                      url.searchParams.set("tab", tab.id);
-                    }
-                    window.history.replaceState(null, "", url.toString());
-                  }
-                }}
-                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold transition-all ${
-                  isActive
-                    ? "bg-primary text-primary-foreground shadow-xs"
-                    : "bg-surface-raised border border-border/70 text-muted-foreground hover:text-foreground hover:border-foreground/30"
-                }`}
-              >
-                <tab.icon className="size-3.5" />
-                <span>{tab.label}</span>
-                {tab.count !== undefined && (
-                  <span
-                    className={`ml-0.5 px-1.5 py-0.5 rounded-full text-[10px] font-bold ${
-                      isActive
-                        ? "bg-primary-foreground/20 text-primary-foreground"
-                        : "bg-muted text-muted-foreground"
-                    }`}
-                  >
-                    {tab.count}
-                  </span>
-                )}
-              </button>
-            );
-          })}
-        </div>
+      {/* Search Toolbar */}
+      <div className="relative">
+        <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+        <input
+          type="text"
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          placeholder="Search settings (e.g. TRN, logo, numbering, date format, VAT, email, bank rules, users)…"
+          className="h-10 w-full rounded-lg border border-border bg-surface-raised pl-9 pr-9 text-sm text-foreground placeholder:text-muted-foreground shadow-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        />
+        {query && (
+          <button
+            type="button"
+            onClick={() => setQuery("")}
+            className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+          >
+            <X className="size-4" />
+          </button>
+        )}
       </div>
 
       {/* Main Settings Content */}
       {visibleGroups.length === 0 ? (
         <div className="rounded-xl border border-dashed border-border bg-surface p-8 text-center">
           <p className="text-sm font-semibold text-foreground">No settings match &ldquo;{query}&rdquo;</p>
-          <p className="mt-1 text-xs text-muted-foreground">Try searching with another keyword or select a different category.</p>
+          <p className="mt-1 text-xs text-muted-foreground">Try searching with another keyword.</p>
           <button
             type="button"
             onClick={() => {
               setQuery("");
-              setActiveTab("all");
               if (typeof window !== "undefined") {
                 const url = new URL(window.location.href);
                 url.searchParams.delete("tab");
@@ -495,10 +385,7 @@ export function SettingsHubClient({
                   <div className="flex size-7 items-center justify-center rounded-md bg-primary/10 text-primary shrink-0">
                     <group.icon className="size-4" />
                   </div>
-                  <div>
-                    <h3 className="text-sm font-bold tracking-tight text-foreground">{group.category}</h3>
-                    <p className="text-xs text-muted-foreground">{group.description}</p>
-                  </div>
+                  <h3 className="text-sm font-bold tracking-tight text-foreground">{group.category}</h3>
                 </div>
                 <span className="text-xs font-medium text-muted-foreground shrink-0 hidden sm:inline">
                   {group.items.length} {group.items.length === 1 ? "item" : "items"}
@@ -511,30 +398,23 @@ export function SettingsHubClient({
                   <Link
                     key={item.title}
                     href={item.href}
-                    className="group relative flex items-center justify-between rounded-lg border border-border/70 bg-surface px-3 py-2.5 transition-all duration-150 hover:border-primary/50 hover:bg-surface-muted/50 hover:shadow-xs"
+                    className="group relative flex h-10 items-center justify-between rounded-lg border border-border/70 bg-surface px-3 transition-all duration-150 hover:border-primary/50 hover:bg-surface-muted/50 hover:shadow-xs"
                   >
-                    <div className="flex items-center gap-2.5 min-w-0">
-                      <div className="flex size-7 shrink-0 items-center justify-center rounded-md bg-surface-muted border border-border/50 text-foreground transition-colors group-hover:bg-primary/15 group-hover:text-primary">
-                        <item.icon className="size-4" />
+                    <div className="flex items-center gap-2.5 min-w-0 pr-1">
+                      <div className="flex size-6 shrink-0 items-center justify-center rounded-md bg-surface-muted border border-border/50 text-foreground transition-colors group-hover:bg-primary/15 group-hover:text-primary">
+                        <item.icon className="size-3.5" />
                       </div>
-                      <div className="min-w-0 pr-1">
-                        <div className="flex items-center gap-1.5 flex-wrap">
-                          <h4 className="text-xs sm:text-sm font-semibold text-foreground group-hover:text-primary transition-colors truncate">
-                            {item.title}
-                          </h4>
-                          {item.badge && (
-                            <Badge
-                              tone={item.tone ?? "neutral"}
-                              className="text-[10px] font-medium px-1.5 py-0 leading-tight shrink-0"
-                            >
-                              {item.badge}
-                            </Badge>
-                          )}
-                        </div>
-                        <p className="text-xs text-muted-foreground truncate leading-tight mt-0.5">
-                          {item.subtitle}
-                        </p>
-                      </div>
+                      <span className="text-xs sm:text-sm font-medium text-foreground group-hover:text-primary transition-colors truncate">
+                        {item.title}
+                      </span>
+                      {item.badge && (
+                        <Badge
+                          tone={item.tone ?? "neutral"}
+                          className="text-[10px] font-medium px-1.5 py-0 leading-tight shrink-0"
+                        >
+                          {item.badge}
+                        </Badge>
+                      )}
                     </div>
 
                     <ChevronRight className="size-4 shrink-0 text-muted-foreground/60 transition-transform group-hover:text-primary group-hover:translate-x-0.5" />

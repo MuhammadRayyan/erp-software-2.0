@@ -302,6 +302,18 @@ export function InvoiceForm({
           <div className="space-y-1.5"><Label htmlFor="invoiceDate">Invoice date</Label><Input id="invoiceDate" type="date" {...register("invoiceDate", { onChange: (event) => { if (documentStatus === "draft") { const customer = customers.find((c) => c.id === customerId); if (customer?.paymentTermsDays && event.target.value) { const d = new Date(event.target.value); if (!Number.isNaN(d.valueOf())) { d.setDate(d.getDate() + customer.paymentTermsDays); setValue("dueDate", d.toISOString().slice(0, 10)); } } } } })} aria-invalid={!!errors.invoiceDate} />{errors.invoiceDate && <p className="field-error">{errors.invoiceDate.message}</p>}</div>
           <div className="space-y-1.5"><Label htmlFor="taxDate">VAT tax date</Label><Input id="taxDate" type="date" {...register("taxDate")} aria-invalid={!!errors.taxDate} />{errors.taxDate && <p className="field-error">{errors.taxDate.message}</p>}</div>
           <div className="space-y-1.5"><Label htmlFor="dueDate">Due date</Label><Input id="dueDate" type="date" {...register("dueDate")} aria-invalid={!!errors.dueDate} />{errors.dueDate && <p className="field-error">{errors.dueDate.message}</p>}</div>
+          <DocumentCurrencyFields
+            baseCurrencyCode={currency}
+            currencies={currencies}
+            rates={rates}
+            currencyCode={currencyCode}
+            exchangeRateToBase={exchangeRateToBase}
+            exchangeRateDate={exchangeRateDate}
+            exchangeRateSource={exchangeRateSource}
+            relevantDate={taxDate || invoiceDate}
+            disabled={documentStatus === "posted"}
+            onChange={(field, value) => setValue(field, value)}
+          />
           <div className="space-y-1.5"><Label htmlFor="supplyEmirate">Supply Emirate</Label><SelectNative id="supplyEmirate"  {...register("supplyEmirate")}><option value="">Use business default</option>{emirates.map((emirate) => <option key={emirate} value={emirate}>{emirateLabels[emirate]}</option>)}</SelectNative><p className="text-xs text-muted-foreground">Reviewed for standard-rated Sales reporting.</p></div>
           <div className="space-y-1.5"><Label htmlFor="projectId">Project <span className="font-normal text-muted-foreground">(optional)</span></Label><SelectNative id="projectId"  {...register("projectId")} aria-invalid={!!errors.projectId}><option value="">No project</option>{availableProjects.map((project) => <option key={project.id} value={project.id}>{project.code} — {project.name}</option>)}</SelectNative>{errors.projectId && <p className="field-error">{errors.projectId.message}</p>}</div>
           <div className="space-y-1.5"><Label htmlFor="reference">Reference <span className="font-normal text-muted-foreground">(optional)</span></Label><Input id="reference" {...register("reference")} /></div>
@@ -316,11 +328,6 @@ export function InvoiceForm({
             </div>
           </div>
         </div>
-      </section>
-      <section className="form-section">
-        <h2 className="mb-4 text-base font-semibold">Document currency</h2>
-        <DocumentCurrencyFields baseCurrencyCode={currency} currencies={currencies} rates={rates} currencyCode={currencyCode} exchangeRateToBase={exchangeRateToBase} exchangeRateDate={exchangeRateDate} exchangeRateSource={exchangeRateSource} relevantDate={taxDate || invoiceDate} disabled={documentStatus === "posted"} onChange={(field, value) => setValue(field, value)} />
-        {currencyCode !== currency && <p className="mt-3 text-xs text-muted-foreground">UAE VAT-relevant invoices require a stored CBUAE-labelled rate for the VAT tax date. Posting preserves this exact snapshot.</p>}
       </section>
       <section className="form-section">
         <div className="mb-3 flex flex-wrap items-end justify-between gap-3">

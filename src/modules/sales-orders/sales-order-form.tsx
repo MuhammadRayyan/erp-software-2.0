@@ -99,12 +99,13 @@ export function SalesOrderForm({ businessId, orderId, status = "draft", customer
           Order # Auto-allocated on save
         </span>
       </div>
-      <p className="mt-1 text-sm text-muted-foreground">Sales orders are operational documents and never post to the ledger.</p>
+      <p className="mt-1 text-sm text-muted-foreground">A sales order is an operational commitment and does not create general ledger movements.</p>
       <div className="mt-5 grid gap-5 md:grid-cols-3">
         <div className="space-y-1.5"><Label htmlFor="customerId">Customer</Label><SelectNative id="customerId"  {...register("customerId", { onChange: (event) => { if (status === "draft") { const code = customers.find((customer) => customer.id === event.target.value)?.defaultCurrencyCode ?? currency; setValue("currencyCode", code); setValue("exchangeRateToBase", code === currency ? "1" : ""); setValue("exchangeRateDate", code === currency ? orderDate : ""); setValue("exchangeRateSource", code === currency ? "Base" : ""); } } })} aria-invalid={!!errors.customerId}><option value="">Choose a customer…</option>{customers.map((customer) => <option key={customer.id} value={customer.id}>{customer.name}</option>)}</SelectNative>{errors.customerId && <p className="field-error">{errors.customerId.message}</p>}</div>
         <div className="space-y-1.5"><Label htmlFor="salesQuoteId">Sales quote <span className="font-normal text-muted-foreground">(optional)</span></Label><SelectNative id="salesQuoteId" {...register("salesQuoteId", { onChange: (e) => { const q = quotes?.find((item) => item.id === e.target.value); if (q) { if (!form.getValues("customerId")) { form.setValue("customerId", q.customerId); } if (!form.getValues("reference")) { form.setValue("reference", `Quote ${q.quoteNumber}`); } } } })}><option value="">No linked quote</option>{availableQuotes.map((q) => <option key={q.id} value={q.id}>{q.quoteNumber}{q.date ? ` — ${q.date}` : ""}</option>)}</SelectNative></div>
       <div className="space-y-1.5"><Label htmlFor="date">Order date</Label><Input id="date" type="date" {...register("date")} aria-invalid={!!errors.date} />{errors.date && <p className="field-error">{errors.date.message}</p>}</div>
       <div className="space-y-1.5"><Label htmlFor="expectedDate">Expected date <span className="font-normal text-muted-foreground">(optional)</span></Label><Input id="expectedDate" type="date" {...register("expectedDate")} /></div>
+      <DocumentCurrencyFields baseCurrencyCode={currency} currencies={currencies} rates={rates} currencyCode={currencyCode} exchangeRateToBase={exchangeRateToBase} exchangeRateDate={exchangeRateDate} exchangeRateSource={exchangeRateSource} relevantDate={orderDate} disabled={status === "active"} onChange={(field, value) => setValue(field, value)} />
       <div className="space-y-1.5"><Label htmlFor="projectId">Project <span className="font-normal text-muted-foreground">(optional)</span></Label><SelectNative id="projectId"  {...register("projectId")}><option value="">No project</option>{availableProjects.map((project) => <option key={project.id} value={project.id}>{project.code} — {project.name}</option>)}</SelectNative></div>
       <div className="space-y-1.5"><Label htmlFor="reference">Reference <span className="font-normal text-muted-foreground">(optional)</span></Label><Input id="reference" {...register("reference")} /></div>
       <div className="space-y-1.5 md:col-span-3 grid md:grid-cols-2 gap-5">
@@ -118,7 +119,6 @@ export function SalesOrderForm({ businessId, orderId, status = "draft", customer
         </div>
       </div>
     </div></section>
-    <section className="form-section"><h2 className="mb-4 text-base font-semibold">Commitment currency</h2><DocumentCurrencyFields baseCurrencyCode={currency} currencies={currencies} rates={rates} currencyCode={currencyCode} exchangeRateToBase={exchangeRateToBase} exchangeRateDate={exchangeRateDate} exchangeRateSource={exchangeRateSource} relevantDate={orderDate} disabled={status === "active"} onChange={(field, value) => setValue(field, value)} /><p className="mt-3 text-xs text-muted-foreground">This is an operational commitment snapshot only. A later Purchase Invoice uses its own posting and VAT rate.</p></section>
     <section className="form-section">
       <div className="mb-3 flex flex-wrap items-end justify-between gap-3">
         <div>

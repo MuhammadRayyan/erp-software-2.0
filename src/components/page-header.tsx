@@ -8,7 +8,7 @@ interface PageHeaderProps {
   showFlowGuide?: boolean;
 }
 
-export function PageHeader({ title, description, children, showFlowGuide = true }: PageHeaderProps) {
+export function PageHeader({ title, description, children, showFlowGuide = false }: PageHeaderProps) {
   return (
     <div className="page-header">
       <div>

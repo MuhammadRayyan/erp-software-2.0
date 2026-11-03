@@ -1,11 +1,10 @@
 import Link from "next/link";
 import { Plus, ReceiptText } from "lucide-react";
 import { EmptyState } from "@/components/empty-state";
-import { ListDateFilter } from "@/components/list-date-filter";
 import { PageHeader } from "@/components/page-header";
 import { Button } from "@/components/ui/button";
 import { requireModule } from "@/core/permissions/require-module";
-import { buildDateSearchParams, DATE_PATTERN } from "@/lib/params";
+import { DATE_PATTERN } from "@/lib/params";
 import { listDebitNotes } from "@/modules/debit-notes/debit-note-service";
 import { DebitNoteTable } from "@/modules/debit-notes/debit-note-table";
 
@@ -24,7 +23,6 @@ export default async function DebitNoteListPage({
   const from = DATE_PATTERN.test(sp.from ?? "") ? sp.from : undefined;
   const to = DATE_PATTERN.test(sp.to ?? "") ? sp.to : undefined;
   const debitNotes = listDebitNotes(businessId, user.id, { from, to });
-  const searchParamsUrl = buildDateSearchParams({ from, to });
 
   return (
     <div className="page-container">
@@ -40,14 +38,6 @@ export default async function DebitNoteListPage({
       </PageHeader>
       {debitNotes.length ? (
         <div className="data-panel overflow-hidden">
-          <ListDateFilter
-            pathname={`/b/${businessId}/purchases/debit-notes`}
-            searchParams={searchParamsUrl}
-            initialFrom={from ?? ""}
-            initialTo={to ?? ""}
-            fromLabel="Debit note from"
-            toLabel="Debit note to"
-          />
           <DebitNoteTable businessId={businessId} debitNotes={debitNotes} />
         </div>
       ) : (
