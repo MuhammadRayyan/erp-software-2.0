@@ -11,7 +11,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: verify-and-deploy-${{ github.event.pull_request.number || github.ref }}
+  group: verify-and-deploy-v2-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
