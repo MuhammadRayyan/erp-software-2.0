@@ -6,6 +6,7 @@ import { formatMoney } from "@/core/format";
 export interface DocumentTotalsPanelProps {
   subtotalMinor: number;
   taxMinor: number;
+  totalMinor?: number;
   currencyCode: string;
   minorUnit: number;
   baseEquivalentMinor?: number | null;
@@ -17,6 +18,7 @@ export interface DocumentTotalsPanelProps {
 export function DocumentTotalsPanel({
   subtotalMinor,
   taxMinor,
+  totalMinor,
   currencyCode,
   minorUnit,
   baseEquivalentMinor,
@@ -24,6 +26,8 @@ export function DocumentTotalsPanel({
   baseMinorUnit,
   className,
 }: DocumentTotalsPanelProps) {
+  const displayTotalMinor = totalMinor != null ? totalMinor : subtotalMinor + taxMinor;
+
   return (
     <dl className={cn("w-full max-w-xs space-y-2 text-sm", className)}>
       <div className="flex justify-between">
@@ -35,9 +39,16 @@ export function DocumentTotalsPanel({
         <dd className="money">{formatMoney(taxMinor, currencyCode, minorUnit)}</dd>
       </div>
       <div className="flex justify-between border-t border-border pt-2 text-base font-semibold">
-        <dt>Total</dt>
+        <div>
+          <dt>Total</dt>
+          {displayTotalMinor < subtotalMinor + taxMinor && (
+            <p className="text-[11px] font-normal text-muted-foreground">
+              Reverse Charge self-accounted
+            </p>
+          )}
+        </div>
         <dd className="money">
-          {formatMoney(subtotalMinor + taxMinor, currencyCode, minorUnit)}
+          {formatMoney(displayTotalMinor, currencyCode, minorUnit)}
         </dd>
       </div>
       {baseEquivalentMinor != null && baseCurrencyCode && (

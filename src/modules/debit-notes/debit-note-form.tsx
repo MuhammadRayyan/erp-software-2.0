@@ -18,10 +18,11 @@ import type { DebitNoteStatus } from "./debit-note-service";
 import { DocumentFormFooter } from "@/components/document-form-footer";
 import { SelectNative } from "@/components/ui/select-native";
 import { DocumentLineTable, useDocumentTotals } from "@/components/documents";
+import { useUnsavedChanges } from "@/hooks/use-unsaved-changes";
 
 type Option = { id: string; name: string };
 type AccountOption = { id: string; name: string };
-type TaxOption = { id: string; name: string; rateBasisPoints: number };
+type TaxOption = { id: string; name: string; rateBasisPoints: number; vatCategory?: string | null };
 type InvoiceOption = {
   id: string;
   invoiceNumber: string;
@@ -47,6 +48,7 @@ export function DebitNoteForm({
   suppliers,
   invoices,
   salesAccounts,
+  expenseAccounts,
   taxCodes,
   projects,
   currency,
@@ -57,7 +59,8 @@ export function DebitNoteForm({
   documentStatus?: DebitNoteStatus;
   suppliers: Option[];
   invoices: InvoiceOption[];
-  salesAccounts: AccountOption[];
+  salesAccounts?: AccountOption[];
+  expenseAccounts?: AccountOption[];
   taxCodes: TaxOption[];
   projects: ProjectOption[];
   currency: string;
@@ -82,9 +85,20 @@ export function DebitNoteForm({
     handleSubmit,
     setError,
     setValue,
-    formState: { errors, isSubmitting },
+    formState: { errors, isSubmitting, isDirty, isSubmitSuccessful },
   } = form;
-  const { fields, append, remove } = useFieldArray({ control, name: "lines" });
+  useUnsavedChanges(isDirty && !isSubmitSuccessful);
+  const { fields, append, remove, insert, move } = useFieldArray({ control, name: "lines" });
+  function duplicateLine(index: number) {
+    const currentLine = form.getValues(`lines.${index}`);
+    insert(index + 1, { ...currentLine });
+  }
+  function moveLineUp(index: number) {
+    if (index > 0) move(index, index - 1);
+  }
+  function moveLineDown(index: number) {
+    if (index < fields.length - 1) move(index, index + 1);
+  }
   const supplierId = useWatch({ control, name: "supplierId" });
   const invoiceId = useWatch({ control, name: "purchaseInvoiceId" });
   const lines = useWatch({ control, name: "lines" }) ?? [];
@@ -122,7 +136,8 @@ export function DebitNoteForm({
     taxCodes,
     minorUnit,
   });
-  const defaultSales = salesAccounts[0]?.id ?? "";
+  const resolvedExpenseAccounts = expenseAccounts ?? salesAccounts ?? [];
+  const defaultExpense = resolvedExpenseAccounts[0]?.id ?? "";
     
   function updateGlobalTax(newTaxId: string) {
     setGlobalTaxCodeId(newTaxId);
@@ -331,26 +346,32 @@ export function DebitNoteForm({
         </div>
         <DocumentLineTable
           register={register}
+          control={control}
+          setValue={setValue}
           errors={errors}
           fields={fields}
           lines={lines}
-          onAppend={() =>
+          onAppend={(custom) =>
             append({
               description: "",
               quantity: "1",
               unitPrice: "0.00",
               discountType: "none",
               discountValue: "0",
-              expenseAccountId: defaultSales,
+              expenseAccountId: defaultExpense,
               taxCodeId: globalTaxCodeId,
               projectId: "",
+              ...custom,
             })
           }
           onRemove={remove}
-          accounts={salesAccounts}
+          onDuplicate={duplicateLine}
+          onMoveUp={moveLineUp}
+          onMoveDown={moveLineDown}
+          accounts={resolvedExpenseAccounts}
           accountFieldName="expenseAccountId"
-          accountColumnLabel="Sales account"
-          accountAriaLabel="sales account"
+          accountColumnLabel="Expense account"
+          accountAriaLabel="expense account"
           accountPlaceholder="Choose an account..."
           taxCodes={taxCodes}
           initialShowLineTaxCodes={true}
@@ -361,6 +382,7 @@ export function DebitNoteForm({
           amountsIncludeTax={totals.amountsIncludeTax}
           subtotalMinor={totals.subtotalMinor}
           taxMinor={totals.taxMinor}
+          totalMinor={totals.totalMinor}
           registerAmountsIncludeTax={register("amountsIncludeTax")}
         />
       </section>

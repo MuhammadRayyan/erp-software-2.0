@@ -59,7 +59,7 @@ export default async function EditInvoicePage({ params }: { params: Promise<{ bu
       customFieldValues={customFieldValues}
       customers={customers as any}
       salesAccounts={salesAccounts.map(({ id, name }) => ({ id, name }))}
-      taxCodes={taxCodes.map(({ id, name, rateBasisPoints }) => ({ id, name, rateBasisPoints }))}
+      taxCodes={taxCodes.map(({ id, name, rateBasisPoints, vatCategory }) => ({ id, name, rateBasisPoints, vatCategory }))}
       projects={projects.map((project) => ({ id: project.id, code: project.code, name: project.name, customerId: project.customer_id }))}
       items={items.map(({ id, sku, name, salesPriceMinor, salesAccountId }) => ({ id, sku, name, salesPriceMinor, salesAccountId }))}
       orders={orders.map((o) => ({ id: o.id, orderNumber: o.order_number, customerId: o.customer_id, date: o.date }))}

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useId, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { Check, ChevronsUpDown, Search, X } from "lucide-react";
 import { cn } from "@/lib/cn";
 import type { DocumentLineItemOption } from "./document-line-table";
@@ -14,6 +15,8 @@ export interface SearchableItemSelectProps {
   ariaLabel?: string;
   disabled?: boolean;
   className?: string;
+  dataGridRow?: number;
+  dataGridColId?: string;
 }
 
 export function SearchableItemSelect({
@@ -25,11 +28,15 @@ export function SearchableItemSelect({
   ariaLabel = "Select item",
   disabled = false,
   className,
+  dataGridRow,
+  dataGridColId,
 }: SearchableItemSelectProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [focusedIndex, setFocusedIndex] = useState(-1);
+  const [dropdownPosition, setDropdownPosition] = useState<{ top: number; left: number; width: number } | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+  const portalRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const listRef = useRef<HTMLUListElement>(null);
   const listboxId = useId();
@@ -49,11 +56,38 @@ export function SearchableItemSelect({
     });
   }, [items, query]);
 
+  // Dropdown position tracking
+  useEffect(() => {
+    if (!isOpen) return;
+    function updatePosition() {
+      if (!containerRef.current) return;
+      const rect = containerRef.current.getBoundingClientRect();
+      const dropdownHeight = 280;
+      const spaceBelow = window.innerHeight - rect.bottom;
+      const showAbove = spaceBelow < dropdownHeight && rect.top > dropdownHeight;
+      setDropdownPosition({
+        top: showAbove ? Math.max(8, rect.top - dropdownHeight - 4) : rect.bottom + 4,
+        left: Math.max(8, Math.min(rect.left, window.innerWidth - 300)),
+        width: Math.max(rect.width, 280),
+      });
+    }
+    updatePosition();
+    window.addEventListener("scroll", updatePosition, true);
+    window.addEventListener("resize", updatePosition);
+    return () => {
+      window.removeEventListener("scroll", updatePosition, true);
+      window.removeEventListener("resize", updatePosition);
+    };
+  }, [isOpen]);
+
   // Click outside listener
   useEffect(() => {
     if (!isOpen) return;
     function handlePointerDown(e: PointerEvent) {
-      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+      const target = e.target as Node;
+      const isInsideContainer = containerRef.current?.contains(target);
+      const isInsidePortal = portalRef.current?.contains(target);
+      if (!isInsideContainer && !isInsidePortal) {
         setIsOpen(false);
         setQuery("");
         setFocusedIndex(-1);
@@ -79,9 +113,16 @@ export function SearchableItemSelect({
 
   function handleTriggerKeyDown(e: React.KeyboardEvent<HTMLButtonElement>) {
     if (disabled) return;
-    if (e.key === "ArrowDown" || e.key === "Enter" || e.key === " ") {
+    if (e.key === "ArrowDown" || e.key === " ") {
       e.preventDefault();
       setIsOpen(true);
+    } else if (e.key === "Enter") {
+      if (onKeyDown) {
+        onKeyDown(e);
+      } else {
+        e.preventDefault();
+        setIsOpen(true);
+      }
     } else if (onKeyDown) {
       onKeyDown(e);
     }
@@ -130,18 +171,20 @@ export function SearchableItemSelect({
         aria-label={ariaLabel}
         aria-expanded={isOpen}
         aria-haspopup="listbox"
+        data-grid-row={dataGridRow}
+        data-grid-col-id={dataGridColId}
         onClick={() => {
           if (!disabled) setIsOpen((prev) => !prev);
         }}
         onKeyDown={handleTriggerKeyDown}
         className={cn(
-          "flex h-9 w-full items-center justify-between rounded-[6px] border border-border-strong bg-surface-raised px-2.5 text-xs text-foreground outline-none transition-colors",
+          "flex h-9 w-full min-w-0 items-center justify-between rounded-[6px] border border-border-strong bg-surface-raised px-2 text-xs text-foreground outline-none transition-colors",
           "hover:border-border-strong hover:bg-surface-muted/60 focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-ring/25",
           disabled && "cursor-not-allowed opacity-60",
           !selectedItem && "text-muted-foreground italic"
         )}
       >
-        <span className="truncate pr-1 text-left">
+        <span className="truncate pr-1 text-left min-w-0 flex-1">
           {selectedItem ? (
             <span className="font-medium not-italic text-foreground">
               {selectedItem.sku ? (
@@ -156,9 +199,17 @@ export function SearchableItemSelect({
         <ChevronsUpDown className="size-3.5 shrink-0 text-muted-foreground opacity-70" />
       </button>
 
-      {isOpen && (
+      {isOpen && typeof document !== "undefined" && dropdownPosition && createPortal(
         <div
-          className="absolute top-[calc(100%+4px)] left-0 z-50 w-72 max-w-[85vw] rounded-lg border border-border bg-surface-raised shadow-lg animate-in fade-in-0 zoom-in-95 duration-100"
+          ref={portalRef}
+          style={{
+            position: "fixed",
+            top: `${dropdownPosition.top}px`,
+            left: `${dropdownPosition.left}px`,
+            width: `${dropdownPosition.width}px`,
+            zIndex: 9999,
+          }}
+          className="max-w-[85vw] rounded-lg border border-border bg-surface-raised shadow-xl animate-in fade-in-0 zoom-in-95 duration-100"
           role="dialog"
           aria-label="Filter items"
         >
@@ -254,7 +305,8 @@ export function SearchableItemSelect({
               </li>
             )}
           </ul>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );

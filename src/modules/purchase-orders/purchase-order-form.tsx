@@ -21,7 +21,7 @@ import { useUnsavedChanges } from "@/hooks/use-unsaved-changes";
 
 type Option = { id: string; name: string; defaultCurrencyCode: string | null };
 type AccountOption = { id: string; name: string };
-type TaxOption = { id: string; name: string; rateBasisPoints: number };
+type TaxOption = { id: string; name: string; rateBasisPoints: number; vatCategory?: string | null };
 type ProjectOption = { id: string; code: string; name: string };
 type ItemOption = { id: string; sku: string | null; name: string; purchasePriceMinor: number | null; inventoryAssetAccountId: string };
 type QuoteOption = { id: string; quoteNumber: string; supplierId: string; date?: string };
@@ -139,10 +139,12 @@ export function PurchaseOrderForm({ businessId, orderId, status = "draft", suppl
 
       <DocumentLineTable
         register={register}
+        control={control}
+        setValue={form.setValue}
         errors={errors}
         fields={fields}
         lines={lines}
-        onAppend={() =>
+        onAppend={(custom) =>
           append({
             itemId: "",
             description: "",
@@ -153,6 +155,7 @@ export function PurchaseOrderForm({ businessId, orderId, status = "draft", suppl
             expenseAccountId: defaultExpense,
             taxCodeId: globalTaxCodeId,
             projectId: "",
+            ...custom,
           })
         }
         onRemove={remove}
@@ -174,6 +177,7 @@ export function PurchaseOrderForm({ businessId, orderId, status = "draft", suppl
         registerAmountsIncludeTax={register("amountsIncludeTax")}
         subtotalMinor={totals.subtotalMinor}
         taxMinor={totals.taxMinor}
+        totalMinor={totals.totalMinor}
       />
     </section>
     <DocumentFormFooter onCancel={() => router.push(cancelHref)}>

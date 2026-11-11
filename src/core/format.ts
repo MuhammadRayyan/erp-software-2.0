@@ -17,6 +17,24 @@ const knownMinorUnits: Record<string, number> = {
   QAR: 2,
 };
 
+export function getCurrencyMinorUnit(currency = "AED"): number {
+  return knownMinorUnits[currency.toUpperCase()] ?? 2;
+}
+
+export function formatMajorMoney(major?: string | number | null, currency = "AED", minorUnit?: number): string {
+  const resolvedMinorUnit = minorUnit ?? getCurrencyMinorUnit(currency);
+  if (major == null || major === "") {
+    return formatMoney(0, currency, resolvedMinorUnit);
+  }
+  try {
+    const dec = new Decimal(major);
+    const minor = dec.mul(new Decimal(10).pow(resolvedMinorUnit)).round().toNumber();
+    return formatMoney(minor, currency, resolvedMinorUnit);
+  } catch {
+    return String(major);
+  }
+}
+
 export function minorToDecimalString(minor: number = 0, currency = "AED", minorUnit?: number): string {
   const resolvedMinorUnit = minorUnit ?? knownMinorUnits[currency.toUpperCase()] ?? 2;
   return new Decimal(minor).div(new Decimal(10).pow(resolvedMinorUnit)).toFixed(resolvedMinorUnit);
@@ -26,7 +44,7 @@ export function minorToDecimalString(minor: number = 0, currency = "AED", minorU
 // are reused across hundreds of table cells per page render.
 const moneyFormatterCache = new Map<string, Intl.NumberFormat>();
 
-export function formatMoney(minor?: number | null, currency = "AED", minorUnit = knownMinorUnits[currency] ?? 2) {
+export function formatMoney(minor?: number | null, currency = "AED", minorUnit = knownMinorUnits[currency?.toUpperCase() ?? "AED"] ?? 2) {
   if (minor == null || Number.isNaN(minor)) {
     minor = 0;
   }

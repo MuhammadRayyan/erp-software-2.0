@@ -16,6 +16,7 @@ import { minorToCurrencyInput, parseCurrencyAmountToMinor } from "@/modules/curr
 import { DocumentCurrencyFields, type DocumentCurrencyOption, type DocumentRateOption } from "@/modules/currency/document-currency-fields";
 import { createReceiptAction } from "./actions";
 import { receiptInputSchema, type ReceiptInput } from "./receipt-input";
+import { useUnsavedChanges } from "@/hooks/use-unsaved-changes";
 
 type Option = { id: string; name: string };
 
@@ -72,8 +73,9 @@ export function ReceiptForm({
     handleSubmit,
     setError,
     setValue,
-    formState: { errors, isSubmitting },
+    formState: { errors, isSubmitting, isDirty, isSubmitSuccessful },
   } = form;
+  useUnsavedChanges(isDirty && !isSubmitSuccessful);
 
   const customerId = useWatch({ control, name: "customerId" });
   const watchedAmount = useWatch({ control, name: "amount" }) || "";

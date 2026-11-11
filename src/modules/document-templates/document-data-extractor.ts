@@ -1,4 +1,4 @@
-import { formatDate, formatMoney } from "@/core/format";
+import { formatDate, formatMajorMoney, formatMoney } from "@/core/format";
 import { quantityMicrosToInput } from "@/modules/accounting/calculations/money";
 import { getPurchaseInvoice } from "@/modules/purchase-invoices/purchase-invoice-service";
 import { getPurchaseOrder } from "@/modules/purchase-orders/purchase-order-service";
@@ -162,7 +162,7 @@ export function buildDocumentTemplateData(
         (line as any).discountType === "percentage"
           ? `${(line as any).discountValue}%`
           : (line as any).discountType === "fixed"
-          ? formatMoney(Number((line as any).discountValue), currency)
+          ? formatMajorMoney((line as any).discountValue, currency)
           : undefined,
       tax: line.taxCode ? `${line.taxCode.name}` : undefined,
       project: line.project?.name,
@@ -201,7 +201,7 @@ export function buildDocumentTemplateData(
         (line as any).discountType === "percentage"
           ? `${(line as any).discountValue}%`
           : (line as any).discountType === "fixed"
-          ? formatMoney(Number((line as any).discountValue), currency)
+          ? formatMajorMoney((line as any).discountValue, currency)
           : undefined,
       tax: (line as any).taxCode ? `${(line as any).taxCode.name}` : undefined,
       project: (line as any).project?.name,
@@ -243,7 +243,7 @@ export function buildDocumentTemplateData(
         (line as any).discountType === "percentage"
           ? `${(line as any).discountValue}%`
           : (line as any).discountType === "fixed"
-          ? formatMoney(Number((line as any).discountValue), currency)
+          ? formatMajorMoney((line as any).discountValue, currency)
           : undefined,
       tax: line.taxCode ? `${line.taxCode.name}` : undefined,
     }));
@@ -289,7 +289,7 @@ export function buildDocumentTemplateData(
         (line as any).discountType === "percentage"
           ? `${(line as any).discountValue}%`
           : (line as any).discountType === "fixed"
-          ? formatMoney(Number((line as any).discountValue), currency)
+          ? formatMajorMoney((line as any).discountValue, currency)
           : undefined,
       tax: line.taxCode ? `${line.taxCode.name}` : undefined,
       project: line.project?.name,
@@ -324,7 +324,7 @@ export function buildDocumentTemplateData(
         (line as any).discountType === "percentage"
           ? `${(line as any).discountValue}%`
           : (line as any).discountType === "fixed"
-          ? formatMoney(Number((line as any).discountValue), currency)
+          ? formatMajorMoney((line as any).discountValue, currency)
           : undefined,
       tax: (line as any).taxCode ? `${(line as any).taxCode.name}` : undefined,
     }));
@@ -365,7 +365,7 @@ export function buildDocumentTemplateData(
         (line as any).discountType === "percentage"
           ? `${(line as any).discountValue}%`
           : (line as any).discountType === "fixed"
-          ? formatMoney(Number((line as any).discountValue), currency)
+          ? formatMajorMoney((line as any).discountValue, currency)
           : undefined,
       tax: line.taxCode ? `${line.taxCode.name}` : undefined,
       project: line.project?.name,
@@ -408,7 +408,7 @@ export function buildDocumentTemplateData(
         (line as any).discountType === "percentage"
           ? `${(line as any).discountValue}%`
           : (line as any).discountType === "fixed"
-          ? formatMoney(Number((line as any).discountValue), currency)
+          ? formatMajorMoney((line as any).discountValue, currency)
           : undefined,
       tax: line.taxCode ? `${line.taxCode.name}` : undefined,
       project: line.project?.name,
@@ -447,7 +447,7 @@ export function buildDocumentTemplateData(
         (line as any).discountType === "percentage"
           ? `${(line as any).discountValue}%`
           : (line as any).discountType === "fixed"
-          ? formatMoney(Number((line as any).discountValue), currency)
+          ? formatMajorMoney((line as any).discountValue, currency)
           : undefined,
       tax: line.taxCode ? `${line.taxCode.name}` : undefined,
     }));

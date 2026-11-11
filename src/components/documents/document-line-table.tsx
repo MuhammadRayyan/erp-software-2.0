@@ -1,17 +1,26 @@
 "use client";
 
-import { useState, useRef, useEffect } from "react";
+import React, { useState, useMemo, useCallback } from "react";
 import type { UseFormRegister, FieldErrors, UseFormRegisterReturn } from "react-hook-form";
-import { ArrowDown, ArrowUp, Copy, Plus, Trash2 } from "lucide-react";
+import { ArrowDown, ArrowUp, Copy, MoreHorizontal, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { SelectNative } from "@/components/ui/select-native";
+import {
+  DropdownMenu,
+  DropdownMenuTrigger,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+} from "@/components/ui/dropdown-menu";
 import { formatMoney } from "@/core/format";
 import { cn } from "@/lib/cn";
 import type { DocumentLinePreview, DocumentLineTaxOption } from "./document-calculations";
 import { DocumentTotalsPanel } from "./document-totals-panel";
 import { DocumentColumnToggles } from "./document-column-toggles";
 import { SearchableItemSelect } from "./searchable-item-select";
+import { DocumentGrid } from "./grid/document-grid";
+import type { DocumentGridColumnDef } from "./grid/document-grid-types";
 
 export interface DocumentLineItemOption {
   id: string;
@@ -39,14 +48,17 @@ export interface DocumentLineProjectOption {
 export interface DocumentLineTableProps {
   // Form control
   register: UseFormRegister<any>;
+  control?: any;
+  setValue?: any;
   errors?: FieldErrors<any>;
   fields: { id: string }[];
-  lines: any[];
-  onAppend: () => void;
+  lines?: any[];
+  onAppend: (initialValues?: any) => void;
   onRemove: (index: number) => void;
   onDuplicate?: (index: number) => void;
   onMoveUp?: (index: number) => void;
   onMoveDown?: (index: number) => void;
+  onPasteTSV?: (tsvRows: string[][], startRow: number, startColId: string) => void;
 
   // Options
   items?: DocumentLineItemOption[];
@@ -88,6 +100,7 @@ export interface DocumentLineTableProps {
   showTotalsSection?: boolean;
   subtotalMinor?: number;
   taxMinor?: number;
+  totalMinor?: number;
   baseEquivalentMinor?: number | null;
   baseCurrencyCode?: string;
   baseMinorUnit?: number;
@@ -96,6 +109,8 @@ export interface DocumentLineTableProps {
 
 export function DocumentLineTable({
   register,
+  control,
+  setValue,
   errors,
   fields,
   lines,
@@ -104,6 +119,7 @@ export function DocumentLineTable({
   onDuplicate,
   onMoveUp,
   onMoveDown,
+  onPasteTSV,
   items,
   onItemSelect,
   accounts,
@@ -135,6 +151,7 @@ export function DocumentLineTable({
   showTotalsSection = true,
   subtotalMinor = 0,
   taxMinor = 0,
+  totalMinor,
   baseEquivalentMinor,
   baseCurrencyCode,
   baseMinorUnit,
@@ -144,10 +161,10 @@ export function DocumentLineTable({
   const [internalShowLineNumber, setInternalShowLineNumber] = useState(initialShowLineNumber);
   const [internalShowDescription, setInternalShowDescription] = useState(initialShowDescription);
   const [internalShowDiscounts, setInternalShowDiscounts] = useState(
-    () => initialShowDiscounts ?? lines.some((l) => l?.discountType && l?.discountType !== "none")
+    () => initialShowDiscounts ?? (lines?.some((l) => l?.discountType && l?.discountType !== "none") ?? false)
   );
   const [internalShowProjects, setInternalShowProjects] = useState(
-    () => initialShowProjects ?? lines.some((l) => Boolean(l?.projectId))
+    () => initialShowProjects ?? (lines?.some((l) => Boolean(l?.projectId)) ?? false)
   );
   const [internalShowLineTaxCodes, setInternalShowLineTaxCodes] = useState(
     () => initialShowLineTaxCodes ?? controlledShowLineTaxCodes ?? true
@@ -165,30 +182,600 @@ export function DocumentLineTable({
   const showLineProjects = controlledShowLineProjects ?? internalShowProjects;
   const setShowLineProjects = onShowLineProjectsChange ?? setInternalShowProjects;
 
-  const showLineTaxCodes = onShowLineTaxCodesChange !== undefined
-    ? (controlledShowLineTaxCodes ?? internalShowLineTaxCodes)
-    : internalShowLineTaxCodes;
+  const showLineTaxCodes =
+    onShowLineTaxCodesChange !== undefined
+      ? controlledShowLineTaxCodes ?? internalShowLineTaxCodes
+      : internalShowLineTaxCodes;
   const setShowLineTaxCodes = onShowLineTaxCodesChange ?? setInternalShowLineTaxCodes;
 
   const resolvedAccountAria =
     accountAriaLabel ?? (accountFieldName === "salesAccountId" ? "sales account" : "expense account");
 
-  const tbodyRef = useRef<HTMLTableSectionElement>(null);
-  const prevFieldsLength = useRef(fields.length);
+  // Default multi-row TSV clipboard paste handler (Excel / Google Sheets import)
+  const defaultPasteTSV = useCallback(
+    (tsvRows: string[][], startRow: number, startColId: string) => {
+      if (!tsvRows.length || !setValue) return;
 
-  useEffect(() => {
-    if (fields.length > prevFieldsLength.current) {
-      const lastRowIndex = fields.length - 1;
-      const row = tbodyRef.current?.querySelector(`tr[data-line-index="${lastRowIndex}"]`);
-      if (row) {
-        const target = row.querySelector<HTMLInputElement | HTMLButtonElement>(
-          'button[role="combobox"], input:not([type="hidden"])'
+      const unquote = (val: string): string => {
+        let trimmed = val.trim();
+        if (trimmed.startsWith('"') && trimmed.endsWith('"')) {
+          trimmed = trimmed.slice(1, -1).replace(/""/g, '"');
+        }
+        return trimmed;
+      };
+
+      tsvRows.forEach((rowCells, rIdx) => {
+        const rowIndex = startRow + rIdx;
+
+        let itemVal = "";
+        let descVal = "";
+        let qtyVal = "1";
+        let priceVal = "0.00";
+        let discType: "none" | "percentage" | "fixed" = "none";
+        let discVal = "0";
+
+        if (startColId === "quantity") {
+          qtyVal = unquote(rowCells[0] || "").replace(/[^0-9.]/g, "") || "1";
+          priceVal = unquote(rowCells[1] || "").replace(/[^0-9.]/g, "") || "0.00";
+          if (rowCells[2]) {
+            const rawDisc = unquote(rowCells[2]);
+            if (rawDisc.includes("%")) {
+              discType = "percentage";
+              discVal = rawDisc.replace(/[^0-9.]/g, "") || "0";
+            } else if (rawDisc && rawDisc !== "0") {
+              discType = "fixed";
+              discVal = rawDisc.replace(/[^0-9.]/g, "") || "0";
+            }
+          }
+        } else if (startColId === "unitPrice") {
+          priceVal = unquote(rowCells[0] || "").replace(/[^0-9.]/g, "") || "0.00";
+          if (rowCells[1]) {
+            const rawDisc = unquote(rowCells[1]);
+            if (rawDisc.includes("%")) {
+              discType = "percentage";
+              discVal = rawDisc.replace(/[^0-9.]/g, "") || "0";
+            } else if (rawDisc && rawDisc !== "0") {
+              discType = "fixed";
+              discVal = rawDisc.replace(/[^0-9.]/g, "") || "0";
+            }
+          }
+        } else {
+          // item or description
+          if (rowCells.length >= 5) {
+            itemVal = unquote(rowCells[0] || "");
+            descVal = unquote(rowCells[1] || "");
+            qtyVal = unquote(rowCells[2] || "").replace(/[^0-9.]/g, "") || "1";
+            priceVal = unquote(rowCells[3] || "").replace(/[^0-9.]/g, "") || "0.00";
+            const rawDisc = unquote(rowCells[4] || "");
+            if (rawDisc.includes("%")) {
+              discType = "percentage";
+              discVal = rawDisc.replace(/[^0-9.]/g, "") || "0";
+            } else if (rawDisc && rawDisc !== "0") {
+              discType = "fixed";
+              discVal = rawDisc.replace(/[^0-9.]/g, "") || "0";
+            }
+          } else if (rowCells.length === 4) {
+            itemVal = unquote(rowCells[0] || "");
+            descVal = unquote(rowCells[1] || "");
+            qtyVal = unquote(rowCells[2] || "").replace(/[^0-9.]/g, "") || "1";
+            priceVal = unquote(rowCells[3] || "").replace(/[^0-9.]/g, "") || "0.00";
+          } else if (rowCells.length === 3) {
+            descVal = unquote(rowCells[0] || "");
+            qtyVal = unquote(rowCells[1] || "").replace(/[^0-9.]/g, "") || "1";
+            priceVal = unquote(rowCells[2] || "").replace(/[^0-9.]/g, "") || "0.00";
+          } else if (rowCells.length === 2) {
+            descVal = unquote(rowCells[0] || "");
+            priceVal = unquote(rowCells[1] || "").replace(/[^0-9.]/g, "") || "0.00";
+          } else {
+            descVal = unquote(rowCells[0] || "");
+          }
+        }
+
+        const matchedItem = items?.find(
+          (i) =>
+            (itemVal &&
+              (i.sku?.toLowerCase() === itemVal.toLowerCase() ||
+                i.name.toLowerCase() === itemVal.toLowerCase())) ||
+            (descVal &&
+              (i.sku?.toLowerCase() === descVal.toLowerCase() ||
+                i.name.toLowerCase() === descVal.toLowerCase()))
         );
-        target?.focus();
-      }
+
+        const resolvedItemId = matchedItem ? matchedItem.id : (items?.find((i) => i.id === itemVal)?.id ?? "");
+        const resolvedDesc = descVal || (matchedItem ? matchedItem.name : "");
+        const resolvedPrice =
+          priceVal !== "0.00" && priceVal !== ""
+            ? priceVal
+            : matchedItem?.salesPriceMinor != null
+            ? (matchedItem.salesPriceMinor / 10 ** minorUnit).toFixed(minorUnit)
+            : "0.00";
+
+        const lineData: Record<string, any> = {
+          itemId: resolvedItemId,
+          description: resolvedDesc,
+          quantity: qtyVal || "1",
+          unitPrice: resolvedPrice,
+          discountType: discType,
+          discountValue: discVal,
+        };
+
+        if (matchedItem && "salesAccountId" in matchedItem && matchedItem.salesAccountId) {
+          lineData.salesAccountId = matchedItem.salesAccountId;
+        }
+
+        if (rowIndex < fields.length) {
+          if (resolvedItemId) setValue(`lines.${rowIndex}.itemId`, resolvedItemId, { shouldDirty: true });
+          if (resolvedDesc) setValue(`lines.${rowIndex}.description`, resolvedDesc, { shouldDirty: true });
+          if (qtyVal) setValue(`lines.${rowIndex}.quantity`, qtyVal, { shouldDirty: true });
+          if (resolvedPrice) setValue(`lines.${rowIndex}.unitPrice`, resolvedPrice, { shouldDirty: true });
+          if (discType !== "none") {
+            setValue(`lines.${rowIndex}.discountType`, discType, { shouldDirty: true });
+            setValue(`lines.${rowIndex}.discountValue`, discVal, { shouldDirty: true });
+          }
+          if (lineData.salesAccountId) {
+            setValue(`lines.${rowIndex}.${accountFieldName}`, lineData.salesAccountId, { shouldDirty: true });
+          }
+          if (matchedItem && onItemSelect) {
+            onItemSelect(rowIndex, matchedItem.id);
+          }
+        } else {
+          onAppend(lineData);
+          setTimeout(() => {
+            if (resolvedItemId) setValue(`lines.${rowIndex}.itemId`, resolvedItemId, { shouldDirty: true });
+            if (resolvedDesc) setValue(`lines.${rowIndex}.description`, resolvedDesc, { shouldDirty: true });
+            if (qtyVal) setValue(`lines.${rowIndex}.quantity`, qtyVal, { shouldDirty: true });
+            if (resolvedPrice) setValue(`lines.${rowIndex}.unitPrice`, resolvedPrice, { shouldDirty: true });
+            if (lineData.salesAccountId) {
+              setValue(`lines.${rowIndex}.${accountFieldName}`, lineData.salesAccountId, { shouldDirty: true });
+            }
+          }, 0);
+        }
+      });
+    },
+    [items, fields.length, onAppend, setValue, minorUnit, accountFieldName, onItemSelect]
+  );
+
+  // Adaptive, fluid column definitions (Manager.io / industry standard ERP layout)
+  // - Columns adapt gracefully to container width without horizontal scrolling or overlaps
+  // - Consolidated single Total column with secondary VAT indicator
+  // - Compact, ergonomic inputs with zero layout shift
+  const columns = useMemo((): DocumentGridColumnDef<any>[] => {
+    const cols: DocumentGridColumnDef<any>[] = [];
+
+    // 1. Line Number (#)
+    cols.push({
+      id: "lineNumber",
+      header: "#",
+      width: "32px",
+      minWidth: "28px",
+      align: "center",
+      isVisible: showLineNumber,
+      isEditable: false,
+      renderCell: ({ index }) => (
+        <span className="text-muted-foreground text-xs font-medium py-1.5 block text-center select-none">
+          {index + 1}
+        </span>
+      ),
+    });
+
+    // 2. Item Selector (optional)
+    if (items) {
+      cols.push({
+        id: "item",
+        header: () => (
+          <>
+            Item <span className="font-normal text-muted-foreground">(opt)</span>
+          </>
+        ),
+        width: showDescription ? "14%" : "28%",
+        minWidth: "110px",
+        isEditable: true,
+        renderCell: ({ index, line, handleKeyDown }) => (
+          <div className="min-w-0">
+            <SearchableItemSelect
+              items={items}
+              value={line?.itemId ?? ""}
+              dataGridRow={index}
+              dataGridColId="item"
+              onKeyDown={(e) => handleKeyDown(e, "item")}
+              onChange={(itemId) => {
+                register(`lines.${index}.itemId`).onChange({
+                  target: { value: itemId, name: `lines.${index}.itemId` },
+                });
+                onItemSelect?.(index, itemId);
+              }}
+              ariaLabel={`Line ${index + 1} inventory item`}
+            />
+            <input type="hidden" {...register(`lines.${index}.itemId`)} />
+          </div>
+        ),
+      });
     }
-    prevFieldsLength.current = fields.length;
-  }, [fields.length]);
+
+    // 3. Description (Flexible column that expands to fill available container space)
+    cols.push({
+      id: "description",
+      header: "Description",
+      width: "auto",
+      minWidth: "140px",
+      isVisible: showDescription,
+      isEditable: true,
+      renderCell: ({ index, errors: rowErrors, handleKeyDown }) => {
+        const lineError = (rowErrors?.lines as any)?.[index];
+        return (
+          <div className="min-w-0">
+            <Input
+              aria-label={`Line ${index + 1} description`}
+              data-grid-row={index}
+              data-grid-col-id="description"
+              className={cn(
+                "w-full min-w-0 text-xs h-9 px-2.5",
+                lineError?.description && "border-destructive focus-visible:ring-destructive"
+              )}
+              placeholder="Description..."
+              {...register(`lines.${index}.description`)}
+              onKeyDown={(e) => handleKeyDown(e, "description")}
+            />
+            {lineError?.description && (
+              <p className="field-error">{lineError.description.message}</p>
+            )}
+          </div>
+        );
+      },
+    });
+
+    // 4. Quantity (Qty)
+    cols.push({
+      id: "quantity",
+      header: "Qty",
+      width: "58px",
+      minWidth: "52px",
+      align: "right",
+      isEditable: true,
+      renderCell: ({ index, errors: rowErrors, handleKeyDown }) => {
+        const lineError = (rowErrors?.lines as any)?.[index];
+        return (
+          <div className="min-w-0">
+            <Input
+              data-grid-row={index}
+              data-grid-col-id="quantity"
+              className={cn(
+                "money text-right w-full min-w-0 text-xs h-9 px-1.5 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none",
+                lineError?.quantity && "border-destructive focus-visible:ring-destructive"
+              )}
+              type="number"
+              step="0.0001"
+              min="0.0001"
+              aria-label={`Line ${index + 1} quantity`}
+              {...register(`lines.${index}.quantity`)}
+              onKeyDown={(e) => handleKeyDown(e, "quantity")}
+            />
+            {lineError?.quantity && (
+              <p className="field-error">{lineError.quantity.message}</p>
+            )}
+          </div>
+        );
+      },
+    });
+
+    // 5. Rate / Unit Price
+    cols.push({
+      id: "unitPrice",
+      header: "Rate",
+      width: "76px",
+      minWidth: "70px",
+      align: "right",
+      isEditable: true,
+      renderCell: ({ index, errors: rowErrors, handleKeyDown }) => {
+        const lineError = (rowErrors?.lines as any)?.[index];
+        return (
+          <div className="min-w-0">
+            <Input
+              data-grid-row={index}
+              data-grid-col-id="unitPrice"
+              className={cn(
+                "money text-right w-full min-w-0 text-xs h-9 px-1.5 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none",
+                lineError?.unitPrice && "border-destructive focus-visible:ring-destructive"
+              )}
+              type="number"
+              step="0.01"
+              min="0"
+              aria-label={`Line ${index + 1} rate`}
+              {...register(`lines.${index}.unitPrice`)}
+              onKeyDown={(e) => handleKeyDown(e, "unitPrice")}
+            />
+            {lineError?.unitPrice && (
+              <p className="field-error">{lineError.unitPrice.message}</p>
+            )}
+          </div>
+        );
+      },
+    });
+
+    // 6. Discount
+    cols.push({
+      id: "discount",
+      header: "Discount",
+      width: "78px",
+      minWidth: "74px",
+      align: "right",
+      isVisible: showDiscounts,
+      isEditable: true,
+      renderCell: ({ index, line, handleKeyDown }) => (
+        <div className="flex items-center h-9 w-full min-w-0 rounded-[6px] border border-border-strong bg-surface-raised overflow-hidden focus-within:border-primary focus-within:ring-1 focus-within:ring-ring">
+          <select
+            data-grid-row={index}
+            data-grid-col-id="discount"
+            aria-label={`Line ${index + 1} discount type`}
+            className="h-full w-8 shrink-0 bg-surface-muted/60 text-[11px] font-medium text-foreground px-0.5 text-center border-r border-border-strong/60 outline-none cursor-pointer hover:bg-surface-muted"
+            {...register(`lines.${index}.discountType`)}
+            onKeyDown={(e) => handleKeyDown(e, "discount")}
+          >
+            <option value="none">—</option>
+            <option value="percentage">%</option>
+            <option value="fixed">Fix</option>
+          </select>
+          {line?.discountType && line.discountType !== "none" ? (
+            <input
+              data-grid-row={index}
+              data-grid-col-id="discountValue"
+              aria-label={`Line ${index + 1} discount value`}
+              className="money h-full w-full min-w-0 bg-transparent text-right px-1.5 text-xs text-foreground outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+              type="number"
+              step="any"
+              min="0"
+              placeholder="0"
+              {...register(`lines.${index}.discountValue`)}
+              onKeyDown={(e) => handleKeyDown(e, "discountValue")}
+            />
+          ) : (
+            <span className="h-full w-full flex items-center justify-center text-xs text-muted-foreground/40 select-none bg-surface-muted/20">
+              0
+            </span>
+          )}
+        </div>
+      ),
+    });
+
+    // 7. Account
+    cols.push({
+      id: "account",
+      header: accountColumnLabel,
+      width: showDescription ? "14%" : (showLineProjects ? "22%" : "28%"),
+      minWidth: "110px",
+      isEditable: true,
+      renderCell: ({ index, line, errors: rowErrors, handleKeyDown }) => {
+        const lineError = (rowErrors?.lines as any)?.[index];
+        return (
+          <div className="min-w-0">
+            {line?.itemId ? (
+              <div className="h-9 flex items-center px-2 rounded-[6px] bg-surface-muted/40 border border-transparent">
+                <input type="hidden" {...register(`lines.${index}.${accountFieldName}`)} />
+                <span className="text-xs text-muted-foreground italic truncate">Auto (item)</span>
+              </div>
+            ) : (
+              <SelectNative
+                data-grid-row={index}
+                data-grid-col-id="account"
+                aria-label={`Line ${index + 1} ${resolvedAccountAria}`}
+                className={cn(
+                  "w-full text-xs h-9 px-1.5 truncate",
+                  lineError?.[accountFieldName] && "border-destructive focus-visible:ring-destructive"
+                )}
+                {...register(`lines.${index}.${accountFieldName}`)}
+                onKeyDown={(e) => handleKeyDown(e, "account")}
+              >
+                {accountPlaceholder && <option value="">{accountPlaceholder}</option>}
+                {accounts.map((account) => (
+                  <option key={account.id} value={account.id}>
+                    {account.name}
+                  </option>
+                ))}
+              </SelectNative>
+            )}
+            {lineError?.[accountFieldName] && (
+              <p className="field-error">{lineError[accountFieldName].message}</p>
+            )}
+            {!showLineTaxCodes && (
+              <input type="hidden" {...register(`lines.${index}.taxCodeId`)} />
+            )}
+          </div>
+        );
+      },
+    });
+
+    // 8. VAT / Tax Code
+    cols.push({
+      id: "taxCode",
+      header: "VAT",
+      width: "80px",
+      minWidth: "76px",
+      isVisible: showLineTaxCodes,
+      isEditable: true,
+      renderCell: ({ index, errors: rowErrors, handleKeyDown }) => {
+        const lineError = (rowErrors?.lines as any)?.[index];
+        return (
+          <div className="min-w-0">
+            <SelectNative
+              data-grid-row={index}
+              data-grid-col-id="taxCode"
+              aria-label={`Line ${index + 1} tax code`}
+              className={cn(
+                "w-full text-xs h-9 px-1.5 truncate",
+                lineError?.taxCodeId && "border-destructive focus-visible:ring-destructive"
+              )}
+              {...register(`lines.${index}.taxCodeId`)}
+              onKeyDown={(e) => handleKeyDown(e, "taxCode")}
+            >
+              {taxCodes.map((taxCode) => (
+                <option key={taxCode.id} value={taxCode.id}>
+                  {taxCode.name}
+                </option>
+              ))}
+            </SelectNative>
+            {lineError?.taxCodeId && (
+              <p className="field-error">{lineError.taxCodeId.message}</p>
+            )}
+          </div>
+        );
+      },
+    });
+
+    // 9. Project Override
+    cols.push({
+      id: "project",
+      header: "Project",
+      width: "86px",
+      minWidth: "80px",
+      isVisible: showLineProjects,
+      isEditable: true,
+      renderCell: ({ index, handleKeyDown }) => (
+        <div className="min-w-0">
+          <SelectNative
+            data-grid-row={index}
+            data-grid-col-id="project"
+            aria-label={`Line ${index + 1} project`}
+            className="w-full text-xs h-9 px-1.5 truncate"
+            {...register(`lines.${index}.projectId`)}
+            onKeyDown={(e) => handleKeyDown(e, "project")}
+          >
+            <option value="">Default</option>
+            {projects?.map((project) => (
+              <option key={project.id} value={project.id}>
+                {"code" in project && project.code ? `${project.code} — ` : ""}
+                {project.name}
+              </option>
+            ))}
+          </SelectNative>
+        </div>
+      ),
+    });
+
+    // 10. Amount / Total (consolidated calculation column matching Manager.io)
+    cols.push({
+      id: "total",
+      header: "Total",
+      width: "84px",
+      minWidth: "80px",
+      align: "right",
+      isEditable: false,
+      renderCell: ({ preview }) => (
+        <div className="text-right pt-2 min-w-0 overflow-hidden">
+          <span
+            className="money block text-xs font-semibold text-foreground truncate"
+            title={formatMoney(preview?.grossMinor ?? 0, currencyCode, minorUnit)}
+          >
+            {formatMoney(preview?.grossMinor ?? 0, currencyCode, minorUnit)}
+          </span>
+          {!amountsIncludeTax && (preview?.taxMinor ?? 0) > 0 && (
+            <span
+              className="money block text-[10px] text-muted-foreground truncate"
+              title={`+${formatMoney(preview?.taxMinor ?? 0, currencyCode, minorUnit)} VAT`}
+            >
+              +{formatMoney(preview?.taxMinor ?? 0, currencyCode, minorUnit)}
+            </span>
+          )}
+        </div>
+      ),
+    });
+
+    // 11. Actions
+    cols.push({
+      id: "actions",
+      header: <span className="sr-only">Actions</span>,
+      width: "36px",
+      minWidth: "36px",
+      align: "center",
+      isEditable: false,
+      renderCell: ({ index, isFirstRow, isLastRow, duplicateLine, removeLine, moveLineUp, moveLineDown }) => {
+        const hasExtraActions = Boolean(duplicateLine || moveLineUp || moveLineDown);
+        if (!hasExtraActions) {
+          return (
+            <div className="flex items-center justify-center pt-1">
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                className="size-7 text-muted-foreground hover:text-danger hover:bg-danger/10"
+                aria-label={`Remove line ${index + 1}`}
+                disabled={fields.length === 1}
+                title={fields.length === 1 ? "At least one line is required" : "Delete line"}
+                onClick={() => removeLine(index)}
+              >
+                <Trash2 className="size-3.5" />
+              </Button>
+            </div>
+          );
+        }
+
+        return (
+          <div className="flex items-center justify-center pt-1">
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="size-7 text-muted-foreground hover:text-foreground hover:bg-surface-muted"
+                  aria-label={`Line ${index + 1} actions`}
+                  title="Line actions"
+                >
+                  <MoreHorizontal className="size-3.5" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-40">
+                {duplicateLine && (
+                  <DropdownMenuItem onClick={() => duplicateLine(index)}>
+                    <Copy className="size-3.5 mr-2" /> Duplicate line
+                  </DropdownMenuItem>
+                )}
+                {moveLineUp && (
+                  <DropdownMenuItem disabled={isFirstRow} onClick={() => moveLineUp(index)}>
+                    <ArrowUp className="size-3.5 mr-2" /> Move up
+                  </DropdownMenuItem>
+                )}
+                {moveLineDown && (
+                  <DropdownMenuItem disabled={isLastRow} onClick={() => moveLineDown(index)}>
+                    <ArrowDown className="size-3.5 mr-2" /> Move down
+                  </DropdownMenuItem>
+                )}
+                <DropdownMenuSeparator />
+                <DropdownMenuItem
+                  disabled={fields.length === 1}
+                  className="text-danger focus:text-danger"
+                  onClick={() => removeLine(index)}
+                >
+                  <Trash2 className="size-3.5 mr-2" /> Delete line
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
+        );
+      },
+    });
+
+    return cols;
+  }, [
+    showLineNumber,
+    items,
+    showDescription,
+    showDiscounts,
+    accountColumnLabel,
+    accountFieldName,
+    resolvedAccountAria,
+    accountPlaceholder,
+    accounts,
+    showLineTaxCodes,
+    taxCodes,
+    showLineProjects,
+    projects,
+    amountsIncludeTax,
+    currencyCode,
+    minorUnit,
+    register,
+    onItemSelect,
+    fields.length,
+  ]);
 
   return (
     <div>
@@ -196,359 +783,25 @@ export function DocumentLineTable({
         <p className="field-error mb-2">{errors.lines.message}</p>
       )}
 
-      <div className="overflow-x-auto pb-3 -mx-1 px-1">
-        <table className="line-item-table w-full">
-          <thead>
-            <tr>
-              {showLineNumber && (
-                <th className="w-10 text-center text-muted-foreground">#</th>
-              )}
-              {items && (
-                <th className="w-[18%] min-w-[130px]">
-                  Item <span className="font-normal text-muted-foreground">(optional)</span>
-                </th>
-              )}
-              {showDescription && (
-                <th className="min-w-[140px]">Description</th>
-              )}
-              <th className="w-20 min-w-[68px] text-right!">Qty</th>
-              <th className="w-24 min-w-[80px] text-right!">Rate</th>
-              {showDiscounts && (
-                <th className="w-32 min-w-[105px] text-right!">Discount</th>
-              )}
-              <th className="w-[16%] min-w-[125px]">{accountColumnLabel}</th>
-              {showLineTaxCodes && (
-                <th className="w-[12%] min-w-[95px]">VAT</th>
-              )}
-              {showLineProjects && (
-                <th className="w-[14%] min-w-[105px]">Project override</th>
-              )}
-              {!amountsIncludeTax && (
-                <>
-                  <th className="w-20 min-w-[70px] text-right!">Amount</th>
-                  <th className="w-18 min-w-[65px] text-right!">Tax</th>
-                </>
-              )}
-              <th className="w-24 min-w-[80px] text-right!">Total</th>
-              <th className={onDuplicate || onMoveUp || onMoveDown ? "w-28 text-center" : "w-10 text-center"}>
-                <span className="sr-only">Actions</span>
-              </th>
-            </tr>
-          </thead>
-          <tbody ref={tbodyRef}>
-            {fields.map((field, index) => {
-              const line = lines[index];
-              const preview = previews[index];
-              const lineError = (errors?.lines as any)?.[index];
-              const isLastRow = index === fields.length - 1;
-
-              const handleLastCellTab = (e: React.KeyboardEvent) => {
-                if (e.key === "Tab" && !e.shiftKey && isLastRow) {
-                  e.preventDefault();
-                  onAppend();
-                }
-              };
-
-              return (
-                <tr key={field.id} data-line-index={index}>
-                  {showLineNumber && (
-                    <td className="text-center text-muted-foreground align-middle py-2 text-xs font-medium">
-                      {index + 1}
-                    </td>
-                  )}
-
-                  {items && (
-                    <td className="align-top">
-                      <SearchableItemSelect
-                        items={items}
-                        value={line?.itemId ?? ""}
-                        onChange={(itemId) => {
-                          register(`lines.${index}.itemId`).onChange({
-                            target: { value: itemId, name: `lines.${index}.itemId` },
-                          });
-                          onItemSelect?.(index, itemId);
-                        }}
-                        ariaLabel={`Line ${index + 1} inventory item`}
-                      />
-                      <input type="hidden" {...register(`lines.${index}.itemId`)} />
-                    </td>
-                  )}
-
-                  {showDescription && (
-                    <td className="align-top min-w-0">
-                      <Input
-                        aria-label={`Line ${index + 1} description`}
-                        className={cn("w-full min-w-0 text-xs", lineError?.description && "border-destructive focus-visible:ring-destructive")}
-                        placeholder="Description..."
-                        {...register(`lines.${index}.description`)}
-                        onKeyDown={(e) => {
-                          if (e.key === "Enter" && !e.shiftKey) {
-                            e.preventDefault();
-                            if (isLastRow) onAppend();
-                          }
-                        }}
-                      />
-                      {lineError?.description && (
-                        <p className="field-error">{lineError.description.message}</p>
-                      )}
-                    </td>
-                  )}
-
-                  <td className="align-top">
-                    <Input
-                      className={cn("money text-right w-full min-w-0 text-xs", lineError?.quantity && "border-destructive focus-visible:ring-destructive")}
-                      type="number"
-                      step="0.0001"
-                      min="0.0001"
-                      aria-label={`Line ${index + 1} quantity`}
-                      {...register(`lines.${index}.quantity`)}
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter" && !e.shiftKey) {
-                          e.preventDefault();
-                          if (isLastRow) onAppend();
-                        }
-                      }}
-                    />
-                    {lineError?.quantity && (
-                      <p className="field-error">{lineError.quantity.message}</p>
-                    )}
-                  </td>
-
-                  <td className="align-top">
-                    <Input
-                      className={cn("money text-right w-full min-w-0 text-xs", lineError?.unitPrice && "border-destructive focus-visible:ring-destructive")}
-                      type="number"
-                      step="0.000001"
-                      min="0"
-                      aria-label={`Line ${index + 1} rate`}
-                      {...register(`lines.${index}.unitPrice`)}
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter" && !e.shiftKey) {
-                          e.preventDefault();
-                          if (isLastRow) {
-                            onAppend();
-                          }
-                        } else if (
-                          e.key === "Tab" &&
-                          !e.shiftKey &&
-                          isLastRow &&
-                          !showDiscounts &&
-                          line?.itemId &&
-                          !showLineTaxCodes &&
-                          !showLineProjects
-                        ) {
-                          e.preventDefault();
-                          onAppend();
-                        }
-                      }}
-                    />
-                    {lineError?.unitPrice && (
-                      <p className="field-error">{lineError.unitPrice.message}</p>
-                    )}
-                  </td>
-
-                  {showDiscounts && (
-                    <td className="align-top">
-                      <div className="flex gap-1 justify-end min-w-0">
-                        <select
-                          aria-label={`Line ${index + 1} discount type`}
-                          className="w-[62px] px-1.5 py-1 h-9 rounded-md border border-border-strong bg-surface-raised text-xs outline-none focus:border-primary focus:ring-1 focus:ring-ring"
-                          {...register(`lines.${index}.discountType`)}
-                        >
-                          <option value="none">None</option>
-                          <option value="percentage">%</option>
-                          <option value="fixed">Fixed</option>
-                        </select>
-                        {line?.discountType && line.discountType !== "none" && (
-                          <Input
-                            aria-label={`Line ${index + 1} discount value`}
-                            className="money w-16 text-right px-2 py-1 h-9 text-xs"
-                            type="number"
-                            step="any"
-                            min="0"
-                            {...register(`lines.${index}.discountValue`)}
-                            onKeyDown={(e) => {
-                              if (
-                                !showLineTaxCodes &&
-                                !showLineProjects &&
-                                line?.itemId
-                              ) {
-                                handleLastCellTab(e);
-                              }
-                            }}
-                          />
-                        )}
-                      </div>
-                    </td>
-                  )}
-
-                  <td className="align-top">
-                    {line?.itemId ? (
-                      <div className="h-9 flex items-center px-2.5 rounded-md bg-surface-muted/40 border border-transparent">
-                        <input
-                          type="hidden"
-                          {...register(`lines.${index}.${accountFieldName}`)}
-                        />
-                        <span className="text-xs text-muted-foreground italic truncate">Auto (item)</span>
-                      </div>
-                    ) : (
-                      <SelectNative
-                        aria-label={`Line ${index + 1} ${resolvedAccountAria}`}
-                        className={cn("w-full text-xs", lineError?.[accountFieldName] && "border-destructive focus-visible:ring-destructive")}
-                        {...register(`lines.${index}.${accountFieldName}`)}
-                        onKeyDown={(e) => {
-                          if (!showLineTaxCodes && !showLineProjects) {
-                            handleLastCellTab(e);
-                          }
-                        }}
-                      >
-                        {accountPlaceholder && (
-                          <option value="">{accountPlaceholder}</option>
-                        )}
-                        {accounts.map((account) => (
-                          <option key={account.id} value={account.id}>
-                            {account.name}
-                          </option>
-                        ))}
-                      </SelectNative>
-                    )}
-                    {lineError?.[accountFieldName] && (
-                      <p className="field-error">{lineError[accountFieldName].message}</p>
-                    )}
-                    {!showLineTaxCodes && (
-                      <input type="hidden" {...register(`lines.${index}.taxCodeId`)} />
-                    )}
-                  </td>
-
-                  {showLineTaxCodes && (
-                    <td className="align-top">
-                      <SelectNative
-                        aria-label={`Line ${index + 1} tax code`}
-                        className={cn("w-full text-xs", lineError?.taxCodeId && "border-destructive focus-visible:ring-destructive")}
-                        {...register(`lines.${index}.taxCodeId`)}
-                        onKeyDown={(e) => {
-                          if (!showLineProjects) {
-                            handleLastCellTab(e);
-                          }
-                        }}
-                      >
-                        {taxCodes.map((taxCode) => (
-                          <option key={taxCode.id} value={taxCode.id}>
-                            {taxCode.name}
-                          </option>
-                        ))}
-                      </SelectNative>
-                      {lineError?.taxCodeId && (
-                        <p className="field-error">{lineError.taxCodeId.message}</p>
-                      )}
-                    </td>
-                  )}
-
-                  {showLineProjects && (
-                    <td className="align-top">
-                      <SelectNative
-                        aria-label={`Line ${index + 1} project`}
-                        className="w-full text-xs"
-                        {...register(`lines.${index}.projectId`)}
-                        onKeyDown={handleLastCellTab}
-                      >
-                        <option value="">Use document Project</option>
-                        {projects?.map((project) => (
-                          <option key={project.id} value={project.id}>
-                            {"code" in project && project.code ? `${project.code} — ` : ""}
-                            {project.name}
-                          </option>
-                        ))}
-                      </SelectNative>
-                    </td>
-                  )}
-
-                  {!amountsIncludeTax && (
-                    <>
-                      <td className="money text-right align-top text-xs pt-2.5">
-                        {formatMoney(preview?.netMinor ?? 0, currencyCode, minorUnit)}
-                      </td>
-                      <td className="money text-right align-top text-xs text-muted-foreground pt-2.5">
-                        {formatMoney(preview?.taxMinor ?? 0, currencyCode, minorUnit)}
-                      </td>
-                    </>
-                  )}
-
-                  <td className="money text-right align-top text-xs font-semibold pt-2.5">
-                    {formatMoney(preview?.grossMinor ?? 0, currencyCode, minorUnit)}
-                  </td>
-
-                  <td className="align-top text-center pt-1 whitespace-nowrap">
-                    <div className="flex items-center justify-center gap-0.5">
-                      {onDuplicate && (
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="icon"
-                          className="size-7 text-muted-foreground hover:text-foreground hover:bg-surface-muted"
-                          aria-label={`Duplicate line ${index + 1}`}
-                          title="Duplicate line"
-                          onClick={() => onDuplicate(index)}
-                        >
-                          <Copy className="size-3" />
-                        </Button>
-                      )}
-                      {onMoveUp && (
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="icon"
-                          className="size-7 text-muted-foreground hover:text-foreground hover:bg-surface-muted"
-                          aria-label={`Move line ${index + 1} up`}
-                          title="Move line up"
-                          disabled={index === 0}
-                          onClick={() => onMoveUp(index)}
-                        >
-                          <ArrowUp className="size-3" />
-                        </Button>
-                      )}
-                      {onMoveDown && (
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="icon"
-                          className="size-7 text-muted-foreground hover:text-foreground hover:bg-surface-muted"
-                          aria-label={`Move line ${index + 1} down`}
-                          title="Move line down"
-                          disabled={index === fields.length - 1}
-                          onClick={() => onMoveDown(index)}
-                        >
-                          <ArrowDown className="size-3" />
-                        </Button>
-                      )}
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="icon"
-                        className="size-7 text-muted-foreground hover:text-danger hover:bg-danger/10"
-                        aria-label={`Remove line ${index + 1}`}
-                        disabled={fields.length === 1}
-                        title={fields.length === 1 ? "At least one line is required" : "Delete line"}
-                        onClick={() => onRemove(index)}
-                      >
-                        <Trash2 className="size-3" />
-                      </Button>
-                    </div>
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
-      </div>
-
-      <button
-        type="button"
-        className="dashed-add-button mt-2"
-        onClick={onAppend}
-      >
-        <Plus className="size-4" /> Add line
-      </button>
+      <DocumentGrid
+        columns={columns}
+        fields={fields}
+        lines={lines}
+        previews={previews}
+        register={register}
+        control={control}
+        errors={errors}
+        taxCodes={taxCodes}
+        minorUnit={minorUnit}
+        currencyCode={currencyCode}
+        amountsIncludeTax={amountsIncludeTax}
+        onAppend={onAppend}
+        onRemove={onRemove}
+        onDuplicate={onDuplicate}
+        onMoveUp={onMoveUp}
+        onMoveDown={onMoveDown}
+        onPasteTSV={onPasteTSV ?? defaultPasteTSV}
+      />
 
       {showTotalsSection && (
         <div className="mt-5 flex flex-col md:flex-row items-start justify-between gap-6">
@@ -568,6 +821,7 @@ export function DocumentLineTable({
           <DocumentTotalsPanel
             subtotalMinor={subtotalMinor}
             taxMinor={taxMinor}
+            totalMinor={totalMinor}
             currencyCode={currencyCode}
             minorUnit={minorUnit}
             baseEquivalentMinor={baseEquivalentMinor}

@@ -121,7 +121,7 @@ export default async function NewPurchaseOrderPage({
         businessId={businessId}
         suppliers={suppliers.map(({ id, name, defaultCurrencyCode }) => ({ id, name, defaultCurrencyCode }))}
         expenseAccounts={accounts.map(({ id, name }) => ({ id, name }))}
-        taxCodes={taxes.map(({ id, name, rateBasisPoints }) => ({ id, name, rateBasisPoints }))}
+        taxCodes={taxes.map(({ id, name, rateBasisPoints, vatCategory }) => ({ id, name, rateBasisPoints, vatCategory }))}
         projects={projects}
         items={items.map(({ id, sku, name, purchasePriceMinor, inventoryAssetAccountId }) => ({
           id,

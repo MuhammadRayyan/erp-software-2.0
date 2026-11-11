@@ -16,6 +16,7 @@ export interface DocumentLineTaxOption {
   id: string;
   name: string;
   rateBasisPoints: number;
+  vatCategory?: string | null;
 }
 
 export interface DocumentLinePreview {
@@ -53,8 +54,9 @@ export function previewDocumentLine(
       minorUnit
     );
     const discountedTotalMinor = lineTotalMinor - discountMinor;
-    const rate =
-      taxCodes.find((tax) => tax.id === line?.taxCodeId)?.rateBasisPoints ?? 0;
+    const taxOption = taxCodes.find((tax) => tax.id === line?.taxCodeId);
+    const rate = taxOption?.rateBasisPoints ?? 0;
+    const vatCategory = taxOption?.vatCategory;
 
     let netMinor = 0;
     let taxMinor = 0;
@@ -62,13 +64,18 @@ export function previewDocumentLine(
 
     if (amountsIncludeTax) {
       grossMinor = discountedTotalMinor;
-      const split = splitTaxInclusive(grossMinor, rate);
-      netMinor = split.netMinor;
-      taxMinor = split.taxMinor;
+      if (vatCategory === "reverse_charge") {
+        netMinor = grossMinor;
+        taxMinor = 0;
+      } else {
+        const split = splitTaxInclusive(grossMinor, rate);
+        netMinor = split.netMinor;
+        taxMinor = split.taxMinor;
+      }
     } else {
       netMinor = discountedTotalMinor;
       taxMinor = calculateTax(netMinor, rate);
-      grossMinor = netMinor + taxMinor;
+      grossMinor = vatCategory === "reverse_charge" ? netMinor : netMinor + taxMinor;
     }
     return { netMinor, taxMinor, grossMinor };
   } catch {
@@ -104,7 +111,10 @@ export function useDocumentTotals<TFieldValues extends FieldValues = any>({
     () => previews.reduce((sum, row) => sum + row.taxMinor, 0),
     [previews]
   );
-  const totalMinor = subtotalMinor + taxMinor;
+  const totalMinor = useMemo(
+    () => previews.reduce((sum, row) => sum + row.grossMinor, 0),
+    [previews]
+  );
 
   return {
     lines,

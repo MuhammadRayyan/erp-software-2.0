@@ -56,7 +56,7 @@ export default async function EditPurchaseOrderPage({ params }: { params: Promis
         status={record.order.status}
         suppliers={suppliers.map(({ id, name, defaultCurrencyCode }) => ({ id, name, defaultCurrencyCode }))}
         expenseAccounts={accounts.map(({ id, name }) => ({ id, name }))}
-        taxCodes={taxes.map(({ id, name, rateBasisPoints }) => ({ id, name, rateBasisPoints }))}
+        taxCodes={taxes.map(({ id, name, rateBasisPoints, vatCategory }) => ({ id, name, rateBasisPoints, vatCategory }))}
         projects={projects}
         items={items.map(({ id, sku, name, purchasePriceMinor, inventoryAssetAccountId }) => ({ id, sku, name, purchasePriceMinor, inventoryAssetAccountId }))}
         quotes={quotes.map((q) => ({ id: q.id, quoteNumber: q.quote_number, supplierId: q.supplier_id, date: q.date }))}
