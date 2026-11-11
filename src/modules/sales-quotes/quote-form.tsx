@@ -22,7 +22,7 @@ import { useUnsavedChanges } from "@/hooks/use-unsaved-changes";
 
 type Option = { id: string; name: string; defaultCurrencyCode: string | null };
 type AccountOption = { id: string; name: string };
-type TaxOption = { id: string; name: string; rateBasisPoints: number };
+type TaxOption = { id: string; name: string; rateBasisPoints: number; vatCategory?: string | null };
 type ProjectOption = { id: string; code: string; name: string; customerId?: string | null; customerIds?: string[] };
 type ItemOption = { id: string; sku: string | null; name: string; salesPriceMinor: number | null; salesAccountId: string };
 
@@ -54,7 +54,7 @@ export function SalesQuoteForm({ businessId, quoteId, status = "draft", customer
   const exchangeRateSource = useWatch({ control, name: "exchangeRateSource" }) || "";
   const quoteDate = useWatch({ control, name: "date" }) || "";
   const minorUnit = currencies.find((entry) => entry.code === currencyCode)?.minorUnit ?? 2;
-  const { lines, amountsIncludeTax, previews, subtotalMinor, taxMinor } = useDocumentTotals({ control, taxCodes, minorUnit });
+  const { lines, amountsIncludeTax, previews, subtotalMinor, taxMinor, totalMinor } = useDocumentTotals({ control, taxCodes, minorUnit });
   const customerId = useWatch({ control, name: "customerId" });
   const availableProjects = projects.filter((project) => {
     if (!customerId) return true;
@@ -145,10 +145,12 @@ export function SalesQuoteForm({ businessId, quoteId, status = "draft", customer
       </div>
       <DocumentLineTable
         register={register}
+        control={control}
+        setValue={setValue}
         errors={errors}
         fields={fields}
         lines={lines}
-        onAppend={() =>
+        onAppend={(custom) =>
           append({
             itemId: "",
             description: "",
@@ -159,6 +161,7 @@ export function SalesQuoteForm({ businessId, quoteId, status = "draft", customer
             salesAccountId: defaultSalesAccount,
             taxCodeId: globalTaxCodeId,
             projectId: "",
+            ...custom,
           })
         }
         onRemove={remove}
@@ -178,6 +181,7 @@ export function SalesQuoteForm({ businessId, quoteId, status = "draft", customer
         amountsIncludeTax={amountsIncludeTax}
         subtotalMinor={subtotalMinor}
         taxMinor={taxMinor}
+        totalMinor={totalMinor}
         registerAmountsIncludeTax={register("amountsIncludeTax")}
       />
     </section>

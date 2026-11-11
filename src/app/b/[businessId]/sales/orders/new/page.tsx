@@ -96,8 +96,8 @@ export default async function NewOrderPage({
       <SalesOrderForm
         businessId={businessId}
         customers={customers.map(({ id, name, defaultCurrencyCode }) => ({ id, name, defaultCurrencyCode }))}
-        expenseAccounts={accounts.map(({ id, name }) => ({ id, name }))}
-        taxCodes={taxes.map(({ id, name, rateBasisPoints }) => ({ id, name, rateBasisPoints }))}
+        salesAccounts={accounts.map(({ id, name }) => ({ id, name }))}
+        taxCodes={taxes.map(({ id, name, rateBasisPoints, vatCategory }) => ({ id, name, rateBasisPoints, vatCategory }))}
         projects={projects}
         items={items.map(({ id, sku, name, salesPriceMinor, salesAccountId }) => ({
           id,

@@ -15,7 +15,7 @@ export const quantitySchema = z
 export const moneySchema = z
   .string()
   .trim()
-  .regex(/^\d{1,10}(?:\.\d{1,6})?$/, "Enter an amount with up to 6 decimals");
+  .regex(/^\d{1,10}(?:\.\d{1,2})?$/, "Enter an amount with up to 2 decimal places");
 
 /** Positive money input (settlement amounts, receipt/payment totals). */
 export const positiveMoneySchema = moneySchema.refine(
@@ -42,7 +42,7 @@ export const discountValueSchema = z
     z
       .string()
       .trim()
-      .regex(/^\d{1,10}(?:\.\d{1,4})?$/, "Discount must be a positive number with up to 4 decimal places"),
+      .regex(/^\d{1,10}(?:\.\d{1,2})?$/, "Discount must be a positive number with up to 2 decimal places"),
   ])
   .transform((val) => (val === "" ? "0" : val))
   .default("0");

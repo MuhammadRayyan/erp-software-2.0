@@ -4,3 +4,7 @@ export * from "./document-column-toggles";
 export * from "./document-line-table";
 export * from "./document-flow-stepper";
 export * from "./searchable-item-select";
+export * from "./grid/document-grid-types";
+export * from "./grid/document-grid";
+export * from "./grid/document-grid-row";
+

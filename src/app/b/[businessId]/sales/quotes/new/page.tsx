@@ -56,7 +56,7 @@ export default async function NewQuotePage({ params, searchParams }: { params: P
         businessId={businessId}
         customers={customers.map(({ id, name, defaultCurrencyCode }) => ({ id, name, defaultCurrencyCode }))}
         salesAccounts={accounts.map(({ id, name }) => ({ id, name }))}
-        taxCodes={taxes.map(({ id, name, rateBasisPoints }) => ({ id, name, rateBasisPoints }))}
+        taxCodes={taxes.map(({ id, name, rateBasisPoints, vatCategory }) => ({ id, name, rateBasisPoints, vatCategory }))}
         projects={projects}
         items={items.map(({ id, sku, name, salesPriceMinor, salesAccountId }) => ({
           id,

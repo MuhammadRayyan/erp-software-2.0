@@ -11,7 +11,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: verify-and-deploy-${{ github.event.pull_request.number || github.ref }}
+  group: verify-and-deploy-v2-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
@@ -81,6 +81,7 @@ jobs:
           docker run --rm --entrypoint cat erp-verified:"$GITHUB_SHA" tools/release.json > release-evidence/release.json
           docker run --rm --entrypoint cat erp-verified:"$GITHUB_SHA" tools/production-dependencies.cdx.json > release-evidence/production-dependencies.cdx.json
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        continue-on-error: true
         with:
           name: release-evidence-${{ github.sha }}
           path: release-evidence

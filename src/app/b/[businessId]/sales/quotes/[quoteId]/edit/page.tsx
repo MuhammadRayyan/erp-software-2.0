@@ -57,7 +57,7 @@ export default async function EditQuotePage({ params }: { params: Promise<{ busi
       status={record.quote.documentStatus as any}
       customers={customers.map(({ id, name, defaultCurrencyCode }) => ({ id, name, defaultCurrencyCode }))}
       salesAccounts={salesAccounts.map(({ id, name }) => ({ id, name }))}
-      taxCodes={taxCodes.map(({ id, name, rateBasisPoints }) => ({ id, name, rateBasisPoints }))}
+      taxCodes={taxCodes.map(({ id, name, rateBasisPoints, vatCategory }) => ({ id, name, rateBasisPoints, vatCategory }))}
       projects={projects.map((project) => ({ id: project.id, code: project.code, name: project.name, customerId: project.customer_id }))}
       items={items.map(({ id, sku, name, salesPriceMinor, salesAccountId }) => ({ id, sku, name, salesPriceMinor, salesAccountId }))}
       currency={access.business.currency}

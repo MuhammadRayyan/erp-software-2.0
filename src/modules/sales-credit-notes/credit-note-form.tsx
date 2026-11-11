@@ -19,10 +19,11 @@ import { emirateLabels, emirates } from "@/modules/tax/uae-vat-config";
 import { DocumentFormFooter } from "@/components/document-form-footer";
 import { SelectNative } from "@/components/ui/select-native";
 import { DocumentLineTable, useDocumentTotals } from "@/components/documents";
+import { useUnsavedChanges } from "@/hooks/use-unsaved-changes";
 
 type Option = { id: string; name: string };
 type AccountOption = { id: string; name: string };
-type TaxOption = { id: string; name: string; rateBasisPoints: number };
+type TaxOption = { id: string; name: string; rateBasisPoints: number; vatCategory?: string | null };
 type InvoiceOption = {
   id: string;
   invoiceNumber: string;
@@ -83,9 +84,20 @@ export function CreditNoteForm({
     handleSubmit,
     setError,
     setValue,
-    formState: { errors, isSubmitting },
+    formState: { errors, isSubmitting, isDirty, isSubmitSuccessful },
   } = form;
-  const { fields, append, remove } = useFieldArray({ control, name: "lines" });
+  useUnsavedChanges(isDirty && !isSubmitSuccessful);
+  const { fields, append, remove, insert, move } = useFieldArray({ control, name: "lines" });
+  function duplicateLine(index: number) {
+    const currentLine = form.getValues(`lines.${index}`);
+    insert(index + 1, { ...currentLine });
+  }
+  function moveLineUp(index: number) {
+    if (index > 0) move(index, index - 1);
+  }
+  function moveLineDown(index: number) {
+    if (index < fields.length - 1) move(index, index + 1);
+  }
   const customerId = useWatch({ control, name: "customerId" });
   const invoiceId = useWatch({ control, name: "sourceInvoiceId" });
   const eligibleInvoices = useMemo(
@@ -120,7 +132,7 @@ export function CreditNoteForm({
     selected?.exchangeRateSource ||
     "Base";
   const minorUnit = selected?.minorUnit ?? 2;
-  const { lines, amountsIncludeTax, previews, subtotalMinor, taxMinor } = useDocumentTotals({ control, taxCodes, minorUnit });
+  const { lines, amountsIncludeTax, previews, subtotalMinor, taxMinor, totalMinor } = useDocumentTotals({ control, taxCodes, minorUnit });
   const defaultSales = salesAccounts[0]?.id ?? "";
     
   function updateGlobalTax(newTaxId: string) {
@@ -348,10 +360,12 @@ export function CreditNoteForm({
         </div>
         <DocumentLineTable
           register={register}
+          control={control}
+          setValue={setValue}
           errors={errors}
           fields={fields}
           lines={lines}
-          onAppend={() =>
+          onAppend={(custom) =>
             append({
               description: "",
               quantity: "1",
@@ -361,9 +375,13 @@ export function CreditNoteForm({
               salesAccountId: defaultSales,
               taxCodeId: globalTaxCodeId,
               projectId: "",
+              ...custom,
             })
           }
           onRemove={remove}
+          onDuplicate={duplicateLine}
+          onMoveUp={moveLineUp}
+          onMoveDown={moveLineDown}
           accounts={salesAccounts}
           accountFieldName="salesAccountId"
           accountAriaLabel="sales account"
@@ -377,6 +395,7 @@ export function CreditNoteForm({
           amountsIncludeTax={amountsIncludeTax}
           subtotalMinor={subtotalMinor}
           taxMinor={taxMinor}
+          totalMinor={totalMinor}
           registerAmountsIncludeTax={register("amountsIncludeTax")}
         />
       </section>

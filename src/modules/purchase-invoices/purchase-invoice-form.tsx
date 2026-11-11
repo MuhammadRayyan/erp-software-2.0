@@ -135,7 +135,7 @@ export function PurchaseInvoiceForm({
     taxCodes,
     minorUnit,
   });
-  const billTotalMinor = totals.subtotalMinor + totals.taxMinor;
+  const billTotalMinor = totals.totalMinor ?? (totals.subtotalMinor + totals.taxMinor);
   const applyAvailablePrepayment = useWatch({ control, name: "applyAvailablePrepayment" });
   const currentPrepayments: SupplierPrepaymentOption[] = (availableSupplierPrepayments?.[supplierId] || []).filter(
     (p: SupplierPrepaymentOption) => p.currencyCode === currencyCode
@@ -433,10 +433,12 @@ export function PurchaseInvoiceForm({
 
         <DocumentLineTable
           register={register}
+          control={control}
+          setValue={form.setValue}
           errors={errors}
           fields={fields}
           lines={lines}
-          onAppend={() =>
+          onAppend={(custom) =>
             append({
               itemId: "",
               description: "",
@@ -447,6 +449,7 @@ export function PurchaseInvoiceForm({
               expenseAccountId: defaultExpense,
               taxCodeId: globalTaxCodeId,
               projectId: "",
+              ...custom,
             })
           }
           onRemove={remove}
@@ -468,6 +471,7 @@ export function PurchaseInvoiceForm({
           registerAmountsIncludeTax={register("amountsIncludeTax")}
           subtotalMinor={totals.subtotalMinor}
           taxMinor={totals.taxMinor}
+          totalMinor={totals.totalMinor}
         />
       </section>
       <DocumentFormFooter

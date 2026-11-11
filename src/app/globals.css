@@ -381,7 +381,6 @@ input[aria-invalid="true"]:focus, select[aria-invalid="true"]:focus {
 }
 .line-item-table tbody tr:hover {
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
-  transform: translateY(-1px);
 }
 .dark .line-item-table tbody tr:hover {
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);

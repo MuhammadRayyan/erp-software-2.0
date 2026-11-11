@@ -21,12 +21,42 @@ import { useUnsavedChanges } from "@/hooks/use-unsaved-changes";
 
 type Option = { id: string; name: string; defaultCurrencyCode: string | null };
 type AccountOption = { id: string; name: string };
-type TaxOption = { id: string; name: string; rateBasisPoints: number };
+type TaxOption = { id: string; name: string; rateBasisPoints: number; vatCategory?: string | null };
 type ProjectOption = { id: string; code: string; name: string; customerId?: string | null; customerIds?: string[] };
 type ItemOption = { id: string; sku: string | null; name: string; salesPriceMinor: number | null; salesAccountId: string };
 type QuoteOption = { id: string; quoteNumber: string; customerId: string; date?: string };
 
-export function SalesOrderForm({ businessId, orderId, status = "draft", customers, expenseAccounts, taxCodes, projects, items, quotes, currency, currencies, rates, initial }: { businessId: string; orderId?: string; status?: SalesOrderStatus; customers: Option[]; expenseAccounts: AccountOption[]; taxCodes: TaxOption[]; projects: ProjectOption[]; items: ItemOption[]; quotes?: QuoteOption[]; currency: string; currencies: DocumentCurrencyOption[]; rates: DocumentRateOption[]; initial: SalesOrderInput }) {
+export function SalesOrderForm({
+  businessId,
+  orderId,
+  status = "draft",
+  customers,
+  salesAccounts,
+  expenseAccounts,
+  taxCodes,
+  projects,
+  items,
+  quotes,
+  currency,
+  currencies,
+  rates,
+  initial,
+}: {
+  businessId: string;
+  orderId?: string;
+  status?: SalesOrderStatus;
+  customers: Option[];
+  salesAccounts?: AccountOption[];
+  expenseAccounts?: AccountOption[];
+  taxCodes: TaxOption[];
+  projects: ProjectOption[];
+  items: ItemOption[];
+  quotes?: QuoteOption[];
+  currency: string;
+  currencies: DocumentCurrencyOption[];
+  rates: DocumentRateOption[];
+  initial: SalesOrderInput;
+}) {
   const router = useRouter();
   const [serverError, setServerError] = useState("");
   const [globalTaxCodeId, setGlobalTaxCodeId] = useState(() => initial.lines[0]?.taxCodeId || taxCodes.find((taxCode) => taxCode.rateBasisPoints === 500)?.id || taxCodes[0]?.id || "");
@@ -54,7 +84,7 @@ export function SalesOrderForm({ businessId, orderId, status = "draft", customer
   const exchangeRateSource = useWatch({ control, name: "exchangeRateSource" }) || "";
   const orderDate = useWatch({ control, name: "date" }) || "";
   const minorUnit = currencies.find((entry) => entry.code === currencyCode)?.minorUnit ?? 2;
-  const { lines, amountsIncludeTax, previews, subtotalMinor, taxMinor } = useDocumentTotals({ control, taxCodes, minorUnit });
+  const { lines, amountsIncludeTax, previews, subtotalMinor, taxMinor, totalMinor } = useDocumentTotals({ control, taxCodes, minorUnit });
   const customerId = useWatch({ control, name: "customerId" });
   const availableProjects = projects.filter((project) => {
     if (!customerId) return true;
@@ -68,11 +98,12 @@ export function SalesOrderForm({ businessId, orderId, status = "draft", customer
     lines.forEach((_, i) => form.setValue(`lines.${i}.taxCodeId`, newTaxId));
   }
 
-  const defaultExpense = expenseAccounts[0]?.id ?? "";
+  const resolvedSalesAccounts = salesAccounts ?? expenseAccounts ?? [];
+  const defaultSalesAccount = resolvedSalesAccounts[0]?.id ?? "";
   function selectItem(index: number, itemId: string) {
     const item = items.find((i) => i.id === itemId);
     if (!item) {
-      form.setValue(`lines.${index}.salesAccountId`, defaultExpense);
+      form.setValue(`lines.${index}.salesAccountId`, defaultSalesAccount);
       return;
     }
     form.setValue(`lines.${index}.description`, item.name);
@@ -145,10 +176,12 @@ export function SalesOrderForm({ businessId, orderId, status = "draft", customer
       </div>
       <DocumentLineTable
         register={register}
+        control={control}
+        setValue={setValue}
         errors={errors}
         fields={fields}
         lines={lines}
-        onAppend={() =>
+        onAppend={(custom) =>
           append({
             itemId: "",
             description: "",
@@ -156,9 +189,10 @@ export function SalesOrderForm({ businessId, orderId, status = "draft", customer
             unitPrice: "0.00",
             discountType: "none",
             discountValue: "0",
-            salesAccountId: defaultExpense,
+            salesAccountId: defaultSalesAccount,
             taxCodeId: globalTaxCodeId,
             projectId: "",
+            ...custom,
           })
         }
         onRemove={remove}
@@ -167,7 +201,7 @@ export function SalesOrderForm({ businessId, orderId, status = "draft", customer
         onMoveDown={moveLineDown}
         items={items}
         onItemSelect={selectItem}
-        accounts={expenseAccounts}
+        accounts={resolvedSalesAccounts}
         accountFieldName="salesAccountId"
         accountAriaLabel="sales account"
         taxCodes={taxCodes}
@@ -179,6 +213,7 @@ export function SalesOrderForm({ businessId, orderId, status = "draft", customer
         amountsIncludeTax={amountsIncludeTax}
         subtotalMinor={subtotalMinor}
         taxMinor={taxMinor}
+        totalMinor={totalMinor}
         registerAmountsIncludeTax={register("amountsIncludeTax")}
       />
     </section>

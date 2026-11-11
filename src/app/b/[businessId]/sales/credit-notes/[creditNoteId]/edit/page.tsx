@@ -36,7 +36,7 @@ export default async function EditCreditNotePage({ params }: { params: Promise<{
       customers={customers.map(({ id, name }) => ({ id, name }))}
       invoices={invoices.map((invoice) => ({ id: invoice.id, invoiceNumber: invoice.invoiceNumber, customerId: invoice.customerId, balanceMinor: invoice.balanceMinor, currencyCode: invoice.currencyCode, minorUnit: minorUnits.get(invoice.currencyCode) ?? 2, exchangeRateToBase: invoice.exchangeRateToBase, exchangeRateDate: invoice.exchangeRateDate, exchangeRateSource: invoice.exchangeRateSource }))}
       salesAccounts={accounts.map(({ id, name }) => ({ id, name }))}
-      taxCodes={taxes.map(({ id, name, rateBasisPoints }) => ({ id, name, rateBasisPoints }))}
+      taxCodes={taxes.map(({ id, name, rateBasisPoints, vatCategory }) => ({ id, name, rateBasisPoints, vatCategory }))}
       projects={projects.map((project) => ({ id: project.id, code: project.code, name: project.name, customerId: project.customer_id }))}
       currency={access.business.currency}
       initial={{

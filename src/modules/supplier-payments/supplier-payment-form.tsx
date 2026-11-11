@@ -16,6 +16,7 @@ import { minorToCurrencyInput, parseCurrencyAmountToMinor } from "@/modules/curr
 import { DocumentCurrencyFields, type DocumentCurrencyOption, type DocumentRateOption } from "@/modules/currency/document-currency-fields";
 import { createSupplierPaymentAction } from "./actions";
 import { supplierPaymentInputSchema, type SupplierPaymentInput } from "./supplier-payment-input";
+import { useUnsavedChanges } from "@/hooks/use-unsaved-changes";
 
 type Option = { id: string; name: string };
 
@@ -73,8 +74,9 @@ export function SupplierPaymentForm({
     handleSubmit,
     setError,
     setValue,
-    formState: { errors, isSubmitting },
+    formState: { errors, isSubmitting, isDirty, isSubmitSuccessful },
   } = form;
+  useUnsavedChanges(isDirty && !isSubmitSuccessful);
 
   const supplierId = useWatch({ control, name: "supplierId" });
   const watchedAmount = useWatch({ control, name: "amount" }) || "";

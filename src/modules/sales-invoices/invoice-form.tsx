@@ -25,7 +25,7 @@ import { useUnsavedChanges } from "@/hooks/use-unsaved-changes";
 
 type CustomerOption = { id: string; name: string; defaultCurrencyCode: string | null; paymentTermsDays: number; creditLimitMinor: number | null };
 type AccountOption = { id: string; name: string };
-type TaxCodeOption = { id: string; name: string; rateBasisPoints: number };
+type TaxCodeOption = { id: string; name: string; rateBasisPoints: number; vatCategory?: string | null };
 type ProjectOption = { id: string; code: string; name: string; customerId: string | null };
 type ItemOption = { id: string; sku: string | null; name: string; salesPriceMinor: number | null; salesAccountId: string };
 type OrderOption = { id: string; orderNumber: string; customerId: string; date?: string };
@@ -117,8 +117,7 @@ export function InvoiceForm({
   const availableOrders = (orders ?? []).filter((o) => !customerId || o.customerId === customerId);
   const availableQuotes = (quotes ?? []).filter((q) => !customerId || q.customerId === customerId);
   const baseMinorUnit = currencies.find((entry) => entry.code === currency)?.minorUnit ?? 2;
-  const { lines, amountsIncludeTax, previews, subtotalMinor, taxMinor } = useDocumentTotals({ control, taxCodes, minorUnit });
-  const totalMinor = subtotalMinor + taxMinor;
+  const { lines, amountsIncludeTax, previews, subtotalMinor, taxMinor, totalMinor } = useDocumentTotals({ control, taxCodes, minorUnit });
   const applyAvailableCredit = useWatch({ control, name: "applyAvailableCredit" });
   const currentCustomerCredits = (availableCustomerCredits?.[customerId] || []).filter((c) => c.currencyCode === currencyCode);
   const totalAvailableCreditMinor = currentCustomerCredits.reduce((s, c) => s + c.unallocatedAmountMinor, 0);
@@ -126,7 +125,7 @@ export function InvoiceForm({
 
   let baseEquivalentMinor: number | null = null;
   if (currencyCode !== currency && exchangeRateToBase) {
-    try { baseEquivalentMinor = convertToBase(subtotalMinor + taxMinor, minorUnit, baseMinorUnit, exchangeRateToBase); } catch { baseEquivalentMinor = null; }
+    try { baseEquivalentMinor = convertToBase(totalMinor, minorUnit, baseMinorUnit, exchangeRateToBase); } catch { baseEquivalentMinor = null; }
   }
   const cancelHref = invoiceId ? `/b/${businessId}/sales/invoices/${invoiceId}` : `/b/${businessId}/sales/invoices`;
   const defaultSalesAccountId = salesAccounts[0]?.id ?? "";
@@ -355,10 +354,12 @@ export function InvoiceForm({
         </div>
         <DocumentLineTable
           register={register}
+          control={control}
+          setValue={setValue}
           errors={errors}
           fields={fields}
           lines={lines}
-          onAppend={() =>
+          onAppend={(custom) =>
             append({
               itemId: "",
               description: "",
@@ -369,6 +370,7 @@ export function InvoiceForm({
               projectId: "",
               discountType: "none",
               discountValue: "0",
+              ...custom,
             })
           }
           onRemove={remove}
@@ -387,6 +389,7 @@ export function InvoiceForm({
           amountsIncludeTax={amountsIncludeTax}
           subtotalMinor={subtotalMinor}
           taxMinor={taxMinor}
+          totalMinor={totalMinor}
           baseEquivalentMinor={baseEquivalentMinor}
           baseCurrencyCode={currency}
           baseMinorUnit={baseMinorUnit}
