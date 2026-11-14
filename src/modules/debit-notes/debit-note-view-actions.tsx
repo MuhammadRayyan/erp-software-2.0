@@ -79,6 +79,7 @@ export function DebitNoteViewActions({
           documentType="debit-note"
           documentNumber={debitNoteNumber}
           defaults={emailDefaults}
+          pdfAvailable
         />
       )}
     </>

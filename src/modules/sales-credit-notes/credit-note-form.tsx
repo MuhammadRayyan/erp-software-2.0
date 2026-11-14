@@ -157,9 +157,9 @@ export function CreditNoteForm({
     ? `/b/${businessId}/sales/credit-notes/${noteId}`
     : `/b/${businessId}/sales/credit-notes`;
   return (
-    <form className="space-y-7 max-w-none" noValidate>
+    <form className="space-y-5 max-w-none" noValidate>
       {serverError && <FormError message={serverError} />}
-      <section className="border-b border-border pb-7">
+      <section className="form-section">
         <h2 className="text-base font-semibold">Credit details</h2>
         <p className="mt-1 text-sm text-muted-foreground">
           A posted credit reverses Sales and output VAT while reducing Accounts
@@ -305,7 +305,7 @@ export function CreditNoteForm({
           </div>
         </div>
       </section>
-      <section className="border-b border-border pb-7">
+      <section className="form-section">
         <h2 className="text-base font-semibold">Inherited currency snapshot</h2>
         <p className="mt-1 text-sm text-muted-foreground">
           A Credit Note always uses the linked invoice currency and original
@@ -333,7 +333,7 @@ export function CreditNoteForm({
         </dl>
       </section>
       
-      <section>
+      <section className="form-section">
         <div className="mb-3 flex flex-wrap items-end justify-between gap-3">
           <div>
             <h2 className="text-base font-semibold">Credited items</h2>
@@ -341,21 +341,20 @@ export function CreditNoteForm({
               Use the original revenue, VAT, and Project allocations for a clean reversal.
             </p>
           </div>
-          <div className="flex gap-2">
-            <div className="flex flex-col gap-1">
-              <Label className="text-xs text-muted-foreground">Default Tax</Label>
-              <SelectNative
-                className="h-8 max-w-[200px]"
-                value={globalTaxCodeId}
-                onChange={(e) => updateGlobalTax(e.target.value)}
-              >
-                {taxCodes.map((taxCode) => (
-                  <option key={taxCode.id} value={taxCode.id}>
-                    {taxCode.name}
-                  </option>
-                ))}
-              </SelectNative>
-            </div>
+          <div className="flex items-center gap-2">
+            <Label htmlFor="globalTax" className="text-sm font-medium">Default Tax:</Label>
+            <SelectNative
+              id="globalTax"
+              className="w-40"
+              value={globalTaxCodeId}
+              onChange={(e) => updateGlobalTax(e.target.value)}
+            >
+              {taxCodes.map((taxCode) => (
+                <option key={taxCode.id} value={taxCode.id}>
+                  {taxCode.name}
+                </option>
+              ))}
+            </SelectNative>
           </div>
         </div>
         <DocumentLineTable
@@ -400,7 +399,17 @@ export function CreditNoteForm({
         />
       </section>
 
-      <DocumentFormFooter onCancel={() => router.push(cancelHref)}>
+      <DocumentFormFooter
+        onCancel={() => router.push(cancelHref)}
+        status={documentStatus}
+        totals={{
+          subtotalMinor,
+          taxMinor,
+          totalMinor,
+          currencyCode,
+          minorUnit,
+        }}
+      >
         {documentStatus === "posted" ? (
           <Button permission={["save", "post"]}
             type="button"

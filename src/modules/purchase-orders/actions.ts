@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { requireSavePermission, requirePermission } from "@/core/permissions/require-module";
 import { purchaseOrderInputSchema } from "./purchase-order-input";
-import { cancelPurchaseOrder, closePurchaseOrder, deletePurchaseOrder, issuePurchaseOrder, savePurchaseOrder, type PurchaseOrderIntent } from "./purchase-order-service";
+import { cancelPurchaseOrder, closePurchaseOrder, deletePurchaseOrder, getPurchaseOrder, issuePurchaseOrder, savePurchaseOrder, type PurchaseOrderIntent } from "./purchase-order-service";
 
 import { formatZodFieldErrors } from "@/lib/zod-errors";
 
@@ -17,10 +17,20 @@ export async function savePurchaseOrderAction(businessId: string, orderId: strin
   let id: string;
   try { id = savePurchaseOrder(businessId, user.id, parsed.data, intent, orderId ?? undefined); }
   catch (error) { return { error: error instanceof Error ? error.message : "The purchase order could not be saved." }; }
+  const saved = getPurchaseOrder(businessId, user.id, id);
+  const status = saved?.order.status;
+  const notice =
+    status === "pending_approval"
+      ? "Submitted for approval"
+      : status === "issued"
+        ? "Purchase order issued"
+        : "Draft saved";
   revalidatePath(`/b/${businessId}/purchases/orders`);
   if (orderId) revalidatePath(`/b/${businessId}/purchases/orders/${orderId}`);
   revalidatePath(`/b/${businessId}/purchases/orders/${id}`);
-  redirect(`/b/${businessId}/purchases/orders/${id}?notice=${intent === "issue" ? "Purchase order issued" : "Draft saved"}`);
+  revalidatePath(`/b/${businessId}/approvals`);
+  revalidatePath(`/b/${businessId}/overview`);
+  redirect(`/b/${businessId}/purchases/orders/${id}?notice=${encodeURIComponent(notice)}`);
 }
 
 async function runStatusAction(businessId: string, orderId: string, action: "close" | "cancel" | "delete") {
@@ -35,13 +45,22 @@ async function runStatusAction(businessId: string, orderId: string, action: "clo
   } catch (error) { return { error: error instanceof Error ? error.message : "The purchase order could not be updated." }; }
 }
 
-export async function issuePurchaseOrderAction(businessId: string, orderId: string) {
-  const { user } = await requirePermission(businessId, "purchases", "approve");
+export async function issuePurchaseOrderAction(
+  businessId: string,
+  orderId: string,
+  intent: "issue" | "submit_approval" = "issue",
+): Promise<{ error?: string; status?: "draft" | "pending_approval" | "issued" | "closed" | "cancelled" | "superseded" }> {
+  const { user, access } = await requirePermission(businessId, "purchases", "edit");
+  if (intent !== "submit_approval" && !access.requiresApproval) {
+    await requirePermission(businessId, "purchases", "approve");
+  }
   try {
-    issuePurchaseOrder(businessId, user.id, orderId);
+    const status = issuePurchaseOrder(businessId, user.id, orderId, intent);
     revalidatePath(`/b/${businessId}/purchases/orders`);
     revalidatePath(`/b/${businessId}/purchases/orders/${orderId}`);
-    return {};
+    revalidatePath(`/b/${businessId}/approvals`);
+    revalidatePath(`/b/${businessId}/overview`);
+    return { status };
   } catch (error) {
     return { error: error instanceof Error ? error.message : "The purchase order could not be issued." };
   }
@@ -59,7 +78,6 @@ export async function deletePurchaseOrderAction(businessId: string, orderId: str
   return runStatusAction(businessId, orderId, "delete");
 }
 
-import { getPurchaseOrder } from "./purchase-order-service";
 import { savePurchaseInvoice } from "@/modules/purchase-invoices/purchase-invoice-service";
 
 import { quantityMicrosToInput } from "@/modules/accounting/calculations/money";

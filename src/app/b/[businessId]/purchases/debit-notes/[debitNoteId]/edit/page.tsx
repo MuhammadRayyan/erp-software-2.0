@@ -67,14 +67,17 @@ export default async function EditDebitNotePage({
           id: inv.id,
           invoiceNumber: inv.internal_number,
           supplierId: inv.supplier_id,
-          balanceMinor: inv.total_minor,
+          balanceMinor:
+            inv.id === record.note.purchaseInvoiceId && record.note.documentStatus === "posted"
+              ? inv.balanceMinor + record.note.totalMinor
+              : inv.balanceMinor,
           currencyCode: inv.currency_code,
-          minorUnit: 2,
+          minorUnit: inv.currency_minor_unit ?? 2,
           exchangeRateToBase: String(inv.exchange_rate_to_base ?? "1"),
           exchangeRateDate: inv.exchange_rate_date ?? "",
           exchangeRateSource: inv.exchange_rate_source ?? "Base",
         }))}
-        salesAccounts={expenseAccounts.map(({ id, name }) => ({ id, name }))}
+        expenseAccounts={expenseAccounts.map(({ id, name }) => ({ id, name }))}
         taxCodes={taxCodes.map(({ id, name, rateBasisPoints, vatCategory }) => ({ id, name, rateBasisPoints, vatCategory }))}
         projects={projects.map((p) => ({
           id: p.id,

@@ -396,7 +396,7 @@ export function DocumentGrid<TLine = any>({
       <button
         type="button"
         className="dashed-add-button"
-        onClick={onAppend}
+        onClick={() => onAppend()}
       >
         <Plus className="size-4" /> Add line
       </button>

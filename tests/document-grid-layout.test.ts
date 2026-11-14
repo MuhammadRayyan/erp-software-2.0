@@ -2,7 +2,10 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { parseTSV } from "../src/components/documents/grid/document-grid";
 import { previewDocumentLine } from "../src/components/documents/document-calculations";
+import { resolvePastedTSVRow } from "../src/components/documents/document-line-table";
 import { formatMoney } from "../src/core/format";
+import { purchaseQuoteInputSchema } from "../src/modules/purchase-quotes/purchase-quote-input";
+import { creditNoteInputSchema } from "../src/modules/sales-credit-notes/credit-note-input";
 
 test("Document Grid & Line Table Layout Engine", async (suite) => {
   await suite.test("1. TSV Parser handles diverse spreadsheet exports", () => {
@@ -170,6 +173,148 @@ test("Document Grid & Line Table Layout Engine", async (suite) => {
       expandedDesc > 340,
       `Description expands to fill space when optional columns are toggled off (${expandedDesc.toFixed(1)}px)`
     );
+  });
+
+  await suite.test("7. Reverse-charge VAT line preview keeps totalMinor equal to netMinor", () => {
+    const taxOptions = [
+      { id: "rc5", name: "Reverse Charge 5%", rateBasisPoints: 500, vatCategory: "reverse_charge" as const },
+    ];
+
+    const preview = previewDocumentLine(
+      { quantity: "1", unitPrice: "1000.00", discountType: "none", discountValue: "0", taxCodeId: "rc5" },
+      taxOptions,
+      2,
+      false
+    );
+
+    assert.equal(preview.netMinor, 100_000);
+    assert.equal(preview.taxMinor, 5_000);
+    assert.equal(preview.grossMinor, 100_000, "Reverse charge bill total payable to supplier must exclude self-accounted VAT");
+  });
+
+  await suite.test("8. Commercial document schemas support 10,000-character terms from Form Defaults", () => {
+    const longTerms = "T".repeat(8_500);
+    const tooLongTerms = "T".repeat(10_001);
+
+    const pqValid = purchaseQuoteInputSchema.safeParse({
+      supplierId: "00000000-0000-4000-8000-000000000001",
+      date: "2026-11-11",
+      currencyCode: "AED",
+      exchangeRateToBase: "1",
+      exchangeRateDate: "2026-11-11",
+      exchangeRateSource: "Base",
+      terms: longTerms,
+      lines: [
+        {
+          description: "Item",
+          quantity: "1",
+          unitPrice: "100.00",
+          taxCodeId: "vat5",
+        },
+      ],
+    });
+    assert.equal(pqValid.success, true);
+
+    const pqInvalid = purchaseQuoteInputSchema.safeParse({
+      supplierId: "00000000-0000-4000-8000-000000000001",
+      date: "2026-11-11",
+      currencyCode: "AED",
+      exchangeRateToBase: "1",
+      exchangeRateDate: "2026-11-11",
+      exchangeRateSource: "Base",
+      terms: tooLongTerms,
+      lines: [
+        {
+          description: "Item",
+          quantity: "1",
+          unitPrice: "100.00",
+          taxCodeId: "vat5",
+        },
+      ],
+    });
+    assert.equal(pqInvalid.success, false);
+
+    const cnValid = creditNoteInputSchema.safeParse({
+      customerId: "00000000-0000-4000-8000-000000000001",
+      sourceInvoiceId: "00000000-0000-4000-8000-000000000002",
+      date: "2026-11-11",
+      currencyCode: "AED",
+      exchangeRateToBase: "1",
+      exchangeRateDate: "2026-11-11",
+      exchangeRateSource: "Base",
+      terms: longTerms,
+      lines: [
+        {
+          description: "Credit Item",
+          quantity: "1",
+          unitPrice: "100.00",
+          salesAccountId: "acc-sales",
+          taxCodeId: "vat5",
+        },
+      ],
+    });
+    assert.equal(cnValid.success, true);
+  });
+
+  await suite.test("9. TSV row resolver preserves custom spreadsheet descriptions/prices and resolves purchase vs sales catalog defaults", () => {
+    const items = [
+      {
+        id: "item-1",
+        sku: "SKU-001",
+        name: "Catalog Widget",
+        salesPriceMinor: 15_000,
+        purchasePriceMinor: 9_500,
+        salesAccountId: "acc-sales-1",
+        inventoryAssetAccountId: "acc-inv-1",
+      },
+    ];
+
+    // 4-col paste on Purchase form with custom description & custom spreadsheet price:
+    // must NOT clobber custom description or custom price with catalog defaults
+    const customPurchaseRow = resolvePastedTSVRow({
+      rowCells: ["SKU-001", "Custom Batch Widget", "5", "110.00"],
+      startColId: "item",
+      items,
+      minorUnit: 2,
+      accountFieldName: "expenseAccountId",
+    });
+    assert.equal(customPurchaseRow.resolvedItemId, "item-1");
+    assert.equal(customPurchaseRow.resolvedDesc, "Custom Batch Widget");
+    assert.equal(customPurchaseRow.qtyVal, "5");
+    assert.equal(customPurchaseRow.resolvedPrice, "110.00");
+    assert.equal(customPurchaseRow.resolvedItemAccountId, "acc-inv-1");
+    assert.equal(customPurchaseRow.lineData.expenseAccountId, "acc-inv-1");
+
+    // 3-col paste on Purchase form with SKU in first column and 0.00 price:
+    // must resolve catalog name (not raw SKU) and catalog purchasePriceMinor (95.00)
+    const catalogPurchaseRow = resolvePastedTSVRow({
+      rowCells: ["SKU-001", "3", "0.00"],
+      startColId: "description",
+      items,
+      minorUnit: 2,
+      accountFieldName: "expenseAccountId",
+    });
+    assert.equal(catalogPurchaseRow.resolvedItemId, "item-1");
+    assert.equal(catalogPurchaseRow.resolvedDesc, "Catalog Widget");
+    assert.equal(catalogPurchaseRow.qtyVal, "3");
+    assert.equal(catalogPurchaseRow.resolvedPrice, "95.00");
+    assert.equal(catalogPurchaseRow.resolvedItemAccountId, "acc-inv-1");
+
+    // 3-col paste on Sales form with SKU in first column and 0.00 price:
+    // must resolve catalog salesPriceMinor (150.00) and salesAccountId
+    const catalogSalesRow = resolvePastedTSVRow({
+      rowCells: ["SKU-001", "2", ""],
+      startColId: "description",
+      items,
+      minorUnit: 2,
+      accountFieldName: "salesAccountId",
+    });
+    assert.equal(catalogSalesRow.resolvedItemId, "item-1");
+    assert.equal(catalogSalesRow.resolvedDesc, "Catalog Widget");
+    assert.equal(catalogSalesRow.qtyVal, "2");
+    assert.equal(catalogSalesRow.resolvedPrice, "150.00");
+    assert.equal(catalogSalesRow.resolvedItemAccountId, "acc-sales-1");
+    assert.equal(catalogSalesRow.lineData.salesAccountId, "acc-sales-1");
   });
 });
 

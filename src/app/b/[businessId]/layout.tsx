@@ -9,6 +9,8 @@ import { moduleForBusinessPath } from "@/core/permissions/module-access";
 import { hasActionPermission } from "@/core/permissions/permissions";
 import { PermissionsProvider } from "@/components/permissions-provider";
 import { PermissionDenied } from "@/components/permission-denied";
+import { getUnreadNotificationCount } from "@/modules/notifications/notification-service";
+import { getPendingApprovalCount } from "@/modules/approvals/approval-service";
 
 export default async function BusinessLayout({ children, params }: { children: React.ReactNode; params: Promise<{ businessId: string }> }) {
   const { businessId } = await params;
@@ -44,20 +46,28 @@ export default async function BusinessLayout({ children, params }: { children: R
   }
 
   const routeAction = pathname.split("/").includes("edit") ? "edit" : pathname.split("/").includes("new") ? "create" : null;
-  const postsOnCreate = /\/(receipts|payments|transfers)\/new(?:\/|$)/.test(pathname);
+  const isTransferNew = /\/transfers\/new(?:\/|$)/.test(pathname);
+  const isSettlementNew = /\/(receipts|payments)\/new(?:\/|$)/.test(pathname);
+  const canSubmitSettlementForApproval = isSettlementNew && access.requiresApproval;
   const canOpenForm = !requirement || !routeAction || (
     hasActionPermission(businessId, user.id, requirement.module, requirement.module === "settings" ? "edit" : routeAction)
-    && (!postsOnCreate || hasActionPermission(businessId, user.id, requirement.module, "post"))
+    && (!isTransferNew || hasActionPermission(businessId, user.id, requirement.module, "post"))
+    && (!isSettlementNew || canSubmitSettlementForApproval || hasActionPermission(businessId, user.id, requirement.module, "post"))
   );
 
   // touchBusiness has its own in-memory throttle to prevent DB thrashing
   touchBusiness(businessId, user.id);
+
+  const unreadNotificationsCount = getUnreadNotificationCount(businessId, user.id);
+  const pendingApprovalsCount = getPendingApprovalCount(businessId, user.id);
 
   return (
     <AppShell
       business={{ id: access.business.id, name: access.business.name }}
       modules={access.modules}
       user={{ name: user.name, email: user.email, isSuperAdmin: isSuper }}
+      unreadNotificationsCount={unreadNotificationsCount}
+      pendingApprovalsCount={pendingApprovalsCount}
     >
       {isSuspended && isSuper && (
         <div className="sticky top-14 z-30 flex items-center justify-between border-b border-amber-300 bg-amber-50 px-4 py-2.5 text-xs font-medium text-amber-950 dark:border-amber-800 dark:bg-amber-950/80 dark:text-amber-200">
@@ -75,7 +85,11 @@ export default async function BusinessLayout({ children, params }: { children: R
           </Link>
         </div>
       )}
-      <PermissionsProvider capabilities={access.capabilities} isAdministrator={access.membership.role === "administrator"}>
+      <PermissionsProvider
+        capabilities={access.capabilities}
+        isAdministrator={access.membership.role === "administrator"}
+        requiresApproval={access.requiresApproval}
+      >
         {canOpenForm ? children : <PermissionDenied module={requirement?.module} action={routeAction ?? undefined} returnHref={`/b/${businessId}/overview`} returnLabel="Return to overview" />}
       </PermissionsProvider>
     </AppShell>

@@ -14,6 +14,7 @@ import {
   DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu";
 import { formatMoney } from "@/core/format";
+import { minorToCurrencyInput } from "@/modules/currency/conversion";
 import { cn } from "@/lib/cn";
 import type { DocumentLinePreview, DocumentLineTaxOption } from "./document-calculations";
 import { DocumentTotalsPanel } from "./document-totals-panel";
@@ -21,6 +22,7 @@ import { DocumentColumnToggles } from "./document-column-toggles";
 import { SearchableItemSelect } from "./searchable-item-select";
 import { DocumentGrid } from "./grid/document-grid";
 import type { DocumentGridColumnDef } from "./grid/document-grid-types";
+import type { CustomFieldInputDefinition } from "@/modules/custom-fields/custom-field-inputs";
 
 export interface DocumentLineItemOption {
   id: string;
@@ -43,6 +45,152 @@ export interface DocumentLineProjectOption {
   code?: string;
   customerId?: string | null;
   supplierId?: string | null;
+}
+
+export function resolvePastedTSVRow({
+  rowCells,
+  startColId,
+  items,
+  minorUnit,
+  accountFieldName,
+}: {
+  rowCells: string[];
+  startColId: string;
+  items?: DocumentLineItemOption[];
+  minorUnit: number;
+  accountFieldName: "salesAccountId" | "expenseAccountId";
+}) {
+  const unquote = (val: string): string => {
+    let trimmed = val.trim();
+    if (trimmed.startsWith('"') && trimmed.endsWith('"')) {
+      trimmed = trimmed.slice(1, -1).replace(/""/g, '"');
+    }
+    return trimmed;
+  };
+
+  let itemVal = "";
+  let descVal = "";
+  let qtyVal = "1";
+  let priceVal = "0.00";
+  let discType: "none" | "percentage" | "fixed" = "none";
+  let discVal = "0";
+
+  if (startColId === "quantity") {
+    qtyVal = unquote(rowCells[0] || "").replace(/[^0-9.]/g, "") || "1";
+    priceVal = unquote(rowCells[1] || "").replace(/[^0-9.]/g, "") || "0.00";
+    if (rowCells[2]) {
+      const rawDisc = unquote(rowCells[2]);
+      if (rawDisc.includes("%")) {
+        discType = "percentage";
+        discVal = rawDisc.replace(/[^0-9.]/g, "") || "0";
+      } else if (rawDisc && rawDisc !== "0") {
+        discType = "fixed";
+        discVal = rawDisc.replace(/[^0-9.]/g, "") || "0";
+      }
+    }
+  } else if (startColId === "unitPrice") {
+    priceVal = unquote(rowCells[0] || "").replace(/[^0-9.]/g, "") || "0.00";
+    if (rowCells[1]) {
+      const rawDisc = unquote(rowCells[1]);
+      if (rawDisc.includes("%")) {
+        discType = "percentage";
+        discVal = rawDisc.replace(/[^0-9.]/g, "") || "0";
+      } else if (rawDisc && rawDisc !== "0") {
+        discType = "fixed";
+        discVal = rawDisc.replace(/[^0-9.]/g, "") || "0";
+      }
+    }
+  } else {
+    // item or description
+    if (rowCells.length >= 5) {
+      itemVal = unquote(rowCells[0] || "");
+      descVal = unquote(rowCells[1] || "");
+      qtyVal = unquote(rowCells[2] || "").replace(/[^0-9.]/g, "") || "1";
+      priceVal = unquote(rowCells[3] || "").replace(/[^0-9.]/g, "") || "0.00";
+      const rawDisc = unquote(rowCells[4] || "");
+      if (rawDisc.includes("%")) {
+        discType = "percentage";
+        discVal = rawDisc.replace(/[^0-9.]/g, "") || "0";
+      } else if (rawDisc && rawDisc !== "0") {
+        discType = "fixed";
+        discVal = rawDisc.replace(/[^0-9.]/g, "") || "0";
+      }
+    } else if (rowCells.length === 4) {
+      itemVal = unquote(rowCells[0] || "");
+      descVal = unquote(rowCells[1] || "");
+      qtyVal = unquote(rowCells[2] || "").replace(/[^0-9.]/g, "") || "1";
+      priceVal = unquote(rowCells[3] || "").replace(/[^0-9.]/g, "") || "0.00";
+    } else if (rowCells.length === 3) {
+      descVal = unquote(rowCells[0] || "");
+      qtyVal = unquote(rowCells[1] || "").replace(/[^0-9.]/g, "") || "1";
+      priceVal = unquote(rowCells[2] || "").replace(/[^0-9.]/g, "") || "0.00";
+    } else if (rowCells.length === 2) {
+      descVal = unquote(rowCells[0] || "");
+      priceVal = unquote(rowCells[1] || "").replace(/[^0-9.]/g, "") || "0.00";
+    } else {
+      descVal = unquote(rowCells[0] || "");
+    }
+  }
+
+  const matchedItem = items?.find(
+    (i) =>
+      (itemVal &&
+        (i.sku?.toLowerCase() === itemVal.toLowerCase() ||
+          i.name.toLowerCase() === itemVal.toLowerCase())) ||
+      (descVal &&
+        (i.sku?.toLowerCase() === descVal.toLowerCase() ||
+          i.name.toLowerCase() === descVal.toLowerCase()))
+  );
+
+  const resolvedItemId = matchedItem ? matchedItem.id : (items?.find((i) => i.id === itemVal)?.id ?? "");
+  const matchedDescBySkuOnly =
+    !itemVal &&
+    Boolean(descVal) &&
+    Boolean(matchedItem?.sku) &&
+    matchedItem!.sku!.toLowerCase() === descVal.toLowerCase();
+  const resolvedDesc = matchedDescBySkuOnly
+    ? matchedItem!.name
+    : descVal || (matchedItem ? matchedItem.name : "");
+
+  const isPurchaseAccount = accountFieldName === "expenseAccountId";
+  const itemPriceMinor = isPurchaseAccount
+    ? matchedItem?.purchasePriceMinor ?? matchedItem?.salesPriceMinor ?? null
+    : matchedItem?.salesPriceMinor ?? matchedItem?.purchasePriceMinor ?? null;
+
+  const resolvedPrice =
+    priceVal !== "0.00" && priceVal !== ""
+      ? priceVal
+      : itemPriceMinor != null
+      ? minorToCurrencyInput(itemPriceMinor, minorUnit)
+      : minorToCurrencyInput(0, minorUnit);
+
+  const resolvedItemAccountId = isPurchaseAccount
+    ? matchedItem?.inventoryAssetAccountId || matchedItem?.salesAccountId || ""
+    : matchedItem?.salesAccountId || matchedItem?.inventoryAssetAccountId || "";
+
+  const lineData: Record<string, any> = {
+    itemId: resolvedItemId,
+    description: resolvedDesc,
+    quantity: qtyVal || "1",
+    unitPrice: resolvedPrice,
+    discountType: discType,
+    discountValue: discVal,
+  };
+
+  if (resolvedItemAccountId) {
+    lineData[accountFieldName] = resolvedItemAccountId;
+  }
+
+  return {
+    resolvedItemId,
+    resolvedDesc,
+    qtyVal: qtyVal || "1",
+    resolvedPrice,
+    discType,
+    discVal,
+    resolvedItemAccountId,
+    lineData,
+  };
 }
 
 export interface DocumentLineTableProps {
@@ -76,6 +224,7 @@ export interface DocumentLineTableProps {
   minorUnit: number;
   previews: DocumentLinePreview[];
   amountsIncludeTax?: boolean;
+  lineCustomFields?: CustomFieldInputDefinition[];
 
   // Column toggles (controlled optional)
   showLineNumber?: boolean;
@@ -136,6 +285,7 @@ export function DocumentLineTable({
   minorUnit,
   previews,
   amountsIncludeTax = false,
+  lineCustomFields = [],
   showLineNumber: controlledShowLineNumber,
   onShowLineNumberChange,
   showDescription: controlledShowDescription,
@@ -196,112 +346,24 @@ export function DocumentLineTable({
     (tsvRows: string[][], startRow: number, startColId: string) => {
       if (!tsvRows.length || !setValue) return;
 
-      const unquote = (val: string): string => {
-        let trimmed = val.trim();
-        if (trimmed.startsWith('"') && trimmed.endsWith('"')) {
-          trimmed = trimmed.slice(1, -1).replace(/""/g, '"');
-        }
-        return trimmed;
-      };
-
       tsvRows.forEach((rowCells, rIdx) => {
         const rowIndex = startRow + rIdx;
-
-        let itemVal = "";
-        let descVal = "";
-        let qtyVal = "1";
-        let priceVal = "0.00";
-        let discType: "none" | "percentage" | "fixed" = "none";
-        let discVal = "0";
-
-        if (startColId === "quantity") {
-          qtyVal = unquote(rowCells[0] || "").replace(/[^0-9.]/g, "") || "1";
-          priceVal = unquote(rowCells[1] || "").replace(/[^0-9.]/g, "") || "0.00";
-          if (rowCells[2]) {
-            const rawDisc = unquote(rowCells[2]);
-            if (rawDisc.includes("%")) {
-              discType = "percentage";
-              discVal = rawDisc.replace(/[^0-9.]/g, "") || "0";
-            } else if (rawDisc && rawDisc !== "0") {
-              discType = "fixed";
-              discVal = rawDisc.replace(/[^0-9.]/g, "") || "0";
-            }
-          }
-        } else if (startColId === "unitPrice") {
-          priceVal = unquote(rowCells[0] || "").replace(/[^0-9.]/g, "") || "0.00";
-          if (rowCells[1]) {
-            const rawDisc = unquote(rowCells[1]);
-            if (rawDisc.includes("%")) {
-              discType = "percentage";
-              discVal = rawDisc.replace(/[^0-9.]/g, "") || "0";
-            } else if (rawDisc && rawDisc !== "0") {
-              discType = "fixed";
-              discVal = rawDisc.replace(/[^0-9.]/g, "") || "0";
-            }
-          }
-        } else {
-          // item or description
-          if (rowCells.length >= 5) {
-            itemVal = unquote(rowCells[0] || "");
-            descVal = unquote(rowCells[1] || "");
-            qtyVal = unquote(rowCells[2] || "").replace(/[^0-9.]/g, "") || "1";
-            priceVal = unquote(rowCells[3] || "").replace(/[^0-9.]/g, "") || "0.00";
-            const rawDisc = unquote(rowCells[4] || "");
-            if (rawDisc.includes("%")) {
-              discType = "percentage";
-              discVal = rawDisc.replace(/[^0-9.]/g, "") || "0";
-            } else if (rawDisc && rawDisc !== "0") {
-              discType = "fixed";
-              discVal = rawDisc.replace(/[^0-9.]/g, "") || "0";
-            }
-          } else if (rowCells.length === 4) {
-            itemVal = unquote(rowCells[0] || "");
-            descVal = unquote(rowCells[1] || "");
-            qtyVal = unquote(rowCells[2] || "").replace(/[^0-9.]/g, "") || "1";
-            priceVal = unquote(rowCells[3] || "").replace(/[^0-9.]/g, "") || "0.00";
-          } else if (rowCells.length === 3) {
-            descVal = unquote(rowCells[0] || "");
-            qtyVal = unquote(rowCells[1] || "").replace(/[^0-9.]/g, "") || "1";
-            priceVal = unquote(rowCells[2] || "").replace(/[^0-9.]/g, "") || "0.00";
-          } else if (rowCells.length === 2) {
-            descVal = unquote(rowCells[0] || "");
-            priceVal = unquote(rowCells[1] || "").replace(/[^0-9.]/g, "") || "0.00";
-          } else {
-            descVal = unquote(rowCells[0] || "");
-          }
-        }
-
-        const matchedItem = items?.find(
-          (i) =>
-            (itemVal &&
-              (i.sku?.toLowerCase() === itemVal.toLowerCase() ||
-                i.name.toLowerCase() === itemVal.toLowerCase())) ||
-            (descVal &&
-              (i.sku?.toLowerCase() === descVal.toLowerCase() ||
-                i.name.toLowerCase() === descVal.toLowerCase()))
-        );
-
-        const resolvedItemId = matchedItem ? matchedItem.id : (items?.find((i) => i.id === itemVal)?.id ?? "");
-        const resolvedDesc = descVal || (matchedItem ? matchedItem.name : "");
-        const resolvedPrice =
-          priceVal !== "0.00" && priceVal !== ""
-            ? priceVal
-            : matchedItem?.salesPriceMinor != null
-            ? (matchedItem.salesPriceMinor / 10 ** minorUnit).toFixed(minorUnit)
-            : "0.00";
-
-        const lineData: Record<string, any> = {
-          itemId: resolvedItemId,
-          description: resolvedDesc,
-          quantity: qtyVal || "1",
-          unitPrice: resolvedPrice,
-          discountType: discType,
-          discountValue: discVal,
-        };
-
-        if (matchedItem && "salesAccountId" in matchedItem && matchedItem.salesAccountId) {
-          lineData.salesAccountId = matchedItem.salesAccountId;
-        }
+        const {
+          resolvedItemId,
+          resolvedDesc,
+          qtyVal,
+          resolvedPrice,
+          discType,
+          discVal,
+          resolvedItemAccountId,
+          lineData,
+        } = resolvePastedTSVRow({
+          rowCells,
+          startColId,
+          items,
+          minorUnit,
+          accountFieldName,
+        });
 
         if (rowIndex < fields.length) {
           if (resolvedItemId) setValue(`lines.${rowIndex}.itemId`, resolvedItemId, { shouldDirty: true });
@@ -312,11 +374,8 @@ export function DocumentLineTable({
             setValue(`lines.${rowIndex}.discountType`, discType, { shouldDirty: true });
             setValue(`lines.${rowIndex}.discountValue`, discVal, { shouldDirty: true });
           }
-          if (lineData.salesAccountId) {
-            setValue(`lines.${rowIndex}.${accountFieldName}`, lineData.salesAccountId, { shouldDirty: true });
-          }
-          if (matchedItem && onItemSelect) {
-            onItemSelect(rowIndex, matchedItem.id);
+          if (resolvedItemAccountId) {
+            setValue(`lines.${rowIndex}.${accountFieldName}`, resolvedItemAccountId, { shouldDirty: true });
           }
         } else {
           onAppend(lineData);
@@ -325,14 +384,14 @@ export function DocumentLineTable({
             if (resolvedDesc) setValue(`lines.${rowIndex}.description`, resolvedDesc, { shouldDirty: true });
             if (qtyVal) setValue(`lines.${rowIndex}.quantity`, qtyVal, { shouldDirty: true });
             if (resolvedPrice) setValue(`lines.${rowIndex}.unitPrice`, resolvedPrice, { shouldDirty: true });
-            if (lineData.salesAccountId) {
-              setValue(`lines.${rowIndex}.${accountFieldName}`, lineData.salesAccountId, { shouldDirty: true });
+            if (resolvedItemAccountId) {
+              setValue(`lines.${rowIndex}.${accountFieldName}`, resolvedItemAccountId, { shouldDirty: true });
             }
           }, 0);
         }
       });
     },
-    [items, fields.length, onAppend, setValue, minorUnit, accountFieldName, onItemSelect]
+    [items, fields.length, onAppend, setValue, minorUnit, accountFieldName]
   );
 
   // Adaptive, fluid column definitions (Manager.io / industry standard ERP layout)
@@ -651,6 +710,77 @@ export function DocumentLineTable({
       ),
     });
 
+    // 9b. Line-level Custom Fields (dynamic columns in DocumentGrid)
+    for (const cf of lineCustomFields) {
+      const colId = `cf_${cf.id}`;
+      cols.push({
+        id: colId,
+        header: cf.name,
+        width: cf.fieldType === "checkbox" ? "58px" : "100px",
+        minWidth: cf.fieldType === "checkbox" ? "52px" : "86px",
+        align: cf.fieldType === "checkbox" ? "center" : cf.fieldType === "number" ? "right" : "left",
+        isVisible: true,
+        isEditable: true,
+        renderCell: ({ index, line, handleKeyDown }) => {
+          const fieldPath = `lines.${index}.customFields.${cf.id}`;
+          if (cf.fieldType === "checkbox") {
+            const checked = line?.customFields?.[cf.id] === "true" || line?.customFields?.[cf.id] === true;
+            return (
+              <div className="flex h-9 items-center justify-center">
+                <input
+                  type="checkbox"
+                  data-grid-row={index}
+                  data-grid-col-id={colId}
+                  aria-label={`Line ${index + 1} ${cf.name}`}
+                  checked={checked}
+                  onChange={(e) => {
+                    if (setValue) {
+                      setValue(fieldPath, e.target.checked ? "true" : "false", { shouldDirty: true });
+                    }
+                  }}
+                  onKeyDown={(e) => handleKeyDown(e, colId)}
+                  className="size-4 accent-[var(--primary)]"
+                />
+              </div>
+            );
+          }
+          if (cf.fieldType === "select") {
+            return (
+              <SelectNative
+                data-grid-row={index}
+                data-grid-col-id={colId}
+                aria-label={`Line ${index + 1} ${cf.name}`}
+                className="w-full text-xs h-9 px-1.5 truncate"
+                {...register(fieldPath)}
+                onKeyDown={(e) => handleKeyDown(e, colId)}
+              >
+                <option value="">—</option>
+                {cf.selectOptions.map((opt) => (
+                  <option key={opt} value={opt}>{opt}</option>
+                ))}
+              </SelectNative>
+            );
+          }
+          return (
+            <Input
+              data-grid-row={index}
+              data-grid-col-id={colId}
+              type={cf.fieldType === "date" ? "date" : "text"}
+              inputMode={cf.fieldType === "number" ? "decimal" : undefined}
+              placeholder={cf.isRequired ? "Required" : ""}
+              aria-label={`Line ${index + 1} ${cf.name}`}
+              className={cn(
+                "w-full min-w-0 text-xs h-9 px-1.5",
+                cf.fieldType === "number" && "money text-right",
+              )}
+              {...register(fieldPath)}
+              onKeyDown={(e) => handleKeyDown(e, colId)}
+            />
+          );
+        },
+      });
+    }
+
     // 10. Amount / Total (consolidated calculation column matching Manager.io)
     cols.push({
       id: "total",
@@ -773,8 +903,10 @@ export function DocumentLineTable({
     currencyCode,
     minorUnit,
     register,
+    setValue,
     onItemSelect,
-    fields.length,
+    fields,
+    lineCustomFields,
   ]);
 
   return (
@@ -795,7 +927,7 @@ export function DocumentLineTable({
         minorUnit={minorUnit}
         currencyCode={currencyCode}
         amountsIncludeTax={amountsIncludeTax}
-        onAppend={onAppend}
+        onAppend={() => onAppend()}
         onRemove={onRemove}
         onDuplicate={onDuplicate}
         onMoveUp={onMoveUp}

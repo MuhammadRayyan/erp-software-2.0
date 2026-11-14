@@ -1,7 +1,12 @@
 import { z } from "zod";
 
+import { normalizeTrnInput } from "@/modules/tax/trn-validation";
+
 export const defaultCurrencyCodeSchema = z.union([z.literal(""), z.string().trim().length(3).transform((value) => value.toUpperCase())]).optional().default("");
-export const trnSchema = z.union([z.literal(""), z.string().trim().regex(/^1\d{12}03$/, "TRN must be 15 digits, begin with 1, and end with 03")]).optional().default("");
+export const trnSchema = z.union([
+  z.literal(""),
+  z.string().trim().transform((v) => normalizeTrnInput(v)).pipe(z.string().regex(/^1\d{14}$/, "UAE TRN must be exactly 15 numeric digits starting with 1")),
+]).optional().default("");
 export const legalRegistrationIdentifierSchema = z.string().trim().max(80).optional().default("");
 export const electronicAddressSchema = z.string().trim().max(80).optional().default("");
 export const electronicAddressSchemeSchema = z.string().trim().max(10).optional().default("");

@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
-import { formatMoney } from "@/core/format";
+import { minorToCurrencyInput } from "@/modules/currency/conversion";
 import { saveSalesOrderAction } from "./actions";
 import { salesOrderInputSchema, type SalesOrderInput } from "./sales-order-input";
 import type { SalesOrderStatus } from "./sales-order-service";
@@ -18,6 +18,7 @@ import { DocumentFormFooter } from "@/components/document-form-footer";
 import { SelectNative } from "@/components/ui/select-native";
 import { DocumentLineTable, useDocumentTotals } from "@/components/documents";
 import { useUnsavedChanges } from "@/hooks/use-unsaved-changes";
+import type { CustomFieldInputDefinition } from "@/modules/custom-fields/custom-field-inputs";
 
 type Option = { id: string; name: string; defaultCurrencyCode: string | null };
 type AccountOption = { id: string; name: string };
@@ -41,6 +42,7 @@ export function SalesOrderForm({
   currencies,
   rates,
   initial,
+  lineCustomFields = [],
 }: {
   businessId: string;
   orderId?: string;
@@ -56,6 +58,7 @@ export function SalesOrderForm({
   currencies: DocumentCurrencyOption[];
   rates: DocumentRateOption[];
   initial: SalesOrderInput;
+  lineCustomFields?: CustomFieldInputDefinition[];
 }) {
   const router = useRouter();
   const [serverError, setServerError] = useState("");
@@ -108,7 +111,7 @@ export function SalesOrderForm({
     }
     form.setValue(`lines.${index}.description`, item.name);
     if (item.salesPriceMinor != null) {
-      form.setValue(`lines.${index}.unitPrice`, formatMoney(item.salesPriceMinor, currency, minorUnit).replace(/[^0-9.]/g, ""));
+      form.setValue(`lines.${index}.unitPrice`, minorToCurrencyInput(item.salesPriceMinor, minorUnit));
     }
     if (item.salesAccountId) {
       form.setValue(`lines.${index}.salesAccountId`, item.salesAccountId);
@@ -158,10 +161,10 @@ export function SalesOrderForm({
         </div>
         <div className="flex gap-4 items-center">
           <div className="flex items-center gap-2">
-            <label htmlFor="globalTax" className="text-sm font-medium">Default Tax:</label>
-            <select
+            <Label htmlFor="globalTax" className="text-sm font-medium">Default Tax:</Label>
+            <SelectNative
               id="globalTax"
-              className="w-40 flex h-9 items-center justify-between rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-sm ring-offset-background placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
+              className="w-40"
               value={globalTaxCodeId}
               onChange={(e) => updateGlobalTax(e.target.value)}
             >
@@ -170,7 +173,7 @@ export function SalesOrderForm({
                   {taxCode.name}
                 </option>
               ))}
-            </select>
+            </SelectNative>
           </div>
         </div>
       </div>
@@ -192,6 +195,7 @@ export function SalesOrderForm({
             salesAccountId: defaultSalesAccount,
             taxCodeId: globalTaxCodeId,
             projectId: "",
+            customFields: {},
             ...custom,
           })
         }
@@ -207,6 +211,7 @@ export function SalesOrderForm({
         taxCodes={taxCodes}
         initialShowLineTaxCodes={false}
         projects={availableProjects}
+        lineCustomFields={lineCustomFields}
         currencyCode={currencyCode}
         minorUnit={minorUnit}
         previews={previews}
@@ -217,7 +222,17 @@ export function SalesOrderForm({
         registerAmountsIncludeTax={register("amountsIncludeTax")}
       />
     </section>
-    <DocumentFormFooter onCancel={() => router.push(cancelHref)}>
+    <DocumentFormFooter
+      onCancel={() => router.push(cancelHref)}
+      status={status}
+      totals={{
+        subtotalMinor,
+        taxMinor,
+        totalMinor,
+        currencyCode,
+        minorUnit,
+      }}
+    >
       {status === "active" ? (
         <Button permission={["save", "approve"]} type="button" disabled={isSubmitting} onClick={handleSubmit((values) => save(values, "issue"))}>
           {isSubmitting && <LoaderCircle className="size-4 animate-spin" />} Save Changes

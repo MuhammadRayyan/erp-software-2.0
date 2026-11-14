@@ -1,10 +1,9 @@
 "use client";
 
 import Link from "next/link";
-import { BookOpenText, Mail } from "lucide-react";
+import { BookOpenText } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { Button } from "@/components/ui/button";
 import { DropdownMenuItem } from "@/components/ui/dropdown-menu";
 import { deleteCreditNoteAction, duplicateCreditNoteAction, voidCreditNoteAction } from "./actions";
 import type { CreditNoteStatus } from "./credit-note-service";
@@ -62,16 +61,8 @@ export function CreditNoteViewActions({
             router.push(`/b/${businessId}/sales/credit-notes`);
           }
         } : undefined}
-        extraPrimaryActions={
-          <Button variant="secondary" onClick={() => setEmailOpen(true)}>
-            <Mail className="mr-1.5 size-3.5" /> Email
-          </Button>
-        }
         extraActions={
           <>
-            <DropdownMenuItem permission="export" onSelect={() => setEmailOpen(true)}>
-              <Mail className="size-4 mr-2" /> Email
-            </DropdownMenuItem>
             {journalEntryId && (
               <DropdownMenuItem asChild>
                 <Link href={`/b/${businessId}/accounting/journal/${journalEntryId}`}><BookOpenText className="size-4" /> View Journal Entry</Link>

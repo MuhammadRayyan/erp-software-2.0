@@ -11,8 +11,9 @@ import { convertDocumentLinesToBase } from "@/modules/currency/conversion";
 import { resolveRateSnapshot } from "@/modules/currency/validation";
 import { calculateLines, totalsForLines, type StoredLine } from "@/modules/accounting/services/document-line-calculator";
 import { recordActivity } from "@/modules/activity-log/activity-log-service";
+import { getCustomFieldValuesForEntities, saveLineCustomFieldValuesInTransaction } from "@/modules/custom-fields/custom-field-service";
 
-export type PurchaseQuoteStatus = "draft" | "sent" | "accepted" | "rejected" | "superseded" | "cancelled";
+export type PurchaseQuoteStatus = "draft" | "pending_approval" | "sent" | "accepted" | "rejected" | "superseded" | "cancelled";
 export type PurchaseQuoteIntent = "draft" | "issue";
 
 function insertLines(sqlite: ReturnType<typeof getBusinessDb>["sqlite"], quoteId: string, lines: StoredLine[]) {
@@ -111,6 +112,8 @@ export function getPurchaseQuote(businessId: string, userId: string, quoteId: st
     .prepare("SELECT id, order_number, status FROM purchase_orders WHERE purchase_quote_id = ? ORDER BY created_at DESC")
     .all(quoteId) as { id: string; order_number: string; status: string }[];
 
+  const lineCustomFieldsMap = getCustomFieldValuesForEntities(businessId, userId, "purchase_quote_line", lines.map((l) => l.id));
+
   return {
     ...header,
     project: header.quote.projectId ? projectById.get(header.quote.projectId) ?? null : null,
@@ -120,6 +123,7 @@ export function getPurchaseQuote(businessId: string, userId: string, quoteId: st
       expenseAccount: line.expenseAccountId ? accountById.get(line.expenseAccountId) ?? null : null,
       taxCode: taxById.get(line.taxCodeId) ?? null,
       project: effectiveProjectId(line.projectId, header.quote.projectId) ? projectById.get(effectiveProjectId(line.projectId, header.quote.projectId)!) ?? null : null,
+      customFields: lineCustomFieldsMap.get(line.id) ?? {},
     })),
     linkedOrders,
   };
@@ -154,7 +158,9 @@ export function savePurchaseQuote(businessId: string, userId: string, input: Pur
   let recordedNumber = "";
 
   context.sqlite.transaction(() => {
+    let oldLineIds: string[] = [];
     if (quoteId) {
+      oldLineIds = (context.sqlite.prepare("SELECT id FROM purchase_quote_lines WHERE quote_id = ?").all(quoteId) as { id: string }[]).map((r) => r.id);
       const current = context.db.select().from(purchaseQuotes).where(eq(purchaseQuotes.id, quoteId)).get();
       if (!current) throw new Error("Purchase quote not found.");
       if (current.documentStatus === "accepted" || current.documentStatus === "cancelled" || current.documentStatus === "superseded") {
@@ -237,6 +243,7 @@ export function savePurchaseQuote(businessId: string, userId: string, input: Pur
       );
     }
     insertLines(context.sqlite, id, lines);
+    saveLineCustomFieldValuesInTransaction(context.sqlite, "purchase_quote_line", lines.map((l) => ({ lineId: l.id, customFields: l.customFields })), oldLineIds);
   }).immediate();
 
   try {

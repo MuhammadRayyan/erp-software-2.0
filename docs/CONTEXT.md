@@ -1,6 +1,6 @@
 # Product context — current decisions
 
-Updated 26 October 2026. [CURRENT_STATE.md](CURRENT_STATE.md) describes implementation; [SYSTEM_DOSSIER.md](../SYSTEM_DOSSIER.md) explains architecture; [NEXT_STEPS.md](NEXT_STEPS.md) owns the immediate checklist. Old Phase 0 and 1,000-business targets are historical.
+Updated 11 November 2026. [CURRENT_STATE.md](CURRENT_STATE.md) describes implementation; [SYSTEM_DOSSIER.md](../SYSTEM_DOSSIER.md) explains architecture; [NEXT_STEPS.md](NEXT_STEPS.md) owns the immediate checklist. Old Phase 0 and 1,000-business targets are historical.
 
 The owner is testing with a few businesses and **5–10 users**. Preserve compact Manager.io-style workflows, portable businesses, multi-user business access, clear document lifecycles, projects and customizable documents. The product is a responsive browser app, English first and UAE-oriented; full regulatory certification and active e-invoicing integration are not established.
 

@@ -2,7 +2,10 @@
 
 import { useMemo, useState, useTransition } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { toast } from "sonner";
+import { broadcastLiveRefresh } from "@/components/use-live-refresh";
+import { useActionPermission, useApprovalPolicy } from "@/components/permissions-provider";
 import { ChevronRight, MoreHorizontal, Eye, FileEdit, Download, CircleDollarSign, CheckCircle2, FileArchive, Mail, Ban } from "lucide-react";
 import { 
   useLegacyTable as useTable,
@@ -49,6 +52,7 @@ export type InvoiceRow = {
 
 const filterLabels: Record<string, string> = {
   "document:draft": "Draft",
+  "document:pending_approval": "Pending Approval",
   "document:posted": "Posted",
   "document:void": "Void",
   "payment:unpaid": "Unpaid",
@@ -70,6 +74,10 @@ export function InvoiceTable({
   customValues?: Record<string, Record<string, string>>;
   serverSnapshot?: ColumnVisibility;
 }) {
+  const router = useRouter();
+  const { requiresApproval } = useApprovalPolicy();
+  const canPost = useActionPermission("post");
+  const mustSubmitForApproval = requiresApproval || !canPost;
   const { density } = useTableDensity(businessId);
 
   const [query, setQuery] = useState("");
@@ -221,7 +229,7 @@ export function InvoiceTable({
       enableSorting: false,
       cell: ({ row }: any) => {
         const inv = row.original;
-        const canEdit = inv.documentStatus !== "void";
+        const canEdit = inv.documentStatus !== "void" && inv.documentStatus !== "pending_approval";
         const canReceive = inv.documentStatus === "posted" && inv.balanceMinor > 0;
         return (
           <div className="flex items-center justify-end gap-1">
@@ -338,6 +346,7 @@ export function InvoiceTable({
           { value: "", label: "All statuses" },
           { label: "Document", options: [
             { value: "document:draft", label: "Draft" },
+            { value: "document:pending_approval", label: "Pending Approval" },
             { value: "document:posted", label: "Posted" },
             { value: "document:void", label: "Void" },
           ]},
@@ -404,13 +413,40 @@ export function InvoiceTable({
         startTransition(async () => {
           try {
             const draftIds = selectedDrafts.map((i) => i.id);
-            const res = await batchPostInvoicesAction(businessId, draftIds);
+            const res = await batchPostInvoicesAction(
+              businessId,
+              draftIds,
+              mustSubmitForApproval ? "submit_approval" : "post",
+            );
+            const postedCount = res.postedCount ?? (res.pendingApprovalCount ? 0 : res.successCount);
+            const pendingCount = res.pendingApprovalCount ?? 0;
+            if (postedCount > 0 && pendingCount > 0) {
+              toast.success(
+                `Posted ${postedCount} draft ${postedCount === 1 ? "invoice" : "invoices"} to the General Ledger and submitted ${pendingCount} for approval.`,
+              );
+            } else if (pendingCount > 0) {
+              toast.success(
+                `Submitted ${pendingCount} draft ${pendingCount === 1 ? "invoice" : "invoices"} for approval.`,
+              );
+            } else if (postedCount > 0) {
+              toast.success(
+                `Posted ${postedCount} draft ${postedCount === 1 ? "invoice" : "invoices"} to the General Ledger.`,
+              );
+            }
             if (res.successCount > 0) {
-              toast.success(`Posted ${res.successCount} draft ${res.successCount === 1 ? "invoice" : "invoices"} to the General Ledger.`);
               setRowSelection({});
+              broadcastLiveRefresh();
+              router.refresh();
             }
             if (res.failedCount > 0) {
-              toast.error(`Failed to post ${res.failedCount} invoices.`);
+              const detail = res.errors
+                .map((e) => (e.number ? `${e.number}: ${e.error}` : e.error))
+                .join(", ");
+              toast.error(
+                detail
+                  ? `Failed to process ${res.failedCount} ${res.failedCount === 1 ? "invoice" : "invoices"}: ${detail}`
+                  : `Failed to process ${res.failedCount} ${res.failedCount === 1 ? "invoice" : "invoices"}.`,
+              );
             }
           } catch (err) {
             toast.error(err instanceof Error ? err.message : "Batch post failed.");
@@ -448,9 +484,18 @@ export function InvoiceTable({
               toast.success(`Successfully voided ${res.successCount} ${res.successCount === 1 ? "invoice" : "invoices"}.`);
               setRowSelection({});
               setConfirmModal(null);
+              broadcastLiveRefresh();
+              router.refresh();
             }
             if (res.failedCount > 0) {
-              toast.error(`Could not void ${res.failedCount} invoices (they may have existing payment allocations).`);
+              const detail = res.errors
+                .map((e) => (e.number ? `${e.number}: ${e.error}` : e.error))
+                .join(", ");
+              toast.error(
+                detail
+                  ? `Could not void ${res.failedCount} ${res.failedCount === 1 ? "invoice" : "invoices"}: ${detail}`
+                  : `Could not void ${res.failedCount} ${res.failedCount === 1 ? "invoice" : "invoices"}.`,
+              );
             }
           } catch (err) {
             toast.error(err instanceof Error ? err.message : "Batch void failed.");
@@ -464,8 +509,21 @@ export function InvoiceTable({
             const draftIds = selectedDrafts.map((i) => i.id);
             const res = await batchDeleteInvoicesAction(businessId, draftIds);
             if (res.successCount > 0) {
-              toast.success(`Deleted ${res.successCount} draft invoices.`);
+              toast.success(`Deleted ${res.successCount} draft ${res.successCount === 1 ? "invoice" : "invoices"}.`);
               setRowSelection({});
+              setConfirmModal(null);
+              broadcastLiveRefresh();
+              router.refresh();
+            }
+            if (res.failedCount > 0) {
+              const detail = res.errors
+                .map((e) => (e.number ? `${e.number}: ${e.error}` : e.error))
+                .join(", ");
+              toast.error(
+                detail
+                  ? `Failed to delete ${res.failedCount} draft ${res.failedCount === 1 ? "invoice" : "invoices"}: ${detail}`
+                  : `Failed to delete ${res.failedCount} draft ${res.failedCount === 1 ? "invoice" : "invoices"}.`,
+              );
               setConfirmModal(null);
             }
           } catch (err) {
@@ -505,6 +563,7 @@ export function InvoiceTable({
           >
             {selectedDrafts.length > 0 && (
               <Button
+                permission={mustSubmitForApproval ? "edit" : "post"}
                 type="button"
                 variant="secondary"
                 size="sm"
@@ -512,7 +571,10 @@ export function InvoiceTable({
                 disabled={isPending}
                 className="h-8 gap-1.5 text-xs text-primary font-medium hover:bg-primary/10"
               >
-                <CheckCircle2 className="size-3.5" /> Post Drafts ({selectedDrafts.length})
+                <CheckCircle2 className="size-3.5" />{" "}
+                {mustSubmitForApproval
+                  ? `Submit for Approval (${selectedDrafts.length})`
+                  : `Post Drafts (${selectedDrafts.length})`}
               </Button>
             )}
 

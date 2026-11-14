@@ -4,7 +4,7 @@ import { redirect } from "next/navigation";
 import { z } from "zod";
 import { requirePermission } from "@/core/permissions/require-module";
 import { supplierPaymentInputSchema, applySupplierPaymentCreditInputSchema } from "./supplier-payment-input";
-import { createSupplierPayment, voidSupplierPayment, applySupplierPaymentCredit } from "./supplier-payment-service";
+import { createSupplierPayment, voidSupplierPayment, applySupplierPaymentCredit, submitOrPostDraftSupplierPayment, deleteDraftSupplierPayment } from "./supplier-payment-service";
 import { revalidatePath } from "next/cache";
 
 export type SupplierPaymentActionResult = { error?: string; fieldErrors?: Record<string, string[]> };
@@ -23,11 +23,10 @@ export async function createSupplierPaymentAction(businessId: string, input: unk
   }
   revalidatePath(`/b/${businessId}/purchases/payments`);
   revalidatePath(`/b/${businessId}/purchases/invoices`);
-  if (result.allocations && result.allocations.length === 1 && result.allocations[0]?.invoiceId && result.unallocatedMinor === 0) {
-    redirect(`/b/${businessId}/purchases/invoices/${result.allocations[0].invoiceId}?notice=Supplier payment posted`);
-  } else {
-    redirect(`/b/${businessId}/purchases/payments/${result.id}?notice=Supplier payment posted`);
-  }
+  revalidatePath(`/b/${businessId}/approvals`);
+  revalidatePath(`/b/${businessId}/overview`);
+  const notice = result.documentStatus === "pending_approval" ? "Payment submitted for approval" : "Supplier payment posted";
+  redirect(`/b/${businessId}/purchases/payments/${result.id}?notice=${encodeURIComponent(notice)}`);
 }
 
 export async function applySupplierPaymentCreditAction(
@@ -63,6 +62,45 @@ export async function voidSupplierPaymentAction(businessId: string, paymentId: s
   } catch (error) {
     return {
       error: error instanceof Error ? error.message : "The Supplier Payment could not be reversed.",
+    };
+  }
+}
+
+export async function submitOrPostDraftSupplierPaymentAction(
+  businessId: string,
+  paymentId: string,
+  intent: "post" | "submit_approval" = "post",
+) {
+  const { user, access } = await requirePermission(businessId, "purchases", "edit");
+  if (intent !== "submit_approval" && !access.requiresApproval) {
+    await requirePermission(businessId, "purchases", "post");
+  }
+  try {
+    const result = submitOrPostDraftSupplierPayment(businessId, user.id, paymentId, intent);
+    revalidatePath(`/b/${businessId}/purchases/payments`);
+    revalidatePath(`/b/${businessId}/purchases/payments/${paymentId}`);
+    revalidatePath(`/b/${businessId}/purchases/invoices`);
+    revalidatePath(`/b/${businessId}/approvals`);
+    revalidatePath(`/b/${businessId}/overview`);
+    return { ok: true, documentStatus: result.documentStatus };
+  } catch (error) {
+    return {
+      error: error instanceof Error ? error.message : "The Supplier Payment could not be submitted.",
+    };
+  }
+}
+
+export async function deleteDraftSupplierPaymentAction(businessId: string, paymentId: string) {
+  const { user } = await requirePermission(businessId, "purchases", "delete");
+  try {
+    deleteDraftSupplierPayment(businessId, user.id, paymentId);
+    revalidatePath(`/b/${businessId}/purchases/payments`);
+    revalidatePath(`/b/${businessId}/approvals`);
+    revalidatePath(`/b/${businessId}/overview`);
+    return { ok: true };
+  } catch (error) {
+    return {
+      error: error instanceof Error ? error.message : "The draft supplier payment could not be deleted.",
     };
   }
 }

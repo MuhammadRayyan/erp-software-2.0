@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import Link from "next/link";
-import { Plus, Play, MoreHorizontal, ChevronRight, Eye, FileEdit } from "lucide-react";
+import { Plus, Play, MoreHorizontal, ChevronRight, Eye, FileEdit, FileSpreadsheet } from "lucide-react";
 import { 
   useLegacyTable as useTable,
   getCoreRowModel as createCoreRowModel,
@@ -28,6 +28,7 @@ interface PayslipTableProps {
   currency?: string;
   serverSnapshot?: ColumnVisibility;
   onOpenPayRun: () => void;
+  onOpenWpsExport?: () => void;
 }
 
 const columnLabels: Record<string, string> = {
@@ -45,6 +46,7 @@ export function PayslipTable({
   currency = "AED",
   serverSnapshot,
   onOpenPayRun,
+  onOpenWpsExport,
 }: PayslipTableProps) {
   const { density } = useTableDensity(businessId);
   const [query, setQuery] = useState("");
@@ -277,6 +279,16 @@ export function PayslipTable({
         <div className="ml-auto flex items-center gap-1.5 shrink-0">
           <DensityToggle businessId={businessId} />
           {dropdown}
+          {onOpenWpsExport && (
+            <Button
+              permission="export"
+              variant="secondary"
+              onClick={onOpenWpsExport}
+              className="h-9"
+            >
+              <FileSpreadsheet className="size-3.5 mr-1.5 text-primary" /> Export WPS (.SIF)
+            </Button>
+          )}
           <Button
             variant="secondary"
             onClick={onOpenPayRun}

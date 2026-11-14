@@ -20,6 +20,7 @@ export type StoredLine = BaseStoredLine & {
   taxAmountMinor: number;
   grossAmountMinor: number;
   lineIndex: number;
+  customFields?: Record<string, string>;
 };
 
 type Config = {
@@ -115,6 +116,7 @@ export function calculateLines(
       taxAmountMinor,
       grossAmountMinor,
       lineIndex: position,
+      customFields: line.customFields,
     };
   });
 }

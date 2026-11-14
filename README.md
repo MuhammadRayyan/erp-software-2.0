@@ -2,7 +2,7 @@
 
 A Manager.io-inspired accounting/ERP application: one Next.js modular monolith with an independent SQLite database for each business.
 
-Package version **2.7.0**. Verified application release: `252093a78db7df9afd9810e96344c1bd237829a9`, 29 October 2026. The owner is testing with a few businesses and **5–10 users**, keeping the repository public and deferring additional hardening.
+Package version **2.7.0**. Verified application release: `797b679e476c90a1b7d60bef387fedc85004a587`, 11 November 2026. The owner is testing with a few businesses and **5–10 users**, keeping the repository public and deferring additional hardening.
 
 ## Documentation
 
@@ -46,7 +46,7 @@ npm run test:e2e
 
 `npm test` now preloads `scripts/test-isolation.mjs`, giving each test process a separate temporary database root, including older suites that previously defaulted to local `data/`. The Manager.io import suite still references real backup fixtures and was excluded from the synthetic acceptance round.
 
-`npm run test:e2e` now defaults to the isolated acceptance configuration: 11 browser scenarios, fresh synthetic businesses and in-memory role sessions. It requires the `.next-validate` production build; use the workflow's build setup before running it. The workflow uses this complete suite for the source gate; `npm run test:browser:hardening` remains a five-scenario focused check. Older browser specs are retained as reference but are not selected by the default configuration. Their generated screenshots now go under ignored `test-results/visual/`.
+`npm run test:e2e` now defaults to the isolated acceptance configuration: 15 browser scenarios, fresh synthetic businesses and in-memory role sessions. It requires `.next-validate` or `.next` production build; use the workflow's build setup before running it. The workflow uses this complete suite for the source gate; `npm run test:browser:hardening` remains a five-scenario focused check. Older browser specs are retained as reference but are not selected by the default configuration. Their generated screenshots now go under ignored `test-results/visual/`.
 
 CI sets `NEXT_PHASE=phase-production-build`, allowing builds without production secrets. Production startup requires strong runtime authentication/setup configuration. Generated reports and local archives stay ignored. Historical logs now live in [docs/history](docs/history/README.md).
 

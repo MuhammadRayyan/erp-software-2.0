@@ -4,10 +4,36 @@ import { createContext, useContext } from "react";
 import { usePathname } from "next/navigation";
 import { hasPermission, moduleForBusinessPath, type ModuleCapabilities, type ActionKey } from "@/core/permissions/module-access";
 
-const PermissionsContext = createContext<{ capabilities: ModuleCapabilities; isAdministrator: boolean } | null>(null);
+const PermissionsContext = createContext<{
+  capabilities: ModuleCapabilities;
+  isAdministrator: boolean;
+  requiresApproval: boolean;
+} | null>(null);
 const DocumentWorkflowContext = createContext<ActionKey | undefined>(undefined);
-export function PermissionsProvider({ capabilities, isAdministrator, children }: { capabilities: ModuleCapabilities; isAdministrator: boolean; children: React.ReactNode }) {
-  return <PermissionsContext.Provider value={{ capabilities, isAdministrator }}>{children}</PermissionsContext.Provider>;
+export function PermissionsProvider({
+  capabilities,
+  isAdministrator,
+  requiresApproval = false,
+  children,
+}: {
+  capabilities: ModuleCapabilities;
+  isAdministrator: boolean;
+  requiresApproval?: boolean;
+  children: React.ReactNode;
+}) {
+  return (
+    <PermissionsContext.Provider value={{ capabilities, isAdministrator, requiresApproval }}>
+      {children}
+    </PermissionsContext.Provider>
+  );
+}
+
+export function useApprovalPolicy() {
+  const context = useContext(PermissionsContext);
+  return {
+    requiresApproval: context?.requiresApproval ?? false,
+    isAdministrator: context?.isAdministrator ?? false,
+  };
 }
 
 export function useActionPermission(action?: ActionKey | ActionKey[]) {
@@ -31,7 +57,7 @@ export function useActionPermission(action?: ActionKey | ActionKey[]) {
 
 export function DocumentWorkflowPermissions({ status, children }: { status?: string; children: React.ReactNode }) {
   const normalized = status?.toLowerCase();
-  const workflow = normalized === "posted" ? "post" : normalized === "sent" || normalized === "issued" ? "approve" : undefined;
+  const workflow = normalized === "posted" ? "post" : normalized === "sent" || normalized === "issued" || normalized === "active" ? "approve" : undefined;
   const allowed = useActionPermission(workflow);
   return <DocumentWorkflowContext.Provider value={workflow}>
     {allowed ? children : <p role="status" className="text-sm text-muted-foreground">Posting or approval permission is required to change this document. Ask a business administrator.</p>}

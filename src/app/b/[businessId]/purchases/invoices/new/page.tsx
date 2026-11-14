@@ -14,6 +14,7 @@ import { minorToCurrencyInput } from "@/modules/currency/conversion";
 import { getCurrencySettings } from "@/modules/currency/exchange-rate";
 import { getAllSuppliersUnallocatedPrepayments } from "@/modules/supplier-payments/supplier-payment-service";
 import { getFormDefaults } from "@/modules/form-defaults/form-defaults-service";
+import { listCustomFieldDefinitions } from "@/modules/custom-fields/custom-field-service";
 
 export default async function NewPurchaseInvoicePage({
   params,
@@ -38,6 +39,7 @@ export default async function NewPurchaseInvoicePage({
   const items = listInventoryItemOptions(businessId, user.id);
   const currencySettings = getCurrencySettings(businessId, user.id);
   const availableSupplierPrepayments = getAllSuppliersUnallocatedPrepayments(businessId, user.id);
+  const lineCustomFields = listCustomFieldDefinitions(businessId, user.id, "purchase_invoice_line").map(({ id, name, fieldType, selectOptions, isRequired }) => ({ id, name, fieldType, selectOptions, isRequired }));
 
   const sourceOrder = query.orderId ? getPurchaseOrder(businessId, user.id, query.orderId) : null;
   const sourceQuote = query.quoteId ? getPurchaseQuote(businessId, user.id, query.quoteId) : null;
@@ -188,6 +190,7 @@ export default async function NewPurchaseInvoicePage({
           lines,
         }}
         availableSupplierPrepayments={availableSupplierPrepayments}
+        lineCustomFields={lineCustomFields}
       />
     </div>
   );

@@ -14,12 +14,22 @@ import { getCurrencySettings } from "@/modules/currency/exchange-rate";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { BackLink } from "@/components/back-link";
+import { listCustomFieldDefinitions } from "@/modules/custom-fields/custom-field-service";
 
 export default async function EditPurchaseOrderPage({ params }: { params: Promise<{ businessId: string; orderId: string }> }) {
   const { businessId, orderId } = await params;
   const { user, access } = await requireModule(businessId, "purchases");
   const record = getPurchaseOrder(businessId, user.id, orderId);
   if (!record) notFound();
+  if (record.order.status === "pending_approval") {
+    return (
+      <div className="page-container">
+        <h1 className="page-title">Pending approval</h1>
+        <p className="page-description">This Purchase Order is awaiting approval. Withdraw or reject it to draft before editing.</p>
+        <Button asChild className="mt-5"><Link href={`/b/${businessId}/purchases/orders/${orderId}`}>Return to order</Link></Button>
+      </div>
+    );
+  }
   if (["closed", "cancelled", "superseded"].includes(record.order.status)) {
     return (
       <div className="page-container">
@@ -42,6 +52,9 @@ export default async function EditPurchaseOrderPage({ params }: { params: Promis
   const items = listInventoryItemOptions(businessId, user.id);
   const quotes = listPurchaseQuotes(businessId, user.id, { onlyLatest: true });
   const currencySettings = getCurrencySettings(businessId, user.id);
+  const lineCustomFields = listCustomFieldDefinitions(businessId, user.id, "purchase_order_line").map(
+    ({ id, name, fieldType, selectOptions, isRequired }) => ({ id, name, fieldType, selectOptions, isRequired }),
+  );
   const minorUnit = currencySettings.currencies.find((currency) => currency.code === record.order.currencyCode)?.minor_unit ?? 2;
   return (
     <div className="page-container">
@@ -61,6 +74,7 @@ export default async function EditPurchaseOrderPage({ params }: { params: Promis
         items={items.map(({ id, sku, name, purchasePriceMinor, inventoryAssetAccountId }) => ({ id, sku, name, purchasePriceMinor, inventoryAssetAccountId }))}
         quotes={quotes.map((q) => ({ id: q.id, quoteNumber: q.quote_number, supplierId: q.supplier_id, date: q.date }))}
         currency={access.business.currency}
+        lineCustomFields={lineCustomFields}
         currencies={currencySettings.currencies.filter((currency) => currency.is_active || currency.code === record.order.currencyCode).map((currency) => ({ code: currency.code, name: currency.name, minorUnit: currency.minor_unit }))}
         rates={currencySettings.rates.map((rate) => ({ id: rate.id, currencyCode: rate.currency_code, rateDate: rate.rate_date, rateToBase: rate.rate_to_base, source: rate.source, sourceReference: rate.source_reference }))}
         initial={{
@@ -87,6 +101,7 @@ export default async function EditPurchaseOrderPage({ params }: { params: Promis
             expenseAccountId: line.expenseAccountId ?? "",
             taxCodeId: line.taxCodeId,
             projectId: line.projectId ?? "",
+            customFields: line.customFields ?? {},
           })),
         }}
       />

@@ -31,6 +31,8 @@ export type ResolvedBusinessProfile = {
   country: string;
   countryCode: string;
   logoUrl: string;
+  molEstablishmentId: string;
+  wpsBankRoutingCode: string;
   dateFormat: "DD/MM/YYYY" | "YYYY-MM-DD" | "MM/DD/YYYY" | "DD MMM YYYY";
   timeFormat: "12h" | "24h";
   financialYearStartMonth: number;
@@ -76,6 +78,8 @@ export const getBusinessProfile = cache((businessId: string, userId: string): Re
       country: sysCountry,
       countryCode: "AE",
       logoUrl: "",
+      molEstablishmentId: "",
+      wpsBankRoutingCode: "",
       dateFormat: "DD/MM/YYYY",
       timeFormat: "12h",
       financialYearStartMonth: sysFiscalMonth,
@@ -107,6 +111,8 @@ export const getBusinessProfile = cache((businessId: string, userId: string): Re
     country: row.country || sysCountry,
     countryCode: row.countryCode || "AE",
     logoUrl: row.logoUrl || "",
+    molEstablishmentId: row.molEstablishmentId || "",
+    wpsBankRoutingCode: row.wpsBankRoutingCode || "",
     dateFormat,
     timeFormat: row.timeFormat === "24h" ? "24h" : "12h",
     financialYearStartMonth: row.financialYearStartMonth || sysFiscalMonth,
@@ -147,6 +153,8 @@ export function updateBusinessProfile(
           country = ?,
           country_code = ?,
           logo_url = ?,
+          mol_establishment_id = ?,
+          wps_bank_routing_code = ?,
           updated_at = ?
         WHERE id = 'default'
       `)
@@ -166,6 +174,8 @@ export function updateBusinessProfile(
         data.country,
         data.countryCode,
         data.logoUrl || null,
+        data.molEstablishmentId || null,
+        data.wpsBankRoutingCode || null,
         now,
       );
   } else {
@@ -175,13 +185,15 @@ export function updateBusinessProfile(
           id, legal_name, trading_name, company_registration_number, tax_id,
           email, phone, website, address_line_1, address_line_2,
           city, state_or_emirate, postal_code, country, country_code,
-          logo_url, date_format, time_format, financial_year_start_month,
+          logo_url, mol_establishment_id, wps_bank_routing_code,
+          date_format, time_format, financial_year_start_month,
           created_at, updated_at
         ) VALUES (
           'default', ?, ?, ?, ?,
           ?, ?, ?, ?, ?,
           ?, ?, ?, ?, ?,
-          ?, 'DD/MM/YYYY', '12h', 1,
+          ?, ?, ?,
+          'DD/MM/YYYY', '12h', 1,
           ?, ?
         )
       `)
@@ -201,6 +213,8 @@ export function updateBusinessProfile(
         data.country,
         data.countryCode,
         data.logoUrl || null,
+        data.molEstablishmentId || null,
+        data.wpsBankRoutingCode || null,
         now,
         now,
       );

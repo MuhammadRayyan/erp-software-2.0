@@ -23,6 +23,7 @@ export async function inviteBusinessUserAction(
     role?: "administrator" | "standard";
     modules?: string[];
     capabilities?: Record<string, string[]>;
+    requiresApproval?: boolean;
     sendEmail?: boolean;
   }
 ) {
@@ -39,6 +40,7 @@ export async function inviteBusinessUserAction(
       role: input.role,
       modules: safeModules,
       capabilities: input.capabilities,
+      requiresApproval: input.requiresApproval,
       sendEmail: input.sendEmail,
     });
 
@@ -140,7 +142,8 @@ export async function updateMembershipAction(
   membershipId: string,
   role: "administrator" | "standard",
   modules: string[],
-  capabilities?: Record<string, string[]>
+  capabilities?: Record<string, string[]>,
+  requiresApproval?: boolean
 ) {
   const { user, access } = await requirePermission(businessId, "settings", "edit");
   if (access.membership.role !== "administrator") return { error: "Administrator access is required." };
@@ -154,7 +157,8 @@ export async function updateMembershipAction(
       user.id,
       membershipId,
       role,
-      payload
+      payload,
+      requiresApproval
     );
     revalidatePath(`/b/${businessId}/settings/users`);
     return { success: true };

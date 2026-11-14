@@ -35,6 +35,10 @@ const employeeSchema = z.object({
   housingAllowanceMinor: z.number().int().min(0).optional().nullable(),
   transportAllowanceMinor: z.number().int().min(0).optional().nullable(),
   otherAllowancesMinor: z.number().int().min(0).optional().nullable(),
+  molPersonId: z.string().trim().max(30).optional().nullable(),
+  bankRoutingCode: z.string().trim().max(20).optional().nullable(),
+  iban: z.string().trim().max(40).optional().nullable(),
+  wpsEnabled: z.boolean().optional(),
   isActive: z.boolean().optional(),
 });
 

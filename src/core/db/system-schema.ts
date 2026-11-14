@@ -109,6 +109,7 @@ export const memberships = sqliteTable(
       .references(() => users.id, { onDelete: "cascade" }),
     role: text("role", { enum: ["administrator", "standard"] }).notNull(),
     modulesJson: text("modules_json").notNull(),
+    requiresApproval: integer("requires_approval", { mode: "boolean" }).notNull().default(false),
     createdAt: text("created_at").notNull(),
   },
   (table) => [uniqueIndex("membership_business_user_idx").on(table.businessId, table.userId)],

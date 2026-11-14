@@ -2862,6 +2862,263 @@ export const businessMigrations = [
         }
       },
     },
+    {
+      version: 37,
+      name: "roadmap_pillars_1_2_3",
+      foreignKeys: "off",
+      up: (sqlite) => {
+        const now = new Date().toISOString();
+
+        const addColumnIfMissing = (table: string, column: string, definition: string) => {
+          const exists = sqlite.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name=?").get(table);
+          if (!exists) return;
+          const cols = (sqlite.prepare(`PRAGMA table_info("${table}")`).all() as { name: string }[]).map((c) => c.name);
+          if (!cols.includes(column)) {
+            sqlite.exec(`ALTER TABLE "${table}" ADD COLUMN "${column}" ${definition};`);
+          }
+        };
+
+        // 1. Custom Fields: Printed PDF filtering
+        addColumnIfMissing("custom_field_definitions", "show_on_pdf", "INTEGER NOT NULL DEFAULT 1");
+
+        // 2. Employees & Business Profile: UAE WPS fields
+        addColumnIfMissing("employees", "mol_person_id", "TEXT");
+        addColumnIfMissing("employees", "bank_routing_code", "TEXT");
+        addColumnIfMissing("employees", "iban", "TEXT");
+        addColumnIfMissing("employees", "wps_enabled", "INTEGER NOT NULL DEFAULT 1");
+
+        addColumnIfMissing("business_profile", "mol_establishment_id", "TEXT");
+        addColumnIfMissing("business_profile", "wps_bank_routing_code", "TEXT");
+
+        // 3. PDC Clearing Accounts & Accounting Settings
+        const hasAccounts = sqlite.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name='accounts'").get();
+        if (hasAccounts) {
+          sqlite.prepare(`
+            INSERT OR IGNORE INTO accounts (id, name, type, subtype, is_system, is_active, created_at, updated_at)
+            VALUES
+              ('acct-pdc-receivable-1120', 'Post-Dated Cheques Receivable', 'asset', 'current_asset', 1, 1, ?, ?),
+              ('acct-pdc-payable-2020', 'Post-Dated Cheques Payable', 'liability', 'current_liability', 1, 1, ?, ?)
+          `).run(now, now, now, now);
+        }
+
+        addColumnIfMissing("business_accounting_settings", "pdc_receivable_account_id", "TEXT REFERENCES accounts(id)");
+        addColumnIfMissing("business_accounting_settings", "pdc_payable_account_id", "TEXT REFERENCES accounts(id)");
+        addColumnIfMissing("business_accounting_settings", "pdc_prefix", "TEXT NOT NULL DEFAULT 'PDC-'");
+        addColumnIfMissing("business_accounting_settings", "pdc_next_number", "INTEGER NOT NULL DEFAULT 1");
+        addColumnIfMissing("business_accounting_settings", "pdc_padding", "INTEGER NOT NULL DEFAULT 4");
+
+        const hasSettings = sqlite.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name='business_accounting_settings'").get();
+        if (hasSettings && hasAccounts) {
+          sqlite.prepare(`
+            UPDATE business_accounting_settings
+            SET pdc_receivable_account_id = COALESCE(pdc_receivable_account_id, 'acct-pdc-receivable-1120'),
+                pdc_payable_account_id = COALESCE(pdc_payable_account_id, 'acct-pdc-payable-2020')
+            WHERE id = 'default'
+          `).run();
+        }
+
+        // 4. Saved Custom Report Views
+        sqlite.exec(`
+          CREATE TABLE IF NOT EXISTS "saved_reports" (
+            "id" TEXT PRIMARY KEY NOT NULL,
+            "name" TEXT NOT NULL,
+            "report_type" TEXT NOT NULL CHECK ("report_type" IN ('profit_loss', 'balance_sheet', 'trial_balance', 'general_ledger', 'vat_transactions', 'project_profitability')),
+            "description" TEXT,
+            "config_json" TEXT NOT NULL,
+            "created_by" TEXT NOT NULL,
+            "is_shared" INTEGER NOT NULL DEFAULT 1,
+            "created_at" TEXT NOT NULL,
+            "updated_at" TEXT NOT NULL
+          );
+          CREATE INDEX IF NOT EXISTS "saved_reports_type_idx" ON "saved_reports" ("report_type");
+        `);
+
+        // 5. Post-Dated Cheques (PDC)
+        sqlite.exec(`
+          CREATE TABLE IF NOT EXISTS "post_dated_cheques" (
+            "id" TEXT PRIMARY KEY NOT NULL,
+            "pdc_number" TEXT NOT NULL UNIQUE,
+            "direction" TEXT NOT NULL CHECK ("direction" IN ('receivable', 'payable')),
+            "cheque_number" TEXT NOT NULL,
+            "cheque_bank_name" TEXT,
+            "issue_date" TEXT NOT NULL,
+            "maturity_date" TEXT NOT NULL,
+            "customer_id" TEXT REFERENCES "customers"("id"),
+            "supplier_id" TEXT REFERENCES "suppliers"("id"),
+            "sales_invoice_id" TEXT REFERENCES "sales_invoices"("id"),
+            "purchase_invoice_id" TEXT REFERENCES "purchase_invoices"("id"),
+            "bank_account_id" TEXT NOT NULL REFERENCES "bank_accounts"("id"),
+            "currency_code" TEXT NOT NULL DEFAULT 'AED' REFERENCES "currencies"("code"),
+            "amount_minor" INTEGER NOT NULL CHECK ("amount_minor" > 0),
+            "status" TEXT NOT NULL DEFAULT 'held' CHECK ("status" IN ('held', 'deposited', 'cleared', 'bounced', 'cancelled')),
+            "reference" TEXT,
+            "notes" TEXT,
+            "deposited_at" TEXT,
+            "cleared_at" TEXT,
+            "bounced_at" TEXT,
+            "bounce_reason" TEXT,
+            "cancelled_at" TEXT,
+            "created_by" TEXT NOT NULL,
+            "created_at" TEXT NOT NULL,
+            "updated_at" TEXT NOT NULL
+          );
+          CREATE UNIQUE INDEX IF NOT EXISTS "pdc_number_idx" ON "post_dated_cheques" ("pdc_number");
+          CREATE INDEX IF NOT EXISTS "pdc_status_maturity_idx" ON "post_dated_cheques" ("status", "maturity_date");
+          CREATE INDEX IF NOT EXISTS "pdc_direction_idx" ON "post_dated_cheques" ("direction", "status");
+          CREATE INDEX IF NOT EXISTS "pdc_customer_idx" ON "post_dated_cheques" ("customer_id");
+          CREATE INDEX IF NOT EXISTS "pdc_supplier_idx" ON "post_dated_cheques" ("supplier_id");
+        `);
+
+        // 6. Maker-Checker Approval Rules, Requests & Notifications
+        sqlite.exec(`
+          CREATE TABLE IF NOT EXISTS "approval_rules" (
+            "id" TEXT PRIMARY KEY NOT NULL,
+            "entity_type" TEXT NOT NULL UNIQUE,
+            "module" TEXT NOT NULL,
+            "is_enabled" INTEGER NOT NULL DEFAULT 0,
+            "threshold_minor" INTEGER NOT NULL DEFAULT 0,
+            "require_checker_separation" INTEGER NOT NULL DEFAULT 1,
+            "updated_at" TEXT NOT NULL
+          );
+          CREATE UNIQUE INDEX IF NOT EXISTS "approval_rules_entity_type_idx" ON "approval_rules" ("entity_type");
+
+          CREATE TABLE IF NOT EXISTS "approval_requests" (
+            "id" TEXT PRIMARY KEY NOT NULL,
+            "entity_type" TEXT NOT NULL,
+            "entity_id" TEXT NOT NULL,
+            "entity_number" TEXT NOT NULL,
+            "module" TEXT NOT NULL,
+            "amount_minor" INTEGER NOT NULL DEFAULT 0,
+            "base_amount_minor" INTEGER NOT NULL DEFAULT 0,
+            "currency_code" TEXT NOT NULL DEFAULT 'AED',
+            "status" TEXT NOT NULL DEFAULT 'pending' CHECK ("status" IN ('pending', 'approved', 'rejected', 'withdrawn')),
+            "requested_by" TEXT NOT NULL,
+            "requested_by_name" TEXT NOT NULL,
+            "requested_at" TEXT NOT NULL,
+            "decided_by" TEXT,
+            "decided_by_name" TEXT,
+            "decided_at" TEXT,
+            "decision_note" TEXT,
+            "target_intent" TEXT NOT NULL DEFAULT 'post'
+          );
+          CREATE INDEX IF NOT EXISTS "approval_requests_status_idx" ON "approval_requests" ("status", "requested_at");
+          CREATE INDEX IF NOT EXISTS "approval_requests_entity_idx" ON "approval_requests" ("entity_type", "entity_id");
+          CREATE INDEX IF NOT EXISTS "approval_requests_requester_idx" ON "approval_requests" ("requested_by");
+
+          CREATE TABLE IF NOT EXISTS "notifications" (
+            "id" TEXT PRIMARY KEY NOT NULL,
+            "recipient_user_id" TEXT NOT NULL,
+            "type" TEXT NOT NULL,
+            "title" TEXT NOT NULL,
+            "message" TEXT NOT NULL,
+            "entity_type" TEXT,
+            "entity_id" TEXT,
+            "entity_number" TEXT,
+            "action_url" TEXT,
+            "actor_user_id" TEXT,
+            "actor_name" TEXT,
+            "is_read" INTEGER NOT NULL DEFAULT 0,
+            "read_at" TEXT,
+            "created_at" TEXT NOT NULL
+          );
+          CREATE INDEX IF NOT EXISTS "notifications_recipient_idx" ON "notifications" ("recipient_user_id", "is_read", "created_at");
+        `);
+
+        const defaultRules: Array<[string, string, string]> = [
+          ["rule-purchase-order", "purchase_order", "purchases"],
+          ["rule-purchase-invoice", "purchase_invoice", "purchases"],
+          ["rule-supplier-payment", "supplier_payment", "purchases"],
+          ["rule-sales-invoice", "sales_invoice", "sales"],
+          ["rule-receipt", "receipt", "sales"],
+          ["rule-sales-credit-note", "sales_credit_note", "sales"],
+          ["rule-debit-note", "debit_note", "purchases"],
+          ["rule-purchase-quote", "purchase_quote", "purchases"],
+          ["rule-sales-order", "sales_order", "sales"],
+          ["rule-sales-quote", "sales_quote", "sales"],
+        ];
+        const insertRule = sqlite.prepare(`
+          INSERT OR IGNORE INTO approval_rules (id, entity_type, module, is_enabled, threshold_minor, require_checker_separation, updated_at)
+          VALUES (?, ?, ?, 0, 0, 1, ?)
+        `);
+        for (const [id, entityType, mod] of defaultRules) {
+          insertRule.run(id, entityType, mod, now);
+        }
+
+        // 7. Rebuild document tables to support 'pending_approval' in status CHECK constraints
+        const rebuildTable = (table: string, transformSql: (sql: string) => string) => {
+          const tableRow = sqlite
+            .prepare("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = ?")
+            .get(table) as { sql: string } | undefined;
+          if (!tableRow?.sql) return;
+          const updatedSql = transformSql(tableRow.sql);
+          if (updatedSql === tableRow.sql) return;
+
+          const dependentObjects = sqlite
+            .prepare("SELECT type, name, sql FROM sqlite_master WHERE tbl_name = ? AND type IN ('index', 'trigger') AND sql IS NOT NULL")
+            .all(table) as Array<{ type: string; name: string; sql: string }>;
+
+          const tempName = `${table}_mig37`;
+          const createTempSql = updatedSql.replace(
+            new RegExp(`^CREATE\\s+TABLE\\s+(?:IF\\s+NOT\\s+EXISTS\\s+)?["']?${table}["']?`, "i"),
+            `CREATE TABLE "${tempName}"`,
+          );
+          if (createTempSql === updatedSql) {
+            throw new Error(`Could not rewrite CREATE TABLE header for ${table}`);
+          }
+
+          sqlite.exec(createTempSql);
+          sqlite.exec(`INSERT INTO "${tempName}" SELECT * FROM "${table}";`);
+          sqlite.exec(`DROP TABLE "${table}";`);
+          sqlite.exec(`ALTER TABLE "${tempName}" RENAME TO "${table}";`);
+          for (const obj of dependentObjects) {
+            sqlite.exec(obj.sql);
+          }
+        };
+
+        const addPendingToDraftPostedVoid = (sql: string) => {
+          if (sql.includes("'pending_approval'")) return sql;
+          return sql.replace(
+            /CHECK\s*\(\s*("?document_status"?)\s+IN\s*\(\s*'draft'\s*,\s*'posted'\s*,\s*'void'\s*\)\s*\)/i,
+            "CHECK ($1 IN ('draft', 'pending_approval', 'posted', 'void'))",
+          );
+        };
+
+        for (const tbl of ["sales_invoices", "purchase_invoices", "sales_credit_notes", "bank_transactions"]) {
+          rebuildTable(tbl, addPendingToDraftPostedVoid);
+        }
+
+        rebuildTable("purchase_orders", (sql) => {
+          if (sql.includes("'pending_approval'")) return sql;
+          return sql.replace(
+            /CHECK\s*\(\s*("?status"?)\s+IN\s*\(\s*'draft'\s*,\s*'issued'\s*,\s*'closed'\s*,\s*'cancelled'\s*,\s*'superseded'\s*\)\s*\)/i,
+            "CHECK ($1 IN ('draft', 'pending_approval', 'issued', 'closed', 'cancelled', 'superseded'))",
+          );
+        });
+
+        rebuildTable("purchase_quotes", (sql) => {
+          if (sql.includes("'pending_approval'")) return sql;
+          return sql.replace(
+            /CHECK\s*\(\s*("?document_status"?)\s+IN\s*\(\s*'draft'\s*,\s*'sent'\s*,\s*'accepted'\s*,\s*'rejected'\s*,\s*'superseded'\s*,\s*'cancelled'\s*\)\s*\)/i,
+            "CHECK ($1 IN ('draft', 'pending_approval', 'sent', 'accepted', 'rejected', 'superseded', 'cancelled'))",
+          );
+        });
+
+        const updateSettlementSql = (sql: string) => {
+          let next = sql;
+          if (!next.includes("'pending_approval'")) {
+            next = next.replace(
+              /CHECK\s*\(\s*("?document_status"?)\s+IN\s*\(\s*'posted'\s*,\s*'void'\s*\)\s*\)/i,
+              "CHECK ($1 IN ('draft', 'pending_approval', 'posted', 'void'))",
+            );
+          }
+          next = next.replace(/("?posted_at"?\s+TEXT)\s+NOT\s+NULL/i, "$1");
+          return next;
+        };
+
+        rebuildTable("receipts", updateSettlementSql);
+        rebuildTable("supplier_payments", updateSettlementSql);
+      },
+    },
   ] satisfies readonly SqliteMigration[];
 
 

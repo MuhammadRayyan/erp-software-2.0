@@ -11,7 +11,7 @@ export default async function NumberingPage({ params }: { params: Promise<{ busi
     <SettingsShell
       businessId={businessId}
       title="Document Numbering Sequences"
-      description="Configure sequential prefixes, zero-padding, and atomic next-number allocators across all 16 sales, purchase, and GL series."
+      description="Configure sequential prefixes, zero-padding, and atomic next-number allocators across all 17 sales, purchase, banking, and GL series."
     >
       <NumberingForm businessId={businessId} initial={{
         prefix: settings.invoicePrefix,
@@ -65,6 +65,9 @@ export default async function NumberingPage({ params }: { params: Promise<{ busi
         journalPrefix: settings.journalPrefix ?? "JRN-",
         journalNextNumber: settings.journalNextNumber ?? 1,
         journalPadding: settings.journalPadding ?? 4,
+        pdcPrefix: settings.pdcPrefix ?? "PDC-",
+        pdcNextNumber: settings.pdcNextNumber ?? 1,
+        pdcPadding: settings.pdcPadding ?? 4,
       }} />
     </SettingsShell>
   );

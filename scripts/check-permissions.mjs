@@ -6,8 +6,8 @@ function walk(directory) {
 }
 const mutationName = /^(create|update|save|delete|void|cancel|close|post|issue|duplicate|batch|generateBatch|ensureDefaultDemo|apply|confirm|ignore|reset|start|complete|import|mark|finalize|reopen|set|toggle|recode|change|move|reorder|add|remove|upload|send|verifyAndSend)/;
 const domainGuards = /\b(assertMutationPermission|assertSavePermission|assertBusinessAdministrator|assertCustomFieldWritePermission)\(/;
-// Personal preferences are scoped to the current actor, not business administration capabilities.
-const personal = new Set(["upsertPreferences", "clearPreferences"]);
+// Personal preferences and actor-scoped notifications are scoped to the current actor, not business administration capabilities.
+const personal = new Set(["upsertPreferences", "clearPreferences", "markNotificationRead", "markAllNotificationsRead"]);
 let checked = 0;
 const failures = [];
 for (const file of walk("src/modules").filter(file => file.endsWith(".ts") && !file.endsWith("actions.ts"))) {

@@ -25,6 +25,9 @@ export default async function EditInvoicePage({ params }: { params: Promise<{ bu
   if (record.invoice.documentStatus === "void") {
     return <div className="page-container"><h1 className="page-title">Void invoice</h1><p className="page-description">Void invoices are retained for history and cannot be edited.</p><Button asChild className="mt-5"><Link href={`/b/${businessId}/sales/invoices/${invoiceId}`}>Return to invoice</Link></Button></div>;
   }
+  if (record.invoice.documentStatus === "pending_approval") {
+    return <div className="page-container"><h1 className="page-title">Pending approval</h1><p className="page-description">This Sales Invoice is awaiting approval. Withdraw or reject it to draft before editing.</p><Button asChild className="mt-5"><Link href={`/b/${businessId}/sales/invoices/${invoiceId}`}>Return to invoice</Link></Button></div>;
+  }
   if (record.deliveryNotes.length > 0) {
     return <div className="page-container"><h1 className="page-title">Locked invoice</h1><p className="page-description">A Sales Invoice cannot be edited after a Delivery Note has been created from it.</p><Button asChild className="mt-5"><Link href={`/b/${businessId}/sales/invoices/${invoiceId}`}>Return to invoice</Link></Button></div>;
   }
@@ -38,6 +41,7 @@ export default async function EditInvoicePage({ params }: { params: Promise<{ bu
   const currencySettings = getCurrencySettings(businessId, user.id);
   const documentMinorUnit = currencySettings.currencies.find((entry) => entry.code === record.invoice.currencyCode)?.minor_unit ?? 2;
   const customFields = listCustomFieldDefinitions(businessId, user.id, "sales_invoice").map(({ id, name, fieldType, selectOptions, isRequired }) => ({ id, name, fieldType, selectOptions, isRequired }));
+  const lineCustomFields = listCustomFieldDefinitions(businessId, user.id, "sales_invoice_line").map(({ id, name, fieldType, selectOptions, isRequired }) => ({ id, name, fieldType, selectOptions, isRequired }));
   const customFieldValues = customFields.length
     ? getCustomFieldValuesForEntities(businessId, user.id, "sales_invoice", [invoiceId]).get(invoiceId) ?? {}
     : {};
@@ -57,6 +61,7 @@ export default async function EditInvoicePage({ params }: { params: Promise<{ bu
       documentStatus={record.invoice.documentStatus}
       customFields={customFields}
       customFieldValues={customFieldValues}
+      lineCustomFields={lineCustomFields}
       customers={customers as any}
       salesAccounts={salesAccounts.map(({ id, name }) => ({ id, name }))}
       taxCodes={taxCodes.map(({ id, name, rateBasisPoints, vatCategory }) => ({ id, name, rateBasisPoints, vatCategory }))}
@@ -94,6 +99,7 @@ export default async function EditInvoicePage({ params }: { params: Promise<{ bu
           salesAccountId: line.salesAccountId,
           taxCodeId: line.taxCodeId,
           projectId: line.projectId ?? "",
+          customFields: line.customFields ?? {},
         })),
       }}
     />

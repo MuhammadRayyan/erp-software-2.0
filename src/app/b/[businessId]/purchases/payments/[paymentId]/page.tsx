@@ -9,6 +9,8 @@ import { getSourceBankingStatus } from "@/modules/banking/banking-report-service
 import { BackLink } from "@/components/back-link";
 import { getDocumentViewData } from "@/modules/document-templates/document-data-extractor";
 import { DocumentViewLayout } from "@/modules/document-templates/components/document-view-layout";
+import { getLatestApprovalForEntity } from "@/modules/approvals/approval-service";
+import { DocumentApprovalBanner } from "@/components/approvals/document-approval-banner";
 
 export default async function SupplierPaymentViewPage({
   params,
@@ -21,8 +23,9 @@ export default async function SupplierPaymentViewPage({
   if (!record) notFound();
   const banking = getSourceBankingStatus(businessId, user.id, "supplier_payment", paymentId);
   const payment = record.payment;
-  const status = String(payment.document_status) as "posted" | "void";
+  const status = String(payment.document_status) as "draft" | "pending_approval" | "posted" | "void";
   const number = String(payment.payment_number);
+  const latestApproval = getLatestApprovalForEntity(businessId, user.id, "supplier_payment", paymentId);
 
   const viewBundle = getDocumentViewData(
     businessId,
@@ -56,6 +59,14 @@ export default async function SupplierPaymentViewPage({
           </p>
         </div>
         <SupplierPaymentViewActions businessId={businessId} paymentId={paymentId} paymentNumber={number} status={status} />
+      </div>
+      <div className="mb-5">
+        <DocumentApprovalBanner
+          businessId={businessId}
+          currentUserId={user.id}
+          isAdmin={access.membership.role === "administrator"}
+          approval={latestApproval}
+        />
       </div>
 
       <DocumentViewLayout
@@ -129,7 +140,15 @@ export default async function SupplierPaymentViewPage({
                       </td>
                       <td className="money text-right">{formatMoney(allocation.amount_minor, String(payment.currency_code))}</td>
                       <td className="money text-right">{formatMoney(allocation.base_carrying_amount_released, access.business.currency)}</td>
-                      <td>{status === "posted" ? "Active" : "Released by reversal"}</td>
+                      <td>
+                        {status === "posted"
+                          ? "Active"
+                          : status === "pending_approval"
+                            ? "Pending approval"
+                            : status === "draft"
+                              ? "Draft"
+                              : "Released by reversal"}
+                      </td>
                     </tr>
                   ))}
                 </tbody>

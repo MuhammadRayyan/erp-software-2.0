@@ -178,3 +178,8 @@ export function closeAllBusinessConnections() {
     closeConnection(key);
   }
 }
+
+export function runImmediateTransaction<T>(sqlite: Database.Database, fn: () => T): T {
+  const tx = sqlite.transaction(fn);
+  return sqlite.inTransaction ? tx() : tx.immediate();
+}

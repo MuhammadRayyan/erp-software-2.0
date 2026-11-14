@@ -46,6 +46,8 @@ export function BusinessProfileForm({
     country: initial.country ?? "United Arab Emirates",
     countryCode: initial.countryCode ?? "AE",
     logoUrl: initial.logoUrl ?? "",
+    molEstablishmentId: initial.molEstablishmentId ?? "",
+    wpsBankRoutingCode: initial.wpsBankRoutingCode ?? "",
   });
 
   const [serverError, setServerError] = useState("");
@@ -183,6 +185,28 @@ export function BusinessProfileForm({
               placeholder="e.g. CN-1234567"
               value={values.companyRegistrationNumber}
               onChange={(e) => setValues({ ...values, companyRegistrationNumber: e.target.value })}
+              disabled={!isAdmin}
+            />
+          </div>
+
+          <div className="space-y-1.5">
+            <Label htmlFor="molEstablishmentId">MOL / MOHRE Establishment ID (13 digits)</Label>
+            <Input
+              id="molEstablishmentId"
+              placeholder="e.g. 1234567890123"
+              value={values.molEstablishmentId}
+              onChange={(e) => setValues({ ...values, molEstablishmentId: e.target.value })}
+              disabled={!isAdmin}
+            />
+          </div>
+
+          <div className="space-y-1.5">
+            <Label htmlFor="wpsBankRoutingCode">WPS Bank Routing Code (9 digits)</Label>
+            <Input
+              id="wpsBankRoutingCode"
+              placeholder="e.g. 303100001"
+              value={values.wpsBankRoutingCode}
+              onChange={(e) => setValues({ ...values, wpsBankRoutingCode: e.target.value })}
               disabled={!isAdmin}
             />
           </div>

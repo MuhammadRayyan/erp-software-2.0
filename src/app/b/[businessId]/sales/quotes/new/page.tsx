@@ -8,6 +8,7 @@ import { getCurrencySettings } from "@/modules/currency/exchange-rate";
 import { SalesQuoteForm } from "@/modules/sales-quotes/quote-form";
 import { Breadcrumbs } from "@/components/breadcrumbs";
 import { getFormDefaults } from "@/modules/form-defaults/form-defaults-service";
+import { listCustomFieldDefinitions } from "@/modules/custom-fields/custom-field-service";
 
 export default async function NewQuotePage({ params, searchParams }: { params: Promise<{ businessId: string }>; searchParams: Promise<{ customerId?: string; projectId?: string }> }) {
   const { businessId } = await params;
@@ -23,6 +24,9 @@ export default async function NewQuotePage({ params, searchParams }: { params: P
   const projects = listProjectOptions(businessId, user.id);
   const items = listInventoryItemOptions(businessId, user.id);
   const currencySettings = getCurrencySettings(businessId, user.id);
+  const lineCustomFields = listCustomFieldDefinitions(businessId, user.id, "sales_quote_line").map(
+    ({ id, name, fieldType, selectOptions, isRequired }) => ({ id, name, fieldType, selectOptions, isRequired }),
+  );
 
   const today = new Date().toISOString().slice(0, 10);
   const defaultTax =
@@ -66,6 +70,7 @@ export default async function NewQuotePage({ params, searchParams }: { params: P
           salesAccountId,
         }))}
         currency={access.business.currency}
+        lineCustomFields={lineCustomFields}
         currencies={currencySettings.currencies
           .filter((currency) => currency.is_active)
           .map((currency) => ({ code: currency.code, name: currency.name, minorUnit: currency.minor_unit }))}

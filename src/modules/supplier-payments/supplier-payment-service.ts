@@ -1,6 +1,7 @@
 import { assertMutationPermission } from "@/core/permissions/mutation-permissions";
-import { createSettlement, voidSettlement, applySettlementCredit, type SettlementConfig } from "@/modules/settlement/settlement-service";
-import { getBusinessDb } from "@/core/db/business";
+import { createSettlement, voidSettlement, applySettlementCredit, postPendingSettlement, revertPendingSettlementToDraft, submitOrPostDraftSettlement, deleteDraftSettlement, type SettlementConfig } from "@/modules/settlement/settlement-service";
+import { evaluateApprovalRequirement, recordPendingApprovalInTransaction } from "@/modules/approvals/approval-policy";
+import { getBusinessDb, runImmediateTransaction } from "@/core/db/business";
 import { postSupplierPayment } from "@/modules/accounting/services/supplier-payment-posting-service";
 import { supplierPaymentInputSchema, type SupplierPaymentInput, type ApplySupplierPaymentCreditInput } from "./supplier-payment-input";
 import { recordActivity } from "@/modules/activity-log/activity-log-service";
@@ -35,9 +36,14 @@ export const supplierPaymentConfig: SettlementConfig = {
 const paymentConfig = supplierPaymentConfig;
 
 export function createSupplierPayment(businessId: string, userId: string, input: SupplierPaymentInput) {
-  assertMutationPermission(businessId, userId, "purchases", "create", "post");
+  assertMutationPermission(businessId, userId, "purchases", "create");
   const data = supplierPaymentInputSchema.parse(input);
   const context = getBusinessDb(businessId, userId);
+
+  const preCheck = evaluateApprovalRequirement(businessId, userId, "supplier_payment", 0, context.sqlite);
+  if (!preCheck.requiresApproval && !preCheck.ruleEnabled) {
+    assertMutationPermission(businessId, userId, "purchases", "post");
+  }
 
   const effectiveInvoiceId = data.purchaseInvoiceId || data.invoiceId;
   const allocations = data.allocations && data.allocations.length > 0
@@ -53,25 +59,150 @@ export function createSupplierPayment(businessId: string, userId: string, input:
 
   let result!: ReturnType<typeof createSettlement>;
   context.sqlite.transaction(() => {
-    result = createSettlement(context.sqlite, paymentConfig, settlementInput, userId);
+    result = createSettlement(context.sqlite, paymentConfig, settlementInput, userId, {
+      resolveStatus: (baseAmountMinor) => {
+        const evalResult = evaluateApprovalRequirement(
+          businessId,
+          userId,
+          "supplier_payment",
+          baseAmountMinor,
+          context.sqlite,
+        );
+        if (evalResult.requiresApproval) {
+          return "pending_approval";
+        }
+        assertMutationPermission(businessId, userId, "purchases", "post");
+        return "posted";
+      },
+    });
+
+    if (result.documentStatus === "pending_approval") {
+      recordPendingApprovalInTransaction(context.sqlite, {
+        businessId,
+        userId,
+        entityType: "supplier_payment",
+        entityId: result.id,
+        entityNumber: result.paymentNumber,
+        amountMinor: result.amountMinor,
+        baseAmountMinor: result.baseAmountMinor,
+        currencyCode: result.currencyCode,
+        targetIntent: "post",
+      });
+    }
   }).immediate();
 
-  const paymentRow = context.sqlite
-    .prepare("SELECT payment_number FROM supplier_payments WHERE id = ?")
-    .get(result.id) as { payment_number: string } | undefined;
-  const paymentNumber = paymentRow?.payment_number || "Payment";
+  const paymentNumber = result.paymentNumber || "Payment";
 
   recordActivity(businessId, {
     userId,
-    action: "posted",
+    action: result.documentStatus === "pending_approval" ? "created" : "posted",
     entityType: "supplier_payment",
     entityId: result.id,
     entityNumber: paymentNumber,
-    summary: `Recorded supplier payment ${paymentNumber} for ${data.currencyCode} ${data.amount}`,
-    details: { supplierId: data.supplierId, amount: data.amount, currency: data.currencyCode },
+    summary:
+      result.documentStatus === "pending_approval"
+        ? `Submitted supplier payment ${paymentNumber} for approval (${data.currencyCode} ${data.amount})`
+        : `Recorded supplier payment ${paymentNumber} for ${data.currencyCode} ${data.amount}`,
+    details: { supplierId: data.supplierId, amount: data.amount, currency: data.currencyCode, status: result.documentStatus },
   });
 
   return result;
+}
+
+export function postPendingSupplierPayment(businessId: string, userId: string, paymentId: string) {
+  assertMutationPermission(businessId, userId, "purchases", "post");
+  const context = getBusinessDb(businessId, userId);
+  runImmediateTransaction(context.sqlite, () => {
+    postPendingSettlement(context.sqlite, paymentConfig, paymentId);
+  });
+}
+
+export function revertSupplierPaymentToDraft(businessId: string, userId: string, paymentId: string) {
+  assertMutationPermission(businessId, userId, "purchases", "post");
+  const context = getBusinessDb(businessId, userId);
+  revertPendingSettlementToDraft(context.sqlite, paymentConfig, paymentId);
+}
+
+export function submitOrPostDraftSupplierPayment(
+  businessId: string,
+  userId: string,
+  paymentId: string,
+  intent: "post" | "submit_approval" = "post",
+) {
+  assertMutationPermission(businessId, userId, "purchases", "edit");
+  const context = getBusinessDb(businessId, userId);
+  const result = runImmediateTransaction(context.sqlite, () => {
+    const submitted = submitOrPostDraftSettlement(
+      context.sqlite,
+      paymentConfig,
+      paymentId,
+      (baseAmountMinor) => {
+        if (intent === "submit_approval") {
+          return "pending_approval";
+        }
+        const evalResult = evaluateApprovalRequirement(
+          businessId,
+          userId,
+          "supplier_payment",
+          baseAmountMinor,
+          context.sqlite,
+        );
+        if (evalResult.requiresApproval) {
+          return "pending_approval";
+        }
+        assertMutationPermission(businessId, userId, "purchases", "post");
+        return "posted";
+      },
+    );
+
+    if (submitted.documentStatus === "pending_approval") {
+      recordPendingApprovalInTransaction(context.sqlite, {
+        businessId,
+        userId,
+        entityType: "supplier_payment",
+        entityId: submitted.id,
+        entityNumber: submitted.paymentNumber,
+        amountMinor: submitted.amountMinor,
+        baseAmountMinor: submitted.baseAmountMinor,
+        currencyCode: submitted.currencyCode,
+        targetIntent: "post",
+      });
+    }
+    return submitted;
+  });
+
+  recordActivity(businessId, {
+    userId,
+    action: result.documentStatus === "pending_approval" ? "updated" : "posted",
+    entityType: "supplier_payment",
+    entityId: result.id,
+    entityNumber: result.paymentNumber,
+    summary:
+      result.documentStatus === "pending_approval"
+        ? `Submitted draft supplier payment ${result.paymentNumber} for approval`
+        : `Posted draft supplier payment ${result.paymentNumber}`,
+    details: { supplierId: result.partyId, status: result.documentStatus },
+  });
+
+  return result;
+}
+
+export function deleteDraftSupplierPayment(businessId: string, userId: string, paymentId: string) {
+  assertMutationPermission(businessId, userId, "purchases", "delete");
+  const context = getBusinessDb(businessId, userId);
+  const deleted = runImmediateTransaction(context.sqlite, () =>
+    deleteDraftSettlement(context.sqlite, paymentConfig, paymentId),
+  );
+
+  recordActivity(businessId, {
+    userId,
+    action: "deleted",
+    entityType: "supplier_payment",
+    entityId: deleted.id,
+    entityNumber: deleted.paymentNumber,
+    summary: `Deleted draft supplier payment ${deleted.paymentNumber}`,
+    details: { supplierId: deleted.partyId },
+  });
 }
 
 export type SupplierPaymentListFilters = {
@@ -106,7 +237,7 @@ type SupplierPaymentListRow = {
   currency_code: string;
   currency_minor_unit: number;
   reference: string | null;
-  document_status: "posted" | "void";
+  document_status: "draft" | "pending_approval" | "posted" | "void";
   created_at: string;
   supplier_id: string;
   supplier_name: string;
@@ -232,10 +363,10 @@ export type SupplierPaymentDetailRecord = {
   realized_fx_amount_minor: number;
   reference: string | null;
   description: string | null;
-  document_status: "posted" | "void";
+  document_status: "draft" | "pending_approval" | "posted" | "void";
   created_by: string;
   created_at: string;
-  posted_at: string;
+  posted_at: string | null;
   voided_at: string | null;
   total_allocated_minor: number;
   unallocated_amount_minor: number;

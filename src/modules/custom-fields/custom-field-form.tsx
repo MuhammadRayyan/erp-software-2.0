@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { ArrowDown, ArrowUp, ContactRound, FileText, Pencil, Plus, ReceiptText, Trash2, Truck, X } from "lucide-react";
+import { ArrowDown, ArrowUp, ContactRound, EyeOff, FileText, ListTree, Pencil, Plus, Printer, ReceiptText, Trash2, Truck, X } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { DialogContent, DialogDescription, DialogRoot, DialogTitle } from "@/components/ui/dialog";
@@ -24,11 +24,13 @@ import type { CustomFieldEntityType, CustomFieldFieldType } from "./custom-field
 const entityTypeLabels: Record<CustomFieldEntityType, string> = {
   customer: "Customers",
   supplier: "Suppliers",
-  sales_invoice: "Sales Invoices",
-  sales_quote: "Sales Quotes",
-  sales_order: "Sales Orders",
-  purchase_quote: "Purchase Quotes",
-  purchase_order: "Purchase Orders",
+  sales_invoice: "Sales Invoices (Header)",
+  sales_invoice_line: "Sales Invoice Lines",
+  sales_quote_line: "Sales Quote Lines",
+  sales_order_line: "Sales Order Lines",
+  purchase_quote_line: "Purchase Quote Lines",
+  purchase_order_line: "Purchase Order Lines",
+  purchase_invoice_line: "Purchase Invoice Lines",
 };
 
 const fieldTypeLabels: Record<CustomFieldFieldType, string> = {
@@ -46,6 +48,7 @@ type FormValues = {
   selectOptions: string[];
   isRequired: boolean;
   showInList: boolean;
+  showOnPdf: boolean;
 };
 
 const emptyValues: FormValues = {
@@ -55,17 +58,31 @@ const emptyValues: FormValues = {
   selectOptions: [],
   isRequired: false,
   showInList: false,
+  showOnPdf: true,
 };
 
-const entityIcons: Record<CustomFieldEntityType, typeof ContactRound> = {
-  customer: ContactRound,
-  supplier: Truck,
-  sales_invoice: ReceiptText,
-  sales_quote: FileText,
-  sales_order: FileText,
-  purchase_quote: FileText,
-  purchase_order: FileText,
-};
+const headerGroups: CustomFieldEntityType[] = [
+  "customer",
+  "supplier",
+  "sales_invoice",
+];
+
+const lineGroups: CustomFieldEntityType[] = [
+  "sales_invoice_line",
+  "sales_quote_line",
+  "sales_order_line",
+  "purchase_invoice_line",
+  "purchase_quote_line",
+  "purchase_order_line",
+];
+
+function getEntityIcon(entityType: CustomFieldEntityType) {
+  if (entityType === "customer") return ContactRound;
+  if (entityType === "supplier") return Truck;
+  if (entityType.endsWith("_line")) return ListTree;
+  if (entityType.includes("invoice")) return ReceiptText;
+  return FileText;
+}
 
 export function CustomFieldsManager({
   businessId,
@@ -75,6 +92,7 @@ export function CustomFieldsManager({
   definitions: CustomFieldDefinitionRow[];
 }) {
   const router = useRouter();
+  const [scopeTab, setScopeTab] = useState<"header" | "line">("header");
   const [editing, setEditing] = useState<CustomFieldDefinitionRow | null | undefined>(undefined);
   const [values, setValues] = useState<FormValues>(emptyValues);
   const [errors, setErrors] = useState<Record<string, string[]>>({});
@@ -84,16 +102,24 @@ export function CustomFieldsManager({
   const [deleting, setDeleting] = useState<CustomFieldDefinitionRow | null>(null);
   const [deletePending, setDeletePending] = useState(false);
 
-  function open(definition?: CustomFieldDefinitionRow) {
+  function open(definition?: CustomFieldDefinitionRow, presetEntityType?: CustomFieldEntityType) {
     setEditing(definition ?? null);
-    setValues(definition ? {
-      entityType: definition.entityType,
-      name: definition.name,
-      fieldType: definition.fieldType,
-      selectOptions: definition.selectOptions,
-      isRequired: definition.isRequired,
-      showInList: definition.showInList,
-    } : { ...emptyValues, entityType: definitions[0]?.entityType ?? "customer" });
+    setValues(
+      definition
+        ? {
+            entityType: definition.entityType,
+            name: definition.name,
+            fieldType: definition.fieldType,
+            selectOptions: definition.selectOptions,
+            isRequired: definition.isRequired,
+            showInList: definition.showInList,
+            showOnPdf: definition.showOnPdf,
+          }
+        : {
+            ...emptyValues,
+            entityType: presetEntityType ?? (scopeTab === "line" ? "sales_invoice_line" : "customer"),
+          },
+    );
     setErrors({});
     setServerError("");
   }
@@ -135,38 +161,83 @@ export function CustomFieldsManager({
     router.refresh();
   }
 
-  const groups: CustomFieldEntityType[] = ["customer", "supplier", "sales_invoice"];
+  const groups = scopeTab === "line" ? lineGroups : headerGroups;
+  const headerCount = definitions.filter((d) => !d.entityType.endsWith("_line")).length;
+  const lineCount = definitions.filter((d) => d.entityType.endsWith("_line")).length;
 
   return (
     <>
-      <div className="mb-4 flex justify-end">
-        <Button onClick={() => open()}><Plus className="size-4" /> New Custom Field</Button>
+      <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
+        <div className="inline-flex rounded-lg border border-border bg-surface-raised p-1">
+          <button
+            type="button"
+            onClick={() => setScopeTab("header")}
+            className={`rounded-md px-3 py-1.5 text-xs font-medium transition-colors cursor-pointer ${
+              scopeTab === "header"
+                ? "bg-primary text-primary-foreground shadow-xs"
+                : "text-muted-foreground hover:text-foreground"
+            }`}
+          >
+            Header &amp; Party Fields ({headerCount})
+          </button>
+          <button
+            type="button"
+            onClick={() => setScopeTab("line")}
+            className={`rounded-md px-3 py-1.5 text-xs font-medium transition-colors cursor-pointer ${
+              scopeTab === "line"
+                ? "bg-primary text-primary-foreground shadow-xs"
+                : "text-muted-foreground hover:text-foreground"
+            }`}
+          >
+            Line Item Fields ({lineCount})
+          </button>
+        </div>
+        <Button onClick={() => open()}>
+          <Plus className="size-4" /> New Custom Field
+        </Button>
       </div>
+
       <div className="space-y-8">
         {groups.map((entityType) => {
           const group = definitions.filter((definition) => definition.entityType === entityType);
-          const Icon = entityIcons[entityType];
+          const Icon = getEntityIcon(entityType);
           return (
             <section key={entityType}>
-              <h2 className="mb-3 text-sm font-semibold tracking-wide text-muted-foreground uppercase">
-                {entityTypeLabels[entityType]} <span className="font-normal">({group.length})</span>
-              </h2>
+              <div className="mb-3 flex items-center justify-between">
+                <h2 className="text-sm font-semibold tracking-wide text-muted-foreground uppercase">
+                  {entityTypeLabels[entityType]} <span className="font-normal">({group.length})</span>
+                </h2>
+                {group.length > 0 && (
+                  <Button variant="ghost" size="sm" onClick={() => open(undefined, entityType)}>
+                    <Plus className="size-3.5" /> Add
+                  </Button>
+                )}
+              </div>
               {group.length === 0 ? (
                 <EmptyState
                   icon={<Icon className="mx-auto mb-3 size-7 text-muted-foreground" />}
                   title={`No custom fields for ${entityTypeLabels[entityType].toLowerCase()}`}
-                  description="Create one to capture extra information on every record."
-                  action={<Button variant="secondary" size="sm" onClick={() => open()}><Plus className="size-4" /> New Custom Field</Button>}
+                  description={
+                    entityType.endsWith("_line")
+                      ? "Add line-level custom columns (e.g. Serial #, Batch, HS Code) to the document grid."
+                      : "Create one to capture extra information on every record."
+                  }
+                  action={
+                    <Button variant="secondary" size="sm" onClick={() => open(undefined, entityType)}>
+                      <Plus className="size-4" /> New Custom Field
+                    </Button>
+                  }
                 />
               ) : (
                 <div className="data-panel overflow-x-auto">
-                  <table className="data-table min-w-[720px]">
+                  <table className="data-table min-w-[760px]">
                     <thead>
                       <tr>
                         <th>Name</th>
                         <th>Type</th>
                         <th>Required</th>
                         <th>Shows in list</th>
+                        <th>Printed PDF</th>
                         <th className="w-48"><span className="sr-only">Actions</span></th>
                       </tr>
                     </thead>
@@ -191,6 +262,17 @@ export function CustomFieldsManager({
                               : <Badge tone="neutral">Form only</Badge>}
                           </td>
                           <td>
+                            {definition.showOnPdf ? (
+                              <Badge tone="success" className="gap-1">
+                                <Printer className="size-3" /> Print on PDF
+                              </Badge>
+                            ) : (
+                              <Badge tone="neutral" className="gap-1">
+                                <EyeOff className="size-3" /> Internal only
+                              </Badge>
+                            )}
+                          </td>
+                          <td>
                             <div className="flex items-center gap-1">
                               <Button variant="ghost" size="icon" aria-label={`Move ${definition.name} up`} disabled={index === 0 || movingId === definition.id} onClick={() => move(definition, "up")}><ArrowUp className="size-3.5" /></Button>
                               <Button variant="ghost" size="icon" aria-label={`Move ${definition.name} down`} disabled={index === group.length - 1 || movingId === definition.id} onClick={() => move(definition, "down")}><ArrowDown className="size-3.5" /></Button>
@@ -212,15 +294,24 @@ export function CustomFieldsManager({
       <DialogRoot open={editing !== undefined} onOpenChange={(isOpen) => !isOpen && setEditing(undefined)}>
         <DialogContent>
           <DialogTitle>{editing ? "Edit custom field" : "New custom field"}</DialogTitle>
-          <DialogDescription>Custom fields appear on the related forms; “Shows in list” fields are also added to list views.</DialogDescription>
+          <DialogDescription>
+            Configure header or line-item custom fields and control whether they print on customer/supplier PDFs.
+          </DialogDescription>
           <div className="mt-5 space-y-4">
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="space-y-1.5">
                 <Label htmlFor="custom-field-entity">Applies to</Label>
                 <SelectNative id="custom-field-entity" value={values.entityType} onChange={(event) => setValues((current) => ({ ...current, entityType: event.target.value as CustomFieldEntityType }))}>
-                  <option value="customer">Customers</option>
-                  <option value="supplier">Suppliers</option>
-                  <option value="sales_invoice">Sales Invoices</option>
+                  <optgroup label="Parties &amp; Document Headers">
+                    {headerGroups.map((et) => (
+                      <option key={et} value={et}>{entityTypeLabels[et]}</option>
+                    ))}
+                  </optgroup>
+                  <optgroup label="Document Line Items">
+                    {lineGroups.map((et) => (
+                      <option key={et} value={et}>{entityTypeLabels[et]}</option>
+                    ))}
+                  </optgroup>
                 </SelectNative>
               </div>
               <div className="space-y-1.5">
@@ -236,7 +327,7 @@ export function CustomFieldsManager({
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="custom-field-name">Name</Label>
-              <Input id="custom-field-name" value={values.name} onChange={(event) => setValues((current) => ({ ...current, name: event.target.value }))} aria-invalid={!!errors.name} placeholder="e.g. Referral Source" />
+              <Input id="custom-field-name" value={values.name} onChange={(event) => setValues((current) => ({ ...current, name: event.target.value }))} aria-invalid={!!errors.name} placeholder="e.g. Serial Number / Batch / Delivery Ref" />
               {errors.name && <p className="field-error">{errors.name[0]}</p>}
             </div>
             {values.fieldType === "select" && (
@@ -270,9 +361,15 @@ export function CustomFieldsManager({
               <input type="checkbox" checked={values.isRequired} onChange={(event) => setValues((current) => ({ ...current, isRequired: event.target.checked }))} className="size-4 accent-[var(--primary)]" />
               Required
             </label>
+            {!values.entityType.endsWith("_line") && (
+              <label className="flex min-h-9 items-center gap-2 text-sm">
+                <input type="checkbox" checked={values.showInList} onChange={(event) => setValues((current) => ({ ...current, showInList: event.target.checked }))} className="size-4 accent-[var(--primary)]" />
+                Shows in list
+              </label>
+            )}
             <label className="flex min-h-9 items-center gap-2 text-sm">
-              <input type="checkbox" checked={values.showInList} onChange={(event) => setValues((current) => ({ ...current, showInList: event.target.checked }))} className="size-4 accent-[var(--primary)]" />
-              Shows in list
+              <input type="checkbox" checked={values.showOnPdf} onChange={(event) => setValues((current) => ({ ...current, showOnPdf: event.target.checked }))} className="size-4 accent-[var(--primary)]" />
+              Show on printed PDFs &amp; document previews
             </label>
           </div>
           {serverError && <FormError message={serverError} />}

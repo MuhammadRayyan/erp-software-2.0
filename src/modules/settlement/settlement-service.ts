@@ -33,7 +33,8 @@ export function createSettlement(
   sqlite: any,
   config: SettlementConfig,
   data: any,
-  userId: string
+  userId: string,
+  options?: { resolveStatus?: (baseAmountMinor: number) => "posted" | "pending_approval" },
 ) {
   const execute = () => {
     const id = randomUUID();
@@ -173,6 +174,10 @@ export function createSettlement(
       sumBaseCarryingReleased += unallocatedBase;
     }
 
+    const targetStatus: "posted" | "pending_approval" = options?.resolveStatus
+      ? options.resolveStatus(sumSettlementBase)
+      : "posted";
+
     const paymentNumber = allocateNumber(sqlite, config.partyType === "customer" ? "receipt" : "supplierPayment");
 
     sqlite.prepare(`
@@ -182,12 +187,13 @@ export function createSettlement(
         base_amount_minor, released_carrying_amount_minor, realized_fx_amount_minor,
         reference, description, document_status, created_by, created_at,
         posted_at, voided_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'posted', ?, ?, ?, NULL)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL)
     `).run(
       id, paymentNumber, partyId, data.date, data.bankAccountId, totalAmountMinor,
       rate.currencyCode, rate.exchangeRateToBase, rate.exchangeRateDate, rate.exchangeRateSource,
       sumSettlementBase, sumBaseCarryingReleased, sumRealizedFx,
-      data.reference || null, data.description || null, userId, now, now
+      data.reference || null, data.description || null, targetStatus, userId, now,
+      targetStatus === "posted" ? now : null
     );
 
     for (const item of allocationsToInsert) {
@@ -202,19 +208,215 @@ export function createSettlement(
       );
     }
 
-    config.postSettlement(sqlite, {
-      id,
-      [config.paymentNumberColumn]: paymentNumber,
-      [config.partyIdColumn]: partyId,
-      date: data.date,
-      bankAccountId: data.bankAccountId,
-      baseAmountMinor: sumSettlementBase,
-      releasedCarryingAmountMinor: sumBaseCarryingReleased,
-      realizedFxAmountMinor: sumRealizedFx,
-    });
+    if (targetStatus === "posted") {
+      config.postSettlement(sqlite, {
+        id,
+        [config.paymentNumberColumn]: paymentNumber,
+        [config.partyIdColumn]: partyId,
+        date: data.date,
+        bankAccountId: data.bankAccountId,
+        baseAmountMinor: sumSettlementBase,
+        releasedCarryingAmountMinor: sumBaseCarryingReleased,
+        realizedFxAmountMinor: sumRealizedFx,
+      });
+    }
 
     const firstInvoiceId = allocationsToInsert[0]?.documentId || data.invoiceId || data.purchaseInvoiceId;
-    return { id, invoiceId: firstInvoiceId, partyId, unallocatedMinor: unallocatedForeign };
+    return {
+      id,
+      invoiceId: firstInvoiceId,
+      partyId,
+      unallocatedMinor: unallocatedForeign,
+      amountMinor: totalAmountMinor,
+      baseAmountMinor: sumSettlementBase,
+      currencyCode: rate.currencyCode,
+      documentStatus: targetStatus,
+      paymentNumber,
+    };
+  };
+
+  if (sqlite.inTransaction) {
+    return execute();
+  }
+  return sqlite.transaction(execute)();
+}
+
+export function postPendingSettlement(
+  sqlite: any,
+  config: SettlementConfig,
+  paymentId: string,
+) {
+  const execute = () => {
+    const payment = sqlite.prepare(`
+      SELECT id, ${config.paymentNumberColumn} AS payment_number, ${config.partyIdColumn} AS party_id,
+        date, bank_account_id, amount_minor, base_amount_minor,
+        released_carrying_amount_minor, realized_fx_amount_minor, document_status
+      FROM ${config.paymentTable}
+      WHERE id = ?
+    `).get(paymentId) as any;
+
+    if (!payment) throw new Error("Settlement record not found.");
+    if (payment.document_status === "posted") return;
+    if (payment.document_status !== "pending_approval" && payment.document_status !== "draft") {
+      throw new Error(`Cannot post settlement in "${payment.document_status}" status.`);
+    }
+
+    assertDateNotLocked(sqlite, payment.date, config.partyType === "customer" ? "Receipt" : "Payment");
+
+    // Re-verify planned allocations do not exceed current open invoice balances
+    const plannedAllocations = sqlite.prepare(`
+      SELECT ${config.documentIdColumn} AS document_id, foreign_amount_allocated
+      FROM ${config.allocationTable}
+      WHERE ${config.allocationPaymentIdColumn} = ?
+    `).all(paymentId) as { document_id: string; foreign_amount_allocated: number }[];
+
+    for (const alloc of plannedAllocations) {
+      const open = getOpenState(sqlite, config, alloc.document_id);
+      if (!open || alloc.foreign_amount_allocated > open.foreign_open_minor) {
+        throw new Error("A linked invoice no longer has enough open balance for this allocation.");
+      }
+    }
+
+    const now = new Date().toISOString();
+    sqlite.prepare(`
+      UPDATE ${config.paymentTable}
+      SET document_status = 'posted', posted_at = ?
+      WHERE id = ?
+    `).run(now, paymentId);
+
+    config.postSettlement(sqlite, {
+      id: payment.id,
+      [config.paymentNumberColumn]: payment.payment_number,
+      [config.partyIdColumn]: payment.party_id,
+      date: payment.date,
+      bankAccountId: payment.bank_account_id,
+      baseAmountMinor: payment.base_amount_minor,
+      releasedCarryingAmountMinor: payment.released_carrying_amount_minor,
+      realizedFxAmountMinor: payment.realized_fx_amount_minor,
+    });
+  };
+
+  if (sqlite.inTransaction) {
+    execute();
+    return;
+  }
+  sqlite.transaction(execute)();
+}
+
+export function revertPendingSettlementToDraft(
+  sqlite: any,
+  config: SettlementConfig,
+  paymentId: string,
+) {
+  const row = sqlite
+    .prepare(`SELECT id, document_status FROM ${config.paymentTable} WHERE id = ?`)
+    .get(paymentId) as { id: string; document_status: string } | undefined;
+  if (!row) throw new Error("Settlement record not found.");
+  if (row.document_status !== "pending_approval") {
+    throw new Error(`Cannot return settlement in "${row.document_status}" status to draft.`);
+  }
+  sqlite
+    .prepare(`UPDATE ${config.paymentTable} SET document_status = 'draft' WHERE id = ?`)
+    .run(paymentId);
+}
+
+export function submitOrPostDraftSettlement(
+  sqlite: any,
+  config: SettlementConfig,
+  paymentId: string,
+  resolveStatus: (baseAmountMinor: number) => "posted" | "pending_approval",
+) {
+  const execute = () => {
+    const payment = sqlite.prepare(`
+      SELECT id, ${config.paymentNumberColumn} AS payment_number, ${config.partyIdColumn} AS party_id,
+        date, amount_minor, base_amount_minor, currency_code, document_status
+      FROM ${config.paymentTable}
+      WHERE id = ?
+    `).get(paymentId) as {
+      id: string;
+      payment_number: string;
+      party_id: string;
+      date: string;
+      amount_minor: number;
+      base_amount_minor: number;
+      currency_code: string;
+      document_status: string;
+    } | undefined;
+    if (!payment) throw new Error("Settlement record not found.");
+    if (payment.document_status !== "draft") {
+      throw new Error(`Only draft records can be submitted or posted (current status: "${payment.document_status}").`);
+    }
+
+    const targetStatus = resolveStatus(Number(payment.base_amount_minor));
+    if (targetStatus === "posted") {
+      postPendingSettlement(sqlite, config, paymentId);
+    } else {
+      assertDateNotLocked(sqlite, payment.date, config.partyType === "customer" ? "Receipt" : "Payment");
+      const plannedAllocations = sqlite.prepare(`
+        SELECT ${config.documentIdColumn} AS document_id, foreign_amount_allocated
+        FROM ${config.allocationTable}
+        WHERE ${config.allocationPaymentIdColumn} = ?
+      `).all(paymentId) as { document_id: string; foreign_amount_allocated: number }[];
+      for (const alloc of plannedAllocations) {
+        const open = getOpenState(sqlite, config, alloc.document_id);
+        if (!open || alloc.foreign_amount_allocated > open.foreign_open_minor) {
+          throw new Error("A linked invoice no longer has enough open balance for this allocation.");
+        }
+      }
+      sqlite.prepare(`UPDATE ${config.paymentTable} SET document_status = 'pending_approval' WHERE id = ?`).run(paymentId);
+    }
+
+    return {
+      id: payment.id,
+      paymentNumber: payment.payment_number,
+      partyId: payment.party_id,
+      amountMinor: Number(payment.amount_minor),
+      baseAmountMinor: Number(payment.base_amount_minor),
+      currencyCode: payment.currency_code,
+      documentStatus: targetStatus,
+    };
+  };
+
+  if (sqlite.inTransaction) {
+    return execute();
+  }
+  return sqlite.transaction(execute)();
+}
+
+export function deleteDraftSettlement(
+  sqlite: any,
+  config: SettlementConfig,
+  paymentId: string,
+) {
+  const execute = () => {
+    const payment = sqlite.prepare(`
+      SELECT id, ${config.paymentNumberColumn} AS payment_number, ${config.partyIdColumn} AS party_id, document_status
+      FROM ${config.paymentTable}
+      WHERE id = ?
+    `).get(paymentId) as {
+      id: string;
+      payment_number: string;
+      party_id: string;
+      document_status: string;
+    } | undefined;
+    if (!payment) throw new Error("Settlement record not found.");
+    if (payment.document_status !== "draft") {
+      throw new Error("Only draft records can be deleted.");
+    }
+    const sourceType = config.partyType === "customer" ? "receipt" : "supplier_payment";
+    const hasJournals = sqlite.prepare(`
+      SELECT 1 FROM journal_entries WHERE source_id = ? AND source_type IN (?, ?) LIMIT 1
+    `).get(paymentId, sourceType, `${sourceType}_void`);
+    if (hasJournals) {
+      throw new Error("Cannot delete a settlement that already has ledger entries.");
+    }
+    sqlite.prepare(`DELETE FROM ${config.allocationTable} WHERE ${config.allocationPaymentIdColumn} = ?`).run(paymentId);
+    sqlite.prepare(`DELETE FROM ${config.paymentTable} WHERE id = ? AND document_status = 'draft'`).run(paymentId);
+    return {
+      id: payment.id,
+      paymentNumber: payment.payment_number,
+      partyId: payment.party_id,
+    };
   };
 
   if (sqlite.inTransaction) {

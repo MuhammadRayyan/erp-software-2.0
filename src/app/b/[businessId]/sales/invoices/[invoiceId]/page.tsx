@@ -10,6 +10,8 @@ import { formatCustomFieldValue } from "@/modules/custom-fields/custom-field-dis
 import { getInvoice } from "@/modules/sales-invoices/invoice-service";
 import { DocumentStatusBadge, PaymentStatusBadge } from "@/modules/sales-invoices/invoice-status";
 import { InvoiceViewActions } from "@/modules/sales-invoices/invoice-view-actions";
+import { getLatestApprovalForEntity } from "@/modules/approvals/approval-service";
+import { DocumentApprovalBanner } from "@/components/approvals/document-approval-banner";
 import { ProjectLinks } from "@/modules/projects/project-links";
 import { emirateLabels, type Emirate } from "@/modules/tax/uae-vat-config";
 import { buildDocumentEmailContext, buildDocumentEmailDefaults } from "@/modules/email/email-defaults";
@@ -166,6 +168,14 @@ export default async function InvoiceViewPage({ params, searchParams }: { params
           </div>
         </div>
         <InvoiceViewActions businessId={businessId} invoiceId={invoice.id} invoiceNumber={invoice.invoiceNumber} documentStatus={invoice.documentStatus} balanceMinor={record.balanceMinor} totalMinor={invoice.totalMinor} hasDeliveryNotes={record.deliveryNotes.length > 0} journalEntryId={record.journal?.id ?? null} reversalJournalEntryId={record.reversalJournal?.id ?? null} inventoryEnabled={access.modules.includes("inventory")} hasDeliverableItems={lines.some((line) => Boolean(line.itemId) && line.remainingToDeliverMicros > 0)} emailDefaults={emailDefaults} />
+      </div>
+      <div className="mb-5">
+        <DocumentApprovalBanner
+          businessId={businessId}
+          currentUserId={user.id}
+          isAdmin={access.membership.role === "administrator"}
+          approval={getLatestApprovalForEntity(businessId, user.id, "sales_invoice", invoice.id)}
+        />
       </div>
       <DocumentViewLayout
         data={viewBundle.data}

@@ -52,6 +52,9 @@ export const invoiceNumberingInputSchema = z.object({
   journalPrefix: z.string().trim().min(1, "Enter a journal prefix").max(12).default("JRN-"),
   journalNextNumber: z.coerce.number().int().positive().max(999_999_999).default(1),
   journalPadding: z.coerce.number().int().min(1).max(10).default(4),
+  pdcPrefix: z.string().trim().min(1, "Enter a PDC prefix").max(12).default("PDC-"),
+  pdcNextNumber: z.coerce.number().int().positive().max(999_999_999).default(1),
+  pdcPadding: z.coerce.number().int().min(1).max(10).default(4),
 });
 
-export type InvoiceNumberingInput = z.output<typeof invoiceNumberingInputSchema>;
+export type InvoiceNumberingInput = z.input<typeof invoiceNumberingInputSchema>;

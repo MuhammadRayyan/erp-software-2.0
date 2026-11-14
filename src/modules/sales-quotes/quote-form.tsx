@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
-import { formatMoney } from "@/core/format";
+import { minorToCurrencyInput } from "@/modules/currency/conversion";
 import { saveSalesQuoteAction } from "./actions";
 import { salesQuoteInputSchema, type SalesQuoteInput } from "./quote-input";
 import type { SalesQuoteStatus } from "./quote-service";
@@ -19,6 +19,7 @@ import { SelectNative } from "@/components/ui/select-native";
 import { DocumentLineTable, useDocumentTotals } from "@/components/documents";
 import { broadcastLiveRefresh } from "@/components/use-live-refresh";
 import { useUnsavedChanges } from "@/hooks/use-unsaved-changes";
+import type { CustomFieldInputDefinition } from "@/modules/custom-fields/custom-field-inputs";
 
 type Option = { id: string; name: string; defaultCurrencyCode: string | null };
 type AccountOption = { id: string; name: string };
@@ -26,7 +27,7 @@ type TaxOption = { id: string; name: string; rateBasisPoints: number; vatCategor
 type ProjectOption = { id: string; code: string; name: string; customerId?: string | null; customerIds?: string[] };
 type ItemOption = { id: string; sku: string | null; name: string; salesPriceMinor: number | null; salesAccountId: string };
 
-export function SalesQuoteForm({ businessId, quoteId, status = "draft", customers, salesAccounts, taxCodes, projects, items, currency, currencies, rates, initial }: { businessId: string; quoteId?: string; status?: SalesQuoteStatus; customers: Option[]; salesAccounts: AccountOption[]; taxCodes: TaxOption[]; projects: ProjectOption[]; items: ItemOption[]; currency: string; currencies: DocumentCurrencyOption[]; rates: DocumentRateOption[]; initial: SalesQuoteInput }) {
+export function SalesQuoteForm({ businessId, quoteId, status = "draft", customers, salesAccounts, taxCodes, projects, items, currency, currencies, rates, initial, lineCustomFields = [] }: { businessId: string; quoteId?: string; status?: SalesQuoteStatus; customers: Option[]; salesAccounts: AccountOption[]; taxCodes: TaxOption[]; projects: ProjectOption[]; items: ItemOption[]; currency: string; currencies: DocumentCurrencyOption[]; rates: DocumentRateOption[]; initial: SalesQuoteInput; lineCustomFields?: CustomFieldInputDefinition[] }) {
   const router = useRouter();
   const [serverError, setServerError] = useState("");
   const [globalTaxCodeId, setGlobalTaxCodeId] = useState(() => initial.lines[0]?.taxCodeId || taxCodes.find((taxCode) => taxCode.rateBasisPoints === 500)?.id || taxCodes[0]?.id || "");
@@ -76,7 +77,7 @@ export function SalesQuoteForm({ businessId, quoteId, status = "draft", customer
     }
     form.setValue(`lines.${index}.description`, item.name);
     if (item.salesPriceMinor != null) {
-      form.setValue(`lines.${index}.unitPrice`, formatMoney(item.salesPriceMinor, currency, minorUnit).replace(/[^0-9.]/g, ""));
+      form.setValue(`lines.${index}.unitPrice`, minorToCurrencyInput(item.salesPriceMinor, minorUnit));
     }
     if (item.salesAccountId) {
       form.setValue(`lines.${index}.salesAccountId`, item.salesAccountId);
@@ -127,10 +128,10 @@ export function SalesQuoteForm({ businessId, quoteId, status = "draft", customer
         </div>
         <div className="flex gap-4 items-center">
           <div className="flex items-center gap-2">
-            <label htmlFor="globalTax" className="text-sm font-medium">Default Tax:</label>
-            <select
+            <Label htmlFor="globalTax" className="text-sm font-medium">Default Tax:</Label>
+            <SelectNative
               id="globalTax"
-              className="w-40 flex h-9 items-center justify-between rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-sm ring-offset-background placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
+              className="w-40"
               value={globalTaxCodeId}
               onChange={(e) => updateGlobalTax(e.target.value)}
             >
@@ -139,7 +140,7 @@ export function SalesQuoteForm({ businessId, quoteId, status = "draft", customer
                   {taxCode.name}
                 </option>
               ))}
-            </select>
+            </SelectNative>
           </div>
         </div>
       </div>
@@ -161,6 +162,7 @@ export function SalesQuoteForm({ businessId, quoteId, status = "draft", customer
             salesAccountId: defaultSalesAccount,
             taxCodeId: globalTaxCodeId,
             projectId: "",
+            customFields: {},
             ...custom,
           })
         }
@@ -175,6 +177,7 @@ export function SalesQuoteForm({ businessId, quoteId, status = "draft", customer
         taxCodes={taxCodes}
         initialShowLineTaxCodes={false}
         projects={availableProjects}
+        lineCustomFields={lineCustomFields}
         currencyCode={currencyCode}
         minorUnit={minorUnit}
         previews={previews}
@@ -191,7 +194,7 @@ export function SalesQuoteForm({ businessId, quoteId, status = "draft", customer
       totals={{
         subtotalMinor,
         taxMinor,
-        totalMinor: subtotalMinor + taxMinor,
+        totalMinor,
         currencyCode,
         minorUnit,
       }}

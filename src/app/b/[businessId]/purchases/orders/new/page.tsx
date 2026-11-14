@@ -12,6 +12,7 @@ import { listProjectOptions } from "@/modules/projects/project-service";
 import { listInventoryItemOptions } from "@/modules/inventory/inventory-item-service";
 import { BackLink } from "@/components/back-link";
 import { getFormDefaults } from "@/modules/form-defaults/form-defaults-service";
+import { listCustomFieldDefinitions } from "@/modules/custom-fields/custom-field-service";
 
 export default async function NewPurchaseOrderPage({
   params,
@@ -37,6 +38,9 @@ export default async function NewPurchaseOrderPage({
   const projects = listProjectOptions(businessId, user.id);
   const items = listInventoryItemOptions(businessId, user.id);
   const currencySettings = getCurrencySettings(businessId, user.id);
+  const lineCustomFields = listCustomFieldDefinitions(businessId, user.id, "purchase_order_line").map(
+    ({ id, name, fieldType, selectOptions, isRequired }) => ({ id, name, fieldType, selectOptions, isRequired }),
+  );
 
   const today = new Date().toISOString().slice(0, 10);
   const defaultTax =
@@ -135,6 +139,7 @@ export default async function NewPurchaseOrderPage({
         currencies={currencySettings.currencies
           .filter((currency) => currency.is_active)
           .map((currency) => ({ code: currency.code, name: currency.name, minorUnit: currency.minor_unit }))}
+        lineCustomFields={lineCustomFields}
         rates={currencySettings.rates.map((rate) => ({
           id: rate.id,
           currencyCode: rate.currency_code,

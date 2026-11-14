@@ -1,20 +1,21 @@
 # Next steps — closed testing phase
 
-Updated **26 October 2026**. Audience: a few businesses and 5–10 users. Keep the current architecture and implemented release checks. This checklist does not authorize deferred operations.
+Updated **14 November 2026**. Audience: a few businesses and 5–10 users. Keep the current architecture and implemented release checks. This checklist does not authorize deferred operations.
 
 ## Complete
 
-- Permission/dashboard/origin checks, payroll transitions, shared financial fixes and reconciliation are deployed.
+- Permission/dashboard/origin checks, payroll transitions, shared financial fixes, legal-entity snapshotting (`schema v36`), reversible document lifecycles, zero-scroll `DocumentGrid` with 2D keyboard navigation and TSV paste, and reconciliation are deployed (`797b679e476c90a1b7d60bef387fedc85004a587`).
+- Financial analytics (report/VAT drill-down, comparative P&L/Balance Sheet, `saved_reports`, line-level custom fields and `showOnPdf` PDF filtering), UAE regulatory workflows (WPS `.SIF`, Post-Dated Cheques with clearing accounts `1120`/`2020`, FTA `FAF` export and 15-digit TRN Luhn validation), and Maker-Checker approvals (`schema v7` / `v37`) with selectable `requires_approval` and bidirectional notifications are implemented and verified locally.
 - Protected PR/source/browser/native ARM64 image checks and immutable merge-to-deploy flow are active, with serialized migrations, snapshot/restore verification, tenant readiness and prior-release retention.
 - Runtime keys were replaced/excluded from images; actual Chromium PDF and SQLite WAL recovery paths were tested.
-- GitHub/SSH work; private read-only Sentry access and OCI profile **ERP_OPERATIONS** are configured. OCI verification passed 13 checks, zero failures.
+- GitHub/SSH work; private read-only Sentry access and OCI profile **ERP_OPERATIONS** are configured. OCI verification passed 14 checks, zero failures.
 - Current documentation and the deployment skill are synchronized; credentials remain outside Git.
 
 See [current state](CURRENT_STATE.md), [hardening outcome](history/HARDENING_OUTCOME_2026-10-26.md) and [operations evidence](history/TESTING_PHASE_OPERATIONS_2026-10-26.md).
 
 ## Next: one small acceptance round
 
-**Automated round completed:** 341 service/regression checks and 11 production-build browser scenarios passed using isolated synthetic businesses. [Results and cleanup](history/FLOW_VERIFICATION_AND_CLEANUP_2026-10-26.md) records layer-by-layer evidence and exclusions. The table below remains useful for representative human-user testing; automated checks do not establish that every screen or interaction has been reviewed.
+**Automated round completed:** 409 service/regression checks across 54 test files (`npm test`) and 15 production-build browser scenarios passed using isolated synthetic businesses. [Results and cleanup](history/FLOW_VERIFICATION_AND_CLEANUP_2026-10-26.md) records layer-by-layer evidence and exclusions. The table below remains useful for representative human-user testing; automated checks do not establish that every screen or interaction has been reviewed.
 
 Use an identified disposable test business with synthetic records. Assign Administrator and restricted-user testers. Do not run destructive scenarios or fixture scripts in customer businesses.
 
@@ -37,7 +38,7 @@ Record pass/fail, role, fixture, steps, expected/actual result and release revis
 |---|---|
 | OCI billing | Trial credit observed; independently confirm entitlement/billing before the trial ends. Read-only API setup does not establish Always Free eligibility. |
 | Sentry delivery | Historical events and enabled monitors/workflow verified. Current-release event/association, source maps and actual delivery remain unproven. Describe a controlled check before sending an event or notification. |
-| Kernel reboot | Installed update is pending activation. Choose a short testing break, then verify Docker/readiness/revision/login after reboot. No reboot is scheduled by this document. |
+| Docker disk & release retention | `docker system df` on `193.123.65.48` shows ~18.3 GB of reclaimable historical images and ~3.2 GB of build cache across 14 retained releases. Schedule `docker image prune -a --filter "until=168h"` and release/backup rotation during a maintenance window. Kernel `7.0.0-1013-oracle` is already active (`REBOOT_REQUIRED=no`). |
 
 ## Deferred by owner
 

@@ -11,6 +11,7 @@ import { deletePurchaseInvoiceAction, duplicatePurchaseInvoiceAction, postPurcha
 import type { PurchaseInvoiceStatus } from "./purchase-invoice-service";
 import { DocumentViewActions } from "@/components/document-view-actions";
 import { broadcastLiveRefresh } from "@/components/use-live-refresh";
+import { useActionPermission, useApprovalPolicy } from "@/components/permissions-provider";
 
 export function PurchaseInvoiceViewActions({
   businessId, invoiceId, internalNumber, documentStatus, balanceMinor, totalMinor, journalEntryId, reversalJournalEntryId, inventoryEnabled, hasInventoryLines, hasGoodsReceipts = false
@@ -18,18 +19,29 @@ export function PurchaseInvoiceViewActions({
   businessId: string; invoiceId: string; internalNumber: string; documentStatus: PurchaseInvoiceStatus; balanceMinor: number; totalMinor?: number; journalEntryId: string | null; reversalJournalEntryId?: string | null; inventoryEnabled: boolean; hasInventoryLines: boolean; hasGoodsReceipts?: boolean;
 }) {
   const router = useRouter();
+  const { requiresApproval } = useApprovalPolicy();
+  const canPost = useActionPermission("post");
+  const mustSubmitForApproval = requiresApproval || !canPost;
   const [posting, setPosting] = useState(false);
 
-  const canEdit = documentStatus !== "void" && !hasGoodsReceipts && (documentStatus === "draft" || totalMinor === undefined || balanceMinor === totalMinor);
+  const canEdit = documentStatus !== "void" && documentStatus !== "pending_approval" && !hasGoodsReceipts && (documentStatus === "draft" || totalMinor === undefined || balanceMinor === totalMinor);
   const canVoid = documentStatus === "posted" && (totalMinor === undefined || balanceMinor === totalMinor);
 
   const handlePost = async () => {
     setPosting(true);
     try {
-      const result = await postPurchaseInvoiceAction(businessId, invoiceId);
+      const result = await postPurchaseInvoiceAction(
+        businessId,
+        invoiceId,
+        mustSubmitForApproval ? "submit_approval" : "post",
+      );
       if (result.error) throw new Error(result.error);
       broadcastLiveRefresh();
-      toast.success("Purchase bill posted to ledger.");
+      toast.success(
+        result.documentStatus === "pending_approval"
+          ? "Purchase bill submitted for approval."
+          : "Purchase bill posted to ledger.",
+      );
       router.refresh();
     } catch (err: any) {
       toast.error(err.message);
@@ -44,28 +56,26 @@ export function PurchaseInvoiceViewActions({
       documentType="Bill"
       editHref={canEdit ? `/b/${businessId}/purchases/invoices/${invoiceId}/edit` : undefined}
       pdfHref={`/api/businesses/${businessId}/documents/purchase-invoice/${invoiceId}/pdf`}
-      copyToActions={documentStatus !== "void" ? [
-        ...(documentStatus === "posted" && balanceMinor > 0 ? [
+      copyToActions={documentStatus === "posted" ? [
+        ...(balanceMinor > 0 ? [
           {
             label: "Supplier Payment",
             href: `/b/${businessId}/purchases/payments/new?invoiceId=${invoiceId}`,
             icon: CircleDollarSign,
           },
         ] : []),
-        ...(inventoryEnabled && hasInventoryLines && documentStatus === "posted" ? [
+        ...(inventoryEnabled && hasInventoryLines ? [
           {
             label: "Goods Receipt",
             href: `/b/${businessId}/purchases/goods-receipts/new?invoiceId=${invoiceId}`,
             icon: ArrowDownToLine,
           },
         ] : []),
-        ...(documentStatus === "posted" ? [
-          {
-            label: "Debit Note",
-            href: `/b/${businessId}/purchases/debit-notes/new?invoiceId=${invoiceId}`,
-            icon: BookOpenText,
-          },
-        ] : []),
+        {
+          label: "Debit Note",
+          href: `/b/${businessId}/purchases/debit-notes/new?invoiceId=${invoiceId}`,
+          icon: BookOpenText,
+        },
       ] : undefined}
       onDuplicate={async () => {
         const result = await duplicatePurchaseInvoiceAction(businessId, invoiceId);
@@ -94,12 +104,12 @@ export function PurchaseInvoiceViewActions({
       extraPrimaryActions={
         <>
           {documentStatus === "draft" && (
-            <Button permission={"post"} onClick={handlePost} disabled={posting} className="gap-1.5">
+            <Button permission={mustSubmitForApproval ? "edit" : "post"} onClick={handlePost} disabled={posting} className="gap-1.5">
               <CheckCircle2 className={`size-4 ${posting ? "animate-spin" : ""}`} />
-              Post Bill
+              {mustSubmitForApproval ? "Submit for Approval" : "Post Bill"}
             </Button>
           )}
-          {inventoryEnabled && hasInventoryLines && documentStatus !== "void" && documentStatus !== "draft" && (
+          {inventoryEnabled && hasInventoryLines && documentStatus === "posted" && (
             <Button permission="create" asChild variant="secondary">
               <Link href={`/b/${businessId}/purchases/goods-receipts/new?invoiceId=${invoiceId}`}><PackagePlus className="size-4" /> Receive Goods</Link>
             </Button>
@@ -113,7 +123,7 @@ export function PurchaseInvoiceViewActions({
       }
       extraActions={
         <>
-          {documentStatus !== "void" && documentStatus !== "draft" && (
+          {documentStatus === "posted" && (
             <DropdownMenuItem permission="create" asChild>
               <Link href={`/b/${businessId}/purchases/debit-notes/new?invoiceId=${invoiceId}`}>
                 <BookOpenText className="size-4" /> Request Refund / Debit Note

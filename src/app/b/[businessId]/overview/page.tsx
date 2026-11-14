@@ -2,8 +2,11 @@ import Link from "next/link";
 import { addMinor } from "@/modules/accounting/calculations/money";
 import { PermissionDenied } from "@/components/permission-denied";
 import { notFound } from "next/navigation";
-import { ArrowRight, Mail } from "lucide-react";
+import { ArrowRight, Landmark, Mail, ShieldCheck } from "lucide-react";
 import { NoticeToast } from "@/components/notice-toast";
+import { StatusBadge } from "@/components/status-badge";
+import { getPdcMaturitySummary } from "@/modules/banking/pdc-service";
+import { listApprovalRequests } from "@/modules/approvals/approval-service";
 import { requireUser } from "@/core/auth/session";
 import { getBusinessForUser } from "@/core/businesses/business-service";
 import { formatDate, formatDateTime, formatMoney } from "@/core/format";
@@ -132,6 +135,9 @@ export default async function OverviewPage({
   // Financial trends & Receivables aging summary
   const trend = canViewReports ? getMonthlyFinancialTrend(businessId, user.id, 6) : [];
   const aging = canViewReports ? getReceivablesAgingSummary(businessId, user.id) : null;
+  const pdcSummary = canViewBanking ? getPdcMaturitySummary(businessId, user.id, 30) : null;
+  const pendingApprovals = listApprovalRequests(businessId, user.id, { status: "pending" });
+  const actionableApprovals = pendingApprovals.filter((r) => r.canApprove);
 
 
   return (
@@ -149,6 +155,29 @@ export default async function OverviewPage({
         financialView={
           <div className="space-y-5">
             <OverviewControls from={from} to={to} serverRange={serverRange} businessId={businessId} />
+            {pendingApprovals.length > 0 && (
+              <section className="rounded-lg border border-warning/40 bg-warning/10 p-4 flex flex-wrap items-center justify-between gap-3">
+                <div className="flex items-center gap-3">
+                  <ShieldCheck className="size-5 text-warning shrink-0" />
+                  <div>
+                    <p className="text-sm font-semibold text-foreground">
+                      {actionableApprovals.length > 0
+                        ? `${actionableApprovals.length} document(s) awaiting your approval`
+                        : `${pendingApprovals.length} submitted document(s) pending approval`}
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      Review Maker-Checker submissions before ledger posting or order issuance.
+                    </p>
+                  </div>
+                </div>
+                <Link
+                  href={`/b/${businessId}/approvals`}
+                  className="inline-flex items-center gap-1.5 rounded-md bg-primary px-3 py-1.5 text-xs font-semibold text-primary-foreground hover:opacity-90"
+                >
+                  Open Approval Queue <ArrowRight className="size-3.5" />
+                </Link>
+              </section>
+            )}
             <KpiCards cards={cards} businessId={businessId} serverSnapshot={decodeColumnSnapshots(preferences)["overview-cards"]} />
             {canViewReports && <FinancialSummary businessId={businessId} userId={user.id} currency={currency} />}
             {!cards.length && !canViewReports && <PermissionDenied module="financial overview" returnHref={`/b/${businessId}/settings/profile`} returnLabel="Open your profile" />}
@@ -237,6 +266,66 @@ export default async function OverviewPage({
                       <Mail className="mx-auto mb-2 size-6 text-muted-foreground/60" aria-hidden />
                       <p className="font-medium">No emails sent yet</p>
                       <p className="mt-1 text-sm text-muted-foreground">Open an invoice and use the Email action.</p>
+                    </div>
+                  )}
+                </section>
+              )}
+              {canViewBanking && pdcSummary && (
+                <section className="data-panel lg:col-span-3">
+                  <div className="flex h-12 items-center justify-between border-b border-border px-4">
+                    <h2 className="flex items-center gap-2 font-semibold">
+                      <Landmark className="size-4 text-primary" /> PDC Maturity Tracker (Next 30 Days)
+                    </h2>
+                    <Link href={`/b/${businessId}/banking/pdcs`} className="flex items-center gap-1 text-xs font-medium text-primary hover:underline">
+                      Manage PDCs <ArrowRight className="size-3.5" />
+                    </Link>
+                  </div>
+                  <div className="grid gap-4 p-4 sm:grid-cols-3 border-b border-border">
+                    <div>
+                      <p className="text-xs text-muted-foreground">Held Receivable PDCs</p>
+                      <p className="money mt-0.5 text-base font-semibold">{formatMoney(pdcSummary.heldReceivableMinor, currency)}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-muted-foreground">Held Payable PDCs</p>
+                      <p className="money mt-0.5 text-base font-semibold">{formatMoney(pdcSummary.heldPayableMinor, currency)}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-muted-foreground">Maturing ≤ 30d / Overdue</p>
+                      <p className="mt-0.5 text-base font-semibold tabular-nums">
+                        {pdcSummary.dueSoonCount} maturing · <span className={pdcSummary.overdueCount > 0 ? "text-danger" : ""}>{pdcSummary.overdueCount} overdue</span>
+                      </p>
+                    </div>
+                  </div>
+                  {pdcSummary.upcomingCheques.length > 0 ? (
+                    <div className="overflow-x-auto">
+                      <table className="data-table min-w-[640px]">
+                        <thead>
+                          <tr>
+                            <th>PDC #</th>
+                            <th>Direction</th>
+                            <th>Party</th>
+                            <th>Maturity</th>
+                            <th className="text-right!">Amount</th>
+                            <th>Status</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {pdcSummary.upcomingCheques.map((pdc) => (
+                            <tr key={pdc.id}>
+                              <td className="font-mono text-xs">{pdc.pdcNumber}</td>
+                              <td className="capitalize text-xs">{pdc.direction}</td>
+                              <td>{pdc.customerName || pdc.supplierName || "—"}</td>
+                              <td className={pdc.maturityDate < pdcSummary.today ? "text-danger font-medium" : ""}>{formatDate(pdc.maturityDate)}</td>
+                              <td className="money text-right">{formatMoney(pdc.amountMinor, pdc.currencyCode)}</td>
+                              <td><StatusBadge status={pdc.status} /></td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  ) : (
+                    <div className="px-4 py-5 text-sm text-muted-foreground">
+                      No open post-dated cheques maturing soon.
                     </div>
                   )}
                 </section>

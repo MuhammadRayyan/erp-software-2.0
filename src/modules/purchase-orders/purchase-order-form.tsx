@@ -9,15 +9,17 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
-import { formatMoney } from "@/core/format";
+import { minorToCurrencyInput } from "@/modules/currency/conversion";
 import { savePurchaseOrderAction } from "./actions";
 import { purchaseOrderInputSchema, type PurchaseOrderInput } from "./purchase-order-input";
-import type { PurchaseOrderStatus } from "./purchase-order-service";
+import type { PurchaseOrderIntent, PurchaseOrderStatus } from "./purchase-order-service";
 import { DocumentCurrencyFields, type DocumentCurrencyOption, type DocumentRateOption } from "@/modules/currency/document-currency-fields";
 import { DocumentFormFooter } from "@/components/document-form-footer";
 import { SelectNative } from "@/components/ui/select-native";
 import { DocumentLineTable, useDocumentTotals } from "@/components/documents";
 import { useUnsavedChanges } from "@/hooks/use-unsaved-changes";
+import { useActionPermission, useApprovalPolicy } from "@/components/permissions-provider";
+import type { CustomFieldInputDefinition } from "@/modules/custom-fields/custom-field-inputs";
 
 type Option = { id: string; name: string; defaultCurrencyCode: string | null };
 type AccountOption = { id: string; name: string };
@@ -26,8 +28,11 @@ type ProjectOption = { id: string; code: string; name: string };
 type ItemOption = { id: string; sku: string | null; name: string; purchasePriceMinor: number | null; inventoryAssetAccountId: string };
 type QuoteOption = { id: string; quoteNumber: string; supplierId: string; date?: string };
 
-export function PurchaseOrderForm({ businessId, orderId, status = "draft", suppliers, expenseAccounts, taxCodes, projects, items, quotes, currency, currencies, rates, initial }: { businessId: string; orderId?: string; status?: PurchaseOrderStatus; suppliers: Option[]; expenseAccounts: AccountOption[]; taxCodes: TaxOption[]; projects: ProjectOption[]; items: ItemOption[]; quotes?: QuoteOption[]; currency: string; currencies: DocumentCurrencyOption[]; rates: DocumentRateOption[]; initial: PurchaseOrderInput }) {
+export function PurchaseOrderForm({ businessId, orderId, status = "draft", suppliers, expenseAccounts, taxCodes, projects, items, quotes, currency, currencies, rates, initial, lineCustomFields = [] }: { businessId: string; orderId?: string; status?: PurchaseOrderStatus; suppliers: Option[]; expenseAccounts: AccountOption[]; taxCodes: TaxOption[]; projects: ProjectOption[]; items: ItemOption[]; quotes?: QuoteOption[]; currency: string; currencies: DocumentCurrencyOption[]; rates: DocumentRateOption[]; initial: PurchaseOrderInput; lineCustomFields?: CustomFieldInputDefinition[] }) {
   const router = useRouter();
+  const { requiresApproval } = useApprovalPolicy();
+  const canApprove = useActionPermission("approve");
+  const mustSubmitForApproval = requiresApproval || !canApprove;
   const [serverError, setServerError] = useState("");
   const [globalTaxCodeId, setGlobalTaxCodeId] = useState(() => initial.lines[0]?.taxCodeId || taxCodes.find((taxCode) => taxCode.rateBasisPoints === 500)?.id || taxCodes[0]?.id || "");
   const form = useForm<PurchaseOrderInput>({
@@ -48,7 +53,6 @@ export function PurchaseOrderForm({ businessId, orderId, status = "draft", suppl
   function moveLineDown(index: number) {
     if (index < fields.length - 1) move(index, index + 1);
   }
-  const lines = useWatch({ control, name: "lines" }) ?? [];
   const supplierId = useWatch({ control, name: "supplierId" });
   const availableQuotes = (quotes ?? []).filter((q) => !supplierId || q.supplierId === supplierId);
   const currencyCode = useWatch({ control, name: "currencyCode" }) || currency; const exchangeRateToBase = useWatch({ control, name: "exchangeRateToBase" }) || ""; const exchangeRateDate = useWatch({ control, name: "exchangeRateDate" }) || ""; const exchangeRateSource = useWatch({ control, name: "exchangeRateSource" }) || ""; const orderDate = useWatch({ control, name: "date" }) || "";
@@ -58,7 +62,8 @@ export function PurchaseOrderForm({ businessId, orderId, status = "draft", suppl
     taxCodes,
     minorUnit,
   });
-    function updateGlobalTax(newTaxId: string) {
+  const lines = totals.lines;
+  function updateGlobalTax(newTaxId: string) {
     setGlobalTaxCodeId(newTaxId);
     lines.forEach((_, i) => form.setValue(`lines.${i}.taxCodeId`, newTaxId));
   }
@@ -72,13 +77,13 @@ export function PurchaseOrderForm({ businessId, orderId, status = "draft", suppl
     }
     form.setValue(`lines.${index}.description`, item.name);
     if (item.purchasePriceMinor != null) {
-      form.setValue(`lines.${index}.unitPrice`, formatMoney(item.purchasePriceMinor, currency, minorUnit).replace(/[^0-9.]/g, ""));
+      form.setValue(`lines.${index}.unitPrice`, minorToCurrencyInput(item.purchasePriceMinor, minorUnit));
     }
     if (item.inventoryAssetAccountId) {
       form.setValue(`lines.${index}.expenseAccountId`, item.inventoryAssetAccountId);
     }
   }
-  async function save(values: PurchaseOrderInput, intent: "draft" | "issue") {
+  async function save(values: PurchaseOrderInput, intent: PurchaseOrderIntent) {
     setServerError("");
     const result = await savePurchaseOrderAction(businessId, orderId ?? null, values, intent);
     if (result.fieldErrors) for (const [field, messages] of Object.entries(result.fieldErrors)) setError(field as keyof PurchaseOrderInput, { message: messages[0] });
@@ -155,6 +160,7 @@ export function PurchaseOrderForm({ businessId, orderId, status = "draft", suppl
             expenseAccountId: defaultExpense,
             taxCodeId: globalTaxCodeId,
             projectId: "",
+            customFields: {},
             ...custom,
           })
         }
@@ -170,6 +176,7 @@ export function PurchaseOrderForm({ businessId, orderId, status = "draft", suppl
         initialShowLineTaxCodes={false}
         taxCodes={taxCodes}
         projects={projects}
+        lineCustomFields={lineCustomFields}
         currencyCode={currencyCode}
         minorUnit={minorUnit}
         previews={totals.previews}
@@ -180,15 +187,36 @@ export function PurchaseOrderForm({ businessId, orderId, status = "draft", suppl
         totalMinor={totals.totalMinor}
       />
     </section>
-    <DocumentFormFooter onCancel={() => router.push(cancelHref)}>
+    <DocumentFormFooter
+      onCancel={() => router.push(cancelHref)}
+      status={status}
+      totals={{
+        subtotalMinor: totals.subtotalMinor,
+        taxMinor: totals.taxMinor,
+        totalMinor: totals.totalMinor,
+        currencyCode,
+        minorUnit,
+      }}
+    >
       {status === "issued" ? (
         <Button permission={["save", "approve"]} type="button" disabled={isSubmitting} onClick={handleSubmit((values) => save(values, "issue"))}>
           {isSubmitting && <LoaderCircle className="size-4 animate-spin" />} Save Changes
         </Button>
       ) : (
-        <Button permission={"save"} type="button" disabled={isSubmitting} onClick={handleSubmit((values) => save(values, "draft"))}>
-          {isSubmitting && <LoaderCircle className="size-4 animate-spin" />} {orderId ? "Save Draft" : "Save Draft Order"}
-        </Button>
+        <div className="flex flex-wrap items-center gap-2">
+          <Button permission={"save"} variant="secondary" type="button" disabled={isSubmitting} onClick={handleSubmit((values) => save(values, "draft"))}>
+            {isSubmitting && <LoaderCircle className="size-4 animate-spin" />} {orderId ? "Save Draft" : "Save Draft Order"}
+          </Button>
+          {mustSubmitForApproval ? (
+            <Button permission={"save"} type="button" disabled={isSubmitting} onClick={handleSubmit((values) => save(values, "submit_approval"))}>
+              {isSubmitting && <LoaderCircle className="size-4 animate-spin" />} Submit for Approval
+            </Button>
+          ) : (
+            <Button permission={["save", "approve"]} type="button" disabled={isSubmitting} onClick={handleSubmit((values) => save(values, "issue"))}>
+              {isSubmitting && <LoaderCircle className="size-4 animate-spin" />} {orderId ? "Save & Issue" : "Create & Issue"}
+            </Button>
+          )}
+        </div>
       )}
     </DocumentFormFooter>
     </form>;

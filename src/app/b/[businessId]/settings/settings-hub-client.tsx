@@ -248,6 +248,13 @@ export function SettingsHubClient({
             icon: Wand2,
             keywords: "bank rules auto categorization matching automatic statement line rules reconciliation manager import",
           },
+          {
+            title: "Approval Rules & Thresholds",
+            subtitle: "Maker-Checker spend limits and separation of duties",
+            href: `/b/${businessId}/settings/approvals`,
+            icon: ShieldCheck,
+            keywords: "approval maker checker threshold spend limits permissions workflow",
+          },
         ],
       },
       {

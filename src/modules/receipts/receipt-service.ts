@@ -1,6 +1,7 @@
 import { assertMutationPermission } from "@/core/permissions/mutation-permissions";
-import { createSettlement, voidSettlement, applySettlementCredit, type SettlementConfig } from "@/modules/settlement/settlement-service";
-import { getBusinessDb } from "@/core/db/business";
+import { createSettlement, voidSettlement, applySettlementCredit, postPendingSettlement, revertPendingSettlementToDraft, submitOrPostDraftSettlement, deleteDraftSettlement, type SettlementConfig } from "@/modules/settlement/settlement-service";
+import { evaluateApprovalRequirement, recordPendingApprovalInTransaction } from "@/modules/approvals/approval-policy";
+import { getBusinessDb, runImmediateTransaction } from "@/core/db/business";
 import { postReceipt } from "@/modules/accounting/services/receipt-posting-service";
 import {
   receiptInputSchema,
@@ -50,30 +51,161 @@ export const receiptConfig: SettlementConfig = {
 
 
 export function createReceipt(businessId: string, userId: string, input: ReceiptInput) {
-  assertMutationPermission(businessId, userId, "sales", "create", "post");
+  assertMutationPermission(businessId, userId, "sales", "create");
   const data = receiptInputSchema.parse(input);
   const context = getBusinessDb(businessId, userId);
+
+  const preCheck = evaluateApprovalRequirement(businessId, userId, "receipt", 0, context.sqlite);
+  if (!preCheck.requiresApproval && !preCheck.ruleEnabled) {
+    assertMutationPermission(businessId, userId, "sales", "post");
+  }
+
   let result!: ReturnType<typeof createSettlement>;
   context.sqlite.transaction(() => {
-    result = createSettlement(context.sqlite, receiptConfig, data, userId);
+    result = createSettlement(context.sqlite, receiptConfig, data, userId, {
+      resolveStatus: (baseAmountMinor) => {
+        const evalResult = evaluateApprovalRequirement(
+          businessId,
+          userId,
+          "receipt",
+          baseAmountMinor,
+          context.sqlite,
+        );
+        if (evalResult.requiresApproval) {
+          return "pending_approval";
+        }
+        assertMutationPermission(businessId, userId, "sales", "post");
+        return "posted";
+      },
+    });
+
+    if (result.documentStatus === "pending_approval") {
+      recordPendingApprovalInTransaction(context.sqlite, {
+        businessId,
+        userId,
+        entityType: "receipt",
+        entityId: result.id,
+        entityNumber: result.paymentNumber,
+        amountMinor: result.amountMinor,
+        baseAmountMinor: result.baseAmountMinor,
+        currencyCode: result.currencyCode,
+        targetIntent: "post",
+      });
+    }
   }).immediate();
 
-  const receiptRow = context.sqlite
-    .prepare("SELECT receipt_number FROM receipts WHERE id = ?")
-    .get(result.id) as { receipt_number: string } | undefined;
-  const receiptNumber = receiptRow?.receipt_number || "Receipt";
+  const receiptNumber = result.paymentNumber || "Receipt";
 
   recordActivity(businessId, {
     userId,
-    action: "posted",
+    action: result.documentStatus === "pending_approval" ? "created" : "posted",
     entityType: "receipt",
     entityId: result.id,
     entityNumber: receiptNumber,
-    summary: `Recorded payment receipt ${receiptNumber} for ${data.currencyCode} ${data.amount}`,
-    details: { customerId: data.customerId, amount: data.amount, currency: data.currencyCode },
+    summary:
+      result.documentStatus === "pending_approval"
+        ? `Submitted payment receipt ${receiptNumber} for approval (${data.currencyCode} ${data.amount})`
+        : `Recorded payment receipt ${receiptNumber} for ${data.currencyCode} ${data.amount}`,
+    details: { customerId: data.customerId, amount: data.amount, currency: data.currencyCode, status: result.documentStatus },
   });
 
   return result;
+}
+
+export function postPendingReceipt(businessId: string, userId: string, receiptId: string) {
+  assertMutationPermission(businessId, userId, "sales", "post");
+  const context = getBusinessDb(businessId, userId);
+  runImmediateTransaction(context.sqlite, () => {
+    postPendingSettlement(context.sqlite, receiptConfig, receiptId);
+  });
+}
+
+export function revertReceiptToDraft(businessId: string, userId: string, receiptId: string) {
+  assertMutationPermission(businessId, userId, "sales", "post");
+  const context = getBusinessDb(businessId, userId);
+  revertPendingSettlementToDraft(context.sqlite, receiptConfig, receiptId);
+}
+
+export function submitOrPostDraftReceipt(
+  businessId: string,
+  userId: string,
+  receiptId: string,
+  intent: "post" | "submit_approval" = "post",
+) {
+  assertMutationPermission(businessId, userId, "sales", "edit");
+  const context = getBusinessDb(businessId, userId);
+  const result = runImmediateTransaction(context.sqlite, () => {
+    const submitted = submitOrPostDraftSettlement(
+      context.sqlite,
+      receiptConfig,
+      receiptId,
+      (baseAmountMinor) => {
+        if (intent === "submit_approval") {
+          return "pending_approval";
+        }
+        const evalResult = evaluateApprovalRequirement(
+          businessId,
+          userId,
+          "receipt",
+          baseAmountMinor,
+          context.sqlite,
+        );
+        if (evalResult.requiresApproval) {
+          return "pending_approval";
+        }
+        assertMutationPermission(businessId, userId, "sales", "post");
+        return "posted";
+      },
+    );
+
+    if (submitted.documentStatus === "pending_approval") {
+      recordPendingApprovalInTransaction(context.sqlite, {
+        businessId,
+        userId,
+        entityType: "receipt",
+        entityId: submitted.id,
+        entityNumber: submitted.paymentNumber,
+        amountMinor: submitted.amountMinor,
+        baseAmountMinor: submitted.baseAmountMinor,
+        currencyCode: submitted.currencyCode,
+        targetIntent: "post",
+      });
+    }
+    return submitted;
+  });
+
+  recordActivity(businessId, {
+    userId,
+    action: result.documentStatus === "pending_approval" ? "updated" : "posted",
+    entityType: "receipt",
+    entityId: result.id,
+    entityNumber: result.paymentNumber,
+    summary:
+      result.documentStatus === "pending_approval"
+        ? `Submitted draft receipt ${result.paymentNumber} for approval`
+        : `Posted draft receipt ${result.paymentNumber}`,
+    details: { customerId: result.partyId, status: result.documentStatus },
+  });
+
+  return result;
+}
+
+export function deleteDraftReceipt(businessId: string, userId: string, receiptId: string) {
+  assertMutationPermission(businessId, userId, "sales", "delete");
+  const context = getBusinessDb(businessId, userId);
+  const deleted = runImmediateTransaction(context.sqlite, () =>
+    deleteDraftSettlement(context.sqlite, receiptConfig, receiptId),
+  );
+
+  recordActivity(businessId, {
+    userId,
+    action: "deleted",
+    entityType: "receipt",
+    entityId: deleted.id,
+    entityNumber: deleted.paymentNumber,
+    summary: `Deleted draft receipt ${deleted.paymentNumber}`,
+    details: { customerId: deleted.partyId },
+  });
 }
 
 export type ReceiptListFilters = {
@@ -108,7 +240,7 @@ type ReceiptListRow = {
   currency_code: string;
   currency_minor_unit: number;
   reference: string | null;
-  document_status: "posted" | "void";
+  document_status: "draft" | "pending_approval" | "posted" | "void";
   created_at: string;
   customer_id: string;
   customer_name: string;
@@ -235,10 +367,10 @@ export type ReceiptDetailRecord = {
   realized_fx_amount_minor: number;
   reference: string | null;
   description: string | null;
-  document_status: "posted" | "void";
+  document_status: "draft" | "pending_approval" | "posted" | "void";
   created_by: string;
   created_at: string;
-  posted_at: string;
+  posted_at: string | null;
   voided_at: string | null;
   total_allocated_minor: number;
   unallocated_amount_minor: number;

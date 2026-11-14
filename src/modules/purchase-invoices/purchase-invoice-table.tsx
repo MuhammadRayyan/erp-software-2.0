@@ -2,7 +2,10 @@
 
 import { useMemo, useState, useTransition } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { toast } from "sonner";
+import { broadcastLiveRefresh } from "@/components/use-live-refresh";
+import { useActionPermission, useApprovalPolicy } from "@/components/permissions-provider";
 import { ChevronRight, MoreHorizontal, Eye, FileEdit, Download, CircleDollarSign, BookOpenText, CheckCircle2, FileArchive, Ban } from "lucide-react";
 import { 
   useLegacyTable as useTable,
@@ -70,6 +73,10 @@ export function PurchaseInvoiceTable({
   /** Server-loaded snapshot for the "purchase-invoices" storage key. */
   serverSnapshot?: import("@/components/use-column-visibility").ColumnVisibility;
 }) {
+  const router = useRouter();
+  const { requiresApproval } = useApprovalPolicy();
+  const canPost = useActionPermission("post");
+  const mustSubmitForApproval = requiresApproval || !canPost;
   const { density } = useTableDensity(businessId);
 
   const [query, setQuery] = useState("");
@@ -228,7 +235,7 @@ export function PurchaseInvoiceTable({
         enableSorting: false,
         cell: ({ row }: any) => {
           const bill = row.original;
-          const canEdit = bill.document_status !== "void";
+          const canEdit = bill.document_status !== "void" && bill.document_status !== "pending_approval";
           const canPay = bill.document_status === "posted" && bill.balanceMinor > 0;
           return (
             <div className="flex items-center justify-end gap-1">
@@ -364,6 +371,7 @@ export function PurchaseInvoiceTable({
             { value: "", label: "All statuses" },
             { label: "Document", options: [
               { value: "document:draft", label: "Draft" },
+              { value: "document:pending_approval", label: "Pending Approval" },
               { value: "document:posted", label: "Posted" },
               { value: "document:void", label: "Void" },
             ]},
@@ -432,13 +440,40 @@ export function PurchaseInvoiceTable({
           startTransition(async () => {
             try {
               const draftIds = selectedDrafts.map((b) => b.id);
-              const res = await batchPostPurchaseInvoicesAction(businessId, draftIds);
+              const res = await batchPostPurchaseInvoicesAction(
+                businessId,
+                draftIds,
+                mustSubmitForApproval ? "submit_approval" : "post",
+              );
+              const postedCount = res.postedCount ?? (res.pendingApprovalCount ? 0 : res.successCount);
+              const pendingCount = res.pendingApprovalCount ?? 0;
+              if (postedCount > 0 && pendingCount > 0) {
+                toast.success(
+                  `Posted ${postedCount} draft ${postedCount === 1 ? "bill" : "bills"} to the General Ledger and submitted ${pendingCount} for approval.`,
+                );
+              } else if (pendingCount > 0) {
+                toast.success(
+                  `Submitted ${pendingCount} draft ${pendingCount === 1 ? "bill" : "bills"} for approval.`,
+                );
+              } else if (postedCount > 0) {
+                toast.success(
+                  `Successfully posted ${postedCount} ${postedCount === 1 ? "bill" : "bills"}.`,
+                );
+              }
               if (res.successCount > 0) {
-                toast.success(`Successfully posted ${res.successCount} ${res.successCount === 1 ? "bill" : "bills"}.`);
                 setRowSelection({});
+                broadcastLiveRefresh();
+                router.refresh();
               }
               if (res.failedCount > 0) {
-                toast.error(`Failed to post ${res.failedCount} ${res.failedCount === 1 ? "bill" : "bills"}: ${res.errors.join(", ")}`);
+                const detail = res.errors
+                  .map((e) => (e.number ? `${e.number}: ${e.error}` : e.error))
+                  .join(", ");
+                toast.error(
+                  detail
+                    ? `Failed to process ${res.failedCount} ${res.failedCount === 1 ? "bill" : "bills"}: ${detail}`
+                    : `Failed to process ${res.failedCount} ${res.failedCount === 1 ? "bill" : "bills"}.`,
+                );
               }
             } catch (err) {
               toast.error(err instanceof Error ? err.message : "Batch post failed.");
@@ -476,9 +511,18 @@ export function PurchaseInvoiceTable({
                 toast.success(`Successfully voided ${res.successCount} ${res.successCount === 1 ? "bill" : "bills"}.`);
                 setRowSelection({});
                 setConfirmModal(null);
+                broadcastLiveRefresh();
+                router.refresh();
               }
               if (res.failedCount > 0) {
-                toast.error(`Could not void ${res.failedCount} bills (they may have existing payment allocations).`);
+                const detail = res.errors
+                  .map((e) => (e.number ? `${e.number}: ${e.error}` : e.error))
+                  .join(", ");
+                toast.error(
+                  detail
+                    ? `Could not void ${res.failedCount} ${res.failedCount === 1 ? "bill" : "bills"}: ${detail}`
+                    : `Could not void ${res.failedCount} ${res.failedCount === 1 ? "bill" : "bills"}.`,
+                );
               }
             } catch (err) {
               toast.error(err instanceof Error ? err.message : "Batch void failed.");
@@ -492,8 +536,21 @@ export function PurchaseInvoiceTable({
               const draftIds = selectedDrafts.map((b) => b.id);
               const res = await batchDeletePurchaseInvoicesAction(businessId, draftIds);
               if (res.successCount > 0) {
-                toast.success(`Deleted ${res.successCount} draft bills.`);
+                toast.success(`Deleted ${res.successCount} draft ${res.successCount === 1 ? "bill" : "bills"}.`);
                 setRowSelection({});
+                setConfirmModal(null);
+                broadcastLiveRefresh();
+                router.refresh();
+              }
+              if (res.failedCount > 0) {
+                const detail = res.errors
+                  .map((e) => (e.number ? `${e.number}: ${e.error}` : e.error))
+                  .join(", ");
+                toast.error(
+                  detail
+                    ? `Failed to delete ${res.failedCount} draft ${res.failedCount === 1 ? "bill" : "bills"}: ${detail}`
+                    : `Failed to delete ${res.failedCount} draft ${res.failedCount === 1 ? "bill" : "bills"}.`,
+                );
                 setConfirmModal(null);
               }
             } catch (err) {
@@ -534,6 +591,7 @@ export function PurchaseInvoiceTable({
             >
               {selectedDrafts.length > 0 && (
                 <Button
+                  permission={mustSubmitForApproval ? "edit" : "post"}
                   type="button"
                   variant="secondary"
                   size="sm"
@@ -541,7 +599,10 @@ export function PurchaseInvoiceTable({
                   disabled={isPending}
                   className="h-8 gap-1.5 text-xs text-primary font-medium hover:bg-primary/10"
                 >
-                  <CheckCircle2 className="size-3.5" /> Post Drafts ({selectedDrafts.length})
+                  <CheckCircle2 className="size-3.5" />{" "}
+                  {mustSubmitForApproval
+                    ? `Submit for Approval (${selectedDrafts.length})`
+                    : `Post Drafts (${selectedDrafts.length})`}
                 </Button>
               )}
 

@@ -1,7 +1,8 @@
 import { assertMutationPermission, assertSavePermission } from "@/core/permissions/mutation-permissions";
+import { getBusinessAccess } from "@/core/permissions/permissions";
 import { randomUUID } from "node:crypto";
 import { asc, eq } from "drizzle-orm";
-import { getBusinessDb } from "@/core/db/business";
+import { getBusinessDb, runImmediateTransaction } from "@/core/db/business";
 import {
   businessTaxSettings,
   customers,
@@ -16,7 +17,7 @@ import { effectiveProjectId, validateProjectReferences } from "@/modules/project
 import { replaceTaxEntries, reverseTaxEntries } from "@/modules/tax/tax-entry-service";
 import { assertVatDateUnlocked, assertVatSourceUnlocked } from "@/modules/tax/tax-lock-service";
 import { assertDateNotLocked } from "@/modules/accounting/services/financial-lock-service";
-import { saveCustomFieldValuesInTransaction } from "@/modules/custom-fields/custom-field-service";
+import { saveCustomFieldValuesInTransaction, saveLineCustomFieldValuesInTransaction, getCustomFieldValuesForEntities } from "@/modules/custom-fields/custom-field-service";
 import { invoiceInputSchema, type InvoiceInput } from "./invoice-input";
 import { convertDocumentLinesToBase, minorToCurrencyInput, parseCurrencyAmountToMinor } from "@/modules/currency/conversion";
 import { getCurrency } from "@/modules/currency/currency";
@@ -26,10 +27,11 @@ import { getCustomerUnallocatedCredit, receiptConfig } from "@/modules/receipts/
 import { applySettlementCredit } from "@/modules/settlement/settlement-service";
 import { recordActivity } from "@/modules/activity-log/activity-log-service";
 import { getBusinessProfile } from "@/modules/business-profile/business-profile-service";
+import { evaluateApprovalRequirement, recordPendingApprovalInTransaction } from "@/modules/approvals/approval-policy";
 
-export type DocumentStatus = "draft" | "posted" | "void";
+export type DocumentStatus = "draft" | "pending_approval" | "posted" | "void";
 export type PaymentStatus = "unpaid" | "partially_paid" | "paid" | "overdue";
-export type InvoiceSaveIntent = "draft" | "post";
+export type InvoiceSaveIntent = "draft" | "submit_approval" | "post";
 
 function derivePaymentStatus(
   documentStatus: DocumentStatus,
@@ -425,6 +427,12 @@ export function getInvoice(businessId: string, userId: string, invoiceId: string
       document_status: DocumentStatus;
       allocated_minor: number;
     }[];
+  const lineCustomFieldsMap = getCustomFieldValuesForEntities(
+    businessId,
+    userId,
+    "sales_invoice_line",
+    lines.map((l) => l.id),
+  );
   return {
     ...header,
     project: header.invoice.projectId ? projectById.get(header.invoice.projectId) ?? null : null,
@@ -436,6 +444,7 @@ export function getInvoice(businessId: string, userId: string, invoiceId: string
       salesAccount: accountById.get(line.salesAccountId) ?? null,
       taxCode: taxCodeById.get(line.taxCodeId) ?? null,
       project: effectiveProjectId(line.projectId, header.invoice.projectId) ? projectById.get(effectiveProjectId(line.projectId, header.invoice.projectId)!) ?? null : null,
+      customFields: lineCustomFieldsMap.get(line.id) ?? {},
     })),
     allocatedMinor,
     balanceMinor:
@@ -512,7 +521,7 @@ export function createInvoice(
   intent: InvoiceSaveIntent,
   customFieldValues?: Record<string, string>,
 ) {
-  assertSavePermission(businessId, userId, "sales", undefined, intent);
+  assertSavePermission(businessId, userId, "sales", undefined, "draft");
   const data = invoiceInputSchema.parse(input);
   const context = getBusinessDb(businessId, userId);
   const customer = context.db.select().from(customers).where(eq(customers.id, data.customerId)).get();
@@ -531,6 +540,20 @@ export function createInvoice(
   const lines = calculateLines(context.sqlite, data.lines, rate.currencyMinorUnit, { accountTypeFilter: "income", taxDirection: "sales", supportItems: true, accountFieldOnLine: "salesAccountId", amountsIncludeTax: data.amountsIncludeTax });
   const totals = totalsForLines(lines);
   const base = convertDocumentLinesToBase(lines, rate);
+
+  const approvalEval =
+    intent === "draft"
+      ? { requiresApproval: false, requireCheckerSeparation: true }
+      : evaluateApprovalRequirement(businessId, userId, "sales_invoice", base.baseTotalMinor, context.sqlite);
+  const effectiveIntent: InvoiceSaveIntent =
+    intent === "draft"
+      ? "draft"
+      : intent === "submit_approval" || approvalEval.requiresApproval
+        ? "submit_approval"
+        : "post";
+  if (effectiveIntent === "post") {
+    assertMutationPermission(businessId, userId, "sales", "post");
+  }
   const id = randomUUID();
   const now = new Date().toISOString();
   let recordedInvoiceNumber = "";
@@ -556,7 +579,7 @@ export function createInvoice(
   const customerAddress = customer.billingAddress || [customer.addressLine1, customer.city, customer.countrySubdivision, customer.countryCode].filter(Boolean).join(", ");
 
   context.sqlite.transaction(() => {
-    if (intent === "post") assertVatDateUnlocked(context.sqlite, taxDate, lines.map((line) => line.taxCodeId));
+    if (effectiveIntent === "post") assertVatDateUnlocked(context.sqlite, taxDate, lines.map((line) => line.taxCodeId));
     const invoiceNumber = allocateNumber(context.sqlite, "invoice");
     recordedInvoiceNumber = invoiceNumber;
     context.sqlite
@@ -608,6 +631,11 @@ export function createInvoice(
         now,
       );
     insertLines(context.db, id, lines);
+    saveLineCustomFieldValuesInTransaction(
+      context.sqlite,
+      "sales_invoice_line",
+      lines.map((l) => ({ lineId: l.id, customFields: l.customFields })),
+    );
 
     if (effectiveSalesOrderId) {
       const parentOrder = context.sqlite.prepare(
@@ -629,7 +657,23 @@ export function createInvoice(
 
       saveCustomFieldValuesInTransaction(context.sqlite, "sales_invoice", id, customFieldValues);
     }
-    if (intent === "post") {
+    if (effectiveIntent === "submit_approval") {
+      context.sqlite
+        .prepare("UPDATE sales_invoices SET document_status = 'pending_approval' WHERE id = ?")
+        .run(id);
+      recordPendingApprovalInTransaction(context.sqlite, {
+        businessId,
+        userId,
+        entityType: "sales_invoice",
+        entityId: id,
+        entityNumber: invoiceNumber,
+        amountMinor: totals.totalMinor,
+        baseAmountMinor: base.baseTotalMinor,
+        currencyCode: rate.currencyCode,
+        targetIntent: "post",
+      });
+    }
+    if (effectiveIntent === "post") {
       assertDateNotLocked(context.sqlite, data.invoiceDate, "Sales invoice");
       postSalesInvoice(
         context.sqlite,
@@ -699,12 +743,12 @@ export function createInvoice(
   const formattedTotal = (totals.totalMinor / (10 ** rate.currencyMinorUnit)).toFixed(2);
   recordActivity(businessId, {
     userId,
-    action: intent === "post" ? "posted" : "created",
+    action: effectiveIntent === "post" ? "posted" : "created",
     entityType: "sales_invoice",
     entityId: id,
     entityNumber: recordedInvoiceNumber,
-    summary: `${intent === "post" ? "Posted" : "Created draft"} sales invoice ${recordedInvoiceNumber} for ${rate.currencyCode} ${formattedTotal}`,
-    details: { customerId: data.customerId, totalMinor: totals.totalMinor, currency: rate.currencyCode, status: intent === "post" ? "posted" : "draft" },
+    summary: `${effectiveIntent === "post" ? "Posted" : effectiveIntent === "submit_approval" ? "Submitted for approval" : "Created draft"} sales invoice ${recordedInvoiceNumber} for ${rate.currencyCode} ${formattedTotal}`,
+    details: { customerId: data.customerId, totalMinor: totals.totalMinor, currency: rate.currencyCode, status: effectiveIntent === "post" ? "posted" : effectiveIntent === "submit_approval" ? "pending_approval" : "draft" },
   });
 
   return id;
@@ -717,13 +761,21 @@ export function updateInvoice(
   input: InvoiceInput,
   intent: InvoiceSaveIntent,
   customFieldValues?: Record<string, string>,
+  options?: { bypassApprovalPolicy?: boolean },
 ) {
-  assertSavePermission(businessId, userId, "sales", invoiceId, intent);
+  if (options?.bypassApprovalPolicy) {
+    assertMutationPermission(businessId, userId, "sales", "post");
+  } else {
+    assertSavePermission(businessId, userId, "sales", invoiceId, "draft");
+  }
   const data = invoiceInputSchema.parse(input);
   const context = getBusinessDb(businessId, userId);
   const current = context.db.select().from(salesInvoices).where(eq(salesInvoices.id, invoiceId)).get();
   if (!current) throw new Error("Invoice not found.");
   if (current.documentStatus === "void") throw new Error("A void invoice cannot be edited.");
+  if (current.documentStatus === "pending_approval" && !options?.bypassApprovalPolicy) {
+    throw new Error("This invoice is pending approval. Withdraw or reject it to draft before editing.");
+  }
   if (current.documentStatus === "posted") {
     assertDateNotLocked(context.sqlite, current.invoiceDate, "Sales invoice");
   }
@@ -758,9 +810,17 @@ export function updateInvoice(
     throw new Error("Cannot reduce invoice total below amount already received.");
   }
   const now = new Date().toISOString();
-  const shouldPost = current.documentStatus === "posted" || intent === "post";
+  const approvalEval =
+    current.documentStatus === "posted" || intent === "draft" || options?.bypassApprovalPolicy
+      ? { requiresApproval: false }
+      : evaluateApprovalRequirement(businessId, userId, "sales_invoice", base.baseTotalMinor, context.sqlite);
+  const shouldPost =
+    current.documentStatus === "posted" || (intent === "post" && !approvalEval.requiresApproval);
+  const shouldSubmitApproval =
+    !shouldPost &&
+    (intent === "submit_approval" || (intent === "post" && approvalEval.requiresApproval));
 
-  context.sqlite.transaction(() => {
+  runImmediateTransaction(context.sqlite, () => {
     if (current.documentStatus === "posted") {
       assertDateNotLocked(context.sqlite, current.invoiceDate, "Sales invoice");
       assertVatSourceUnlocked(context.sqlite, "sales_invoice", invoiceId, current.taxDate);
@@ -840,8 +900,17 @@ export function updateInvoice(
         now,
         invoiceId,
       );
+    const oldLineIds = (
+      context.sqlite.prepare("SELECT id FROM sales_invoice_lines WHERE invoice_id = ?").all(invoiceId) as { id: string }[]
+    ).map((r) => r.id);
     context.sqlite.prepare("DELETE FROM sales_invoice_lines WHERE invoice_id = ?").run(invoiceId);
     insertLines(context.db, invoiceId, lines);
+    saveLineCustomFieldValuesInTransaction(
+      context.sqlite,
+      "sales_invoice_line",
+      lines.map((l) => ({ lineId: l.id, customFields: l.customFields })),
+      oldLineIds,
+    );
 
     if (effectiveSalesOrderId) {
       context.sqlite.prepare(
@@ -856,6 +925,22 @@ export function updateInvoice(
     if (customFieldValues) {
 
       saveCustomFieldValuesInTransaction(context.sqlite, "sales_invoice", invoiceId, customFieldValues);
+    }
+    if (shouldSubmitApproval) {
+      context.sqlite
+        .prepare("UPDATE sales_invoices SET document_status = 'pending_approval' WHERE id = ?")
+        .run(invoiceId);
+      recordPendingApprovalInTransaction(context.sqlite, {
+        businessId,
+        userId,
+        entityType: "sales_invoice",
+        entityId: invoiceId,
+        entityNumber: current.invoiceNumber,
+        amountMinor: totals.totalMinor,
+        baseAmountMinor: base.baseTotalMinor,
+        currencyCode: rate.currencyCode,
+        targetIntent: "post",
+      });
     }
     if (shouldPost) {
       postSalesInvoice(
@@ -885,18 +970,19 @@ export function updateInvoice(
         `)
         .run(now, invoiceId);
     }
-  }).immediate();
+  });
 
   const formattedTotal = (totals.totalMinor / (10 ** rate.currencyMinorUnit)).toFixed(2);
   const action = shouldPost && current.documentStatus !== "posted" ? "posted" : "updated";
+  const finalStatus = shouldPost ? "posted" : shouldSubmitApproval ? "pending_approval" : current.documentStatus;
   recordActivity(businessId, {
     userId,
     action,
     entityType: "sales_invoice",
     entityId: invoiceId,
     entityNumber: current.invoiceNumber,
-    summary: `${action === "posted" ? "Posted" : "Updated"} sales invoice ${current.invoiceNumber} for ${rate.currencyCode} ${formattedTotal}`,
-    details: { customerId: data.customerId, totalMinor: totals.totalMinor, currency: rate.currencyCode, status: shouldPost ? "posted" : current.documentStatus },
+    summary: `${action === "posted" ? "Posted" : shouldSubmitApproval ? "Submitted for approval" : "Updated"} sales invoice ${current.invoiceNumber} for ${rate.currencyCode} ${formattedTotal}`,
+    details: { customerId: data.customerId, totalMinor: totals.totalMinor, currency: rate.currencyCode, status: finalStatus },
   });
 }
 
@@ -1060,62 +1146,144 @@ export function voidInvoice(businessId: string, userId: string, invoiceId: strin
   });
 }
 
-export function postInvoice(businessId: string, userId: string, invoiceId: string) {
+function buildInvoiceInputFromRecord(
+  context: ReturnType<typeof getBusinessDb>,
+  record: NonNullable<ReturnType<typeof getInvoice>>,
+): InvoiceInput {
+  const minorUnit = getCurrency(context.sqlite, record.invoice.currencyCode).minor_unit;
+  return {
+    customerId: record.invoice.customerId,
+    currencyCode: record.invoice.currencyCode,
+    exchangeRateToBase: record.invoice.exchangeRateToBase,
+    exchangeRateDate: record.invoice.exchangeRateDate,
+    exchangeRateSource: record.invoice.exchangeRateSource as "Base" | "Manual" | "CBUAE",
+    projectId: record.invoice.projectId ?? "",
+    invoiceDate: record.invoice.invoiceDate,
+    taxDate: record.invoice.taxDate,
+    supplyEmirate: record.invoice.supplyEmirate ?? "",
+    dueDate: record.invoice.dueDate,
+    reference: record.invoice.reference ?? "",
+    notes: record.invoice.notes ?? "",
+    terms: record.invoice.terms ?? "",
+    salesOrderId: record.invoice.salesOrderId ?? "",
+    quoteId: record.invoice.quoteId ?? "",
+    amountsIncludeTax: Boolean(record.invoice.amountsIncludeTax),
+    lines: record.lines.map((line) => ({
+      itemId: line.itemId ?? "",
+      description: line.description,
+      quantity: quantityMicrosToInput(line.quantityMicros),
+      unitPrice: minorToCurrencyInput(line.unitPriceMinor, minorUnit),
+      discountType: (line.discountType ?? "none") as any,
+      discountValue: line.discountValue ?? "0",
+      salesAccountId: line.salesAccountId,
+      taxCodeId: line.taxCodeId,
+      projectId: line.projectId ?? "",
+      customFields: line.customFields ?? {},
+    })),
+  };
+}
+
+export function postInvoice(
+  businessId: string,
+  userId: string,
+  invoiceId: string,
+  intent: "post" | "submit_approval" = "post",
+): DocumentStatus {
+  assertMutationPermission(businessId, userId, "sales", "edit");
+  const record = getInvoice(businessId, userId, invoiceId);
+  if (!record) throw new Error("Invoice not found.");
+  if (record.invoice.documentStatus === "posted") return "posted";
+  if (record.invoice.documentStatus === "void") throw new Error("A void invoice cannot be posted.");
+  if (record.invoice.documentStatus === "pending_approval") {
+    throw new Error("This invoice is pending approval and must be finalized through the approval queue.");
+  }
+
+  const context = getBusinessDb(businessId, userId);
+  const evalResult =
+    intent === "submit_approval"
+      ? { requiresApproval: true }
+      : evaluateApprovalRequirement(
+          businessId,
+          userId,
+          "sales_invoice",
+          record.invoice.baseTotalMinor,
+          context.sqlite,
+        );
+  if (!evalResult.requiresApproval) {
+    assertMutationPermission(businessId, userId, "sales", "post");
+  }
+  updateInvoice(
+    businessId,
+    userId,
+    invoiceId,
+    buildInvoiceInputFromRecord(context, record),
+    evalResult.requiresApproval ? "submit_approval" : "post",
+  );
+  return evalResult.requiresApproval ? "pending_approval" : "posted";
+}
+
+export function postPendingSalesInvoice(businessId: string, userId: string, invoiceId: string) {
   assertMutationPermission(businessId, userId, "sales", "post");
   const record = getInvoice(businessId, userId, invoiceId);
   if (!record) throw new Error("Invoice not found.");
   if (record.invoice.documentStatus === "posted") return;
   if (record.invoice.documentStatus === "void") throw new Error("A void invoice cannot be posted.");
-
   const context = getBusinessDb(businessId, userId);
-  const minorUnit = getCurrency(context.sqlite, record.invoice.currencyCode).minor_unit;
   updateInvoice(
     businessId,
     userId,
     invoiceId,
-    {
-      customerId: record.invoice.customerId,
-      currencyCode: record.invoice.currencyCode,
-      exchangeRateToBase: record.invoice.exchangeRateToBase,
-      exchangeRateDate: record.invoice.exchangeRateDate,
-      exchangeRateSource: record.invoice.exchangeRateSource as "Base" | "Manual" | "CBUAE",
-      projectId: record.invoice.projectId ?? "",
-      invoiceDate: record.invoice.invoiceDate,
-      taxDate: record.invoice.taxDate,
-      supplyEmirate: record.invoice.supplyEmirate ?? "",
-      dueDate: record.invoice.dueDate,
-      reference: record.invoice.reference ?? "",
-      notes: record.invoice.notes ?? "",
-      terms: record.invoice.terms ?? "",
-      salesOrderId: record.invoice.salesOrderId ?? "",
-      quoteId: record.invoice.quoteId ?? "",
-      amountsIncludeTax: Boolean(record.invoice.amountsIncludeTax),
-      lines: record.lines.map((line) => ({
-        itemId: line.itemId ?? "",
-        description: line.description,
-        quantity: quantityMicrosToInput(line.quantityMicros),
-        unitPrice: minorToCurrencyInput(line.unitPriceMinor, minorUnit),
-        discountType: (line.discountType ?? "none") as any,
-        discountValue: line.discountValue ?? "0",
-        salesAccountId: line.salesAccountId,
-        taxCodeId: line.taxCodeId,
-        projectId: line.projectId ?? "",
-      })),
-    },
+    buildInvoiceInputFromRecord(context, record),
     "post",
+    undefined,
+    { bypassApprovalPolicy: true },
   );
+}
+
+export function revertSalesInvoiceToDraft(businessId: string, userId: string, invoiceId: string) {
+  assertMutationPermission(businessId, userId, "sales", "post");
+  const context = getBusinessDb(businessId, userId);
+  const row = context.sqlite
+    .prepare("SELECT id, document_status FROM sales_invoices WHERE id = ?")
+    .get(invoiceId) as { id: string; document_status: string } | undefined;
+  if (!row) throw new Error("Invoice not found.");
+  if (row.document_status !== "pending_approval") {
+    throw new Error(`Cannot return invoice in "${row.document_status}" status to draft.`);
+  }
+  context.sqlite
+    .prepare("UPDATE sales_invoices SET document_status = 'draft', updated_at = ? WHERE id = ?")
+    .run(new Date().toISOString(), invoiceId);
 }
 
 export type BatchActionResult = {
   successCount: number;
+  postedCount?: number;
+  pendingApprovalCount?: number;
   failedCount: number;
   errors: { id: string; number?: string; error: string }[];
 };
 
-export function batchPostInvoices(businessId: string, userId: string, invoiceIds: string[]): BatchActionResult {
-  assertMutationPermission(businessId, userId, "sales", "post");
-  const result: BatchActionResult = { successCount: 0, failedCount: 0, errors: [] };
+export function batchPostInvoices(
+  businessId: string,
+  userId: string,
+  invoiceIds: string[],
+  intent: "post" | "submit_approval" = "post",
+): BatchActionResult {
+  const access = getBusinessAccess(businessId, userId);
+  if (!access) throw new Error("BUSINESS_ACCESS_DENIED");
+  assertMutationPermission(businessId, userId, "sales", "edit");
+  if (intent !== "submit_approval" && !access.requiresApproval) {
+    assertMutationPermission(businessId, userId, "sales", "post");
+  }
+  const result: BatchActionResult = {
+    successCount: 0,
+    postedCount: 0,
+    pendingApprovalCount: 0,
+    failedCount: 0,
+    errors: [],
+  };
   for (const id of invoiceIds) {
+    let invoiceNumber: string | undefined;
     try {
       const record = getInvoice(businessId, userId, id);
       if (!record) {
@@ -1123,20 +1291,27 @@ export function batchPostInvoices(businessId: string, userId: string, invoiceIds
         result.errors.push({ id, error: "Invoice not found" });
         continue;
       }
+      invoiceNumber = record.invoice.invoiceNumber;
       if (record.invoice.documentStatus === "posted") {
         result.successCount++;
+        result.postedCount = (result.postedCount ?? 0) + 1;
         continue;
       }
       if (record.invoice.documentStatus === "void") {
         result.failedCount++;
-        result.errors.push({ id, number: record.invoice.invoiceNumber, error: "Cannot post a void invoice" });
+        result.errors.push({ id, number: invoiceNumber, error: "Cannot post a void invoice" });
         continue;
       }
-      postInvoice(businessId, userId, id);
+      const nextStatus = postInvoice(businessId, userId, id, intent);
       result.successCount++;
+      if (nextStatus === "pending_approval") {
+        result.pendingApprovalCount = (result.pendingApprovalCount ?? 0) + 1;
+      } else {
+        result.postedCount = (result.postedCount ?? 0) + 1;
+      }
     } catch (err) {
       result.failedCount++;
-      result.errors.push({ id, error: err instanceof Error ? err.message : "Posting failed" });
+      result.errors.push({ id, number: invoiceNumber, error: err instanceof Error ? err.message : "Posting failed" });
     }
   }
   return result;

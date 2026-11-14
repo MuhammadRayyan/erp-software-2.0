@@ -5,11 +5,11 @@ description: "Operational runbook for UAE Manager on Oracle Cloud: verified immu
 
 # Oracle production operations
 
-Use the canonical [deployment guide](../../../docs/DEPLOYMENT.md). Host: ubuntu@193.123.65.48; application: https://erp-portal.rapidtss.com; root: /opt/modern-erp; data: /opt/modern-erp/data. Verified 31 October 2026: ARM64 A1 Flex, 1 OCPU/6 GB RAM, 100 GB boot volume at 10 VPUs/GB. Settled billing/free-tier entitlement remains unverified.
+Use the canonical [deployment guide](../../../docs/DEPLOYMENT.md). Host: ubuntu@193.123.65.48; application: https://erp-portal.rapidtss.com; root: /opt/modern-erp; data: /opt/modern-erp/data. Verified 11 November 2026: revision `797b679e476c90a1b7d60bef387fedc85004a587`, ARM64 A1 Flex, 1 OCPU/6 GB RAM, 100 GB boot volume at 10 VPUs/GB, system schema 6, business schema 36 across 6 businesses. Settled billing/free-tier entitlement remains unverified.
 
 ## Current scope and existing access
 
-The owner is in closed testing with a few businesses and 5–10 users, keeping the repository public and deferring additional hardening/backlog. Read [next steps](../../../docs/NEXT_STEPS.md) and the [operations report](../../../docs/TESTING_PHASE_OPERATIONS_2026-10-26.md) before proposing more work. Documentation updates do not authorize deployment, a pending kernel reboot, new monitoring/offsite automation, or deferred changes.
+The owner is in closed testing with a few businesses and 5–10 users, keeping the repository public and deferring additional hardening/backlog. Read [next steps](../../../docs/NEXT_STEPS.md) and the [operations report](../../../docs/history/TESTING_PHASE_OPERATIONS_2026-10-26.md) before proposing more work. Documentation updates do not authorize deployment, a host reboot, new monitoring/offsite automation, or deferred changes.
 
 The owner workstation already has approved private OCI profile ERP_OPERATIONS in ~/.oci/config and read-only Sentry config ~/.sentryclirc. Check those before requesting another login or creating keys. OCI usage/revocation instructions are in ~/.oci/ERP_API_SETUP.md; the Windows helper ~/.oci/oci.ps1 handles the isolated CLI's ACL-check module-path compatibility. Use --profile ERP_OPERATIONS. These credentials are read-only operational access, separate from deployment; keep them outside Git, images and the VM. See the runbook's access section for verified scopes and limits. Other workstations need separately authorized access.
 
@@ -17,7 +17,7 @@ The owner workstation already has approved private OCI profile ERP_OPERATIONS in
 
 Use the existing local SSH key with BatchMode=yes, ConnectTimeout=10, and StrictHostKeyChecking=yes. Never disable host-key verification. Inspect container status, public HTTPS /api/health, and bounded logs without printing environment values, cookies, private keys or customer records. Health exposes status/revision; detailed integrity/reconciliation is checked with the bundled tools.
 
-For application acceptance, use the README's Node 22/npm commands and isolated default browser configuration, not the old development-server workflow in historical notes. The [flow/cleanup report](../../../docs/FLOW_VERIFICATION_AND_CLEANUP_2026-10-26.md) records 341 service checks and eleven local browser scenarios, preserved data and quarantined artifacts. These results do not authorize production mutations or imply that the local workflow edits have been deployed.
+For application acceptance, use the README's Node 22/npm commands and isolated default browser configuration, not the old development-server workflow in historical notes. The [flow/cleanup report](../../../docs/history/FLOW_VERIFICATION_AND_CLEANUP_2026-10-26.md) records historical service checks and local browser scenarios, preserved data and quarantined artifacts. These results do not authorize production mutations or imply that local workflow edits have been deployed.
 
 ## Normal release flow
 

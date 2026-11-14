@@ -1,11 +1,18 @@
 import Link from "next/link";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { formatMoney } from "@/core/format";
 import { requireModule } from "@/core/permissions/require-module";
-import { getProfitAndLoss } from "@/modules/reports/report-service";
+import {
+  computeVariance,
+  getComparativeProfitAndLoss,
+  resolveComparativePnlPeriods,
+  type ComparativePnlRow,
+} from "@/modules/reports/report-service";
+import { listSavedReports } from "@/modules/reports/saved-report-service";
 import { BackLink } from "@/components/back-link";
 import { ExportCsvButton } from "@/components/export-csv-button";
+import { ProfitLossFilterForm } from "@/components/reports/comparative-report-filters";
+import { ReportDrilldownButton } from "@/components/reports/report-drilldown-button";
+import { SavedReportToolbar } from "@/components/reports/saved-report-toolbar";
 
 export const metadata = { title: "Profit & Loss Report" };
 
@@ -14,158 +21,258 @@ export default async function ProfitAndLossReportPage({
   searchParams,
 }: {
   params: Promise<{ businessId: string }>;
-  searchParams: Promise<{ dateFrom?: string; dateTo?: string; basis?: "accrual" | "cash" }>;
+  searchParams: Promise<{
+    dateFrom?: string;
+    dateTo?: string;
+    basis?: "accrual" | "cash";
+    compareMode?: string;
+    compareDateFrom?: string;
+    compareDateTo?: string;
+    viewId?: string;
+  }>;
 }) {
   const { businessId } = await params;
   const filters = await searchParams;
   const basis = filters.basis === "cash" ? "cash" : "accrual";
+  const compareMode = filters.compareMode || "none";
   const { user, access } = await requireModule(businessId, "reports");
 
-  const rows = getProfitAndLoss(businessId, user.id, filters.dateFrom, filters.dateTo, basis);
+  const periods = resolveComparativePnlPeriods({
+    dateFrom: filters.dateFrom,
+    dateTo: filters.dateTo,
+    compareMode,
+    compareDateFrom: filters.compareDateFrom,
+    compareDateTo: filters.compareDateTo,
+  });
 
-  // Group by subtype
+  const rows = getComparativeProfitAndLoss(businessId, user.id, periods, basis);
+  const savedViews = listSavedReports(businessId, user.id, "profit_loss");
+  const showVariance = periods.length === 2;
+  const totalCols = 1 + periods.length + (showVariance ? 2 : 0);
+
   const sales = rows.filter((r) => r.type === "income" && r.subtype === "sales");
   const otherIncome = rows.filter((r) => r.type === "income" && r.subtype === "other_income");
   const costOfSales = rows.filter((r) => r.type === "expense" && r.subtype === "cost_of_sales");
   const operatingExpenses = rows.filter((r) => r.type === "expense" && r.subtype === "operating");
   const otherExpenses = rows.filter((r) => r.type === "expense" && r.subtype === "other_expense");
 
-  const sumNet = (arr: typeof rows) => arr.reduce((acc, r) => acc + r.net_minor, 0);
+  const sumPeriods = (arr: ComparativePnlRow[]) =>
+    periods.map((_, idx) => arr.reduce((acc, r) => acc + r.amountsMinor[idx], 0));
 
-  const totalSales = sumNet(sales);
-  const totalOtherIncome = sumNet(otherIncome);
-  const totalIncome = totalSales + totalOtherIncome;
+  const totalSales = sumPeriods(sales);
+  const totalOtherIncome = sumPeriods(otherIncome);
+  const totalIncome = periods.map((_, i) => totalSales[i] + totalOtherIncome[i]);
 
-  const totalCostOfSales = sumNet(costOfSales);
-  const grossProfit = totalIncome - totalCostOfSales;
+  const totalCostOfSales = sumPeriods(costOfSales);
+  const grossProfit = periods.map((_, i) => totalIncome[i] - totalCostOfSales[i]);
 
-  const totalOperating = sumNet(operatingExpenses);
-  const totalOtherExpenses = sumNet(otherExpenses);
-  const totalExpenses = totalCostOfSales + totalOperating + totalOtherExpenses;
+  const totalOperating = sumPeriods(operatingExpenses);
+  const totalOtherExpenses = sumPeriods(otherExpenses);
+  const totalExpenses = periods.map(
+    (_, i) => totalCostOfSales[i] + totalOperating[i] + totalOtherExpenses[i],
+  );
 
-  const netProfit = totalIncome - totalExpenses;
+  const netProfit = periods.map((_, i) => totalIncome[i] - totalExpenses[i]);
 
-  const csvData = rows.map((r) => ({
-    name: r.name,
-    type: r.type,
-    subtype: r.subtype,
-    net_amount: (r.net_minor / 100).toFixed(2),
-  }));
+  const csvData = rows.map((r) => {
+    const obj: Record<string, string> = {
+      name: r.name,
+      type: r.type,
+      subtype: r.subtype,
+    };
+    periods.forEach((p, idx) => {
+      obj[`period_${idx}`] = (r.amountsMinor[idx] / 100).toFixed(2);
+    });
+    if (showVariance) {
+      obj.variance = r.varianceMinor !== null ? (r.varianceMinor / 100).toFixed(2) : "";
+      obj.variance_pct = r.variancePercent !== null ? `${r.variancePercent}%` : "";
+    }
+    return obj;
+  });
 
   const csvColumns = [
     { header: "Account", accessorKey: "name" },
     { header: "Type", accessorKey: "type" },
     { header: "Subtype", accessorKey: "subtype" },
-    { header: "Net Amount", accessorKey: "net_amount" },
+    ...periods.map((p, idx) => ({ header: p.label, accessorKey: `period_${idx}` })),
+    ...(showVariance
+      ? [
+          { header: "Variance", accessorKey: "variance" },
+          { header: "Variance %", accessorKey: "variance_pct" },
+        ]
+      : []),
   ];
 
-  function renderGroup(title: string, data: typeof rows, total: number) {
+  function renderVarianceCells(amounts: number[]) {
+    if (!showVariance) return null;
+    const { varianceMinor, variancePercent } = computeVariance(amounts[0], amounts[1]);
+    return (
+      <>
+        <td
+          className={`money text-right ${
+            varianceMinor !== null && varianceMinor < 0 ? "text-danger" : "text-muted-foreground"
+          }`}
+        >
+          {varianceMinor !== null ? formatMoney(varianceMinor, access.business.currency) : "—"}
+        </td>
+        <td className="money text-right text-muted-foreground">
+          {variancePercent !== null ? `${variancePercent > 0 ? "+" : ""}${variancePercent}%` : "—"}
+        </td>
+      </>
+    );
+  }
+
+  function renderGroup(title: string, data: ComparativePnlRow[], totals: number[]) {
     if (data.length === 0) return null;
     return (
       <>
         <tr>
-          <td colSpan={2} className="bg-surface-muted py-2 font-semibold text-foreground">
+          <td colSpan={totalCols} className="bg-surface-muted py-2 px-3 font-semibold text-foreground">
             {title}
           </td>
         </tr>
         {data.map((row) => (
-          <tr key={row.id}>
-            <td className="pl-6">
-              <Link href={`/b/${businessId}/accounting/chart-of-accounts/${row.id}`} className="hover:underline">
+          <tr key={row.id} className="hover:bg-surface-muted/40">
+            <td className="pl-6 py-2">
+              <Link
+                href={`/b/${businessId}/accounting/chart-of-accounts/${row.id}`}
+                className="hover:underline"
+              >
                 {row.name}
               </Link>
             </td>
-            <td className="money text-right">
-              <Link
-                href={`/b/${businessId}/reports/general-ledger?accountId=${row.id}&dateFrom=${filters.dateFrom || ""}&dateTo=${filters.dateTo || ""}`}
-                className="tabular font-medium text-primary hover:underline"
-                title={`View General Ledger for ${row.name}`}
-              >
-                {formatMoney(row.net_minor, access.business.currency)}
-              </Link>
-            </td>
+            {periods.map((p, idx) => (
+              <td key={`${row.id}-${idx}`} className="money py-2 text-right">
+                {row.amountsMinor[idx] !== 0 ? (
+                  <ReportDrilldownButton
+                    businessId={businessId}
+                    currency={access.business.currency}
+                    label={formatMoney(row.amountsMinor[idx], access.business.currency)}
+                    query={{
+                      kind: basis === "cash" ? "cash_pnl" : "account",
+                      accountId: row.id,
+                      dateFrom: p.dateFrom,
+                      dateTo: p.dateTo,
+                    }}
+                    title={`Drill down into ${row.name} (${p.label})`}
+                  />
+                ) : (
+                  <span className="text-muted-foreground">—</span>
+                )}
+              </td>
+            ))}
+            {renderVarianceCells(row.amountsMinor)}
           </tr>
         ))}
         <tr>
-          <td className="pl-6 pt-2 font-medium">Total {title}</td>
-          <td className="money border-t border-border pt-2 text-right font-medium">
-            {formatMoney(total, access.business.currency)}
-          </td>
+          <td className="pl-6 pt-2 pb-2 font-medium">Total {title}</td>
+          {totals.map((val, idx) => (
+            <td key={idx} className="money border-t border-border pt-2 pb-2 text-right font-medium">
+              {formatMoney(val, access.business.currency)}
+            </td>
+          ))}
+          {showVariance && renderVarianceCells(totals)}
         </tr>
         <tr>
-          <td colSpan={2} className="h-4"></td>
+          <td colSpan={totalCols} className="h-3"></td>
         </tr>
       </>
     );
   }
 
+  const hasIncome = totalIncome.some((v) => v !== 0);
+  const hasCogs = totalCostOfSales.some((v) => v !== 0);
+
   return (
-    <div className="page-container max-w-4xl">
+    <div className="page-container max-w-6xl">
       <BackLink href={`/b/${businessId}/reports`}>Reports</BackLink>
-      
+
       <div className="page-header flex flex-wrap items-start justify-between gap-4">
         <div>
-          <h1 className="page-title">Profit & Loss</h1>
+          <h1 className="page-title">Profit &amp; Loss</h1>
           <p className="page-description">
-            Income vs expenses for the selected period.
+            Income vs expenses with comparative periods and click-to-drill-down ledger inspection.
           </p>
         </div>
-        <ExportCsvButton 
-          filename={`profit-loss-${new Date().toISOString().slice(0, 10)}.csv`} 
-          columns={csvColumns} 
-          data={csvData} 
-        />
+        <div className="flex flex-wrap items-center gap-2">
+          <SavedReportToolbar
+            businessId={businessId}
+            reportType="profit_loss"
+            currentConfig={{
+              dateFrom: filters.dateFrom ?? "",
+              dateTo: filters.dateTo ?? "",
+              basis,
+              compareMode,
+              compareDateFrom: filters.compareDateFrom ?? "",
+              compareDateTo: filters.compareDateTo ?? "",
+            }}
+            savedViews={savedViews}
+            activeViewId={filters.viewId}
+            basePath={`/b/${businessId}/reports/profit-loss`}
+          />
+          <ExportCsvButton
+            filename={`profit-loss-${new Date().toISOString().slice(0, 10)}.csv`}
+            columns={csvColumns}
+            data={csvData}
+          />
+        </div>
       </div>
 
-      <form className="mb-6 flex flex-wrap items-end gap-3">
-        <label className="space-y-1 text-xs text-muted-foreground">
-          From
-          <Input name="dateFrom" type="date" defaultValue={filters.dateFrom} className="mt-1 w-40 text-foreground" />
-        </label>
-        <label className="space-y-1 text-xs text-muted-foreground">
-          To
-          <Input name="dateTo" type="date" defaultValue={filters.dateTo} className="mt-1 w-40 text-foreground" />
-        </label>
-        <label className="space-y-1 text-xs text-muted-foreground">
-          Accounting Basis
-          <select
-            name="basis"
-            defaultValue={basis}
-            className="mt-1 flex h-9 w-36 rounded-md border border-input bg-surface px-3 py-1 text-sm shadow-xs focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-          >
-            <option value="accrual">Accrual Basis</option>
-            <option value="cash">Cash Basis</option>
-          </select>
-        </label>
-        <Button type="submit" variant="secondary">Update</Button>
-        <span className="ml-auto hidden text-xs text-muted-foreground self-center lg:inline">
-          {basis === "cash" ? "Cash basis: recognized upon payment" : "Accrual basis: recognized when issued"}
-        </span>
-      </form>
+      <ProfitLossFilterForm
+        key={`${filters.dateFrom ?? ""}|${filters.dateTo ?? ""}|${basis}|${compareMode}|${filters.compareDateFrom ?? ""}|${filters.compareDateTo ?? ""}|${filters.viewId ?? ""}`}
+        dateFrom={filters.dateFrom}
+        dateTo={filters.dateTo}
+        basis={basis}
+        compareMode={compareMode}
+        compareDateFrom={filters.compareDateFrom}
+        compareDateTo={filters.compareDateTo}
+      />
 
-      <div className="data-panel p-6">
-        <table className="w-full text-sm">
+      <div className="data-panel overflow-x-auto p-6">
+        <table className="w-full min-w-[640px] text-sm">
+          <thead>
+            <tr className="border-b border-border text-xs uppercase tracking-wider text-muted-foreground">
+              <th className="pb-3 text-left font-semibold">Account</th>
+              {periods.map((p, idx) => (
+                <th key={idx} className="pb-3 text-right font-semibold">
+                  {p.label}
+                </th>
+              ))}
+              {showVariance && (
+                <>
+                  <th className="pb-3 text-right font-semibold">Variance</th>
+                  <th className="pb-3 text-right font-semibold">Var %</th>
+                </>
+              )}
+            </tr>
+          </thead>
           <tbody>
             {renderGroup("Sales", sales, totalSales)}
             {renderGroup("Other Income", otherIncome, totalOtherIncome)}
-            
-            {totalIncome !== 0 && (
+
+            {hasIncome && (
               <tr>
                 <td className="pb-4 pt-2 text-base font-semibold">Total Income</td>
-                <td className="money border-b-2 border-border pb-4 pt-2 text-right text-base font-semibold">
-                  {formatMoney(totalIncome, access.business.currency)}
-                </td>
+                {totalIncome.map((val, idx) => (
+                  <td key={idx} className="money border-b-2 border-border pb-4 pt-2 text-right text-base font-semibold">
+                    {formatMoney(val, access.business.currency)}
+                  </td>
+                ))}
+                {showVariance && renderVarianceCells(totalIncome)}
               </tr>
             )}
-            
+
             {renderGroup("Cost of Sales", costOfSales, totalCostOfSales)}
-            
-            {totalCostOfSales !== 0 && (
+
+            {hasCogs && (
               <tr>
                 <td className="pb-4 pt-2 text-base font-semibold">Gross Profit</td>
-                <td className="money border-b border-border pb-4 pt-2 text-right text-base font-semibold">
-                  {formatMoney(grossProfit, access.business.currency)}
-                </td>
+                {grossProfit.map((val, idx) => (
+                  <td key={idx} className="money border-b border-border pb-4 pt-2 text-right text-base font-semibold">
+                    {formatMoney(val, access.business.currency)}
+                  </td>
+                ))}
+                {showVariance && renderVarianceCells(grossProfit)}
               </tr>
             )}
 
@@ -174,9 +281,12 @@ export default async function ProfitAndLossReportPage({
 
             <tr>
               <td className="pt-6 text-lg font-bold">Net Profit / (Loss)</td>
-              <td className="money border-t-2 border-border pt-6 text-right text-lg font-bold">
-                {formatMoney(netProfit, access.business.currency)}
-              </td>
+              {netProfit.map((val, idx) => (
+                <td key={idx} className="money border-t-2 border-border pt-6 text-right text-lg font-bold">
+                  {formatMoney(val, access.business.currency)}
+                </td>
+              ))}
+              {showVariance && renderVarianceCells(netProfit)}
             </tr>
           </tbody>
         </table>

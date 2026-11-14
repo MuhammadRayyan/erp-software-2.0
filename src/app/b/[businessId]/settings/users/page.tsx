@@ -24,12 +24,13 @@ export default async function UsersPage({
   }
 
   const rows = listBusinessUsers(businessId, user.id).map(
-    ({ user: member, membership, invitationStatus, isOwner, modules, capabilities }) => ({
+    ({ user: member, membership, invitationStatus, isOwner, requiresApproval, modules, capabilities }) => ({
       membershipId: membership.id,
       userId: member.id,
       name: member.name,
       email: member.email,
       role: membership.role,
+      requiresApproval,
       modules,
       capabilities,
       current: member.id === user.id,

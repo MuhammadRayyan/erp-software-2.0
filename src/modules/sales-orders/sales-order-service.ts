@@ -12,6 +12,7 @@ import { convertDocumentLinesToBase} from "@/modules/currency/conversion";
 import { resolveRateSnapshot } from "@/modules/currency/validation";
 import { calculateLines, totalsForLines, type StoredLine } from "@/modules/accounting/services/document-line-calculator";
 import { recordActivity } from "@/modules/activity-log/activity-log-service";
+import { getCustomFieldValuesForEntities, saveLineCustomFieldValuesInTransaction } from "@/modules/custom-fields/custom-field-service";
 
 export type SalesOrderStatus = "draft" | "active" | "completed" | "cancelled" | "superseded";
 export type SalesOrderIntent = "draft" | "issue";
@@ -113,7 +114,8 @@ export function getSalesOrder(businessId: string, userId: string, orderId: strin
   const linkedQuote = header.order.salesQuoteId
     ? (context.sqlite.prepare("SELECT id, quote_number, document_status FROM sales_quotes WHERE id = ?").get(header.order.salesQuoteId) as { id: string; quote_number: string; document_status: string } | undefined)
     : undefined;
-  return { ...header, project: header.order.projectId ? projectById.get(header.order.projectId) ?? null : null, lines: lines.map((line) => ({ ...line, item: line.itemId ? itemById.get(line.itemId) ?? null : null, receivedMicros: receivedByLine.get(line.id) ?? 0, remainingMicros: Math.max(0, line.quantityMicros - (receivedByLine.get(line.id) ?? 0)), salesAccount: line.salesAccountId ? accountById.get(line.salesAccountId) ?? null : null, taxCode: taxById.get(line.taxCodeId) ?? null, project: effectiveProjectId(line.projectId, header.order.projectId) ? projectById.get(effectiveProjectId(line.projectId, header.order.projectId)!) ?? null : null })), relatedInvoices, goodsReceipts, linkedQuote };
+  const lineCustomFieldsMap = getCustomFieldValuesForEntities(businessId, userId, "sales_order_line", lines.map((l) => l.id));
+  return { ...header, project: header.order.projectId ? projectById.get(header.order.projectId) ?? null : null, lines: lines.map((line) => ({ ...line, item: line.itemId ? itemById.get(line.itemId) ?? null : null, receivedMicros: receivedByLine.get(line.id) ?? 0, remainingMicros: Math.max(0, line.quantityMicros - (receivedByLine.get(line.id) ?? 0)), salesAccount: line.salesAccountId ? accountById.get(line.salesAccountId) ?? null : null, taxCode: taxById.get(line.taxCodeId) ?? null, project: effectiveProjectId(line.projectId, header.order.projectId) ? projectById.get(effectiveProjectId(line.projectId, header.order.projectId)!) ?? null : null, customFields: lineCustomFieldsMap.get(line.id) ?? {} })), relatedInvoices, goodsReceipts, linkedQuote };
 }
 
 function resolveQuoteIdFromReference(sqlite: any, reference?: string | null, customerId?: string | null): string | null {
@@ -152,7 +154,9 @@ export function saveSalesOrder(businessId: string, userId: string, input: SalesO
   let recordedOrderNumber = "";
   const resolvedQuoteId = data.salesQuoteId || resolveQuoteIdFromReference(context.sqlite, data.reference, data.customerId);
   context.sqlite.transaction(() => {
+    let oldLineIds: string[] = [];
     if (orderId) {
+      oldLineIds = (context.sqlite.prepare("SELECT id FROM sales_order_lines WHERE order_id = ?").all(orderId) as { id: string }[]).map((r) => r.id);
       const current = context.db.select().from(salesOrders).where(eq(salesOrders.id, orderId)).get();
       if (!current) throw new Error("Sales order not found.");
       if (current.documentStatus === "completed" || current.documentStatus === "cancelled") throw new Error("Closed or cancelled sales orders cannot be edited.");
@@ -180,6 +184,7 @@ export function saveSalesOrder(businessId: string, userId: string, input: SalesO
         .run(id, orderNumber, data.customerId, data.projectId || null, resolvedQuoteId || null, data.date, data.expectedDate || "", data.reference || null, status, data.amountsIncludeTax ? 1 : 0, amounts.subtotalMinor, amounts.taxMinor, amounts.totalMinor, rate.currencyCode, rate.exchangeRateToBase, rate.exchangeRateDate, rate.exchangeRateSource, base.baseSubtotalMinor, base.baseTaxMinor, base.baseTotalMinor, data.notes || null, data.terms || null, userId, now, now);
     }
     insertLines(context.db, id, lines);
+    saveLineCustomFieldValuesInTransaction(context.sqlite, "sales_order_line", lines.map((l) => ({ lineId: l.id, customFields: l.customFields })), oldLineIds);
 
     if (resolvedQuoteId) {
       context.sqlite.prepare(

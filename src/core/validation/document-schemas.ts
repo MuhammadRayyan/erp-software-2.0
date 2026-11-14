@@ -47,3 +47,10 @@ export const discountValueSchema = z
   .transform((val) => (val === "" ? "0" : val))
   .default("0");
 
+export const lineCustomFieldsSchema = z
+  .record(
+    z.string(),
+    z.union([z.string(), z.boolean()]).transform((val) => (typeof val === "boolean" ? (val ? "true" : "false") : val)),
+  )
+  .optional();
+

@@ -101,7 +101,6 @@ export function DebitNoteForm({
   }
   const supplierId = useWatch({ control, name: "supplierId" });
   const invoiceId = useWatch({ control, name: "purchaseInvoiceId" });
-  const lines = useWatch({ control, name: "lines" }) ?? [];
   const eligibleInvoices = useMemo(
     () => invoices.filter((invoice) => invoice.supplierId === supplierId),
     [supplierId, invoices],
@@ -136,6 +135,7 @@ export function DebitNoteForm({
     taxCodes,
     minorUnit,
   });
+  const lines = totals.lines;
   const resolvedExpenseAccounts = expenseAccounts ?? salesAccounts ?? [];
   const defaultExpense = resolvedExpenseAccounts[0]?.id ?? "";
     
@@ -164,10 +164,9 @@ export function DebitNoteForm({
     <form className="space-y-5 max-w-none" noValidate>
       {serverError && <FormError message={serverError} />}
       <section className="form-section">
-        <h2 className="text-base font-semibold">Credit details</h2>
+        <h2 className="text-base font-semibold">Debit note details</h2>
         <p className="mt-1 text-sm text-muted-foreground">
-          A posted credit reverses Sales and output VAT while reducing Accounts
-          Receivable.
+          A posted debit note reverses purchase expenses and input VAT while reducing Accounts Payable.
         </p>
         <div className="mt-5 grid gap-5 md:grid-cols-3">
           <div className="space-y-1.5">
@@ -191,7 +190,7 @@ export function DebitNoteForm({
             )}
           </div>
           <div className="space-y-1.5">
-            <Label htmlFor="purchaseInvoiceId">Apply to invoice</Label>
+            <Label htmlFor="purchaseInvoiceId">Apply to purchase bill</Label>
             <SelectNative
               id="purchaseInvoiceId"
               {...register("purchaseInvoiceId", {
@@ -211,7 +210,7 @@ export function DebitNoteForm({
               })}
               aria-invalid={!!errors.purchaseInvoiceId}
             >
-              <option value="">Choose a posted invoice…</option>
+              <option value="">Choose a posted bill…</option>
               {eligibleInvoices.map((invoice) => (
                 <option key={invoice.id} value={invoice.id}>
                   {invoice.invoiceNumber} ·{" "}
@@ -226,7 +225,7 @@ export function DebitNoteForm({
             </SelectNative>
             {selected && (
               <p className="text-xs text-muted-foreground">
-                Maximum credit{" "}
+                Maximum debit{" "}
                 {formatMoney(
                   selected.balanceMinor,
                   selected.currencyCode,
@@ -239,7 +238,7 @@ export function DebitNoteForm({
             )}
           </div>
           <div className="space-y-1.5">
-            <Label htmlFor="date">Credit note date</Label>
+            <Label htmlFor="date">Debit note date</Label>
             <Input
               id="date"
               type="date"
@@ -322,26 +321,25 @@ export function DebitNoteForm({
       <section className="form-section">
         <div className="mb-3 flex flex-wrap items-end justify-between gap-3">
           <div>
-            <h2 className="text-base font-semibold">Credited items</h2>
+            <h2 className="text-base font-semibold">Debited items</h2>
             <p className="mt-1 text-sm text-muted-foreground">
-              Use the original revenue, VAT, and Project allocations for a clean reversal.
+              Use the original expense, VAT, and Project allocations for a clean reversal.
             </p>
           </div>
-          <div className="flex gap-2">
-            <div className="flex flex-col gap-1">
-              <Label className="text-xs text-muted-foreground">Default Tax</Label>
-              <SelectNative
-                className="h-8 max-w-[200px]"
-                value={globalTaxCodeId}
-                onChange={(e) => updateGlobalTax(e.target.value)}
-              >
-                {taxCodes.map((taxCode) => (
-                  <option key={taxCode.id} value={taxCode.id}>
-                    {taxCode.name}
-                  </option>
-                ))}
-              </SelectNative>
-            </div>
+          <div className="flex items-center gap-2">
+            <Label htmlFor="globalTax" className="text-sm font-medium">Default Tax:</Label>
+            <SelectNative
+              id="globalTax"
+              className="w-40"
+              value={globalTaxCodeId}
+              onChange={(e) => updateGlobalTax(e.target.value)}
+            >
+              {taxCodes.map((taxCode) => (
+                <option key={taxCode.id} value={taxCode.id}>
+                  {taxCode.name}
+                </option>
+              ))}
+            </SelectNative>
           </div>
         </div>
         <DocumentLineTable
@@ -387,7 +385,17 @@ export function DebitNoteForm({
         />
       </section>
 
-      <DocumentFormFooter onCancel={() => router.push(cancelHref)}>
+      <DocumentFormFooter
+        onCancel={() => router.push(cancelHref)}
+        status={documentStatus}
+        totals={{
+          subtotalMinor: totals.subtotalMinor,
+          taxMinor: totals.taxMinor,
+          totalMinor: totals.totalMinor,
+          currencyCode,
+          minorUnit,
+        }}
+      >
         {documentStatus === "posted" ? (
           <Button permission={["save", "post"]}
             type="button"
@@ -395,7 +403,7 @@ export function DebitNoteForm({
             onClick={handleSubmit((values) => save(values, "post"))}
           >
             {isSubmitting && <LoaderCircle className="size-4 animate-spin" />}{" "}
-            Update Posted Credit
+            Update Posted Debit Note
           </Button>
         ) : (
           <div className="flex gap-2">

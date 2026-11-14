@@ -7,6 +7,7 @@ import { purchaseInvoiceInputSchema } from "./purchase-invoice-input";
 import {
   deletePurchaseInvoice,
   duplicatePurchaseInvoice,
+  getPurchaseInvoice,
   postPurchaseInvoiceDoc,
   savePurchaseInvoice,
   voidPurchaseInvoice,
@@ -28,14 +29,20 @@ export async function savePurchaseInvoiceAction(businessId: string, invoiceId: s
   let id: string;
   try { id = savePurchaseInvoice(businessId, user.id, parsed.data, intent, invoiceId ?? undefined); }
   catch (error) { return { error: error instanceof Error ? error.message : "The purchase invoice could not be saved." }; }
+  const saved = getPurchaseInvoice(businessId, user.id, id);
+  const status = saved?.invoice.documentStatus;
   const notice =
-    intent === "post"
-      ? parsed.data.applyAvailablePrepayment
-        ? "Purchase invoice posted & prepayment applied"
-        : "Purchase invoice posted"
-      : "Draft saved";
+    status === "pending_approval"
+      ? "Submitted for approval"
+      : status === "posted"
+        ? parsed.data.applyAvailablePrepayment
+          ? "Purchase invoice posted & prepayment applied"
+          : "Purchase invoice posted"
+        : "Draft saved";
   revalidatePath(`/b/${businessId}/purchases/invoices`);
   revalidatePath(`/b/${businessId}/purchases/invoices/${id}`);
+  revalidatePath(`/b/${businessId}/approvals`);
+  revalidatePath(`/b/${businessId}/overview`);
   redirect(`/b/${businessId}/purchases/invoices/${id}?notice=${encodeURIComponent(notice)}`);
 }
 
@@ -53,22 +60,40 @@ export async function duplicatePurchaseInvoiceAction(businessId: string, invoice
 export async function deletePurchaseInvoiceAction(businessId: string, invoiceId: string) { const { user } = await requirePermission(businessId, "purchases", "delete"); try { deletePurchaseInvoice(businessId, user.id, invoiceId); revalidatePath(`/b/${businessId}/purchases/invoices`); return {}; } catch (error) { return { error: error instanceof Error ? error.message : "The purchase invoice could not be deleted." }; } }
 export async function voidPurchaseInvoiceAction(businessId: string, invoiceId: string) { const { user } = await requirePermission(businessId, "purchases", "delete"); try { voidPurchaseInvoice(businessId, user.id, invoiceId); revalidatePath(`/b/${businessId}/purchases/invoices/${invoiceId}`); return {}; } catch (error) { return { error: error instanceof Error ? error.message : "The purchase invoice could not be voided." }; } }
 
-export async function postPurchaseInvoiceAction(businessId: string, invoiceId: string) {
-  const { user } = await requirePermission(businessId, "purchases", "post");
+export async function postPurchaseInvoiceAction(
+  businessId: string,
+  invoiceId: string,
+  intent: "post" | "submit_approval" = "post",
+): Promise<{ error?: string; documentStatus?: "draft" | "pending_approval" | "posted" | "void" }> {
+  const { user, access } = await requirePermission(businessId, "purchases", "edit");
+  if (intent !== "submit_approval" && !access.requiresApproval) {
+    await requirePermission(businessId, "purchases", "post");
+  }
   try {
-    postPurchaseInvoiceDoc(businessId, user.id, invoiceId);
+    const documentStatus = postPurchaseInvoiceDoc(businessId, user.id, invoiceId, intent);
     revalidatePath(`/b/${businessId}/purchases/invoices`);
     revalidatePath(`/b/${businessId}/purchases/invoices/${invoiceId}`);
-    return {};
+    revalidatePath(`/b/${businessId}/approvals`);
+    revalidatePath(`/b/${businessId}/overview`);
+    return { documentStatus };
   } catch (error) {
     return { error: error instanceof Error ? error.message : "The purchase bill could not be posted." };
   }
 }
 
-export async function batchPostPurchaseInvoicesAction(businessId: string, invoiceIds: string[]): Promise<BatchPurchaseActionResult> {
-  const { user } = await requirePermission(businessId, "purchases", "post");
-  const result = batchPostPurchaseInvoices(businessId, user.id, invoiceIds);
+export async function batchPostPurchaseInvoicesAction(
+  businessId: string,
+  invoiceIds: string[],
+  intent: "post" | "submit_approval" = "post",
+): Promise<BatchPurchaseActionResult> {
+  const { user, access } = await requirePermission(businessId, "purchases", "edit");
+  if (intent !== "submit_approval" && !access.requiresApproval) {
+    await requirePermission(businessId, "purchases", "post");
+  }
+  const result = batchPostPurchaseInvoices(businessId, user.id, invoiceIds, intent);
   revalidatePath(`/b/${businessId}/purchases/invoices`);
+  revalidatePath(`/b/${businessId}/approvals`);
+  revalidatePath(`/b/${businessId}/overview`);
   return result;
 }
 

@@ -79,6 +79,9 @@ export function updateInvoiceNumbering(
       journalPrefix: data.journalPrefix,
       journalNextNumber: data.journalNextNumber,
       journalPadding: data.journalPadding,
+      pdcPrefix: data.pdcPrefix,
+      pdcNextNumber: data.pdcNextNumber,
+      pdcPadding: data.pdcPadding,
       updatedAt: new Date().toISOString(),
     })
     .where(eq(accountingSettings.id, "default"))

@@ -64,6 +64,7 @@ export function NumberingForm({ businessId, initial }: { businessId: string; ini
       items: [
         { label: "Bank Transactions", prefixKey: "bankTransactionPrefix", nextKey: "bankTransactionNextNumber", paddingKey: "bankTransactionPadding" },
         { label: "Bank Transfers", prefixKey: "bankTransferPrefix", nextKey: "bankTransferNextNumber", paddingKey: "bankTransferPadding" },
+        { label: "Post-Dated Cheques (PDC)", prefixKey: "pdcPrefix", nextKey: "pdcNextNumber", paddingKey: "pdcPadding" },
         { label: "Journal Entries", prefixKey: "journalPrefix", nextKey: "journalNextNumber", paddingKey: "journalPadding" },
       ],
     },
