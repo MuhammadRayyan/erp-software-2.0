@@ -22,6 +22,7 @@ import { DocumentFormFooter } from "@/components/document-form-footer";
 import { SelectNative } from "@/components/ui/select-native";
 import { DocumentLineTable, useDocumentTotals } from "@/components/documents";
 import { useUnsavedChanges } from "@/hooks/use-unsaved-changes";
+import { useActionPermission, useApprovalPolicy } from "@/components/permissions-provider";
 
 type CustomerOption = { id: string; name: string; defaultCurrencyCode: string | null; paymentTermsDays: number; creditLimitMinor: number | null };
 type AccountOption = { id: string; name: string };
@@ -51,6 +52,7 @@ export function InvoiceForm({
   availableCustomerCredits,
   customFields = [],
   customFieldValues,
+  lineCustomFields = [],
 }: {
   onDefaultSave?: (values: any, customValues: Record<string, string>) => Promise<{ error?: string; fieldErrors?: any } | undefined>;
   businessId: string;
@@ -70,8 +72,12 @@ export function InvoiceForm({
   availableCustomerCredits?: Record<string, CustomerCreditOption[]>;
   customFields?: CustomFieldInputDefinition[];
   customFieldValues?: Record<string, string>;
+  lineCustomFields?: CustomFieldInputDefinition[];
 }) {
   const router = useRouter();
+  const { requiresApproval } = useApprovalPolicy();
+  const canPost = useActionPermission("post");
+  const mustSubmitForApproval = requiresApproval || !canPost;
   const [serverError, setServerError] = useState("");
   const [customValues, setCustomValues] = useState<Record<string, string>>(() => {
     const initialCustomValues: Record<string, string> = {};
@@ -336,10 +342,10 @@ export function InvoiceForm({
           </div>
           <div className="flex gap-4 items-center">
             <div className="flex items-center gap-2">
-              <label htmlFor="globalTax" className="text-sm font-medium">Default Tax:</label>
-              <select
+              <Label htmlFor="globalTax" className="text-sm font-medium">Default Tax:</Label>
+              <SelectNative
                 id="globalTax"
-                className="w-40 flex h-9 items-center justify-between rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-sm ring-offset-background placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
+                className="w-40"
                 value={globalTaxCodeId}
                 onChange={(e) => updateGlobalTax(e.target.value)}
               >
@@ -348,7 +354,7 @@ export function InvoiceForm({
                     {taxCode.name}
                   </option>
                 ))}
-              </select>
+              </SelectNative>
             </div>
           </div>
         </div>
@@ -387,6 +393,7 @@ export function InvoiceForm({
           minorUnit={minorUnit}
           previews={previews}
           amountsIncludeTax={amountsIncludeTax}
+          lineCustomFields={lineCustomFields}
           subtotalMinor={subtotalMinor}
           taxMinor={taxMinor}
           totalMinor={totalMinor}
@@ -426,9 +433,20 @@ export function InvoiceForm({
             {isSubmitting && <LoaderCircle className="size-4 animate-spin" />} Save Changes
           </Button>
         ) : (
-          <Button permission={"save"} type="button" disabled={isSubmitting} onClick={handleSubmit((values) => save(values, "draft"))}>
-            {isSubmitting && <LoaderCircle className="size-4 animate-spin" />} {invoiceId ? "Save Draft" : "Save Draft Invoice"}
-          </Button>
+          <div className="flex flex-wrap items-center gap-2">
+            <Button permission={"save"} variant="secondary" type="button" disabled={isSubmitting} onClick={handleSubmit((values) => save(values, "draft"))}>
+              {isSubmitting && <LoaderCircle className="size-4 animate-spin" />} {invoiceId ? "Save Draft" : "Save Draft Invoice"}
+            </Button>
+            {mustSubmitForApproval ? (
+              <Button permission={"save"} type="button" disabled={isSubmitting} onClick={handleSubmit((values) => save(values, "submit_approval"))}>
+                {isSubmitting && <LoaderCircle className="size-4 animate-spin" />} Submit for Approval
+              </Button>
+            ) : (
+              <Button permission={["save", "post"]} type="button" disabled={isSubmitting} onClick={handleSubmit((values) => save(values, "post"))}>
+                {isSubmitting && <LoaderCircle className="size-4 animate-spin" />} {invoiceId ? "Save & Post" : "Create & Post"}
+              </Button>
+            )}
+          </div>
         )}
       </DocumentFormFooter>
     </form>

@@ -62,6 +62,7 @@ export type UserAccess = {
   name: string;
   email: string;
   role: "administrator" | "standard";
+  requiresApproval?: boolean;
   modules: ModuleKey[];
   capabilities?: ModuleCapabilities;
   current: boolean;
@@ -102,6 +103,7 @@ function AccessRow({
 }) {
   const router = useRouter();
   const [role, setRole] = useState(entry.role);
+  const [requiresApproval, setRequiresApproval] = useState(Boolean(entry.requiresApproval));
   const [capabilities, setCapabilities] = useState<ModuleCapabilities>(() => {
     if (entry.capabilities) return entry.capabilities;
     return parseCapabilities(entry.role, JSON.stringify(entry.modules));
@@ -113,11 +115,12 @@ function AccessRow({
 
   useEffect(() => {
     setRole(entry.role);
+    setRequiresApproval(Boolean(entry.requiresApproval));
     setCapabilities(
       entry.capabilities ?? parseCapabilities(entry.role, JSON.stringify(entry.modules))
     );
     setStatus(entry.status);
-  }, [entry.role, entry.modules, entry.capabilities, entry.status]);
+  }, [entry.role, entry.requiresApproval, entry.modules, entry.capabilities, entry.status]);
 
   const activeModules = moduleKeys.filter((m) => (capabilities[m]?.length ?? 0) > 0);
 
@@ -179,7 +182,8 @@ function AccessRow({
       entry.membershipId,
       role,
       activeModules,
-      role === "administrator" ? undefined : capabilities
+      role === "administrator" ? undefined : capabilities,
+      role === "administrator" ? false : requiresApproval
     );
     setPending(false);
     if (result.error) toast.error(result.error);
@@ -349,6 +353,20 @@ function AccessRow({
             <option value="administrator">Administrator</option>
             <option value="standard">Standard User</option>
           </SelectNative>
+          {role === "standard" && (
+            <SelectNative
+              id={`approval-${entry.membershipId}`}
+              aria-label={`Approval policy for ${entry.name}`}
+              value={requiresApproval ? "requires_approval" : "direct"}
+              disabled={entry.current || entry.isOwner}
+              onChange={(event) => setRequiresApproval(event.target.value === "requires_approval")}
+              className="text-xs h-8"
+              title="Choose whether this user requires checker approval before posting/issuing documents"
+            >
+              <option value="direct">Can proceed without approval</option>
+              <option value="requires_approval">Requires approval before posting</option>
+            </SelectNative>
+          )}
           <Button permission={"save"}
             variant="secondary"
             size="sm"
@@ -639,6 +657,7 @@ export function UserAccessList({ businessId, users }: { businessId: string; user
   const [open, setOpen] = useState(false);
   const [email, setEmail] = useState("");
   const [role, setRole] = useState<"administrator" | "standard">("standard");
+  const [inviteRequiresApproval, setInviteRequiresApproval] = useState(false);
   const [selectedModules, setSelectedModules] = useState<ModuleKey[]>([
     "sales",
     "purchases",
@@ -709,6 +728,7 @@ export function UserAccessList({ businessId, users }: { businessId: string; user
         role,
         modules: role === "standard" ? selectedModules : (moduleKeys as unknown as string[]),
         capabilities: role === "standard" ? inviteCapabilities : undefined,
+        requiresApproval: role === "standard" ? inviteRequiresApproval : false,
         sendEmail,
       });
 
@@ -860,7 +880,18 @@ export function UserAccessList({ businessId, users }: { businessId: string; user
                   </div>
 
                   {role === "standard" && (
-                    <div className="space-y-2 border-t border-border pt-3">
+                    <div className="space-y-3 border-t border-border pt-3">
+                      <div className="space-y-1.5">
+                        <Label htmlFor="new-user-approval">Posting Approval Control</Label>
+                        <SelectNative
+                          id="new-user-approval"
+                          value={inviteRequiresApproval ? "requires_approval" : "direct"}
+                          onChange={(e) => setInviteRequiresApproval(e.target.value === "requires_approval")}
+                        >
+                          <option value="direct">Can proceed without approval (posts directly if permitted)</option>
+                          <option value="requires_approval">Requires approval before posting / issuing</option>
+                        </SelectNative>
+                      </div>
                       <div className="flex items-center justify-between">
                         <Label>Initial Visible Modules & Actions</Label>
                         <div className="flex items-center gap-2 text-[11px]">

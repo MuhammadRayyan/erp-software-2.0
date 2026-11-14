@@ -140,7 +140,14 @@ export function MinimalDocumentTemplate({ data, settings, variant }: { data: Doc
 
           {data.lines.map((line, i) => (
             <View key={i} style={localStyles.tableRow} wrap={false}>
-              <Text style={[localStyles.tableCell, { flex: 4, fontSize: fontScale.table }]}>{line.description}</Text>
+              <View style={[localStyles.tableCell, { flex: 4 }]}>
+                <Text style={{ fontSize: fontScale.table }}>{line.description}</Text>
+                {settings.showCustomFields !== false && line.customFields && line.customFields.length > 0 && (
+                  <Text style={{ fontSize: Math.max(6.5, fontScale.table - 1.5), color: "#71717a", marginTop: 1.5 }}>
+                    {line.customFields.map((cf) => `${cf.name}: ${cf.value}`).join("  •  ")}
+                  </Text>
+                )}
+              </View>
               {hasProject && <Text style={[localStyles.tableCell, { flex: 1.5, fontSize: fontScale.table, color: "#71717a" }]}>{line.project || "-"}</Text>}
               <Text style={[localStyles.tableCell, { flex: 1, textAlign: "right", fontSize: fontScale.table }]}>{line.quantity}</Text>
               <Text style={[localStyles.tableCell, { flex: 1.4, textAlign: "right", fontSize: fontScale.table }]}>{line.unitPrice}</Text>

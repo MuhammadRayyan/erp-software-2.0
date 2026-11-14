@@ -14,12 +14,22 @@ import { getCurrencySettings } from "@/modules/currency/exchange-rate";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Breadcrumbs } from "@/components/breadcrumbs";
+import { listCustomFieldDefinitions } from "@/modules/custom-fields/custom-field-service";
 
 export default async function EditPurchaseInvoicePage({ params }: { params: Promise<{ businessId: string; invoiceId: string }> }) {
   const { businessId, invoiceId } = await params;
   const { user, access } = await requireModule(businessId, "purchases");
   const record = getPurchaseInvoice(businessId, user.id, invoiceId);
   if (!record || record.invoice.documentStatus === "void") notFound();
+  if (record.invoice.documentStatus === "pending_approval") {
+    return (
+      <div className="page-container">
+        <h1 className="page-title">Pending approval</h1>
+        <p className="page-description">This Purchase Invoice is awaiting approval. Withdraw or reject it to draft before editing.</p>
+        <Button asChild className="mt-5"><Link href={`/b/${businessId}/purchases/invoices/${invoiceId}`}>Return to bill</Link></Button>
+      </div>
+    );
+  }
   if (record.goodsReceipts && record.goodsReceipts.length > 0) {
     return (
       <div className="page-container">
@@ -46,6 +56,7 @@ export default async function EditPurchaseInvoicePage({ params }: { params: Prom
   const items = listInventoryItemOptions(businessId, user.id);
   const currencySettings = getCurrencySettings(businessId, user.id);
   const minorUnit = currencySettings.currencies.find((currency) => currency.code === record.invoice.currencyCode)?.minor_unit ?? 2;
+  const lineCustomFields = listCustomFieldDefinitions(businessId, user.id, "purchase_invoice_line").map(({ id, name, fieldType, selectOptions, isRequired }) => ({ id, name, fieldType, selectOptions, isRequired }));
   return (
     <div className="page-container">
       <Breadcrumbs
@@ -64,6 +75,7 @@ export default async function EditPurchaseInvoicePage({ params }: { params: Prom
         businessId={businessId}
         invoiceId={invoiceId}
         documentStatus={record.invoice.documentStatus}
+        lineCustomFields={lineCustomFields}
         suppliers={suppliers.map(({ id, name, defaultCurrencyCode }) => ({ id, name, defaultCurrencyCode }))}
         expenseAccounts={accounts.map(({ id, name }) => ({ id, name }))}
         taxCodes={taxes.map(({ id, name, rateBasisPoints, vatCategory }) => ({ id, name, rateBasisPoints, vatCategory: vatCategory! }))}
@@ -99,6 +111,7 @@ export default async function EditPurchaseInvoicePage({ params }: { params: Prom
             expenseAccountId: line.expenseAccountId,
             taxCodeId: line.taxCodeId,
             projectId: line.projectId ?? "",
+            customFields: line.customFields ?? {},
           })),
         }}
       />

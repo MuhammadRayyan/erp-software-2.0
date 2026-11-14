@@ -226,6 +226,11 @@ export const accountingSettings = sqliteTable("business_accounting_settings", {
   payslipPrefix: text("payslip_prefix").notNull().default("PS-"),
   payslipNextNumber: integer("payslip_next_number").notNull().default(1),
   payslipPadding: integer("payslip_padding").notNull().default(4),
+  pdcReceivableAccountId: text("pdc_receivable_account_id").references(() => accounts.id),
+  pdcPayableAccountId: text("pdc_payable_account_id").references(() => accounts.id),
+  pdcPrefix: text("pdc_prefix").notNull().default("PDC-"),
+  pdcNextNumber: integer("pdc_next_number").notNull().default(1),
+  pdcPadding: integer("pdc_padding").notNull().default(4),
   financialLockDate: text("financial_lock_date"),
   openingBalancesDate: text("opening_balances_date"),
   createdAt: text("created_at").notNull(),
@@ -282,6 +287,8 @@ export const businessProfile = sqliteTable("business_profile", {
   dateFormat: text("date_format").notNull().default("DD/MM/YYYY"),
   timeFormat: text("time_format").notNull().default("12h"),
   financialYearStartMonth: integer("financial_year_start_month").notNull().default(1),
+  molEstablishmentId: text("mol_establishment_id"),
+  wpsBankRoutingCode: text("wps_bank_routing_code"),
   createdAt: text("created_at").notNull(),
   updatedAt: text("updated_at").notNull(),
 });
@@ -436,7 +443,7 @@ export const salesInvoices = sqliteTable(
     eInvoiceTransactionFlagsJson: text("einvoice_transaction_flags_json")
       .notNull()
       .default('{"freeTradeZone":false,"deemedSupply":false,"marginScheme":false,"summaryInvoice":false,"continuousSupply":false,"agentBilling":false,"eCommerce":false,"export":false}'),
-    documentStatus: text("document_status", { enum: ["draft", "posted", "void"] })
+    documentStatus: text("document_status", { enum: ["draft", "pending_approval", "posted", "void"] })
       .notNull()
       .default("draft"),
     subtotalMinor: integer("subtotal_minor").notNull(),
@@ -587,12 +594,12 @@ export const receipts = sqliteTable(
     realizedFxAmountMinor: integer("realized_fx_amount_minor").notNull(),
     reference: text("reference"),
     description: text("description"),
-    documentStatus: text("document_status", { enum: ["posted", "void"] })
+    documentStatus: text("document_status", { enum: ["draft", "pending_approval", "posted", "void"] })
       .notNull()
       .default("posted"),
     createdBy: text("created_by").notNull(),
     createdAt: text("created_at").notNull(),
-    postedAt: text("posted_at").notNull(),
+    postedAt: text("posted_at"),
     voidedAt: text("voided_at"),
   },
   (table) => [
@@ -638,7 +645,7 @@ export const purchaseOrders = sqliteTable(
     date: text("date").notNull(),
     expectedDate: text("expected_date"),
     reference: text("reference"),
-    status: text("status", { enum: ["draft", "issued", "closed", "cancelled", "superseded"] }).notNull().default("draft"),
+    status: text("status", { enum: ["draft", "pending_approval", "issued", "closed", "cancelled", "superseded"] }).notNull().default("draft"),
     subtotalMinor: integer("subtotal_minor").notNull(),
     taxMinor: integer("tax_minor").notNull(),
     totalMinor: integer("total_minor").notNull(),
@@ -707,7 +714,7 @@ export const purchaseInvoices = sqliteTable(
     dueDate: text("due_date").notNull(),
     reference: text("reference"),
     purchaseOrderId: text("purchase_order_id").references(() => purchaseOrders.id),
-    documentStatus: text("document_status", { enum: ["draft", "posted", "void"] }).notNull().default("draft"),
+    documentStatus: text("document_status", { enum: ["draft", "pending_approval", "posted", "void"] }).notNull().default("draft"),
     subtotalMinor: integer("subtotal_minor").notNull(),
     taxMinor: integer("tax_minor").notNull(),
     totalMinor: integer("total_minor").notNull(),
@@ -785,10 +792,10 @@ export const supplierPayments = sqliteTable(
     realizedFxAmountMinor: integer("realized_fx_amount_minor").notNull(),
     reference: text("reference"),
     description: text("description"),
-    documentStatus: text("document_status", { enum: ["posted", "void"] }).notNull().default("posted"),
+    documentStatus: text("document_status", { enum: ["draft", "pending_approval", "posted", "void"] }).notNull().default("posted"),
     createdBy: text("created_by").notNull(),
     createdAt: text("created_at").notNull(),
-    postedAt: text("posted_at").notNull(),
+    postedAt: text("posted_at"),
     voidedAt: text("voided_at"),
   },
   (table) => [
@@ -1142,7 +1149,7 @@ export const bankTransactions = sqliteTable(
     description: text("description").notNull(),
     totalMinor: integer("total_minor").notNull(),
     statementLineId: text("statement_line_id").references(() => bankStatementLines.id),
-    documentStatus: text("document_status", { enum: ["draft", "posted", "void"] })
+    documentStatus: text("document_status", { enum: ["draft", "pending_approval", "posted", "void"] })
       .notNull()
       .default("draft"),
     createdBy: text("created_by").notNull(),
@@ -1196,10 +1203,10 @@ export const bankTransfers = sqliteTable(
     amountMinor: integer("amount_minor").notNull(),
     reference: text("reference"),
     description: text("description"),
-    documentStatus: text("document_status", { enum: ["posted", "void"] }).notNull().default("posted"),
+    documentStatus: text("document_status", { enum: ["draft", "pending_approval", "posted", "void"] }).notNull().default("posted"),
     createdBy: text("created_by").notNull(),
     createdAt: text("created_at").notNull(),
-    postedAt: text("posted_at").notNull(),
+    postedAt: text("posted_at"),
     voidedAt: text("voided_at"),
   },
   (table) => [
@@ -1642,7 +1649,26 @@ export const documentTemplates = sqliteTable("document_templates", {
   updatedAt: text("updated_at").notNull(),
 });
 
-export const customFieldEntityTypes = ["customer", "supplier", "sales_invoice", "sales_quote", "sales_order", "purchase_quote", "purchase_order"] as const;
+export const customFieldEntityTypes = [
+  "customer",
+  "supplier",
+  "sales_invoice",
+  "sales_quote",
+  "sales_order",
+  "purchase_quote",
+  "purchase_order",
+  "purchase_invoice",
+  "sales_credit_note",
+  "debit_note",
+  "sales_invoice_line",
+  "sales_quote_line",
+  "sales_order_line",
+  "purchase_quote_line",
+  "purchase_order_line",
+  "purchase_invoice_line",
+  "sales_credit_note_line",
+  "debit_note_line",
+] as const;
 export const customFieldFieldTypes = ["text", "number", "date", "select", "checkbox"] as const;
 export const customFieldDefinitions = sqliteTable(
   "custom_field_definitions",
@@ -1655,6 +1681,7 @@ export const customFieldDefinitions = sqliteTable(
     position: integer("position").notNull().default(0),
     isRequired: integer("is_required", { mode: "boolean" }).notNull().default(false),
     showInList: integer("show_in_list", { mode: "boolean" }).notNull().default(false),
+    showOnPdf: integer("show_on_pdf", { mode: "boolean" }).notNull().default(true),
     createdAt: text("created_at").notNull(),
     updatedAt: text("updated_at").notNull(),
   },
@@ -1772,7 +1799,7 @@ export const salesQuotes = sqliteTable(
     quoteDate: text("quote_date").notNull(),
     expiryDate: text("expiry_date").notNull(),
     reference: text("reference"),
-    documentStatus: text("document_status", { enum: ["draft", "sent", "accepted", "rejected", "superseded", "cancelled"] })
+    documentStatus: text("document_status", { enum: ["draft", "pending_approval", "sent", "accepted", "rejected", "superseded", "cancelled"] })
       .notNull()
       .default("draft"),
     amountsIncludeTax: integer("amounts_include_tax", { mode: "boolean" }).notNull().default(false),
@@ -1918,7 +1945,7 @@ export const debitNotes = sqliteTable(
     debitNoteDate: text("debit_note_date").notNull(),
     taxDate: text("tax_date").notNull(),
     reference: text("reference"),
-    documentStatus: text("document_status", { enum: ["draft", "posted", "void"] })
+    documentStatus: text("document_status", { enum: ["draft", "pending_approval", "posted", "void"] })
       .notNull()
       .default("draft"),
     amountsIncludeTax: integer("amounts_include_tax", { mode: "boolean" }).notNull().default(false),
@@ -2001,7 +2028,7 @@ export const purchaseQuotes = sqliteTable(
     quoteDate: text("quote_date").notNull(),
     expiryDate: text("expiry_date").notNull(),
     reference: text("reference"),
-    documentStatus: text("document_status", { enum: ["draft", "sent", "accepted", "rejected", "superseded", "cancelled"] })
+    documentStatus: text("document_status", { enum: ["draft", "pending_approval", "sent", "accepted", "rejected", "superseded", "cancelled"] })
       .notNull()
       .default("draft"),
     amountsIncludeTax: integer("amounts_include_tax", { mode: "boolean" }).notNull().default(false),
@@ -2136,6 +2163,10 @@ export const employees = sqliteTable(
     housingAllowanceMinor: integer("housing_allowance_minor"),
     transportAllowanceMinor: integer("transport_allowance_minor"),
     otherAllowancesMinor: integer("other_allowances_minor"),
+    molPersonId: text("mol_person_id"),
+    bankRoutingCode: text("bank_routing_code"),
+    iban: text("iban"),
+    wpsEnabled: integer("wps_enabled", { mode: "boolean" }).notNull().default(true),
     isActive: integer("is_active", { mode: "boolean" }).notNull().default(true),
     createdAt: text("created_at").notNull(),
     updatedAt: text("updated_at").notNull(),
@@ -2217,5 +2248,135 @@ export const payslipLines = sqliteTable(
     index("payslip_lines_account_idx").on(table.accountId),
   ],
 );
+
+export const savedReports = sqliteTable(
+  "saved_reports",
+  {
+    id: text("id").primaryKey(),
+    name: text("name").notNull(),
+    reportType: text("report_type", {
+      enum: ["profit_loss", "balance_sheet", "trial_balance", "general_ledger", "vat_transactions", "project_profitability"],
+    }).notNull(),
+    description: text("description"),
+    configJson: text("config_json").notNull(),
+    createdBy: text("created_by").notNull(),
+    isShared: integer("is_shared", { mode: "boolean" }).notNull().default(true),
+    createdAt: text("created_at").notNull(),
+    updatedAt: text("updated_at").notNull(),
+  },
+  (table) => [
+    index("saved_reports_type_idx").on(table.reportType),
+  ],
+);
+
+export const postDatedCheques = sqliteTable(
+  "post_dated_cheques",
+  {
+    id: text("id").primaryKey(),
+    pdcNumber: text("pdc_number").notNull(),
+    direction: text("direction", { enum: ["receivable", "payable"] }).notNull(),
+    chequeNumber: text("cheque_number").notNull(),
+    chequeBankName: text("cheque_bank_name"),
+    issueDate: text("issue_date").notNull(),
+    maturityDate: text("maturity_date").notNull(),
+    customerId: text("customer_id").references(() => customers.id),
+    supplierId: text("supplier_id").references(() => suppliers.id),
+    salesInvoiceId: text("sales_invoice_id").references(() => salesInvoices.id),
+    purchaseInvoiceId: text("purchase_invoice_id").references(() => purchaseInvoices.id),
+    bankAccountId: text("bank_account_id").notNull().references(() => bankAccounts.id),
+    currencyCode: text("currency_code").notNull().default("AED").references(() => currencies.code),
+    amountMinor: integer("amount_minor").notNull(),
+    status: text("status", { enum: ["held", "deposited", "cleared", "bounced", "cancelled"] })
+      .notNull()
+      .default("held"),
+    reference: text("reference"),
+    notes: text("notes"),
+    depositedAt: text("deposited_at"),
+    clearedAt: text("cleared_at"),
+    bouncedAt: text("bounced_at"),
+    bounceReason: text("bounce_reason"),
+    cancelledAt: text("cancelled_at"),
+    createdBy: text("created_by").notNull(),
+    createdAt: text("created_at").notNull(),
+    updatedAt: text("updated_at").notNull(),
+  },
+  (table) => [
+    uniqueIndex("pdc_number_idx").on(table.pdcNumber),
+    index("pdc_status_maturity_idx").on(table.status, table.maturityDate),
+    index("pdc_direction_idx").on(table.direction, table.status),
+    index("pdc_customer_idx").on(table.customerId),
+    index("pdc_supplier_idx").on(table.supplierId),
+  ],
+);
+
+export const approvalRules = sqliteTable(
+  "approval_rules",
+  {
+    id: text("id").primaryKey(),
+    entityType: text("entity_type").notNull(),
+    module: text("module").notNull(),
+    isEnabled: integer("is_enabled", { mode: "boolean" }).notNull().default(false),
+    thresholdMinor: integer("threshold_minor").notNull().default(0),
+    requireCheckerSeparation: integer("require_checker_separation", { mode: "boolean" }).notNull().default(true),
+    updatedAt: text("updated_at").notNull(),
+  },
+  (table) => [
+    uniqueIndex("approval_rules_entity_type_idx").on(table.entityType),
+  ],
+);
+
+export const approvalRequests = sqliteTable(
+  "approval_requests",
+  {
+    id: text("id").primaryKey(),
+    entityType: text("entity_type").notNull(),
+    entityId: text("entity_id").notNull(),
+    entityNumber: text("entity_number").notNull(),
+    module: text("module").notNull(),
+    amountMinor: integer("amount_minor").notNull().default(0),
+    baseAmountMinor: integer("base_amount_minor").notNull().default(0),
+    currencyCode: text("currency_code").notNull().default("AED"),
+    status: text("status", { enum: ["pending", "approved", "rejected", "withdrawn"] })
+      .notNull()
+      .default("pending"),
+    requestedBy: text("requested_by").notNull(),
+    requestedByName: text("requested_by_name").notNull(),
+    requestedAt: text("requested_at").notNull(),
+    decidedBy: text("decided_by"),
+    decidedByName: text("decided_by_name"),
+    decidedAt: text("decided_at"),
+    decisionNote: text("decision_note"),
+    targetIntent: text("target_intent").notNull().default("post"),
+  },
+  (table) => [
+    index("approval_requests_status_idx").on(table.status, table.requestedAt),
+    index("approval_requests_entity_idx").on(table.entityType, table.entityId),
+    index("approval_requests_requester_idx").on(table.requestedBy),
+  ],
+);
+
+export const notifications = sqliteTable(
+  "notifications",
+  {
+    id: text("id").primaryKey(),
+    recipientUserId: text("recipient_user_id").notNull(),
+    type: text("type").notNull(),
+    title: text("title").notNull(),
+    message: text("message").notNull(),
+    entityType: text("entity_type"),
+    entityId: text("entity_id"),
+    entityNumber: text("entity_number"),
+    actionUrl: text("action_url"),
+    actorUserId: text("actor_user_id"),
+    actorName: text("actor_name"),
+    isRead: integer("is_read", { mode: "boolean" }).notNull().default(false),
+    readAt: text("read_at"),
+    createdAt: text("created_at").notNull(),
+  },
+  (table) => [
+    index("notifications_recipient_idx").on(table.recipientUserId, table.isRead, table.createdAt),
+  ],
+);
+
 
 

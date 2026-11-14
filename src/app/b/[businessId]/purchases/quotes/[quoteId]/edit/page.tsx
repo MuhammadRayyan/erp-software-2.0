@@ -11,6 +11,7 @@ import { getCurrencySettings } from "@/modules/currency/exchange-rate";
 import { quantityMicrosToInput } from "@/modules/accounting/calculations/money";
 import { minorToCurrencyInput } from "@/modules/currency/conversion";
 import { BackLink } from "@/components/back-link";
+import { listCustomFieldDefinitions } from "@/modules/custom-fields/custom-field-service";
 
 export default async function EditPurchaseQuotePage({
   params,
@@ -31,6 +32,9 @@ export default async function EditPurchaseQuotePage({
   const projects = listProjectOptions(businessId, user.id);
   const items = listInventoryItemOptions(businessId, user.id);
   const currencySettings = getCurrencySettings(businessId, user.id);
+  const lineCustomFields = listCustomFieldDefinitions(businessId, user.id, "purchase_quote_line").map(
+    ({ id, name, fieldType, selectOptions, isRequired }) => ({ id, name, fieldType, selectOptions, isRequired }),
+  );
   const minorUnit =
     currencySettings.currencies.find((c) => c.code === record.quote.currencyCode)?.minor_unit ?? 2;
 
@@ -57,6 +61,7 @@ export default async function EditPurchaseQuotePage({
           inventoryAssetAccountId,
         }))}
         currency={access.business.currency}
+        lineCustomFields={lineCustomFields}
         currencies={currencySettings.currencies
           .filter((currency) => currency.is_active || currency.code === record.quote.currencyCode)
           .map((currency) => ({ code: currency.code, name: currency.name, minorUnit: currency.minor_unit }))}
@@ -81,7 +86,7 @@ export default async function EditPurchaseQuotePage({
           notes: record.quote.notes ?? "",
           terms: record.quote.terms ?? "",
           amountsIncludeTax: record.quote.amountsIncludeTax,
-          lines: record.lines.map((line) => ({
+          lines: record.lines.map((line: any) => ({
             itemId: line.itemId ?? "",
             description: line.description,
             quantity: quantityMicrosToInput(line.quantityMicros),
@@ -91,6 +96,7 @@ export default async function EditPurchaseQuotePage({
             expenseAccountId: line.expenseAccountId ?? "",
             taxCodeId: line.taxCodeId,
             projectId: line.projectId ?? "",
+            customFields: line.customFields ?? {},
           })),
         }}
       />

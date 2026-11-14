@@ -11,7 +11,14 @@ import {
 import { formatCustomFieldValue } from "./custom-field-display";
 
 function assertCustomFieldWritePermission(businessId: string, userId: string, entityType: CustomFieldEntityType) {
-  assertMutationPermission(businessId, userId, entityType === "supplier" || entityType.startsWith("purchase_") ? "purchases" : "sales", "edit");
+  assertMutationPermission(
+    businessId,
+    userId,
+    entityType === "supplier" || entityType.startsWith("purchase_")
+      ? "purchases"
+      : "sales",
+    "edit",
+  );
 }
 
 export type CustomFieldDefinitionRow = {
@@ -23,6 +30,7 @@ export type CustomFieldDefinitionRow = {
   position: number;
   isRequired: boolean;
   showInList: boolean;
+  showOnPdf: boolean;
   createdAt: string;
   updatedAt: string;
 };
@@ -36,6 +44,7 @@ type DefinitionSqlRow = {
   position: number;
   is_required: number;
   show_in_list: number;
+  show_on_pdf?: number;
   created_at: string;
   updated_at: string;
 };
@@ -57,6 +66,7 @@ function parseDefinitionRow(row: DefinitionSqlRow): CustomFieldDefinitionRow {
     position: row.position,
     isRequired: row.is_required === 1,
     showInList: row.show_in_list === 1,
+    showOnPdf: row.show_on_pdf === undefined ? true : row.show_on_pdf === 1,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -121,8 +131,8 @@ export function createCustomFieldDefinition(
   sqlite
     .prepare(
       `INSERT INTO custom_field_definitions
-        (id, entity_type, name, field_type, select_options, position, is_required, show_in_list, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        (id, entity_type, name, field_type, select_options, position, is_required, show_in_list, show_on_pdf, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     )
     .run(
       id,
@@ -133,6 +143,7 @@ export function createCustomFieldDefinition(
       nextPosition(sqlite, data.entityType),
       data.isRequired ? 1 : 0,
       data.showInList ? 1 : 0,
+      data.showOnPdf ? 1 : 0,
       now,
       now,
     );
@@ -172,7 +183,7 @@ export function updateCustomFieldDefinition(
   sqlite
     .prepare(
       `UPDATE custom_field_definitions
-       SET entity_type = ?, name = ?, field_type = ?, select_options = ?, is_required = ?, show_in_list = ?, updated_at = ?
+       SET entity_type = ?, name = ?, field_type = ?, select_options = ?, is_required = ?, show_in_list = ?, show_on_pdf = ?, updated_at = ?
        WHERE id = ?`,
     )
     .run(
@@ -182,6 +193,7 @@ export function updateCustomFieldDefinition(
       JSON.stringify(data.selectOptions),
       data.isRequired ? 1 : 0,
       data.showInList ? 1 : 0,
+      data.showOnPdf ? 1 : 0,
       new Date().toISOString(),
       definitionId,
     );
@@ -381,9 +393,13 @@ export function getCustomFieldPairsForEntity(
   userId: string,
   entityType: CustomFieldEntityType,
   entityId: string,
+  options?: { forPdf?: boolean },
 ): Array<{ name: string; value: string }> {
   const { sqlite } = getBusinessDb(businessId, userId);
-  const definitions = listDefinitionRows(sqlite, entityType);
+  const allDefinitions = listDefinitionRows(sqlite, entityType);
+  const definitions = options?.forPdf
+    ? allDefinitions.filter((d) => d.showOnPdf)
+    : allDefinitions;
   if (definitions.length === 0) return [];
   const rows = sqlite
     .prepare(
@@ -399,4 +415,64 @@ export function getCustomFieldPairsForEntity(
       valueByDefinition.get(definition.id),
     ),
   }));
+}
+
+export function saveLineCustomFieldValuesInTransaction(
+  sqlite: Database.Database,
+  lineEntityType: CustomFieldEntityType,
+  lineEntries: Array<{ lineId: string; customFields?: Record<string, string> }>,
+  previousLineIds: string[] = [],
+): void {
+  const activeLineIds = new Set(lineEntries.map((l) => l.lineId));
+  const staleLineIds = previousLineIds.filter((id) => !activeLineIds.has(id));
+  if (staleLineIds.length > 0) {
+    const placeholders = staleLineIds.map(() => "?").join(", ");
+    sqlite
+      .prepare(`DELETE FROM custom_field_values WHERE entity_id IN (${placeholders})`)
+      .run(...staleLineIds);
+  }
+  const definitions = listDefinitionRows(sqlite, lineEntityType);
+  if (definitions.length === 0) return;
+
+  for (const entry of lineEntries) {
+    saveCustomFieldValuesInTransaction(
+      sqlite,
+      lineEntityType,
+      entry.lineId,
+      entry.customFields ?? {},
+    );
+  }
+}
+
+export function getLineCustomFieldPairsByLineId(
+  businessId: string,
+  userId: string,
+  lineEntityType: CustomFieldEntityType,
+  lineIds: string[],
+  options?: { forPdf?: boolean },
+): Map<string, Array<{ definitionId: string; name: string; value: string }>> {
+  const result = new Map<string, Array<{ definitionId: string; name: string; value: string }>>();
+  if (lineIds.length === 0) return result;
+  const { sqlite } = getBusinessDb(businessId, userId);
+  const allDefs = listDefinitionRows(sqlite, lineEntityType);
+  const definitions = options?.forPdf ? allDefs.filter((d) => d.showOnPdf) : allDefs;
+  if (definitions.length === 0) return result;
+
+  const valueMap = getCustomFieldValuesForEntities(businessId, userId, lineEntityType, lineIds);
+  for (const lineId of lineIds) {
+    const vals = valueMap.get(lineId) ?? {};
+    const pairs: Array<{ definitionId: string; name: string; value: string }> = [];
+    for (const def of definitions) {
+      const raw = vals[def.id];
+      const formatted = formatCustomFieldValue(def.fieldType, raw);
+      if (options?.forPdf && (raw === undefined || raw === "" || (def.fieldType === "checkbox" && raw !== "true"))) {
+        continue;
+      }
+      pairs.push({ definitionId: def.id, name: def.name, value: formatted });
+    }
+    if (pairs.length > 0) {
+      result.set(lineId, pairs);
+    }
+  }
+  return result;
 }

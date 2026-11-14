@@ -13,6 +13,7 @@ import { listProjectOptions } from "@/modules/projects/project-service";
 import { DebitNoteForm } from "@/modules/debit-notes/debit-note-form";
 import { getCurrencySettings } from "@/modules/currency/exchange-rate";
 import { BackLink } from "@/components/back-link";
+import { getFormDefaults } from "@/modules/form-defaults/form-defaults-service";
 
 export default async function NewDebitNotePage({
   params,
@@ -24,6 +25,7 @@ export default async function NewDebitNotePage({
   const { businessId } = await params;
   const query = await searchParams;
   const { user, access } = await requireModule(businessId, "purchases");
+  const formDefaults = getFormDefaults(businessId, user.id, "debit-note");
 
   const sourceInvoice = query.invoiceId ? getPurchaseInvoice(businessId, user.id, query.invoiceId) : null;
   const suppliers = listActiveSuppliers(businessId, user.id);
@@ -56,8 +58,12 @@ export default async function NewDebitNotePage({
   const today = new Date();
   const iso = (date: Date) => date.toISOString().slice(0, 10);
   const defaultTaxCode =
+    (formDefaults.defaultTaxCodeId ? taxCodes.find((tc) => tc.id === formDefaults.defaultTaxCodeId) : undefined) ??
     taxCodes.find((tc) => tc.vatCategory === "standard" && tc.rateBasisPoints === 500) ??
     taxCodes[0];
+  const defaultExpenseAccountId =
+    (formDefaults.defaultExpenseAccountId ? expenseAccounts.find((a) => a.id === formDefaults.defaultExpenseAccountId)?.id : undefined) ??
+    settings.defaultPurchaseExpenseAccountId;
 
   const lines = sourceInvoice?.lines.length
     ? sourceInvoice.lines.map((line) => ({
@@ -66,7 +72,7 @@ export default async function NewDebitNotePage({
         unitPrice: minorToCurrencyInput(line.unitPriceMinor, documentMinorUnit),
         discountType: "none" as const,
         discountValue: "0",
-        expenseAccountId: line.expenseAccountId ?? settings.defaultPurchaseExpenseAccountId,
+        expenseAccountId: line.expenseAccountId ?? defaultExpenseAccountId,
         taxCodeId: line.taxCodeId ?? defaultTaxCode?.id ?? "",
         projectId: line.projectId ?? "",
       }))
@@ -77,7 +83,7 @@ export default async function NewDebitNotePage({
           unitPrice: "0.00",
           discountType: "none" as const,
           discountValue: "0",
-          expenseAccountId: settings.defaultPurchaseExpenseAccountId,
+          expenseAccountId: defaultExpenseAccountId,
           taxCodeId: defaultTaxCode?.id ?? "",
           projectId: "",
         },
@@ -102,14 +108,14 @@ export default async function NewDebitNotePage({
             id: inv.id,
             invoiceNumber: inv.internal_number,
             supplierId: inv.supplier_id,
-            balanceMinor: inv.total_minor,
+            balanceMinor: inv.balanceMinor,
             currencyCode: inv.currency_code,
-            minorUnit: 2,
+            minorUnit: inv.currency_minor_unit ?? 2,
             exchangeRateToBase: String(inv.exchange_rate_to_base ?? "1"),
             exchangeRateDate: inv.exchange_rate_date ?? "",
             exchangeRateSource: inv.exchange_rate_source ?? "Base",
           }))}
-          salesAccounts={expenseAccounts.map(({ id, name }) => ({ id, name }))}
+          expenseAccounts={expenseAccounts.map(({ id, name }) => ({ id, name }))}
           taxCodes={taxCodes.map(({ id, name, rateBasisPoints, vatCategory }) => ({ id, name, rateBasisPoints, vatCategory }))}
           projects={projects.map((p) => ({
             id: p.id,
@@ -132,7 +138,7 @@ export default async function NewDebitNotePage({
             supplierId: selectedSupplierId,
             projectId: selectedProject?.id ?? "",
             purchaseInvoiceId: query.invoiceId ?? "",
-            amountsIncludeTax: false,
+            amountsIncludeTax: sourceInvoice ? Boolean(sourceInvoice.invoice.amountsIncludeTax) : Boolean(formDefaults.amountsIncludeTax),
             date: iso(today),
             taxDate: iso(today),
             reference:

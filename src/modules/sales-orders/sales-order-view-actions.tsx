@@ -132,7 +132,7 @@ export function SalesOrderViewActions({
         extraPrimaryActions={
           <>
             {documentStatus === "draft" && (
-              <Button onClick={handleIssue} disabled={issuing} className="gap-1.5">
+              <Button permission={"approve"} onClick={handleIssue} disabled={issuing} className="gap-1.5">
                 <CheckCircle2 className={`size-4 ${issuing ? "animate-spin" : ""}`} />
                 Activate Order
               </Button>

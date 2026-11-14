@@ -22,6 +22,7 @@ import {
   Users,
   Calculator,
   ListChecks,
+  ShieldCheck,
 } from "lucide-react";
 import type { ModuleKey } from "@/core/permissions/permissions";
 
@@ -35,7 +36,12 @@ export type NavItem = {
 };
 
 export const primaryNav: { label?: string; items: NavItem[] }[] = [
-  { items: [{ label: "Overview", path: "/overview", icon: LayoutDashboard }] },
+  {
+    items: [
+      { label: "Overview", path: "/overview", icon: LayoutDashboard },
+      { label: "Approval Queue", path: "/approvals", icon: ShieldCheck },
+    ],
+  },
   {
     label: "Sales",
     items: [
@@ -63,7 +69,10 @@ export const primaryNav: { label?: string; items: NavItem[] }[] = [
   },
   {
     label: "Banking",
-    items: [{ label: "Bank Accounts", path: "/banking/accounts", icon: Banknote, module: "banking" }],
+    items: [
+      { label: "Bank Accounts", path: "/banking/accounts", icon: Banknote, module: "banking" },
+      { label: "Post-Dated Cheques", path: "/banking/pdcs", icon: ReceiptText, module: "banking" },
+    ],
   },
   {
     label: "Projects",

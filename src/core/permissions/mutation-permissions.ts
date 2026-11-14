@@ -22,9 +22,13 @@ export function assertSavePermission(
   id?: string | null,
   intent: string = "draft",
 ) {
-  if (!["draft", "post", "issue"].includes(intent)) throw new Error("Invalid document save intent.");
+  if (!["draft", "submit_approval", "post", "issue"].includes(intent)) {
+    throw new Error("Invalid document save intent.");
+  }
   assertMutationPermission(businessId, userId, module, id ? "edit" : "create");
-  if (intent !== "draft") assertMutationPermission(businessId, userId, module, intent === "issue" ? "approve" : "post");
+  if (intent === "post" || intent === "issue") {
+    assertMutationPermission(businessId, userId, module, intent === "issue" ? "approve" : "post");
+  }
 }
 
 export function assertBusinessAdministrator(businessId: string, userId: string) {

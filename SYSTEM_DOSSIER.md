@@ -1,6 +1,6 @@
 # UAE Manager — architecture and operations dossier
 
-Verified baseline: package **2.7.0**, application revision `252093a78db7df9afd9810e96344c1bd237829a9`, **29 October 2026**. This replaces the older build-on-server specification, runtime mismatch and unverified zero-downtime/free-tier/compliance claims. [Current state](docs/CURRENT_STATE.md) owns release facts, [deployment](docs/DEPLOYMENT.md) owns procedures, and [next steps](docs/NEXT_STEPS.md) owns the testing plan.
+Verified baseline prior to release PR: package **2.7.0**, application revision `797b679e476c90a1b7d60bef387fedc85004a587`; current release candidate updated **14 November 2026** (System schema **7**, Business schema **37**). This replaces the older build-on-server specification, runtime mismatch and unverified zero-downtime/free-tier/compliance claims. [Current state](docs/CURRENT_STATE.md) owns release facts, [deployment](docs/DEPLOYMENT.md) owns procedures, and [next steps](docs/NEXT_STEPS.md) owns the testing plan.
 
 ## Architecture and data
 
@@ -25,7 +25,7 @@ data/businesses/<trusted-directory-key>/business.sqlite
 data/businesses/<trusted-directory-key>/attachments/
 ```
 
-System tables store users/sessions/account and business membership data; business tables hold accounts/journals, parties/documents/allocations, inventory, banking, projects, payroll, settings and tax data. Last live schema verification: system **6**, all six businesses **35**. Transactions and foreign keys are database-local; cross-database creation/import is not automatically atomic and its lifecycle improvements remain deferred.
+System tables store users/sessions/account and business membership data (`requires_approval`, schema **7**); business tables hold accounts/journals, parties/documents/allocations, inventory, banking/PDCs, approvals/notifications, saved reports, projects, payroll, settings and tax data (schema **37**, `37_roadmap_pillars_1_2_3`). Prior live schema verification on `797b679e`: system **6**, all six businesses **36**. Transactions and foreign keys are database-local; cross-database creation/import is not automatically atomic and its lifecycle improvements remain deferred.
 
 Membership and active-account checks select a trusted business directory; the filesystem key is validated. Separate files reduce accidental query crossover but do not replace permissions or isolate a compromised process. Connections use WAL, foreign keys, **synchronous FULL**, and a 5-second busy timeout. The tenant cache caps at 50 with idle eviction. WAL improves concurrency, but writes serialize per file, lock errors remain possible, and synchronous SQLite/report work can delay the Node event loop. Active SQLite files must stay on local storage. A second app replica is not a routine scaling change for this topology.
 
@@ -37,7 +37,7 @@ Currency values use minor-unit integers, checked safe-number conversion and BigI
 
 Posting applies financial effects transactionally where supported and journals must balance. Lock dates guard closed periods. Purchase settlement/aging includes posted debit notes. Payroll posting is transactional/idempotent; posted payroll corrections use void/new draft. Other document correction behavior remains module-specific. A universal immutable audit trail is deferred. VAT snapshots/calculations do not establish cryptographic signing or statutory certification; there is no active PINT-AE/provider integration.
 
-Shared guards cover **147 domain mutations**, including action, batch, conversion, settings and export boundaries, with account-state enforcement. Dashboard/email-history reads filter by allowed modules. UI hiding supplements server checks. Runtime authentication/setup secrets were replaced on the VM, initial sessions/tokens revoked, and secrets excluded from images. Production trusted origins use explicit configuration; ordinary releases retain runtime keys.
+Shared guards cover **159 domain mutations**, including action, batch, conversion, settings, approval, PDC, and export boundaries, with account-state enforcement. Dashboard/email-history reads filter by allowed modules. UI hiding supplements server checks. Runtime authentication/setup secrets were replaced on the VM, initial sessions/tokens revoked, and secrets excluded from images. Production trusted origins use explicit configuration; ordinary releases retain runtime keys.
 
 ## Remote work and delivery
 
@@ -75,11 +75,11 @@ Local deployment snapshots do not survive host/tenancy loss or bound loss of tra
 
 ## Operations, verification and limits
 
-GitHub/SSH work. OCI API-only user `erp-operations-api` has the approved `erp-operations-readonly` policy: infrastructure/monitoring reads and IAM metadata inspection across the tenancy. Private profile **ERP_OPERATIONS** in `~/.oci/config` passed **13 read-only checks, zero failures**. Console login/other credential types are disabled; normal self-service management of its own signing keys remains. Private key/config stay outside Git with restricted Windows ACLs. Local usage/revocation instructions are in `~/.oci/ERP_API_SETUP.md`.
+GitHub/SSH work. OCI API-only user `erp-operations-api` has the approved `erp-operations-readonly` policy: infrastructure/monitoring reads and IAM metadata inspection across the tenancy. Private profile **ERP_OPERATIONS** in `~/.oci/config` passed **14 read-only checks, zero failures**. Console login/other credential types are disabled; normal self-service management of its own signing keys remains. Private key/config stay outside Git with restricted permissions. Local usage/revocation instructions are in `~/.oci/ERP_API_SETUP.md`.
 
 Sentry project `personal-bv0 / erp-20`, historical events, three monitors and one email workflow were verified with read-only alerts/event/org/project scopes in `~/.sentryclirc`. Current-release ingestion/association, source maps and delivered notifications remain unproven. A DSN is distinct from a management token; these local operational credentials are separate from deployment credentials and were not copied into GitHub or production.
 
-The last app release passed **345 unit/integration**, **5 isolated browser** and **8 deployment recovery** scenarios plus native image/PDF/WAL gates. This is not exhaustive load, penetration, UX/accessibility or regulatory certification. Large reports/imports and concurrent Chromium work are areas to measure if usage grows. The pending kernel reboot has not been performed; additional maintenance automation remains deferred.
+The current verification suite passes **409 unit/integration tests across 53 suites**, **15 isolated browser scenarios** and **8 deployment recovery scenarios** plus native image/PDF/WAL gates. This is not exhaustive load, penetration, UX/accessibility or regulatory certification. Large reports/imports and concurrent Chromium work are areas to measure if usage grows. Kernel `7.0.0-1013-oracle` (`aarch64`) is active on the production VM (`REBOOT_REQUIRED=no`); additional maintenance automation remains deferred.
 
 Proceed with [closed user acceptance testing](docs/NEXT_STEPS.md), defect-driven fixes and the existing PR flow. Offsite recovery, SMTP, import/quota redesign, broader audit controls, deployment privilege reduction, dependency cleanup and load testing remain deferred. The real Manager.io backup remains tracked/public under the owner's ignore-only decision; ignore rules do not remove existing data/history. The [operations report](docs/history/TESTING_PHASE_OPERATIONS_2026-10-26.md) records dated observations and limits.
 

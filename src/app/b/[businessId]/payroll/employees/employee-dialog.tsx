@@ -71,6 +71,10 @@ export function EmployeeDialog({
       housingAllowanceMinor: parseAEDToMinor(housingVal),
       transportAllowanceMinor: parseAEDToMinor(transportVal),
       otherAllowancesMinor: parseAEDToMinor(otherVal),
+      molPersonId: formData.get("molPersonId")?.toString().trim() || null,
+      bankRoutingCode: formData.get("bankRoutingCode")?.toString().trim() || null,
+      iban: formData.get("iban")?.toString().replace(/\s+/g, "").toUpperCase() || null,
+      wpsEnabled: formData.get("wpsEnabled") === "on",
       isActive: formData.get("isActive") === "on",
     };
 
@@ -251,6 +255,56 @@ export function EmployeeDialog({
                   placeholder="0.00"
                 />
               </div>
+            </div>
+          </div>
+
+          <div className="pt-2 border-t border-border space-y-3">
+            <div>
+              <h4 className="text-sm font-medium text-foreground">UAE WPS Banking Details</h4>
+              <p className="text-xs text-muted-foreground">
+                Used when generating Central Bank / MOHRE Wage Protection System (.SIF) files.
+              </p>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <div className="space-y-1.5">
+                <Label htmlFor="molPersonId" className="text-xs">MOL / Labour Card ID (14 digits)</Label>
+                <Input
+                  id="molPersonId"
+                  name="molPersonId"
+                  defaultValue={employee?.molPersonId || ""}
+                  placeholder="14-digit Person ID"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="bankRoutingCode" className="text-xs">Bank Routing Code (9 digits)</Label>
+                <Input
+                  id="bankRoutingCode"
+                  name="bankRoutingCode"
+                  defaultValue={employee?.bankRoutingCode || ""}
+                  placeholder="e.g. 303100001"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="iban" className="text-xs">Employee IBAN (AE + 21 digits)</Label>
+                <Input
+                  id="iban"
+                  name="iban"
+                  defaultValue={employee?.iban || ""}
+                  placeholder="AE070331234567890123456"
+                />
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              <input
+                type="checkbox"
+                id="wpsEnabled"
+                name="wpsEnabled"
+                defaultChecked={employee ? employee.wpsEnabled : true}
+                className="rounded border-border text-primary focus:ring-primary size-4"
+              />
+              <Label htmlFor="wpsEnabled" className="cursor-pointer text-xs text-muted-foreground">
+                Include employee in WPS (.SIF) salary transfers
+              </Label>
             </div>
           </div>
 

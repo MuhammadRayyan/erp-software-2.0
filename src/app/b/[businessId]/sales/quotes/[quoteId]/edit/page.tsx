@@ -13,6 +13,7 @@ import { getSalesQuote } from "@/modules/sales-quotes/quote-service";
 import { minorToCurrencyInput } from "@/modules/currency/conversion";
 import { getCurrencySettings } from "@/modules/currency/exchange-rate";
 import { Breadcrumbs } from "@/components/breadcrumbs";
+import { listCustomFieldDefinitions } from "@/modules/custom-fields/custom-field-service";
 
 export default async function EditQuotePage({ params }: { params: Promise<{ businessId: string; quoteId: string }> }) {
   const { businessId, quoteId } = await params;
@@ -40,6 +41,9 @@ export default async function EditQuotePage({ params }: { params: Promise<{ busi
   const projects = listProjectOptions(businessId, user.id);
   const items = listInventoryItemOptions(businessId, user.id);
   const currencySettings = getCurrencySettings(businessId, user.id);
+  const lineCustomFields = listCustomFieldDefinitions(businessId, user.id, "sales_quote_line").map(
+    ({ id, name, fieldType, selectOptions, isRequired }) => ({ id, name, fieldType, selectOptions, isRequired }),
+  );
   const documentMinorUnit = currencySettings.currencies.find((entry) => entry.code === record.quote.currencyCode)?.minor_unit ?? 2;
   return <div className="page-container">
     <Breadcrumbs
@@ -61,6 +65,7 @@ export default async function EditQuotePage({ params }: { params: Promise<{ busi
       projects={projects.map((project) => ({ id: project.id, code: project.code, name: project.name, customerId: project.customer_id }))}
       items={items.map(({ id, sku, name, salesPriceMinor, salesAccountId }) => ({ id, sku, name, salesPriceMinor, salesAccountId }))}
       currency={access.business.currency}
+      lineCustomFields={lineCustomFields}
       currencies={currencySettings.currencies.filter((entry) => entry.is_active || entry.code === record.quote.currencyCode).map((entry) => ({ code: entry.code, name: entry.name, minorUnit: entry.minor_unit }))}
       rates={currencySettings.rates.map((entry) => ({ id: entry.id, currencyCode: entry.currency_code, rateDate: entry.rate_date, rateToBase: entry.rate_to_base, source: entry.source, sourceReference: entry.source_reference }))}
       initial={{
@@ -76,7 +81,7 @@ export default async function EditQuotePage({ params }: { params: Promise<{ busi
         notes: record.quote.notes ?? "",
         terms: record.quote.terms ?? "",
         amountsIncludeTax: record.quote.amountsIncludeTax ?? false,
-        lines: record.lines.map((line) => ({ itemId: line.itemId ?? "", description: line.description, quantity: quantityMicrosToInput(line.quantityMicros), unitPrice: minorToCurrencyInput(line.unitPriceMinor, documentMinorUnit), discountType: line.discountType ?? "none", discountValue: line.discountValue ?? "0", salesAccountId: line.salesAccountId ?? "", taxCodeId: line.taxCodeId, projectId: line.projectId ?? "" })),
+        lines: record.lines.map((line: any) => ({ itemId: line.itemId ?? "", description: line.description, quantity: quantityMicrosToInput(line.quantityMicros), unitPrice: minorToCurrencyInput(line.unitPriceMinor, documentMinorUnit), discountType: line.discountType ?? "none", discountValue: line.discountValue ?? "0", salesAccountId: line.salesAccountId ?? "", taxCodeId: line.taxCodeId, projectId: line.projectId ?? "", customFields: line.customFields ?? {} })),
       }}
     />
   </div>;

@@ -10,7 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
-import { formatMoney } from "@/core/format";
+import { minorToCurrencyInput } from "@/modules/currency/conversion";
 import { savePurchaseQuoteAction } from "./actions";
 import { purchaseQuoteInputSchema, type PurchaseQuoteInput } from "./purchase-quote-input";
 import type { PurchaseQuoteStatus } from "./purchase-quote-service";
@@ -20,6 +20,7 @@ import { SelectNative } from "@/components/ui/select-native";
 import { DocumentLineTable, useDocumentTotals } from "@/components/documents";
 import { broadcastLiveRefresh } from "@/components/use-live-refresh";
 import { useUnsavedChanges } from "@/hooks/use-unsaved-changes";
+import type { CustomFieldInputDefinition } from "@/modules/custom-fields/custom-field-inputs";
 
 type Option = { id: string; name: string; defaultCurrencyCode: string | null };
 type AccountOption = { id: string; name: string };
@@ -40,6 +41,7 @@ export function PurchaseQuoteForm({
   currencies,
   rates,
   initial,
+  lineCustomFields = [],
 }: {
   businessId: string;
   quoteId?: string;
@@ -53,6 +55,7 @@ export function PurchaseQuoteForm({
   currencies: DocumentCurrencyOption[];
   rates: DocumentRateOption[];
   initial: PurchaseQuoteInput;
+  lineCustomFields?: CustomFieldInputDefinition[];
 }) {
   const router = useRouter();
   const [serverError, setServerError] = useState("");
@@ -85,7 +88,6 @@ export function PurchaseQuoteForm({
   function moveLineDown(index: number) {
     if (index < fields.length - 1) move(index, index + 1);
   }
-  const lines = useWatch({ control, name: "lines" }) ?? [];
   const currencyCode = useWatch({ control, name: "currencyCode" }) || currency;
   const exchangeRateToBase = useWatch({ control, name: "exchangeRateToBase" }) || "";
   const exchangeRateDate = useWatch({ control, name: "exchangeRateDate" }) || "";
@@ -97,6 +99,7 @@ export function PurchaseQuoteForm({
     taxCodes,
     minorUnit,
   });
+  const lines = totals.lines;
   const defaultExpense = expenseAccounts[0]?.id ?? "";
 
   function updateGlobalTax(newTaxId: string) {
@@ -114,7 +117,7 @@ export function PurchaseQuoteForm({
     if (item.purchasePriceMinor != null) {
       form.setValue(
         `lines.${index}.unitPrice`,
-        formatMoney(item.purchasePriceMinor, currency, minorUnit).replace(/[^0-9.]/g, ""),
+        minorToCurrencyInput(item.purchasePriceMinor, minorUnit),
       );
     }
     if (item.inventoryAssetAccountId) {
@@ -280,6 +283,7 @@ export function PurchaseQuoteForm({
               expenseAccountId: defaultExpense,
               taxCodeId: globalTaxCodeId,
               projectId: "",
+              customFields: {},
               ...custom,
             })
           }
@@ -295,6 +299,7 @@ export function PurchaseQuoteForm({
           initialShowLineTaxCodes={false}
           taxCodes={taxCodes}
           projects={projects}
+          lineCustomFields={lineCustomFields}
           currencyCode={currencyCode}
           minorUnit={minorUnit}
           previews={totals.previews}
@@ -306,7 +311,17 @@ export function PurchaseQuoteForm({
         />
       </section>
 
-      <DocumentFormFooter onCancel={() => router.push(cancelHref)}>
+      <DocumentFormFooter
+        onCancel={() => router.push(cancelHref)}
+        status={status}
+        totals={{
+          subtotalMinor: totals.subtotalMinor,
+          taxMinor: totals.taxMinor,
+          totalMinor: totals.totalMinor,
+          currencyCode,
+          minorUnit,
+        }}
+      >
         {status === "sent" ? (
           <Button permission={["save", "approve"]} type="button" disabled={isSubmitting} onClick={handleSubmit((values) => save(values, "issue"))}>
             {isSubmitting && <LoaderCircle className="size-4 animate-spin" />} Save Changes

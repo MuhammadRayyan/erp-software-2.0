@@ -3,6 +3,7 @@ import type { DocumentStatus, PaymentStatus } from "./invoice-service";
 
 const documentStyles = {
   draft: { tone: "neutral", label: "Draft" },
+  pending_approval: { tone: "warning", label: "Pending Approval" },
   posted: { tone: "info", label: "Posted" },
   void: { tone: "danger", label: "Void" },
 } as const;

@@ -27,6 +27,11 @@ export default async function BankAccountsPage({ params }: { params: Promise<{ b
       >
         <DensityToggle businessId={businessId} />
         <Button asChild variant="secondary">
+          <Link href={`/b/${businessId}/banking/pdcs`}>
+            <Landmark className="size-4" /> Post-Dated Cheques
+          </Link>
+        </Button>
+        <Button asChild variant="secondary">
           <Link href={`/b/${businessId}/reports/cash-flow-forecast`}>
             <LineChart className="size-4" /> Liquidity Forecast
           </Link>

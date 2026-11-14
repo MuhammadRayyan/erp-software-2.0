@@ -99,6 +99,7 @@ export function listBusinessUsers(businessId: string, adminUserId: string) {
       membership,
       invitationStatus,
       isOwner: user.id === ownerUserId,
+      requiresApproval: membership.role !== "administrator" && Boolean(membership.requiresApproval),
       modules: parseModules(membership.role, membership.modulesJson),
       capabilities: parseCapabilities(membership.role, membership.modulesJson),
     };
@@ -148,6 +149,7 @@ export async function inviteBusinessUser(
     role?: "administrator" | "standard";
     modules?: ModuleKey[];
     capabilities?: ModuleCapabilitiesInput;
+    requiresApproval?: boolean;
     sendEmail?: boolean;
   }
 ) {
@@ -233,6 +235,7 @@ export async function inviteBusinessUser(
 
   // Create membership
   const membershipId = randomUUID();
+  const requiresApproval = role === "administrator" ? false : Boolean(input.requiresApproval);
   db.insert(memberships)
     .values({
       id: membershipId,
@@ -240,6 +243,7 @@ export async function inviteBusinessUser(
       userId: user.id,
       role,
       modulesJson,
+      requiresApproval,
       createdAt: new Date().toISOString(),
     })
     .run();
@@ -617,7 +621,8 @@ export function updateMembership(
   adminUserId: string,
   membershipId: string,
   role: "administrator" | "standard",
-  modulesOrCapabilities: ModuleKey[] | ModuleCapabilitiesInput
+  modulesOrCapabilities: ModuleKey[] | ModuleCapabilitiesInput,
+  requiresApproval?: boolean
 ) {
   const access = getBusinessAccess(businessId, adminUserId);
   if (!access || access.membership.role !== "administrator") throw new Error("BUSINESS_ACCESS_DENIED");
@@ -651,9 +656,16 @@ export function updateMembership(
     modulesJson = JSON.stringify(safeModules);
   }
 
+  const nextRequiresApproval =
+    role === "administrator"
+      ? false
+      : requiresApproval !== undefined
+        ? Boolean(requiresApproval)
+        : Boolean(target.requiresApproval);
+
   getSystemDb()
     .update(memberships)
-    .set({ role, modulesJson })
+    .set({ role, modulesJson, requiresApproval: nextRequiresApproval })
     .where(eq(memberships.id, membershipId))
     .run();
 
@@ -690,6 +702,7 @@ export async function createAndAddBusinessUser(
     role?: "administrator" | "standard";
     modules?: ModuleKey[];
     capabilities?: ModuleCapabilitiesInput;
+    requiresApproval?: boolean;
   }
 ) {
   const access = getBusinessAccess(businessId, adminUserId);
@@ -783,6 +796,7 @@ export async function createAndAddBusinessUser(
       userId: user.id,
       role,
       modulesJson,
+      requiresApproval: role === "administrator" ? false : Boolean(input.requiresApproval),
       createdAt: new Date().toISOString(),
     })
     .run();

@@ -8,6 +8,7 @@ import {
   amountsIncludeTaxSchema,
   discountTypeSchema,
   discountValueSchema,
+  lineCustomFieldsSchema,
 } from "@/core/validation/document-schemas";
 
 export const purchaseQuoteLineSchema = z.object({
@@ -20,6 +21,7 @@ export const purchaseQuoteLineSchema = z.object({
   expenseAccountId: z.string().optional().default(""),
   taxCodeId: z.string().min(1, "Choose a tax code"),
   projectId: projectIdField,
+  customFields: lineCustomFieldsSchema,
 });
 
 export const purchaseQuoteInputSchema = z.object({
@@ -31,7 +33,7 @@ export const purchaseQuoteInputSchema = z.object({
   expiryDate: z.union([z.literal(""), z.iso.date("Enter a valid expiry date")]).optional().default(""),
   reference: z.string().trim().max(100).optional().default(""),
   notes: z.string().trim().max(1_000).optional().default(""),
-  terms: z.string().trim().max(1_000).optional().default(""),
+  terms: z.string().trim().max(10_000).optional().default(""),
   lines: z.array(purchaseQuoteLineSchema).min(1, "Add at least one line").max(100),
 });
 

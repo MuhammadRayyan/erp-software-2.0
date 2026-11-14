@@ -20,6 +20,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { formatBytes } from "@/core/format";
+import { copyToClipboard } from "@/lib/clipboard";
 import { triggerDiagnosticTraceAction } from "./actions";
 
 export type SystemHealthData = {
@@ -86,11 +87,15 @@ export function SystemHealthClient({ initialData }: { initialData: SystemHealthD
   const [searchQuery, setSearchQuery] = useState<string>("");
   const [expandedLogId, setExpandedLogId] = useState<string | null>(null);
 
-  const handleCopyTrace = (traceId: string) => {
-    navigator.clipboard.writeText(traceId);
-    setCopiedId(traceId);
-    toast.success(`Trace ID copied: ${traceId}`);
-    setTimeout(() => setCopiedId(null), 2500);
+  const handleCopyTrace = async (traceId: string) => {
+    const ok = await copyToClipboard(traceId);
+    if (ok) {
+      setCopiedId(traceId);
+      toast.success(`Trace ID copied: ${traceId}`);
+      setTimeout(() => setCopiedId(null), 2500);
+    } else {
+      toast.error("Failed to copy Trace ID");
+    }
   };
 
   const handleTriggerTrace = () => {

@@ -17,6 +17,7 @@ import { DocumentCurrencyFields, type DocumentCurrencyOption, type DocumentRateO
 import { createReceiptAction } from "./actions";
 import { receiptInputSchema, type ReceiptInput } from "./receipt-input";
 import { useUnsavedChanges } from "@/hooks/use-unsaved-changes";
+import { useActionPermission, useApprovalPolicy } from "@/components/permissions-provider";
 
 type Option = { id: string; name: string };
 
@@ -51,6 +52,9 @@ export function ReceiptForm({
   rates: DocumentRateOption[];
   initial: ReceiptInput;
 }) {
+  const { requiresApproval } = useApprovalPolicy();
+  const canPost = useActionPermission("post");
+  const mustSubmitForApproval = requiresApproval || !canPost;
   const [serverError, setServerError] = useState("");
   
   // Track allocation inputs per invoice: invoiceId -> string amount
@@ -306,8 +310,8 @@ export function ReceiptForm({
             <Input
               id="amount"
               type="number"
-              min="0.000001"
-              step="0.000001"
+              min="0.01"
+              step="0.01"
               className="money text-right font-medium text-base"
               {...register("amount")}
               aria-invalid={!!errors.amount}
@@ -444,7 +448,7 @@ export function ReceiptForm({
                       <td className="text-right">
                         <Input
                           type="number"
-                          step="0.000001"
+                          step="0.01"
                           min="0"
                           placeholder="0.00"
                           className={`money text-right h-8 text-sm ${isLineOverAllocated ? "border-danger ring-1 ring-danger/30 text-danger font-semibold" : ""}`}
@@ -538,8 +542,9 @@ export function ReceiptForm({
         <Button asChild variant="ghost">
           <Link href={`/b/${businessId}/sales/receipts`}>Cancel</Link>
         </Button>
-        <Button type="submit" disabled={isSubmitting || isOverAllocated}>
-          {isSubmitting && <LoaderCircle className="size-4 animate-spin" />} Post Receipt
+        <Button permission={mustSubmitForApproval ? "create" : ["create", "post"]} type="submit" disabled={isSubmitting || isOverAllocated}>
+          {isSubmitting && <LoaderCircle className="size-4 animate-spin" />}{" "}
+          {mustSubmitForApproval ? "Submit for Approval" : "Post Receipt"}
         </Button>
       </div>
     </form>

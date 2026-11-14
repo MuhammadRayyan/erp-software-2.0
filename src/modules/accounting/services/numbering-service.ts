@@ -18,7 +18,8 @@ export type NumberKind =
   | "bankTransaction"
   | "bankTransfer"
   | "journal"
-  | "payslip";
+  | "payslip"
+  | "pdc";
 
 const columns: Record<NumberKind, { prefix: string; next: string; padding?: string }> = {
   invoice: { prefix: "invoice_prefix", next: "invoice_next_number", padding: "invoice_padding" },
@@ -39,6 +40,7 @@ const columns: Record<NumberKind, { prefix: string; next: string; padding?: stri
   bankTransfer: { prefix: "bank_transfer_prefix", next: "bank_transfer_next_number", padding: "bank_transfer_padding" },
   journal: { prefix: "journal_prefix", next: "journal_next_number", padding: "journal_padding" },
   payslip: { prefix: "payslip_prefix", next: "payslip_next_number", padding: "payslip_padding" },
+  pdc: { prefix: "pdc_prefix", next: "pdc_next_number", padding: "pdc_padding" },
 };
 
 export function allocateNumber(sqlite: Database.Database, kind: NumberKind) {
@@ -81,6 +83,7 @@ export function allocateNumber(sqlite: Database.Database, kind: NumberKind) {
       bankTransfer: { table: "bank_transfers", column: "transfer_number" },
       journal: { table: "journal_entries", column: "entry_number" },
       payslip: { table: "payslips", column: "payslip_number" },
+      pdc: { table: "post_dated_cheques", column: "pdc_number" },
     }[kind];
     let nextNumber = row.next_number;
     let number = `${row.prefix}${String(nextNumber).padStart(padding, "0")}`;

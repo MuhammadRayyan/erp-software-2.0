@@ -773,3 +773,38 @@ Following the modern accounting software industry standard (e.g., Xero, FreeAgen
 - Added per-process service isolation, an isolated default browser suite, shared role-session reuse and current workflow selectors. The local CI change runs the expanded browser suite and collects its failure evidence.
 - Moved historical records to docs/history, old generated screenshots to ignored test output, and unused ZIP/Bun lock/inactive caches to ignored local archive. Existing business data and real Manager backups remain intact; quarantine does not reclaim disk space.
 - Updated [flow verification and cleanup evidence](history/FLOW_VERIFICATION_AND_CLEANUP_2026-10-26.md). Changes remain local and undeployed; optional hardening remains deferred.
+
+
+## 2026-11-11 — Production Audit, Commercial Grid & Form Standardization, and Documentation Alignment
+
+- **Verified Live Production Release (`797b679e476c90a1b7d60bef387fedc85004a587`)**:
+  - Confirmed public health endpoint (`https://erp-portal.rapidtss.com/api/health`), container digest (`sha256:65128f19e2ae8327e92d50ce5f4c27fa09b7eeb1476715be959d28aa1a4240e5`), system schema `6`, and business schema `36` (`36_legal_entity_snapshotting`) across all 6 production business databases, with 14/14 read-only OCI checks passing and active kernel `7.0.0-1013-oracle` (`REBOOT_REQUIRED=no`).
+- **Component Deduplication & Standardization**:
+  - Consolidated 4 duplicated revision switcher components into shared `DocumentRevisionSwitcher` (`src/components/documents/document-revision-switcher.tsx`).
+  - Consolidated customer advance credit and supplier prepayment modals into shared `ApplyAdvanceCreditDialog` (`src/components/documents/apply-advance-credit-dialog.tsx`) with standardized `0.01` currency input step/min precision.
+  - Standardized clipboard operations across Admin, System Health, and Template Studio onto `@/lib/clipboard`, and removed dead re-export shims (`src/app/admin/clipboard.ts`, `src/app/super-admin/actions.ts`, `src/app/super-admin/business-table.tsx`) and leftover Sentry/scratch debug files (`src/app/sentry-example-page/page.tsx`, `scripts/test-sentry.ts`, `scripts/test-fonts.ts`, `scratch/check-gl.ts`).
+- **Commercial Document Forms, Grid & Permission Fixes**:
+  - Fixed TSV spreadsheet paste in `DocumentLineTable` (`defaultPasteTSV` / `resolvePastedTSVRow`) so purchase documents resolve `purchasePriceMinor` and `inventoryAssetAccountId`, SKU-only rows resolve the catalog item name, and pasting custom descriptions/prices into existing rows is not overwritten by `onItemSelect`.
+  - Fixed `DocumentGrid` "+ Add line" button so React `MouseEvent` is not passed as initial line state into `onAppend`, and fixed `ApplyAdvanceCreditDialog` state resynchronization after partial credit application / dialog reopen.
+  - Wired `getFormDefaults` across all remaining configurable document creation pages (`sales-credit-note`, `debit-note`, `delivery-note`, `goods-receipt`, `stock-adjustment`) and aligned `listPurchaseInvoices` `PAID_MINOR_FRAGMENT` with `purchaseSettlementSql("pi").foreign` so Debit Note settlements are reflected on Purchase Bill list balances and Debit Note pickers.
+  - Fixed Reverse Charge footer total display in `PurchaseInvoiceForm` and `SalesQuoteForm` to use `totalMinor` (`billTotalMinor`) instead of `subtotalMinor + taxMinor`.
+  - Fixed copy-pasted Credit Note labels in `DebitNoteForm` to use Debit Note / Purchase Bill / Expense / Accounts Payable terminology, and passed `status` and `totals` consistently to `DocumentFormFooter` across all commercial document forms.
+  - Added `"active"` status handling to `DocumentWorkflowPermissions` and `permission={"approve"}` to `Activate Order` in `SalesOrderViewActions`; removed duplicate Email buttons in `CreditNoteViewActions` and enabled `pdfAvailable` in `DebitNoteViewActions`.
+  - Aligned `terms` max length to `10,000` characters in `purchaseQuoteInputSchema` and `creditNoteInputSchema` to match Form Defaults.
+
+## 2026-11-14 — Financial Analytics, UAE Regulatory Workflows & Maker-Checker Approvals (Schema v7 / v37)
+
+- **Pillar 1 — Report Drill-Downs, Comparative Views & Line-Level Custom Fields**:
+  - Added interactive ledger/tax drill-down modals (`src/modules/reports/drilldown-service.ts`, `ReportDrilldownButton`, `/api/businesses/[businessId]/reports/drilldown`) across Profit & Loss, Balance Sheet, Trial Balance, and UAE VAT 201 working papers, plus direct document and statement links on Accounts Receivable / Accounts Payable aging views and `journalSourceHref` linking on VAT Transaction Detail.
+  - Added multi-period comparative columns (`prior_period`, `prior_year`, `custom` dates with live client-side toggle and variance amount/percent) to Profit & Loss and Balance Sheet, and persisted custom report configurations in `saved_reports` (`src/modules/reports/saved-report-service.ts`).
+  - Extended custom field definitions (`show_on_pdf` column, `*_line` scopes) to render inline inside `DocumentGrid`, persist across document revisions (`src/core/versioning/revision-engine.ts`), and filter printed PDFs/previews via `showOnPdf`.
+- **Pillar 2 — UAE WPS `.SIF`, Post-Dated Cheques (PDC) & FTA Audit File (`FAF`)**:
+  - Implemented CBUAE/MOHRE Wage Protection System `.SIF` (`EDR` + `SCR`) validation, preview dialog, and export (`src/modules/payroll/services/wps-service.ts`, `/api/businesses/[businessId]/payroll/wps`).
+  - Implemented receivable and payable Post-Dated Cheque lifecycle (`held` → `deposited` → `cleared` | `bounced` | `cancelled`) with PDC clearing GL accounts (`1120` / `2020`), configurable PDC numbering sequences, overview maturity widget, and `/banking/pdcs` register (`src/modules/banking/pdc-service.ts`).
+  - Implemented 15-digit UAE TRN Luhn mod-10 validation (`src/modules/tax/trn-validation.ts`) with UI status badges and 1-click UAE FTA Audit File (`FAF`) export (`src/modules/tax/faf-service.ts`, `/api/businesses/[businessId]/tax/vat/faf`).
+- **Pillar 3 — Maker-Checker Approvals & Bidirectional Notifications**:
+  - Added System migration `v7` (`business_memberships.requires_approval`) and Business migration `v37` (`approval_rules`, `approval_requests`, `notifications`, and `pending_approval` document states).
+  - Administrators can configure per-user approval requirement (`Can proceed without approval` vs `Requires approval before posting`) in `/settings/users` and per-document spend thresholds / separation rules in `/settings/approvals`.
+  - Submitting a document notifies eligible approvers in-app and via email (`NotificationBell`, `src/modules/notifications/notification-service.ts`); approving or rejecting on `/approvals` or the document banner atomically posts/reverts the document, broadcasts live refresh, and notifies the submitter with a direct document link.
+  - Standardized batch-post/void/delete error details and mixed-result toasts (`postedCount` vs `pendingApprovalCount`) across Sales & Purchase Invoice tables.
+- **Verification**: Passed `typecheck`, `lint`, `check:permissions` (`159` guarded business command functions), `db:check` (system schema `7`, business schema `37`), `409` unit/integration tests across 53 suites, production build, and `15` isolated Playwright Chromium E2E scenarios (`e2e/hardening.spec.ts`, `e2e/acceptance.spec.ts`, `e2e/pillars.spec.ts`).

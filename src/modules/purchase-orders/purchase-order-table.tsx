@@ -145,7 +145,11 @@ export function PurchaseOrderTable({
         enableSorting: false,
         cell: ({ row }: any) => {
           const order = row.original;
-          const canEdit = order.status !== "closed" && order.status !== "cancelled" && order.status !== "superseded";
+          const canEdit =
+            order.status !== "closed" &&
+            order.status !== "cancelled" &&
+            order.status !== "superseded" &&
+            order.status !== "pending_approval";
           const canBill = order.status === "issued";
           return (
             <div className="flex items-center justify-end gap-1">
@@ -246,7 +250,7 @@ export function PurchaseOrderTable({
         fromAriaLabel="Order date from"
         toAriaLabel="Order date to"
       />
-      <ToolbarSelect value={status} onChange={setStatus} ariaLabel="Filter by status" options={[{ value: "", label: "All statuses" }, { value: "draft", label: "Draft" }, { value: "issued", label: "Issued" }, { value: "closed", label: "Closed" }, { value: "cancelled", label: "Cancelled" }]} />
+      <ToolbarSelect value={status} onChange={setStatus} ariaLabel="Filter by status" options={[{ value: "", label: "All statuses" }, { value: "draft", label: "Draft" }, { value: "pending_approval", label: "Pending Approval" }, { value: "issued", label: "Issued" }, { value: "closed", label: "Closed" }, { value: "cancelled", label: "Cancelled" }]} />
       <div className="ml-auto flex items-center gap-1.5 shrink-0">
         <DensityToggle businessId={businessId} />
         {dropdown}

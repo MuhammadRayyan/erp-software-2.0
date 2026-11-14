@@ -28,6 +28,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { SelectNative } from "@/components/ui/select-native";
+import { copyToClipboard } from "@/lib/clipboard";
 import { saveTemplateSettingsAction } from "./actions";
 import { defaultSettings, type TemplateSettings } from "./template-settings";
 
@@ -190,11 +191,15 @@ export function TemplateEditor({
     }
   }
 
-  const copyVariable = (v: string) => {
-    navigator.clipboard.writeText(v);
-    setCopiedVar(v);
-    toast.success(`Copied ${v} to clipboard`);
-    setTimeout(() => setCopiedVar(null), 1800);
+  const copyVariable = async (v: string) => {
+    const ok = await copyToClipboard(v);
+    if (ok) {
+      setCopiedVar(v);
+      toast.success(`Copied ${v} to clipboard`);
+      setTimeout(() => setCopiedVar(null), 1800);
+    } else {
+      toast.error("Failed to copy to clipboard");
+    }
   };
 
   return (

@@ -12,6 +12,7 @@ import type { DocumentStatus } from "./invoice-service";
 import { DocumentViewActions } from "@/components/document-view-actions";
 import { DocumentEmailDialog, type DocumentEmailDefaults } from "@/modules/email/email-compose-dialog";
 import { broadcastLiveRefresh } from "@/components/use-live-refresh";
+import { useActionPermission, useApprovalPolicy } from "@/components/permissions-provider";
 
 export function InvoiceViewActions({
   businessId,
@@ -41,19 +42,30 @@ export function InvoiceViewActions({
   emailDefaults: DocumentEmailDefaults;
 }) {
   const router = useRouter();
+  const { requiresApproval } = useApprovalPolicy();
+  const canPost = useActionPermission("post");
+  const mustSubmitForApproval = requiresApproval || !canPost;
   const [emailOpen, setEmailOpen] = useState(false);
   const [posting, setPosting] = useState(false);
   const canReceive = documentStatus === "posted" && balanceMinor > 0;
-  const canEdit = documentStatus !== "void" && !hasDeliveryNotes;
+  const canEdit = documentStatus !== "void" && documentStatus !== "pending_approval" && !hasDeliveryNotes;
   const canVoid = documentStatus === "posted" && (totalMinor === undefined || balanceMinor === totalMinor);
 
   const handlePost = async () => {
     setPosting(true);
     try {
-      const result = await postInvoiceAction(businessId, invoiceId);
+      const result = await postInvoiceAction(
+        businessId,
+        invoiceId,
+        mustSubmitForApproval ? "submit_approval" : "post",
+      );
       if (result.error) throw new Error(result.error);
       broadcastLiveRefresh();
-      toast.success("Invoice posted to ledger.");
+      toast.success(
+        result.documentStatus === "pending_approval"
+          ? "Invoice submitted for approval."
+          : "Invoice posted to ledger.",
+      );
       router.refresh();
     } catch (err: any) {
       toast.error(err.message);
@@ -118,9 +130,9 @@ export function InvoiceViewActions({
         extraPrimaryActions={
           <>
             {documentStatus === "draft" && (
-              <Button permission={"post"} onClick={handlePost} disabled={posting} className="gap-1.5">
+              <Button permission={mustSubmitForApproval ? "edit" : "post"} onClick={handlePost} disabled={posting} className="gap-1.5">
                 <CheckCircle2 className={`size-4 ${posting ? "animate-spin" : ""}`} />
-                Post Invoice
+                {mustSubmitForApproval ? "Submit for Approval" : "Post Invoice"}
               </Button>
             )}
             {inventoryEnabled && hasDeliverableItems && documentStatus === "posted" && (

@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { type PayslipRecord, type EmployeeRecord } from "@/modules/payroll/services/payroll-service";
 import { PayslipTable } from "@/modules/payroll/payslip-table";
 import { PayRunDialog } from "./pay-run-dialog";
+import { WpsExportDialog } from "./wps-export-dialog";
 
 interface PayslipsClientProps {
   businessId: string;
@@ -16,6 +17,7 @@ interface PayslipsClientProps {
 export function PayslipsClient({ businessId, payslips, employees, currency }: PayslipsClientProps) {
   const router = useRouter();
   const [payRunOpen, setPayRunOpen] = useState(false);
+  const [wpsOpen, setWpsOpen] = useState(false);
 
   return (
     <div className="space-y-4">
@@ -24,6 +26,7 @@ export function PayslipsClient({ businessId, payslips, employees, currency }: Pa
         payslips={payslips}
         currency={currency}
         onOpenPayRun={() => setPayRunOpen(true)}
+        onOpenWpsExport={() => setWpsOpen(true)}
       />
 
       <PayRunDialog
@@ -33,6 +36,13 @@ export function PayslipsClient({ businessId, payslips, employees, currency }: Pa
         open={payRunOpen}
         onOpenChange={setPayRunOpen}
         onGenerated={() => router.refresh()}
+      />
+
+      <WpsExportDialog
+        businessId={businessId}
+        currency={currency}
+        open={wpsOpen}
+        onOpenChange={setWpsOpen}
       />
     </div>
   );

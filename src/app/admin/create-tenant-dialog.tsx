@@ -13,7 +13,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { copyToClipboard } from "./clipboard";
+import { copyToClipboard } from "@/lib/clipboard";
 import { createTenantAction } from "./actions";
 
 function generateSecurePassword(): string {

@@ -8,6 +8,8 @@ import { quantityMicrosToInput, rateBasisPointsToPercent } from "@/modules/accou
 import { ProjectLinks } from "@/modules/projects/project-links";
 import { getPurchaseInvoice } from "@/modules/purchase-invoices/purchase-invoice-service";
 import { PurchaseInvoiceViewActions } from "@/modules/purchase-invoices/purchase-invoice-view-actions";
+import { getLatestApprovalForEntity } from "@/modules/approvals/approval-service";
+import { DocumentApprovalBanner } from "@/components/approvals/document-approval-banner";
 import { DocumentFlowStepper, type FlowStep } from "@/components/documents/document-flow-stepper";
 import { Breadcrumbs } from "@/components/breadcrumbs";
 import { getSupplierUnallocatedCredit } from "@/modules/supplier-payments/supplier-payment-service";
@@ -158,6 +160,14 @@ export default async function PurchaseInvoiceViewPage({
           inventoryEnabled={access.modules.includes("inventory")}
           hasInventoryLines={lines.some((line) => Boolean(line.itemId))}
           hasGoodsReceipts={record.goodsReceipts.length > 0}
+        />
+      </div>
+      <div className="mb-5">
+        <DocumentApprovalBanner
+          businessId={businessId}
+          currentUserId={user.id}
+          isAdmin={access.membership.role === "administrator"}
+          approval={getLatestApprovalForEntity(businessId, user.id, "purchase_invoice", invoice.id)}
         />
       </div>
 

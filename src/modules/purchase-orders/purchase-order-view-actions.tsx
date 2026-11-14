@@ -11,6 +11,7 @@ import { DocumentViewActions } from "@/components/document-view-actions";
 import { useState } from "react";
 import { DocumentEmailDialog, type DocumentEmailDefaults } from "@/modules/email/email-compose-dialog";
 import { broadcastLiveRefresh } from "@/components/use-live-refresh";
+import { useActionPermission, useApprovalPolicy } from "@/components/permissions-provider";
 
 export function PurchaseOrderViewActions({
   businessId, orderId, orderNumber, status, inventoryEnabled, hasReceivableItems, emailDefaults, linkedInvoice
@@ -18,6 +19,9 @@ export function PurchaseOrderViewActions({
   businessId: string; orderId: string; orderNumber: string; status: PurchaseOrderStatus; inventoryEnabled: boolean; hasReceivableItems: boolean; emailDefaults: DocumentEmailDefaults; linkedInvoice?: { id: string; invoice_number: string };
 }) {
   const router = useRouter();
+  const { requiresApproval } = useApprovalPolicy();
+  const canApprove = useActionPermission("approve");
+  const mustSubmitForApproval = requiresApproval || !canApprove;
   const editable = status === "draft" || status === "issued";
   const [issuing, setIssuing] = useState(false);
   const [converting, setConverting] = useState(false);
@@ -27,10 +31,18 @@ export function PurchaseOrderViewActions({
   const handleIssue = async () => {
     setIssuing(true);
     try {
-      const result = await issuePurchaseOrderAction(businessId, orderId);
+      const result = await issuePurchaseOrderAction(
+        businessId,
+        orderId,
+        mustSubmitForApproval ? "submit_approval" : "issue",
+      );
       if (result.error) throw new Error(result.error);
       broadcastLiveRefresh();
-      toast.success("Purchase order issued.");
+      toast.success(
+        result.status === "pending_approval"
+          ? "Purchase order submitted for approval."
+          : "Purchase order issued.",
+      );
       router.refresh();
     } catch (err: any) {
       toast.error(err.message);
@@ -73,7 +85,7 @@ export function PurchaseOrderViewActions({
         editHref={editable ? `/b/${businessId}/purchases/orders/${orderId}/edit` : undefined}
         pdfHref={`/api/businesses/${businessId}/documents/purchase-order/${orderId}/pdf`}
         onEmail={() => setEmailOpen(true)}
-        copyToActions={status !== "cancelled" && status !== "superseded" ? [
+        copyToActions={status !== "cancelled" && status !== "superseded" && status !== "pending_approval" ? [
           ...(status !== "closed" && !linkedInvoice ? [{
             label: "Purchase Invoice",
             href: `/b/${businessId}/purchases/invoices/new?orderId=${orderId}`,
@@ -121,12 +133,12 @@ export function PurchaseOrderViewActions({
         extraPrimaryActions={
           <>
             {status === "draft" && (
-              <Button permission={"approve"} onClick={handleIssue} disabled={issuing} className="gap-1.5">
+              <Button permission={mustSubmitForApproval ? "edit" : "approve"} onClick={handleIssue} disabled={issuing} className="gap-1.5">
                 <Send className={`size-4 ${issuing ? "animate-spin" : ""}`} /> 
-                Issue Order
+                {mustSubmitForApproval ? "Submit for Approval" : "Issue Order"}
               </Button>
             )}
-            {status !== "cancelled" && status !== "superseded" && (
+            {status !== "cancelled" && status !== "superseded" && status !== "pending_approval" && (
               <Button variant="secondary" onClick={handleRevise} disabled={revising}>
                 <GitBranch className={`size-4 ${revising ? "animate-spin" : ""}`} /> 
                 New Revision

@@ -1,5 +1,5 @@
 import { test, expect, type Page } from "@playwright/test";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 import Database from "better-sqlite3";
 import { reconcileBusinessDatabase } from "../src/core/db/reconciliation";
@@ -95,7 +95,8 @@ test("payroll draft → posted → void renders correctly and reconciles", async
 
 test("a valid direct Server Action payload works for a creator and is denied for a viewer", async ({ page }) => {
   const f = fixture();
-  const manifest = JSON.parse(readFileSync(path.join(process.env.ERP_BROWSER_DIST_DIR ?? ".next-validate", "server/server-reference-manifest.json"), "utf8"));
+  const distDir = process.env.ERP_BROWSER_DIST_DIR ?? (existsSync(path.resolve(process.cwd(), ".next-validate")) ? ".next-validate" : ".next");
+  const manifest = JSON.parse(readFileSync(path.join(distDir, "server/server-reference-manifest.json"), "utf8"));
   const action = Object.entries(manifest.node as Record<string, { exportedName?: string }>).find(([, meta]) => meta.exportedName === "createCustomerAction")?.[0];
   expect(action).toBeTruthy();
   const post = (name: string) => page.request.post(`/b/${f.businessId}/customers/new`, {

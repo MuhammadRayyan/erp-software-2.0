@@ -16,7 +16,7 @@ import {
   purchaseInvoiceInputSchema,
   type PurchaseInvoiceInput,
 } from "./purchase-invoice-input";
-import type { PurchaseInvoiceStatus } from "./purchase-invoice-service";
+import type { PurchaseInvoiceIntent, PurchaseInvoiceStatus } from "./purchase-invoice-service";
 import {
   DocumentCurrencyFields,
   type DocumentCurrencyOption,
@@ -26,6 +26,8 @@ import { DocumentFormFooter } from "@/components/document-form-footer";
 import { SelectNative } from "@/components/ui/select-native";
 import { DocumentLineTable, useDocumentTotals } from "@/components/documents";
 import { useUnsavedChanges } from "@/hooks/use-unsaved-changes";
+import { useActionPermission, useApprovalPolicy } from "@/components/permissions-provider";
+import type { CustomFieldInputDefinition } from "@/modules/custom-fields/custom-field-inputs";
 
 type AccountOption = { id: string; name: string };
 type TaxOption = {
@@ -67,6 +69,7 @@ export function PurchaseInvoiceForm({
   rates,
   initial,
   availableSupplierPrepayments,
+  lineCustomFields = [],
 }: {
   businessId: string;
   invoiceId?: string;
@@ -82,8 +85,12 @@ export function PurchaseInvoiceForm({
   rates: DocumentRateOption[];
   initial: PurchaseInvoiceInput;
   availableSupplierPrepayments?: Record<string, SupplierPrepaymentOption[]>;
+  lineCustomFields?: CustomFieldInputDefinition[];
 }) {
   const router = useRouter();
+  const { requiresApproval } = useApprovalPolicy();
+  const canPost = useActionPermission("post");
+  const mustSubmitForApproval = requiresApproval || !canPost;
   const [serverError, setServerError] = useState("");
   const [globalTaxCodeId, setGlobalTaxCodeId] = useState(
     () =>
@@ -117,7 +124,6 @@ export function PurchaseInvoiceForm({
   function moveLineDown(index: number) {
     if (index < fields.length - 1) move(index, index + 1);
   }
-  const lines = useWatch({ control, name: "lines" }) ?? [];
   const supplierId = useWatch({ control, name: "supplierId" });
   const currencyCode = useWatch({ control, name: "currencyCode" }) || currency;
   const exchangeRateToBase =
@@ -135,6 +141,7 @@ export function PurchaseInvoiceForm({
     taxCodes,
     minorUnit,
   });
+  const lines = totals.lines;
   const billTotalMinor = totals.totalMinor ?? (totals.subtotalMinor + totals.taxMinor);
   const applyAvailablePrepayment = useWatch({ control, name: "applyAvailablePrepayment" });
   const currentPrepayments: SupplierPrepaymentOption[] = (availableSupplierPrepayments?.[supplierId] || []).filter(
@@ -171,7 +178,7 @@ export function PurchaseInvoiceForm({
       item.inventoryAssetAccountId
     );
   }
-  async function save(values: PurchaseInvoiceInput, intent: "draft" | "post") {
+  async function save(values: PurchaseInvoiceInput, intent: PurchaseInvoiceIntent) {
     setServerError("");
     const result = await savePurchaseInvoiceAction(
       businessId,
@@ -468,6 +475,7 @@ export function PurchaseInvoiceForm({
           minorUnit={minorUnit}
           previews={totals.previews}
           amountsIncludeTax={totals.amountsIncludeTax}
+          lineCustomFields={lineCustomFields}
           registerAmountsIncludeTax={register("amountsIncludeTax")}
           subtotalMinor={totals.subtotalMinor}
           taxMinor={totals.taxMinor}
@@ -481,7 +489,7 @@ export function PurchaseInvoiceForm({
           subtotalMinor: totals.subtotalMinor,
           taxMinor: totals.taxMinor,
           creditAppliedMinor: prepaymentAppliedMinor,
-          totalMinor: totals.subtotalMinor + totals.taxMinor,
+          totalMinor: billTotalMinor,
           currencyCode,
           minorUnit,
         }}
@@ -496,14 +504,36 @@ export function PurchaseInvoiceForm({
             Save Changes
           </Button>
         ) : (
-          <Button permission={"save"}
-            type="button"
-            disabled={isSubmitting}
-            onClick={handleSubmit((values) => save(values, "draft"))}
-          >
-            {isSubmitting && <LoaderCircle className="size-4 animate-spin" />}{" "}
-            {invoiceId ? "Save Draft" : "Save Draft Bill"}
-          </Button>
+          <div className="flex flex-wrap items-center gap-2">
+            <Button permission={"save"}
+              variant="secondary"
+              type="button"
+              disabled={isSubmitting}
+              onClick={handleSubmit((values) => save(values, "draft"))}
+            >
+              {isSubmitting && <LoaderCircle className="size-4 animate-spin" />}{" "}
+              {invoiceId ? "Save Draft" : "Save Draft Bill"}
+            </Button>
+            {mustSubmitForApproval ? (
+              <Button permission={"save"}
+                type="button"
+                disabled={isSubmitting}
+                onClick={handleSubmit((values) => save(values, "submit_approval"))}
+              >
+                {isSubmitting && <LoaderCircle className="size-4 animate-spin" />}{" "}
+                Submit for Approval
+              </Button>
+            ) : (
+              <Button permission={["save", "post"]}
+                type="button"
+                disabled={isSubmitting}
+                onClick={handleSubmit((values) => save(values, "post"))}
+              >
+                {isSubmitting && <LoaderCircle className="size-4 animate-spin" />}{" "}
+                {invoiceId ? "Save & Post" : "Create & Post"}
+              </Button>
+            )}
+          </div>
         )}
       </DocumentFormFooter>
     </form>

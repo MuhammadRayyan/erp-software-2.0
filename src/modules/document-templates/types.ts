@@ -6,6 +6,7 @@ export interface DocumentTemplateLine {
   discount?: string;
   tax?: string;
   project?: string;
+  customFields?: Array<{ name: string; value: string }>;
 }
 
 export interface DocumentTemplateData {

@@ -150,10 +150,33 @@ export function createDocumentRevision(
       .prepare(`INSERT INTO ${config.headerTable} (${insertCols}) VALUES (${insertPlaceholders})`)
       .run(...insertValues);
 
-    // 3. Duplicate lines
+    // 3. Duplicate lines and any line-level custom field values
     const lines = sqlite
       .prepare(`SELECT * FROM ${config.lineTable} WHERE ${config.lineHeaderIdColumn} = ?`)
       .all(sourceDocumentId) as any[];
+
+    const copyCustomFieldValues = (oldEntityId: string, newEntityId: string) => {
+      const cfRows = sqlite
+        .prepare(`SELECT * FROM custom_field_values WHERE entity_id = ?`)
+        .all(oldEntityId) as any[];
+      if (cfRows.length === 0) return;
+
+      const cfCols = sanitizeColumnList(Object.keys(cfRows[0]));
+      const cfInsertCols = cfCols.join(", ");
+      const cfInsertPlaceholders = cfCols.map(() => "?").join(", ");
+      const insertCfStmt = sqlite.prepare(
+        `INSERT INTO custom_field_values (${cfInsertCols}) VALUES (${cfInsertPlaceholders})`
+      );
+
+      for (const cf of cfRows) {
+        const newCf = { ...cf };
+        newCf.id = randomUUID();
+        newCf.entity_id = newEntityId;
+        if ("updated_at" in newCf) newCf.updated_at = now;
+        const cfValues = cfCols.map((col) => newCf[col]);
+        insertCfStmt.run(...cfValues);
+      }
+    };
 
     if (lines.length > 0) {
       const lineColumns = sanitizeColumnList(Object.keys(lines[0]));
@@ -164,36 +187,19 @@ export function createDocumentRevision(
       );
 
       for (const line of lines) {
+        const oldLineId = String(line.id);
+        const newLineId = randomUUID();
         const newLine = { ...line };
-        newLine.id = randomUUID();
+        newLine.id = newLineId;
         newLine[config.lineHeaderIdColumn] = newDocumentId;
         const lineValues = lineColumns.map((col) => newLine[col]);
         insertLineStmt.run(...lineValues);
+        copyCustomFieldValues(oldLineId, newLineId);
       }
     }
 
-    // 4. Duplicate custom fields
-    const customFields = sqlite
-      .prepare(`SELECT * FROM custom_field_values WHERE entity_id = ?`)
-      .all(sourceDocumentId) as any[];
-
-    if (customFields.length > 0) {
-      const cfCols = sanitizeColumnList(Object.keys(customFields[0]));
-      const cfInsertCols = cfCols.join(", ");
-      const cfInsertPlaceholders = cfCols.map(() => "?").join(", ");
-      const insertCfStmt = sqlite.prepare(
-        `INSERT INTO custom_field_values (${cfInsertCols}) VALUES (${cfInsertPlaceholders})`
-      );
-
-      for (const cf of customFields) {
-        const newCf = { ...cf };
-        newCf.id = randomUUID();
-        newCf.entity_id = newDocumentId;
-        newCf.created_at = now;
-        const cfValues = cfCols.map((col) => newCf[col]);
-        insertCfStmt.run(...cfValues);
-      }
-    }
+    // 4. Duplicate header custom fields
+    copyCustomFieldValues(sourceDocumentId, newDocumentId);
   }).immediate();
 
   return newDocumentId;

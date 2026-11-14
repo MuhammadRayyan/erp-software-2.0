@@ -13,6 +13,8 @@ import { AccountMenu } from "@/components/account-menu";
 import { primaryNav, settingsNav, systemHealthNav } from "./nav-items";
 import { SidebarNav } from "./sidebar-nav";
 import { ModuleFlowGuide } from "@/components/module-flow-guide";
+import { NotificationBell } from "./notification-bell";
+import { ShieldCheck } from "lucide-react";
 
 type ShellProps = {
   children: React.ReactNode;
@@ -20,6 +22,8 @@ type ShellProps = {
   businesses?: { id: string; name: string }[];
   modules: ModuleKey[];
   user: { name: string; email: string; isSuperAdmin?: boolean };
+  unreadNotificationsCount?: number;
+  pendingApprovalsCount?: number;
 };
 
 function buildCommands(businessId: string, modules: ModuleKey[], isSuperAdmin: boolean, push: (path: string) => void): CommandItem[] {
@@ -79,7 +83,14 @@ function buildCommands(businessId: string, modules: ModuleKey[], isSuperAdmin: b
   return [...navigation, ...actions];
 }
 
-export function AppShell({ children, business, modules, user }: ShellProps) {
+export function AppShell({
+  children,
+  business,
+  modules,
+  user,
+  unreadNotificationsCount = 0,
+  pendingApprovalsCount = 0,
+}: ShellProps) {
   const router = useRouter();
   const [mobileOpen, setMobileOpen] = useState(false);
   const [paletteOpen, setPaletteOpen] = useState(false);
@@ -133,6 +144,18 @@ export function AppShell({ children, business, modules, user }: ShellProps) {
           </button>
           <Button variant="ghost" size="icon" className="lg:hidden" aria-label="Search or jump to (Ctrl K)" onClick={() => setPaletteOpen(true)}><Search className="size-[18px]" /></Button>
           <ModuleFlowGuide />
+          {pendingApprovalsCount > 0 && (
+            <Button asChild variant="ghost" size="sm" className="hidden sm:inline-flex gap-1.5 text-xs">
+              <Link href={`/b/${business.id}/approvals`} title="Pending Maker-Checker approvals">
+                <ShieldCheck className="size-4 text-warning" />
+                <span className="tabular-nums font-semibold">{pendingApprovalsCount}</span>
+              </Link>
+            </Button>
+          )}
+          <NotificationBell
+            businessId={business.id}
+            initialUnreadCount={unreadNotificationsCount}
+          />
           <Button variant="ghost" size="icon" aria-label="Help" title="Help" onClick={() => setHelpOpen(true)}><CircleHelp className="size-[18px]" /></Button>
           <AccountMenu user={user} businessId={business.id} />
         </div>

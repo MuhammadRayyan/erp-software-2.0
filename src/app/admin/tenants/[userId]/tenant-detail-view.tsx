@@ -34,7 +34,7 @@ import {
   updateTenantQuotasAction,
 } from "../../actions";
 import { ConfirmDialog } from "../../confirm-dialog";
-import { copyToClipboard } from "../../clipboard";
+import { copyToClipboard } from "@/lib/clipboard";
 import type { TenantDetails } from "@/core/admin/tenant-service";
 
 function generateSecurePassword(): string {

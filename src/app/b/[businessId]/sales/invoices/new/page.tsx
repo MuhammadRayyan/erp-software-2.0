@@ -53,6 +53,15 @@ export default async function NewInvoicePage({
       isRequired,
     }),
   );
+  const lineCustomFields = listCustomFieldDefinitions(businessId, user.id, "sales_invoice_line").map(
+    ({ id, name, fieldType, selectOptions, isRequired }) => ({
+      id,
+      name,
+      fieldType,
+      selectOptions,
+      isRequired,
+    }),
+  );
   const currencySettings = getCurrencySettings(businessId, user.id);
   const availableCustomerCredits = getAllCustomersUnallocatedCredit(businessId, user.id);
 
@@ -169,6 +178,7 @@ export default async function NewInvoicePage({
           orders={orders.map((o) => ({ id: o.id, orderNumber: o.order_number, customerId: o.customer_id, date: o.date }))}
           quotes={quotes.map((q) => ({ id: q.id, quoteNumber: q.quote_number, customerId: q.customer_id, date: q.date }))}
           customFields={customFields}
+          lineCustomFields={lineCustomFields}
           currency={access.business.currency}
           currencies={currencySettings.currencies
             .filter((entry) => entry.is_active)

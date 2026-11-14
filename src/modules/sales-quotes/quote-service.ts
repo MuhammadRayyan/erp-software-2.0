@@ -12,8 +12,9 @@ import { convertDocumentLinesToBase} from "@/modules/currency/conversion";
 import { resolveRateSnapshot } from "@/modules/currency/validation";
 import { calculateLines, totalsForLines, type StoredLine } from "@/modules/accounting/services/document-line-calculator";
 import { recordActivity } from "@/modules/activity-log/activity-log-service";
+import { getCustomFieldValuesForEntities, saveLineCustomFieldValuesInTransaction } from "@/modules/custom-fields/custom-field-service";
 
-export type SalesQuoteStatus = "draft" | "sent" | "accepted" | "rejected" | "superseded" | "cancelled";
+export type SalesQuoteStatus = "draft" | "pending_approval" | "sent" | "accepted" | "rejected" | "superseded" | "cancelled";
 export type SalesQuoteIntent = "draft" | "issue";
 
 
@@ -114,7 +115,8 @@ export function getSalesQuote(businessId: string, userId: string, quoteId: strin
   const linkedOrders = context.sqlite
     .prepare("SELECT id, order_number, document_status FROM sales_orders WHERE sales_quote_id = ? ORDER BY created_at DESC")
     .all(quoteId) as { id: string; order_number: string; document_status: string }[];
-  return { ...header, project: header.quote.projectId ? projectById.get(header.quote.projectId) ?? null : null, lines: lines.map((line) => ({ ...line, item: line.itemId ? itemById.get(line.itemId) ?? null : null, salesAccount: line.salesAccountId ? accountById.get(line.salesAccountId) ?? null : null, taxCode: taxById.get(line.taxCodeId) ?? null, project: effectiveProjectId(line.projectId, header.quote.projectId) ? projectById.get(effectiveProjectId(line.projectId, header.quote.projectId)!) ?? null : null })), linkedOrders };
+  const lineCustomFieldsMap = getCustomFieldValuesForEntities(businessId, userId, "sales_quote_line", lines.map((l) => l.id));
+  return { ...header, project: header.quote.projectId ? projectById.get(header.quote.projectId) ?? null : null, lines: lines.map((line) => ({ ...line, item: line.itemId ? itemById.get(line.itemId) ?? null : null, salesAccount: line.salesAccountId ? accountById.get(line.salesAccountId) ?? null : null, taxCode: taxById.get(line.taxCodeId) ?? null, project: effectiveProjectId(line.projectId, header.quote.projectId) ? projectById.get(effectiveProjectId(line.projectId, header.quote.projectId)!) ?? null : null, customFields: lineCustomFieldsMap.get(line.id) ?? {} })), linkedOrders };
 }
 
 export function saveSalesQuote(businessId: string, userId: string, input: SalesQuoteInput, intent: SalesQuoteIntent, quoteId?: string) {
@@ -139,7 +141,9 @@ export function saveSalesQuote(businessId: string, userId: string, input: SalesQ
   const id = quoteId ?? randomUUID();
   let recordedNumber = "";
   context.sqlite.transaction(() => {
+    let oldLineIds: string[] = [];
     if (quoteId) {
+      oldLineIds = (context.sqlite.prepare("SELECT id FROM sales_quote_lines WHERE quote_id = ?").all(quoteId) as { id: string }[]).map((r) => r.id);
       const current = context.db.select().from(salesQuotes).where(eq(salesQuotes.id, quoteId)).get();
       if (!current) throw new Error("Sales quote not found.");
       if (current.documentStatus === "accepted" || current.documentStatus === "cancelled" || current.documentStatus === "superseded") {
@@ -159,6 +163,7 @@ export function saveSalesQuote(businessId: string, userId: string, input: SalesQ
         .run(id, quoteNumber, quoteNumber, id, data.customerId, data.projectId || null, data.date, data.expectedDate || "", data.reference || null, status, data.amountsIncludeTax ? 1 : 0, amounts.subtotalMinor, amounts.taxMinor, amounts.totalMinor, rate.currencyCode, rate.exchangeRateToBase, rate.exchangeRateDate, rate.exchangeRateSource, base.baseSubtotalMinor, base.baseTaxMinor, base.baseTotalMinor, data.notes || null, data.terms || null, userId, now, now);
     }
     insertLines(context.db, id, lines);
+    saveLineCustomFieldValuesInTransaction(context.sqlite, "sales_quote_line", lines.map((l) => ({ lineId: l.id, customFields: l.customFields })), oldLineIds);
   }).immediate();
 
   try {
