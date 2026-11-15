@@ -4,7 +4,9 @@ import { selectComboboxOption } from './helpers/combobox';
 test.describe('Evaluation Suite E: Currency & Multi-Currency', () => {
   test.beforeEach(async ({ page }) => {
     await page.goto('/');
-    await page.locator('article a').first().click();
+    const demoArticle = page.locator('article').filter({ hasText: /Northstar Technical Services/i }).first();
+    const businessCard = (await demoArticle.count()) > 0 ? demoArticle.locator('a').first() : page.locator('article a').first();
+    await businessCard.click();
     await expect(page.getByRole('heading', { name: 'Overview' })).toBeVisible();
   });
 
@@ -37,13 +39,13 @@ test.describe('Evaluation Suite E: Currency & Multi-Currency', () => {
     await selectComboboxOption(page, page.getByLabel(/Line 1 inventory item/i), itemName);
     await page.waitForTimeout(1000); // Wait for form re-render after item selection
     
-    // Set invoice date and tax date to match stored rate date (2026-08-27); rate is resolved in backend automatically
-    await page.getByLabel(/invoice date/i).fill('2026-08-27');
-    await page.getByLabel(/vat tax date/i).fill('2026-08-27');
+    // Keep invoice date and tax date aligned with today's seeded CBUAE USD FX rate (resolved automatically by backend)
+    const todayDate = await page.getByLabel(/invoice date/i).inputValue();
+    await page.getByLabel(/vat tax date/i).fill(todayDate);
     await expect(page.locator('#storedExchangeRate')).toHaveCount(0);
     
     // Automatically should have USD and exchange rate
-    await page.getByRole('button', { name: /post invoice/i }).click();
+    await page.getByRole('button', { name: /Create & Post|Save & Post|Post Invoice/i }).click();
     await expect(page.getByText('POSTED').first()).toBeVisible({ timeout: 15000 });
 
     // Try to record a receipt against it

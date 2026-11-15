@@ -4,7 +4,9 @@ import { selectComboboxByIndex } from './helpers/combobox';
 test.describe('Deep Banking Testing', () => {
   test.beforeEach(async ({ page }) => {
     await page.goto('/');
-    await page.locator('article a').first().click();
+    const demoArticle = page.locator('article').filter({ hasText: /Northstar Technical Services/i }).first();
+    const businessCard = (await demoArticle.count()) > 0 ? demoArticle.locator('a').first() : page.locator('article a').first();
+    await businessCard.click();
     await expect(page.getByRole('heading', { name: 'Overview' })).toBeVisible();
   });
 

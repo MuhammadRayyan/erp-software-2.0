@@ -35,17 +35,21 @@ test.describe('Evaluation Suite C: AR/AP Financial Integrity', () => {
     await expect(page.getByLabel(/customer/i).first()).not.toHaveAttribute('data-value', '');
     await selectComboboxOption(page, page.getByLabel(/Line 1 inventory item/i), item);
     
-    await page.getByRole('button', { name: /post invoice/i }).click();
+    await page.getByRole('button', { name: /Create & Post|Save & Post|Post Invoice/i }).click();
     await expect(page.getByText('POSTED').first()).toBeVisible({ timeout: 15000 });
     
     // C1: Over-payment Guard
     await page.getByRole('link', { name: 'Record Receipt' }).click();
-    await page.getByLabel(/amount/i).fill('600.00');
+    const allocInput = page.getByLabel(/Allocate amount for INV-/i).first();
+    const fullAmount = await allocInput.inputValue();
+    await page.locator('#amount').fill('600.00');
+    await allocInput.fill('600.00');
     await page.getByRole('button', { name: /post receipt/i }).click();
-    await expect(page.getByText(/Receipt amount cannot exceed the invoice balance/i)).toBeVisible();
+    await expect(page.getByText(/Receipt allocation cannot exceed the invoice balance/i)).toBeVisible();
     
     // C3: Happy Path Settle
-    await page.getByLabel(/amount/i).fill('500.00');
+    await page.locator('#amount').fill(fullAmount);
+    await allocInput.fill(fullAmount);
     await page.getByRole('button', { name: /post receipt/i }).click();
     await expect(page.getByText('POSTED').first()).toBeVisible();
 
@@ -54,10 +58,9 @@ test.describe('Evaluation Suite C: AR/AP Financial Integrity', () => {
     await page.getByRole('row', { name: customerName }).first().getByRole('link').first().click();
     await expect(page.getByText('PAID').first()).toBeVisible();
 
-    // Attempt to void the invoice
+    // Settled invoice must hide Void and Record Receipt actions while receipt allocations exist
     await page.getByRole('button', { name: /more actions/i }).click();
-    await page.getByRole('menuitem', { name: /void/i }).click();
-    await page.getByRole('button', { name: 'Void', exact: true }).click();
-    await expect(page.getByText(/Cannot void an invoice that has receipt allocations/i)).toBeVisible();
+    await expect(page.getByRole('menuitem', { name: /void/i })).toHaveCount(0);
+    await expect(page.getByRole('link', { name: 'Record Receipt' })).toHaveCount(0);
   });
 });

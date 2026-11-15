@@ -21,7 +21,7 @@ test.describe('Deep UI Testing', () => {
     // Fill form
     await page.getByLabel(/customer name/i).first().fill(customerName);
     await page.getByLabel(/email/i).first().fill(email);
-    await page.getByLabel(/TRN \/ reference/i).first().fill('TAX-12345');
+    await page.locator('#taxReference').fill('TAX-12345');
     
     // Click Save
     await page.getByRole('button', { name: /save customer/i }).click();

@@ -6,8 +6,8 @@ test.describe('Top-Down Visual and Architecture Flow Verification', () => {
 
   test.beforeEach(async ({ page }) => {
     await page.goto('/');
-    // Select first business card
-    const businessCard = page.locator('article a').first();
+    const demoArticle = page.locator('article').filter({ hasText: /Northstar Technical Services/i }).first();
+    const businessCard = (await demoArticle.count()) > 0 ? demoArticle.locator('a').first() : page.locator('article a').first();
     await expect(businessCard).toBeVisible({ timeout: 15000 });
     await businessCard.click();
     await expect(page.getByRole('heading', { name: 'Overview' })).toBeVisible({ timeout: 15000 });
@@ -76,7 +76,7 @@ test.describe('Top-Down Visual and Architecture Flow Verification', () => {
     await page.waitForTimeout(300);
 
     // 7. Test View Switcher Tab (Document View vs. Operational & Ledger)
-    const ledgerTab = page.getByRole('button', { name: /Operational & Ledger/i });
+    const ledgerTab = page.getByRole('tab', { name: /Operational & Ledger/i });
     await expect(ledgerTab).toBeVisible();
     await ledgerTab.click();
 
@@ -88,7 +88,7 @@ test.describe('Top-Down Visual and Architecture Flow Verification', () => {
     await page.screenshot({ path: 'test-results/visual/02-sales-invoice-operational-ledger.png', fullPage: true });
 
     // Switch back to Document View
-    const docTab = page.getByRole('button', { name: /Document View \(Paper\)/i });
+    const docTab = page.getByRole('tab', { name: /Document View \(Paper\)/i });
     await expect(docTab).toBeVisible();
     await docTab.click();
     await expect(paperSheet).toBeVisible();
@@ -204,7 +204,7 @@ test.describe('Top-Down Visual and Architecture Flow Verification', () => {
     // Edit and Issue the order
     const editOrderLink = page.getByRole('link', { name: 'Edit', exact: true });
     await editOrderLink.click();
-    const issueOrderBtn = page.getByRole('button', { name: /Issue Order/i });
+    const issueOrderBtn = page.getByRole('button', { name: /Save & Issue|Issue Order/i });
     await expect(issueOrderBtn).toBeVisible({ timeout: 15000 });
     await issueOrderBtn.click();
 
@@ -225,7 +225,7 @@ test.describe('Top-Down Visual and Architecture Flow Verification', () => {
     await expect(page).toHaveURL(/.*\/sales\/invoices\/[a-zA-Z0-9-]{10,}.*/);
     const editInvoiceLink = page.getByRole('link', { name: 'Edit', exact: true });
     await editInvoiceLink.click();
-    const postInvoiceBtn = page.getByRole('button', { name: /Post Invoice/i });
+    const postInvoiceBtn = page.getByRole('button', { name: /Save & Post|Create & Post|Post Invoice/i });
     await expect(postInvoiceBtn).toBeVisible({ timeout: 15000 });
     await postInvoiceBtn.click();
 

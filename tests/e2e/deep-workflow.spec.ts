@@ -67,7 +67,7 @@ test.describe('Deep Workflow Testing', () => {
 
     // Now on Sales Invoice edit form
     await expect(page.getByRole('heading', { name: /Edit Sales Invoice/i })).toBeVisible({ timeout: 15000 });
-    await page.getByRole('button', { name: /Post Invoice/i }).click();
+    await page.getByRole('button', { name: /Save & Post|Create & Post|Post Invoice/i }).click();
     
     // Back to Sales Invoice view
     await expect(page).toHaveURL(/.*\/sales\/invoices\/[a-zA-Z0-9-]{10,}.*/);

@@ -21,6 +21,7 @@
     "test:platform": "node --import tsx --import ./scripts/test-isolation.mjs --test-force-exit --test \"tests/platform/**/*.test.ts\"",
     "test:integration": "node --import tsx --import ./scripts/test-isolation.mjs --test-force-exit --test \"tests/integration/**/*.test.ts\"",
     "test:e2e": "playwright test",
+    "test:e2e:sprint3": "playwright test --config playwright.sprint3.config.ts",
     "build:ops": "node scripts/build-ops.mjs",
     "test:hardening": "tsx --test-force-exit --test tests/platform/production-hardening.test.ts",
     "check:permissions": "node scripts/check-permissions.mjs",

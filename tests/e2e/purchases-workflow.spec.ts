@@ -48,9 +48,10 @@ test.describe('Purchases Deep Workflow Testing', () => {
     
     // We are now on the Purchase Order view, but it's a Draft. We need to edit to issue it.
     await page.getByRole('link', { name: 'Edit', exact: true }).click();
+    await expect(page).toHaveURL(/.*\/orders\/.*\/edit/);
     
-    await expect(page.getByRole('button', { name: /Save & Issue|Issue Order/i })).toBeVisible({ timeout: 30000 });
-    await page.getByRole('button', { name: /Save & Issue|Issue Order/i }).click();
+    await expect(page.getByRole('button', { name: /Save & Issue/i })).toBeVisible({ timeout: 30000 });
+    await page.getByRole('button', { name: /Save & Issue/i }).click();
     
     await expect(page.getByRole('button', { name: /Create Invoice/i })).toBeVisible({ timeout: 30000 });
 
@@ -63,9 +64,9 @@ test.describe('Purchases Deep Workflow Testing', () => {
     await expect(page).toHaveURL(/.*\/purchases\/invoices\/[a-zA-Z0-9-]{10,}\/edit/);
     
     // On the Purchase Invoice form
-    await expect(page.getByRole('button', { name: /Post Invoice/i })).toBeVisible({ timeout: 30000 });
+    await expect(page.getByRole('button', { name: /Save & Post|Create & Post|Post Invoice/i })).toBeVisible({ timeout: 30000 });
     // Intentionally omit Due Date
-    await page.getByRole('button', { name: /Post Invoice/i }).click();
+    await page.getByRole('button', { name: /Save & Post|Create & Post|Post Invoice/i }).click();
     
     // We should see a success marker (like POSTED status)
     await expect(page.getByText('POSTED').first()).toBeVisible();

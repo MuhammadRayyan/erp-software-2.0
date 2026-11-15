@@ -37,7 +37,7 @@ test.describe('Evaluation Suite A: Inventory Integrity', () => {
     await page.locator('button', { hasText: 'Post Delivery' }).click();
 
     // 4. Assert error message is visible
-    await expect(page.getByText(/Only 0/i).or(page.getByText(/available/i))).toBeVisible();
+    await expect(page.getByRole('alert').filter({ hasText: /Only 0|available/i }).first()).toBeVisible();
   });
 
   test('A4: Opening Balance + Zero-Value Adjustment Guard', async ({ page }) => {

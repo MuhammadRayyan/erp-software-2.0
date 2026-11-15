@@ -50,12 +50,15 @@ jobs:
         run: |
           npx playwright install --with-deps chromium
           npm run test:e2e
+          npm run test:e2e:sprint3
       - name: Browser failure evidence
         if: failure()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: browser-failure-evidence
-          path: test-results/acceptance
+          path: |
+            test-results/acceptance
+            test-results/sprint3
           if-no-files-found: ignore
           retention-days: 3
 
