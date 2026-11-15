@@ -56,8 +56,17 @@ test.describe('Settings Reactivity, PDF Generations, and System Health Flows', (
     test.setTimeout(60000);
     const businessId = page.url().match(/\/b\/([^/]+)/)?.[1] || 'demo';
 
+    await page.goto(`/b/${businessId}/settings`);
+    const healthCard = page.locator(`a[href*="/settings/system-health"]`);
+    if ((await healthCard.count()) === 0) {
+      // Non-super-admin users must not see or access System Health
+      const res = await page.request.get(`/b/${businessId}/settings/system-health`);
+      expect(res.status()).toBe(404);
+      return;
+    }
+
     await page.goto(`/b/${businessId}/settings/system-health`);
-    await expect(page.getByRole('heading', { name: 'System Health & Diagnostics' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: /System Health & Diagnostics/i })).toBeVisible();
 
     // Verify key telemetry elements are rendered
     await expect(page.getByText(/Business DB \(SQLite\)/i).first()).toBeVisible();
@@ -85,7 +94,8 @@ test.describe('Settings Reactivity, PDF Generations, and System Health Flows', (
     await page.goto(`/b/${businessId}/settings/document-templates`);
     await expect(page.getByRole('heading', { name: 'Document Templates' })).toBeVisible();
 
-    // Verify template layout radio buttons
+    // Switch to Style & Colors tab where template layout presets live
+    await page.getByRole('button', { name: /Style & Colors/i }).click();
     await expect(page.getByText(/Classic/i).first()).toBeVisible();
     await expect(page.getByText(/Minimal/i).first()).toBeVisible();
     await expect(page.getByText(/Modern/i).first()).toBeVisible();

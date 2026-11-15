@@ -24,7 +24,7 @@ test.describe('Purchases Module', () => {
     await expect(page.getByRole('heading', { name: 'New Purchase Invoice' })).toBeVisible();
     
     // Verify essential form fields exist
-    await expect(page.locator('select#supplierId')).toBeVisible();
+    await expect(page.locator('#supplierId')).toBeVisible();
     await expect(page.getByLabel(/invoice date/i)).toBeVisible();
   });
 

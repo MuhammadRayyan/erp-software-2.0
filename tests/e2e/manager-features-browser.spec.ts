@@ -22,7 +22,7 @@ test.describe('Manager.io ERP Features & Interactive Flows', () => {
     await expect(page.locator('a[href*="/settings/opening-balances"]')).toBeVisible();
 
     // Filter by keyword "Payment"
-    const searchInput = page.getByPlaceholder(/Filter settings by keyword/i);
+    const searchInput = page.getByPlaceholder(/Search settings/i);
     await searchInput.fill('Payment');
     await expect(page.locator('a[href*="/settings/payment-terms"]')).toBeVisible();
     await expect(page.locator('a[href*="/settings/units-of-measure"]')).not.toBeVisible();
@@ -212,7 +212,7 @@ test.describe('Manager.io ERP Features & Interactive Flows', () => {
       await rowCheckboxes.first().click();
 
       // Verify BatchActionBar floating bar appears at bottom
-      const batchBar = page.getByText(/selected/i);
+      const batchBar = page.getByText(/of \d+ selected/i);
       await expect(batchBar).toBeVisible();
       await expect(page.getByRole('button', { name: /Export CSV/i })).toBeVisible();
       await expect(page.getByRole('button', { name: /Print/i })).toBeVisible();
@@ -237,7 +237,7 @@ test.describe('Manager.io ERP Features & Interactive Flows', () => {
 
     // Verify running totals indicator and action buttons
     await expect(stickyDock.getByText('Total:', { exact: true })).toBeVisible();
-    await expect(stickyDock.getByRole('button', { name: 'Save Draft' })).toBeVisible();
-    await expect(stickyDock.getByRole('button', { name: 'Post Invoice' })).toBeVisible();
+    await expect(stickyDock.getByRole('button', { name: /Save Draft/i })).toBeVisible();
+    await expect(stickyDock.getByRole('button', { name: /Create & Post/i })).toBeVisible();
   });
 });

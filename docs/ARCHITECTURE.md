@@ -53,13 +53,13 @@ flowchart LR
 - **Authentication & Requests**: Handled by Better Auth (`src/core/auth/`) and `src/proxy.ts`. `assertActiveUser` rejects suspended or deleted users on mutations; production refuses missing or placeholder secrets and restricts `BETTER_AUTH_TRUSTED_ORIGINS`.
 - **Permission Boundaries**:
   - Every business command invokes `assertMutationPermission`, `assertSavePermission`, or `assertBusinessAdministrator` (`src/core/permissions/`).
-  - `npm run check:permissions` (`scripts/check-permissions.mjs`) statically verifies coverage across all **159** business command functions.
+  - `npm run check:permissions` (`scripts/check-permissions.mjs`) statically verifies coverage across all **160** business command functions.
   - Super-admin workspace quotas (`max_businesses`, `max_users`) are managed in [tenant-service.ts](../src/core/admin/tenant-service.ts).
 - **Maker-Checker Approvals** (`src/modules/approvals/` & `src/modules/notifications/`): Supports per-membership `requires_approval`, configurable amount threshold rules, `pending_approval` document states, isolated approval queue transitions, and bi-directional notifications between maker and approver.
 - **Content Security Policy (CSP)** ([next.config.ts](../next.config.ts)):
   - Emits strict security headers (`frame-ancestors 'self'`, `base-uri 'self'`, `form-action 'self'`, `worker-src 'self' blob:`, `object-src 'self' blob:`, `frame-src 'self' blob: data:` for Template Studio PDF previews, Sentry ingest allowlist on `connect-src`).
   - `script-src 'self' 'unsafe-inline'` in production (`process.env.NODE_ENV === "production"`), appending `'unsafe-eval'` only in non-production builds for React/Next dev tooling.
-  - `Caddyfile` layers TLS, HSTS, `X-Frame-Options`, `X-Content-Type-Options`, `Referrer-Policy`, and `Permissions-Policy`.
+  - [next.config.ts](../next.config.ts) also emits `Strict-Transport-Security`, `Permissions-Policy`, `X-Frame-Options`, `X-Content-Type-Options`, and `Referrer-Policy` across application routes, while [Caddyfile](../Caddyfile) layers TLS and default (`?`) fallback `X-Frame-Options`, `X-Content-Type-Options`, and `Referrer-Policy` headers on static/error responses without duplicating headers.
 
 ---
 

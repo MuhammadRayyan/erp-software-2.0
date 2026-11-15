@@ -12,20 +12,21 @@ test.describe('Settings Module', () => {
     await expect(page.getByRole('heading', { name: 'Settings' })).toBeVisible();
 
     // Verify category headings
-    await expect(page.getByText('Organization & Profile')).toBeVisible();
-    await expect(page.getByText('Commercial & Documents')).toBeVisible();
-    await expect(page.getByText('Accounting & Tax')).toBeVisible();
-    await expect(page.getByText('Workspace & Access')).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Business & Regional' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Documents & Forms' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Email & Communications' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Accounting & Rules' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Users & System' })).toBeVisible();
 
     // Test search filtering
-    const searchInput = page.getByPlaceholder(/Filter settings by keyword/i);
+    const searchInput = page.getByPlaceholder(/Search settings/i);
     await searchInput.fill('numbering');
     await expect(page.getByRole('link', { name: /Document Numbering/i })).toBeVisible();
-    await expect(page.getByText('Organization & Profile')).not.toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Business & Regional' })).not.toBeVisible();
 
     // Clear search
     await page.locator('button:has(svg.lucide-x)').click();
-    await expect(page.getByText('Organization & Profile')).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Business & Regional' })).toBeVisible();
   });
 
   test('can update business profile and branding', async ({ page }) => {
@@ -114,7 +115,7 @@ test.describe('Settings Module', () => {
   test('can view appearance settings', async ({ page }) => {
     await page.getByRole('link', { name: 'Settings' }).click();
     await page.locator('main').getByRole('link', { name: /Appearance & Theme/i }).click();
-    await expect(page.getByRole('heading', { name: 'Appearance Settings' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Appearance & Theme' })).toBeVisible();
 
     // Check live preview card and theme controls
     await expect(page.getByText(/Live Interface Preview/i)).toBeVisible();
@@ -135,17 +136,18 @@ test.describe('Settings Module', () => {
 
     // Verify studio controls and live preview container
     await expect(page.getByText(/Template Studio/i)).toBeVisible();
-    await expect(page.getByText(/Live Document Preview/i)).toBeVisible();
-    await expect(page.getByRole('button', { name: 'Minimal' })).toBeVisible();
+    await expect(page.getByText(/Live Reactive Preview/i)).toBeVisible();
+
+    // Verify Style & Colors tab
+    await page.getByRole('button', { name: /Style & Colors/i }).click();
+    await expect(page.getByRole('button', { name: /minimal/i })).toBeVisible();
 
     // Verify tabs
-    await page.getByRole('button', { name: /Logo & Branding/i }).click();
+    await page.getByRole('button', { name: /Logo & Banners/i }).click();
     await expect(page.getByText(/Company Logo/i)).toBeVisible();
 
-    await page.getByRole('button', { name: /Content & Details/i }).click();
-    await expect(page.getByText(/Document Watermark/i)).toBeVisible();
-
-    await page.getByRole('button', { name: /Columns/i }).click();
-    await expect(page.getByText(/Table Columns/i)).toBeVisible();
+    await page.getByRole('button', { name: /Columns & Blocks/i }).click();
+    await expect(page.getByText(/Table Columns & Field Visibility/i)).toBeVisible();
+    await expect(page.getByText(/Diagonal Watermark Text/i)).toBeVisible();
   });
 });

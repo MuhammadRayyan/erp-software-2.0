@@ -5,16 +5,26 @@ import { expect, type Locator, type Page } from "@playwright/test";
  * Supports visible label / substring / RegExp, option UUID value (`data-option-value`),
  * or clearing back to empty via `__clear__`.
  */
+async function openComboboxPopover(page: Page, trigger: Locator) {
+  await expect(trigger).toBeVisible();
+  const popover = page.locator("[cmdk-root]:visible").last();
+  await expect(async () => {
+    if ((await popover.count()) === 0) {
+      if ((await trigger.getAttribute("aria-expanded")) !== "true") {
+        await trigger.click();
+      }
+    }
+    await expect(popover).toBeVisible({ timeout: 800 });
+  }).toPass({ intervals: [150, 300, 600], timeout: 8000 });
+  return popover;
+}
+
 export async function selectComboboxOption(
   page: Page,
   trigger: Locator,
   valueOrText: string | RegExp,
 ) {
-  await expect(trigger).toBeVisible();
-  await trigger.click();
-
-  const popover = page.locator("[cmdk-root]:visible").last();
-  await expect(popover).toBeVisible();
+  const popover = await openComboboxPopover(page, trigger);
 
   const input = popover.locator("[cmdk-input]");
   if (typeof valueOrText === "string") {
@@ -78,11 +88,7 @@ export async function selectComboboxByIndex(
   trigger: Locator,
   oneBasedIndex: number,
 ) {
-  await expect(trigger).toBeVisible();
-  await trigger.click();
-
-  const popover = page.locator("[cmdk-root]:visible").last();
-  await expect(popover).toBeVisible();
+  const popover = await openComboboxPopover(page, trigger);
 
   const items = popover.locator("[cmdk-item][data-option-value]");
   const item = items.nth(Math.max(0, oneBasedIndex - 1));

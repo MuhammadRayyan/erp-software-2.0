@@ -18,9 +18,15 @@ test.describe('Evaluation Suite F: Banking & Reconciliation', () => {
     // Select money in
     await page.getByLabel(/direction/i).selectOption({ label: 'Money In' });
     
-    // Select an account like Accounts Receivable
-    const selectContent = await page.locator(`select[name="lines.0.accountId"]`).innerText();
-    expect(selectContent).not.toContain('Accounts Receivable');
-    expect(selectContent).not.toContain('Accounts Payable');
+    // Open counter-account combobox and verify AR/AP control accounts are excluded
+    const accountTrigger = page.getByLabel('Line 1 counter account', { exact: true });
+    await expect(accountTrigger).toBeVisible();
+    await accountTrigger.click();
+    const popover = page.locator('[cmdk-root]:visible').last();
+    await expect(popover).toBeVisible();
+    await expect(popover.locator('[cmdk-item]').first()).toBeVisible();
+    const optionTexts = await popover.locator('[cmdk-item]').allInnerTexts();
+    expect(optionTexts.join('\n')).not.toContain('Accounts Receivable');
+    expect(optionTexts.join('\n')).not.toContain('Accounts Payable');
   });
 });
