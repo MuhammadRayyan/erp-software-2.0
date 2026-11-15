@@ -76,6 +76,10 @@ on_exit() {
       cp "$release/previous-Caddyfile" "$root/Caddyfile"
       if [[ -f "$release/previous-release.env" ]]; then cp "$release/previous-release.env" "$root/.release.env"; else printf 'ERP_IMAGE=%s\n' "$previous" > "$root/.release.env"; fi
       compose up -d --no-build --pull never modern-erp
+      if ! docker exec erp-caddy cat /etc/caddy/Caddyfile | cmp -s - "$root/Caddyfile"; then
+        compose up -d --no-build --pull never --force-recreate caddy
+      fi
+      docker exec erp-caddy caddy reload --config /etc/caddy/Caddyfile --adapter caddyfile
       if curl --fail --silent --retry 10 --retry-delay 2 --retry-all-errors http://localhost/api/health >/dev/null; then
         echo "Previous release restored; the deployment is still marked FAILED." >&2
       else echo "CRITICAL: previous release did not recover. Backup: $backup" >&2; fi
@@ -111,6 +115,9 @@ cp "$release/Caddyfile" "$root/Caddyfile"
 printf 'ERP_IMAGE=%s\n' "$image" > "$root/.release.env"
 compose config --quiet
 compose up -d --no-build --pull never modern-erp caddy
+if ! docker exec erp-caddy cat /etc/caddy/Caddyfile | cmp -s - "$root/Caddyfile"; then
+  compose up -d --no-build --pull never --force-recreate caddy
+fi
 docker exec erp-caddy caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile
 docker exec erp-caddy caddy reload --config /etc/caddy/Caddyfile --adapter caddyfile
 for attempt in $(seq 1 30); do
