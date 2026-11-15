@@ -153,8 +153,10 @@ test.describe("Sprint 3 UI & Workflow Modernization", () => {
     await expect(rail).toHaveAttribute("data-sidebar-collapsed", "false");
     await page.getByRole("button", { name: "Collapse sidebar", exact: true }).click();
     await expect(rail).toHaveAttribute("data-sidebar-collapsed", "true");
-    const collapsedBox = await rail.boundingBox();
-    expect(collapsedBox?.width).toBeLessThanOrEqual(70);
+    await expect(async () => {
+      const collapsedBox = await rail.boundingBox();
+      expect(collapsedBox?.width).toBeLessThanOrEqual(70);
+    }).toPass({ timeout: 5000 });
 
     await page.reload();
     await expect(rail).toHaveAttribute("data-sidebar-collapsed", "true");
