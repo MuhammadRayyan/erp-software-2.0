@@ -4,10 +4,14 @@
     request_body {
         max_size 55MB
     }
-    header {
-        ?X-Content-Type-Options "nosniff"
-        ?X-Frame-Options "SAMEORIGIN"
-        ?Referrer-Policy "strict-origin-when-cross-origin"
+    header ?X-Content-Type-Options "nosniff" {
+        defer
+    }
+    header ?X-Frame-Options "SAMEORIGIN" {
+        defer
+    }
+    header ?Referrer-Policy "strict-origin-when-cross-origin" {
+        defer
     }
     handle_path /_next/static/* {
         root * /srv/erp-static
