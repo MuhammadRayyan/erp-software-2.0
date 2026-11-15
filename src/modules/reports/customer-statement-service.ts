@@ -1,4 +1,5 @@
 import { getBusinessDb } from "@/core/db/business";
+import { resolveBaseCurrencyCode } from "./currency-fallback";
 
 export type CustomerStatementRow = {
   date: string;
@@ -194,7 +195,7 @@ export function getCustomerAging(
   asOfDate?: string,
   currencyCode?: string,
 ): AgingBuckets {
-  const { sqlite } = getBusinessDb(businessId, userId);
+  const { sqlite, business } = getBusinessDb(businessId, userId);
   const targetAsOf = asOfDate || new Date().toISOString().slice(0, 10);
 
   let targetCurrency = currencyCode?.toUpperCase();
@@ -211,8 +212,7 @@ export function getCustomerAging(
       targetCurrency = cust?.default_currency_code;
     }
     if (!targetCurrency) {
-      const biz = sqlite.prepare("SELECT currency FROM business_settings LIMIT 1").get() as { currency?: string } | undefined;
-      targetCurrency = biz?.currency || "AED";
+      targetCurrency = resolveBaseCurrencyCode(sqlite, business?.currency);
     }
   }
 

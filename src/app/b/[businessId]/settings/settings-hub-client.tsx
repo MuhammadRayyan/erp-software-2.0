@@ -23,6 +23,7 @@ import {
   Scale,
   Search,
   ShieldCheck,
+  SlidersHorizontal,
   Sun,
   UserRound,
   Wand2,
@@ -30,7 +31,6 @@ import {
 } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
-import type { ResolvedBusinessProfile } from "@/modules/business-profile/business-profile-service";
 
 type SettingItem = {
   title: string;
@@ -53,18 +53,15 @@ type SettingGroup = {
 
 export function SettingsHubClient({
   businessId,
-  profile,
   vatRegistered,
   isSuperAdmin = false,
   isAdmin = true,
   initialQuery,
 }: {
   businessId: string;
-  profile: ResolvedBusinessProfile;
   vatRegistered: boolean;
   isSuperAdmin?: boolean;
   isAdmin?: boolean;
-  initialTab?: string;
   initialQuery?: string;
 }) {
   const [query, setQuery] = useState(initialQuery ?? "");
@@ -79,13 +76,18 @@ export function SettingsHubClient({
         icon: Building2,
         items: [
           {
+            title: "Customize Modules",
+            subtitle: "Show or hide modules and sub-tabs in workspace navigation",
+            href: `/b/${businessId}/settings/customize`,
+            icon: SlidersHorizontal,
+            keywords: "customize modules tabs hide show sidebar navigation menu",
+          },
+          {
             title: "Business Profile & Branding",
             subtitle: "Company legal name, address, tax ID, and logo",
             href: `/b/${businessId}/settings/business-profile`,
             icon: Building2,
             keywords: "profile company name trading address phone email website logo branding registration trn",
-            badge: profile.tradingName || profile.legalName ? "Configured" : "Needs setup",
-            tone: profile.tradingName || profile.legalName ? "success" : "warning",
           },
           {
             title: "Regional & Localization",
@@ -93,22 +95,20 @@ export function SettingsHubClient({
             href: `/b/${businessId}/settings/localization`,
             icon: Calendar,
             keywords: "date time format calendar fiscal financial year regional timezone",
-            badge: profile.dateFormat,
-            tone: "neutral",
           },
           {
             title: "Appearance & Theme",
-            subtitle: "Dark/light mode, font family, and scale",
+            subtitle: "Account-wide dark/light mode, font family, and scale across all businesses",
             href: `/b/${businessId}/settings/appearance`,
             icon: Sun,
-            keywords: "appearance theme dark light font size text density display style",
+            keywords: "appearance theme dark light font size text density display style personal",
           },
           {
             title: "Display Preferences",
-            subtitle: "Column visibility and KPI card toggles",
+            subtitle: "Per-business column visibility and KPI card toggles synced across devices",
             href: `/b/${businessId}/settings/preferences`,
             icon: LayoutGrid,
-            keywords: "preferences columns kpi cards reset ui view display sync",
+            keywords: "preferences columns kpi cards reset ui view display sync business",
           },
         ],
       },
@@ -141,8 +141,6 @@ export function SettingsHubClient({
             href: `/b/${businessId}/settings/currencies`,
             icon: Coins,
             keywords: "currency currencies exchange rate fx foreign base rate aed usd eur",
-            badge: profile.baseCurrency,
-            tone: "info",
           },
           {
             title: "Financial Lock Date",
@@ -266,10 +264,10 @@ export function SettingsHubClient({
         items: [
           {
             title: "My Profile & Security",
-            subtitle: "Account credentials, name, and password",
+            subtitle: "Account-wide credentials, display name, and password",
             href: `/b/${businessId}/settings/profile`,
             icon: UserRound,
-            keywords: "profile user account password change security name credentials",
+            keywords: "profile user account password change security name credentials personal",
           },
           ...(isAdmin
             ? [
@@ -297,15 +295,13 @@ export function SettingsHubClient({
                   href: `/b/${businessId}/settings/system-health`,
                   icon: Activity,
                   keywords: "system health diagnostics logs traces sentry memory database wal uptime",
-                  badge: "Operational",
-                  tone: "success" as const,
                 },
               ]
             : []),
         ],
       },
     ],
-    [businessId, profile, vatRegistered, isSuperAdmin, isAdmin],
+    [businessId, vatRegistered, isSuperAdmin, isAdmin],
   );
 
   const visibleGroups = useMemo(() => {
@@ -363,7 +359,6 @@ export function SettingsHubClient({
               setQuery("");
               if (typeof window !== "undefined") {
                 const url = new URL(window.location.href);
-                url.searchParams.delete("tab");
                 url.searchParams.delete("q");
                 window.history.replaceState(null, "", url.toString());
               }
@@ -384,33 +379,22 @@ export function SettingsHubClient({
           {visibleGroups.map((group) => (
             <section
               key={group.id}
-              className="rounded-xl border border-border bg-surface-raised shadow-xs p-4 sm:p-5 space-y-3"
+              className="rounded-xl border border-border bg-surface-raised p-4 sm:p-5 space-y-3"
             >
-              {/* Category Header */}
-              <div className="flex items-center justify-between border-b border-border/60 pb-2">
-                <div className="flex items-center gap-2.5">
-                  <div className="flex size-7 items-center justify-center rounded-md bg-primary/10 text-primary shrink-0">
-                    <group.icon className="size-4" />
-                  </div>
-                  <h3 className="text-sm font-bold tracking-tight text-foreground">{group.category}</h3>
-                </div>
-                <span className="text-xs font-medium text-muted-foreground shrink-0 hidden sm:inline">
-                  {group.items.length} {group.items.length === 1 ? "item" : "items"}
-                </span>
+              <div className="flex items-center gap-2 border-b border-border/60 pb-2">
+                <group.icon className="size-4 text-muted-foreground" />
+                <h3 className="text-sm font-semibold tracking-tight text-foreground">{group.category}</h3>
               </div>
 
-              {/* Compact Manager.io Grid */}
               <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
                 {group.items.map((item) => (
                   <Link
                     key={item.title}
                     href={item.href}
-                    className="group relative flex h-10 items-center justify-between rounded-lg border border-border/70 bg-surface px-3 transition-all duration-150 hover:border-primary/50 hover:bg-surface-muted/50 hover:shadow-xs"
+                    className="group flex h-10 items-center justify-between rounded-lg border border-border/70 bg-surface px-3 transition-colors hover:border-primary/50 hover:bg-surface-muted/50"
                   >
                     <div className="flex items-center gap-2.5 min-w-0 pr-1">
-                      <div className="flex size-6 shrink-0 items-center justify-center rounded-md bg-surface-muted border border-border/50 text-foreground transition-colors group-hover:bg-primary/15 group-hover:text-primary">
-                        <item.icon className="size-3.5" />
-                      </div>
+                      <item.icon className="size-4 shrink-0 text-muted-foreground transition-colors group-hover:text-primary" />
                       <span className="text-xs sm:text-sm font-medium text-foreground group-hover:text-primary transition-colors truncate">
                         {item.title}
                       </span>

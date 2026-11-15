@@ -8,6 +8,29 @@ import { saveCustomFieldValuesInTransaction } from "@/modules/custom-fields/cust
 import { supplierInputSchema, type SupplierInput } from "./supplier-input";
 import { getBaseCurrency, getCurrency } from "@/modules/currency/currency";
 import { recordActivity } from "@/modules/activity-log/activity-log-service";
+import type { ListSortDir } from "@/lib/list-query-params";
+import {
+  buildLikePattern,
+  clampPositiveInt,
+  DEFAULT_LIST_PAGE_SIZE,
+  MAX_LIST_PAGE_SIZE,
+  resolveSortSql,
+} from "@/modules/shared/list-query-helpers";
+
+const SUPPLIER_TOTALS_CTE = `
+  purchase_totals AS (
+    SELECT supplier_id, SUM(base_total_minor) AS total_purchased_minor
+    FROM purchase_invoices
+    WHERE document_status = 'posted'
+    GROUP BY supplier_id
+  ),
+  payment_totals AS (
+    SELECT supplier_id, SUM(released_carrying_amount_minor) AS total_paid_minor
+    FROM supplier_payments
+    WHERE document_status = 'posted'
+    GROUP BY supplier_id
+  )
+`;
 
 export interface SupplierListRow {
   id: string;
@@ -29,22 +52,30 @@ export interface SupplierListRow {
 export function listSuppliers(businessId: string, userId: string): SupplierListRow[] {
   const { sqlite } = getBusinessDb(businessId, userId);
   return sqlite.prepare(`
+    WITH ${SUPPLIER_TOTALS_CTE}
     SELECT s.*, s.payment_terms_days AS paymentTermsDays,
-      COALESCE((SELECT SUM(base_total_minor) FROM purchase_invoices pi
-        WHERE pi.supplier_id = s.id AND pi.document_status = 'posted'), 0) AS total_purchased_minor,
-      COALESCE((SELECT SUM(released_carrying_amount_minor) FROM supplier_payments sp
-        WHERE sp.supplier_id = s.id AND sp.document_status = 'posted'), 0) AS total_paid_minor
+      COALESCE(pt.total_purchased_minor, 0) AS total_purchased_minor,
+      COALESCE(pay.total_paid_minor, 0) AS total_paid_minor
     FROM suppliers s
-    ORDER BY s.name
+    LEFT JOIN purchase_totals pt ON pt.supplier_id = s.id
+    LEFT JOIN payment_totals pay ON pay.supplier_id = s.id
+    ORDER BY s.name ASC
   `).all() as SupplierListRow[];
 }
 
+export type SupplierListSummary = {
+  unfilteredTotal: number;
+  filteredTotal: number;
+  activeCount: number;
+  totalOutstandingMinor: number;
+};
+
 /** Result of `listSuppliersPaginated`. The `rows` slice is just the rows for the
- *  requested page; `total` is the supplier count used to compute "Page X of Y".
- *  Row shape matches `listSuppliers` so callers can switch between them freely. */
+ *  requested page; `total` is the filtered supplier count; `summary` holds DB-wide totals. */
 export type PaginatedSuppliers = {
   rows: ReturnType<typeof listSuppliers>;
   total: number;
+  summary: SupplierListSummary;
   /** 1-indexed page number actually returned (clamped to the last valid page). */
   page: number;
   /** Rows per page that were requested. */
@@ -53,51 +84,99 @@ export type PaginatedSuppliers = {
   totalPages: number;
 };
 
-const DEFAULT_SUPPLIER_PAGE_SIZE = 50;
-const MAX_SUPPLIER_PAGE_SIZE = 200;
-
-function clampPositiveInt(value: number | undefined, fallback: number, max: number): number {
-  if (value === undefined || !Number.isInteger(value) || value < 1) return fallback;
-  return Math.min(value, max);
-}
-
 /**
- * Paginated supplier list for the list page. Server-side LIMIT/OFFSET keeps the
- * query cheap as the supplier table grows past thousands of rows. The returned
- * `total` is the supplier count regardless of the page bounds — the UI uses it
- * to render "Page X of Y" and disable the Next button on the last page. Page is
- * clamped to the last valid page so out-of-range URLs (e.g. `?page=999`) still
- * render the last page rather than 0 rows.
- *
- * @param page 1-indexed page number (clamped to >= 1).
- * @param pageSize rows per page (defaults to 50, capped at 200).
+ * Paginated supplier list with SQL filtering, sorting, and DB-wide outstanding balance totals.
  */
 export function listSuppliersPaginated(
   businessId: string,
   userId: string,
-  filters: { page?: number; pageSize?: number } = {},
+  filters: { q?: string; status?: string; sort?: string; dir?: ListSortDir; page?: number; pageSize?: number } = {},
 ): PaginatedSuppliers {
   const page = clampPositiveInt(filters.page, 1, Number.MAX_SAFE_INTEGER);
-  const pageSize = clampPositiveInt(filters.pageSize, DEFAULT_SUPPLIER_PAGE_SIZE, MAX_SUPPLIER_PAGE_SIZE);
+  const pageSize = clampPositiveInt(filters.pageSize, DEFAULT_LIST_PAGE_SIZE, MAX_LIST_PAGE_SIZE);
   const { sqlite } = getBusinessDb(businessId, userId);
-  const totalRow = sqlite.prepare(`SELECT COUNT(*) AS total FROM suppliers`).get() as { total: number };
-  const total = totalRow.total;
-  // Clamp the page number to the last valid page so out-of-range URLs
-  // (e.g. `?page=999`) still render the last page rather than 0 rows.
+
+  const conditions: string[] = [];
+  const values: Array<string | number> = [];
+
+  if (filters.status === "active") {
+    conditions.push("s.is_active = 1");
+  } else if (filters.status === "inactive") {
+    conditions.push("s.is_active = 0");
+  }
+
+  const likePattern = buildLikePattern(filters.q);
+  if (likePattern) {
+    conditions.push(
+      "(lower(s.name) LIKE ? ESCAPE '\\' OR lower(COALESCE(s.email, '')) LIKE ? ESCAPE '\\' OR lower(COALESCE(s.phone, '')) LIKE ? ESCAPE '\\')",
+    );
+    values.push(likePattern, likePattern, likePattern);
+  }
+
+  const where = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";
+  const unfilteredRow = sqlite.prepare(`SELECT COUNT(*) AS total FROM suppliers`).get() as { total: number };
+  const summaryRow = sqlite
+    .prepare(`
+      WITH ${SUPPLIER_TOTALS_CTE}
+      SELECT
+        COUNT(*) AS filtered_total,
+        COALESCE(SUM(CASE WHEN s.is_active = 1 THEN 1 ELSE 0 END), 0) AS active_count,
+        COALESCE(SUM(MAX(0, COALESCE(pt.total_purchased_minor, 0) - COALESCE(pay.total_paid_minor, 0))), 0) AS total_outstanding_minor
+      FROM suppliers s
+      LEFT JOIN purchase_totals pt ON pt.supplier_id = s.id
+      LEFT JOIN payment_totals pay ON pay.supplier_id = s.id
+      ${where}
+    `)
+    .get(...values) as {
+    filtered_total: number;
+    active_count: number;
+    total_outstanding_minor: number;
+  };
+
+  const total = summaryRow.filtered_total;
   const maxPage = Math.max(1, Math.ceil(total / pageSize));
   const effectivePage = Math.min(page, maxPage);
   const offset = (effectivePage - 1) * pageSize;
+
+  const sortColumns: Record<string, string> = {
+    name: "s.name",
+    email: "lower(COALESCE(s.email, ''))",
+    outstanding: "MAX(0, COALESCE(pt.total_purchased_minor, 0) - COALESCE(pay.total_paid_minor, 0))",
+    status: "s.is_active",
+  };
+  const orderByClause = resolveSortSql(
+    filters.sort,
+    filters.dir,
+    sortColumns,
+    "s.name ASC, s.id ASC",
+  );
+
   const rows = sqlite.prepare(`
+    WITH ${SUPPLIER_TOTALS_CTE}
     SELECT s.*, s.payment_terms_days AS paymentTermsDays,
-      COALESCE((SELECT SUM(base_total_minor) FROM purchase_invoices pi
-        WHERE pi.supplier_id = s.id AND pi.document_status = 'posted'), 0) AS total_purchased_minor,
-      COALESCE((SELECT SUM(released_carrying_amount_minor) FROM supplier_payments sp
-        WHERE sp.supplier_id = s.id AND sp.document_status = 'posted'), 0) AS total_paid_minor
+      COALESCE(pt.total_purchased_minor, 0) AS total_purchased_minor,
+      COALESCE(pay.total_paid_minor, 0) AS total_paid_minor
     FROM suppliers s
-    ORDER BY s.name
+    LEFT JOIN purchase_totals pt ON pt.supplier_id = s.id
+    LEFT JOIN payment_totals pay ON pay.supplier_id = s.id
+    ${where}
+    ORDER BY ${orderByClause}
     LIMIT ? OFFSET ?
-  `).all(pageSize, offset) as SupplierListRow[];
-  return { rows, total, page: effectivePage, pageSize, totalPages: maxPage };
+  `).all(...values, pageSize, offset) as SupplierListRow[];
+
+  return {
+    rows,
+    total,
+    summary: {
+      unfilteredTotal: unfilteredRow.total,
+      filteredTotal: total,
+      activeCount: summaryRow.active_count,
+      totalOutstandingMinor: summaryRow.total_outstanding_minor,
+    },
+    page: effectivePage,
+    pageSize,
+    totalPages: maxPage,
+  };
 }
 
 export function getSupplier(businessId: string, userId: string, supplierId: string) {

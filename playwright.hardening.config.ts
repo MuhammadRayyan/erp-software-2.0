@@ -10,7 +10,7 @@ process.env.ERP_BROWSER_META = path.join(root, "fixture.json");
 const defaultDistDir = existsSync(path.resolve(process.cwd(), ".next-validate")) ? ".next-validate" : ".next";
 
 export default defineConfig({
-  testDir: "./e2e", testMatch: "hardening.spec.ts", workers: 1, retries: 0, timeout: 45_000,
+  testDir: "./tests/e2e", testMatch: "hardening.spec.ts", workers: 1, retries: 0, timeout: 45_000,
   reporter: "list", outputDir: "test-results/hardening",
   use: { ...devices["Desktop Chrome"], baseURL: "http://localhost:3310", trace: "retain-on-failure", screenshot: "only-on-failure" },
   webServer: {

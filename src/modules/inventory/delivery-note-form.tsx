@@ -5,18 +5,19 @@ import Link from "next/link";
 import { useState } from "react";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Columns3, LoaderCircle, Plus, Trash2 } from "lucide-react";
-import { useFieldArray, useForm, useWatch } from "react-hook-form";
+import { Controller, useFieldArray, useForm, useWatch } from "react-hook-form";
 import { Button } from "@/components/ui/button";
+import { Combobox } from "@/components/ui/combobox";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { saveDeliveryNoteAction } from "./delivery-note-actions";
+import { useUnsavedChanges } from "@/hooks/use-unsaved-changes";
 import {
   deliveryNoteInputSchema,
   type DeliveryNoteInput,
 } from "./delivery-note-input";
 import type { InventoryDocumentStatus } from "./inventory-document";
-import { SelectNative } from "@/components/ui/select-native";
 
 type Item = { id: string; sku: string | null; name: string; unitName: string };
 type Option = { id: string; name: string };
@@ -60,8 +61,9 @@ export function DeliveryNoteForm({
     setError,
     setValue,
     control,
-    formState: { isSubmitting },
+    formState: { isSubmitting, isDirty, isSubmitSuccessful },
   } = form;
+  useUnsavedChanges(isDirty && !isSubmitSuccessful);
   const { fields, append, remove } = useFieldArray({ control, name: "lines" });
   const customerId = useWatch({ control, name: "customerId" });
   const availableProjects = projects.filter((project) => {
@@ -89,7 +91,7 @@ export function DeliveryNoteForm({
 
   function selectItem(index: number, id: string) {
     const item = items.find((entry) => entry.id === id);
-    if (item) setValue(`lines.${index}.description`, item.name);
+    if (item) setValue(`lines.${index}.description`, item.name, { shouldDirty: true, shouldTouch: true });
   }
 
   return (
@@ -107,14 +109,23 @@ export function DeliveryNoteForm({
         <div className="mt-5 grid gap-5 md:grid-cols-3">
           <div className="space-y-1.5">
             <Label htmlFor="customerId">Customer</Label>
-            <SelectNative id="customerId"  {...register("customerId")}>
-              <option value="">Choose a customer…</option>
-              {customers.map((customer) => (
-                <option key={customer.id} value={customer.id}>
-                  {customer.name}
-                </option>
-              ))}
-            </SelectNative>
+            <Controller
+              control={control}
+              name="customerId"
+              render={({ field }) => (
+                <Combobox
+                  id="customerId"
+                  options={customers.map((customer) => ({ value: customer.id, label: customer.name }))}
+                  value={field.value ?? ""}
+                  onValueChange={field.onChange}
+                  allowClear
+                  clearLabel="No customer"
+                  placeholder="Choose a customer…"
+                  searchPlaceholder="Search customers…"
+                  emptyText="No customers found."
+                />
+              )}
+            />
           </div>
           <div className="space-y-1.5">
             <Label htmlFor="date">Delivery date</Label>
@@ -122,45 +133,73 @@ export function DeliveryNoteForm({
           </div>
           <div className="space-y-1.5">
             <Label htmlFor="locationId">Location</Label>
-            <SelectNative id="locationId"  {...register("locationId")}>
-              {locations.map((location) => (
-                <option key={location.id} value={location.id}>
-                  {location.code} — {location.name}
-                </option>
-              ))}
-            </SelectNative>
+            <Controller
+              control={control}
+              name="locationId"
+              render={({ field }) => (
+                <Combobox
+                  id="locationId"
+                  options={locations.map((location) => ({
+                    value: location.id,
+                    label: `${location.code} — ${location.name}`,
+                  }))}
+                  value={field.value ?? ""}
+                  onValueChange={field.onChange}
+                  placeholder="Choose location…"
+                  searchPlaceholder="Search locations…"
+                  emptyText="No locations found."
+                />
+              )}
+            />
           </div>
           <div className="space-y-1.5">
             <Label htmlFor="salesInvoiceId">
               Sales Invoice <span className="font-normal text-muted-foreground">(optional)</span>
             </Label>
-            <SelectNative
-              id="salesInvoiceId"
-              
-              {...register("salesInvoiceId")}
-            >
-              <option value="">No linked invoice</option>
-              {invoices
-                .filter((invoice) => !customerId || invoice.customerId === customerId)
-                .map((invoice) => (
-                  <option key={invoice.id} value={invoice.id}>
-                    {invoice.number}
-                  </option>
-                ))}
-            </SelectNative>
+            <Controller
+              control={control}
+              name="salesInvoiceId"
+              render={({ field }) => (
+                <Combobox
+                  id="salesInvoiceId"
+                  options={invoices
+                    .filter((invoice) => !customerId || invoice.customerId === customerId)
+                    .map((invoice) => ({ value: invoice.id, label: invoice.number }))}
+                  value={field.value ?? ""}
+                  onValueChange={field.onChange}
+                  allowClear
+                  clearLabel="No linked invoice"
+                  placeholder="No linked invoice"
+                  searchPlaceholder="Search invoices…"
+                  emptyText="No sales invoices found."
+                />
+              )}
+            />
           </div>
           <div className="space-y-1.5">
             <Label htmlFor="projectId">
               Project <span className="font-normal text-muted-foreground">(optional)</span>
             </Label>
-            <SelectNative id="projectId"  {...register("projectId")}>
-              <option value="">No project</option>
-              {availableProjects.map((project) => (
-                <option key={project.id} value={project.id}>
-                  {project.code} — {project.name}
-                </option>
-              ))}
-            </SelectNative>
+            <Controller
+              control={control}
+              name="projectId"
+              render={({ field }) => (
+                <Combobox
+                  id="projectId"
+                  options={availableProjects.map((project) => ({
+                    value: project.id,
+                    label: `${project.code} — ${project.name}`,
+                  }))}
+                  value={field.value ?? ""}
+                  onValueChange={field.onChange}
+                  allowClear
+                  clearLabel="No project"
+                  placeholder="No project"
+                  searchPlaceholder="Search projects…"
+                  emptyText="No projects found."
+                />
+              )}
+            />
           </div>
           <div className="space-y-1.5">
             <Label htmlFor="reference">
@@ -228,19 +267,30 @@ export function DeliveryNoteForm({
               {fields.map((field, index) => (
                 <tr key={field.id} className="hover:bg-transparent!">
                   <td>
-                    <SelectNative
-                      aria-label={`Line ${index + 1} item`}
-                      {...register(`lines.${index}.itemId`, {
-                        onChange: (event) => selectItem(index, event.target.value),
-                      })}
-                    >
-                      <option value="">Choose item…</option>
-                      {items.map((item) => (
-                        <option key={item.id} value={item.id}>
-                          {item.sku ? `${item.sku} — ` : ""}{item.name}
-                        </option>
-                      ))}
-                    </SelectNative>
+                    <Controller
+                      control={control}
+                      name={`lines.${index}.itemId`}
+                      render={({ field: itemField }) => (
+                        <Combobox
+                          size="sm"
+                          ariaLabel={`Line ${index + 1} item`}
+                          options={items.map((item) => ({
+                            value: item.id,
+                            label: `${item.sku ? `${item.sku} — ` : ""}${item.name}`,
+                          }))}
+                          value={itemField.value ?? ""}
+                          onValueChange={(next) => {
+                            itemField.onChange(next);
+                            selectItem(index, next);
+                          }}
+                          allowClear
+                          clearLabel="Clear item"
+                          placeholder="Choose item…"
+                          searchPlaceholder="Search items…"
+                          emptyText="No items found."
+                        />
+                      )}
+                    />
                     <input type="hidden" {...register(`lines.${index}.salesInvoiceLineId`)} />
                   </td>
                   <td><Input aria-label={`Line ${index + 1} description`} {...register(`lines.${index}.description`)} /></td>
@@ -256,14 +306,27 @@ export function DeliveryNoteForm({
                   </td>
                   {showProjects && (
                     <td>
-                      <SelectNative  {...register(`lines.${index}.projectId`)}>
-                        <option value="">Use document Project</option>
-                        {availableProjects.map((project) => (
-                          <option key={project.id} value={project.id}>
-                            {project.code} — {project.name}
-                          </option>
-                        ))}
-                      </SelectNative>
+                      <Controller
+                        control={control}
+                        name={`lines.${index}.projectId`}
+                        render={({ field: projField }) => (
+                          <Combobox
+                            size="sm"
+                            ariaLabel={`Line ${index + 1} project`}
+                            options={availableProjects.map((project) => ({
+                              value: project.id,
+                              label: `${project.code} — ${project.name}`,
+                            }))}
+                            value={projField.value ?? ""}
+                            onValueChange={projField.onChange}
+                            allowClear
+                            clearLabel="Use document Project"
+                            placeholder="Use document Project"
+                            searchPlaceholder="Search projects…"
+                            emptyText="No projects found."
+                          />
+                        )}
+                      />
                     </td>
                   )}
                   <td>

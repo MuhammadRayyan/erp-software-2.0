@@ -6,6 +6,7 @@ import { ChevronRight, MoreHorizontal, Eye, FileEdit, Download, FileText, Packag
 import { 
   useLegacyTable as useTable,
   getCoreRowModel as createCoreRowModel,
+  getPaginationRowModel as createPaginationRowModel,
   getSortedRowModel as createSortedRowModel
 } from "@tanstack/react-table/legacy";
 import { type SortingState } from "@tanstack/react-table";
@@ -14,7 +15,8 @@ import { ListToolbar, SearchInput, ToolbarSelect, DateRangeFilter, ActiveFilters
 import { Button } from "@/components/ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { useColumns } from "@/components/columns-dropdown";
-import { DataTable } from "@/components/ui/data-table";
+import { DataTable, ListTableCard } from "@/components/ui/data-table";
+import { ClientListPagination, useTablePagination } from "@/components/list-pagination";
 import { formatDate, formatMoney } from "@/core/format";
 import type { PurchaseOrderStatus } from "./purchase-order-service";
 import { DensityToggle } from "@/components/density-toggle";
@@ -207,16 +209,21 @@ export function PurchaseOrderTable({
     [],
   );
 
+  const { pagination, onPaginationChange, paginationInfo, setPage, setPageSize } = useTablePagination(rows.length);
+
   const table = useTable({
     data: rows,
     columns,
     state: {
       sorting,
+      pagination,
       columnVisibility: colVisibility,
     },
     onSortingChange: setSorting,
+    onPaginationChange,
     getCoreRowModel: createCoreRowModel(),
     getSortedRowModel: createSortedRowModel(),
+    getPaginationRowModel: createPaginationRowModel(),
   });
 
   const clearFilters = () => { setQuery(""); setStatus(""); setSupplierId(""); setProjectId(""); setFromDate(""); setToDate(""); };
@@ -267,24 +274,32 @@ export function PurchaseOrderTable({
       </ActiveFiltersRow>
     )}
 
-    <DataTable 
-      table={table}
-      density={density}
-      minWidth="min-w-[780px]" 
-      noResultsMessage="No purchase orders match" 
-      onClearFilters={clearFilters}
-    />
-
-    {rows.length > 0 && (
-      <TableTotalsBar
-        filteredCount={rows.length}
-        totalCount={orders.length}
-        itemLabel="orders"
-        metrics={[
-          { label: "Total PO Value", value: totalPOValueStr, tone: "primary" },
-          { label: "Active Orders", value: `${activeCount} orders` },
-        ]}
+    <ListTableCard>
+      <DataTable 
+        table={table}
+        density={density}
+        framed={false}
+        minWidth="min-w-[780px]" 
+        noResultsMessage="No purchase orders match" 
+        onClearFilters={clearFilters}
       />
-    )}
+
+      {rows.length > 0 && (
+        <TableTotalsBar
+          filteredCount={rows.length}
+          totalCount={orders.length}
+          itemLabel="orders"
+          metrics={[
+            { label: "Total PO Value", value: totalPOValueStr, tone: "primary" },
+            { label: "Active Orders", value: `${activeCount} orders` },
+          ]}
+        />
+      )}
+      <ClientListPagination
+        info={paginationInfo}
+        onPageChange={setPage}
+        onPageSizeChange={setPageSize}
+      />
+    </ListTableCard>
   </>;
 }

@@ -1,4 +1,3 @@
-import { PageHeader } from "@/components/page-header";
 import { requireModule } from "@/core/permissions/require-module";
 import { listEmployees } from "@/modules/payroll/services/payroll-service";
 import { EmployeesClient } from "./employees-client";
@@ -18,11 +17,7 @@ export default async function EmployeesPage({
   const employees = listEmployees(businessId, user.id);
 
   return (
-    <div className="page-container space-y-6">
-      <PageHeader
-        title="Employees"
-        description="Master directory of workforce, job designations, and standard compensation structures."
-      />
+    <div className="page-container">
       <EmployeesClient
         businessId={businessId}
         employees={employees}

@@ -42,9 +42,7 @@ export default async function PurchaseOrdersPage({
       </PageHeader>
       
       {orders.length ? (
-        <div className="data-panel overflow-hidden">
-          <PurchaseOrderTable businessId={businessId} orders={orders} />
-        </div>
+        <PurchaseOrderTable businessId={businessId} orders={orders} />
       ) : (
         <EmptyState
           icon={<ShoppingCart className="mx-auto mb-3 size-7 text-muted-foreground" />}

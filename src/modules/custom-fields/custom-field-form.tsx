@@ -6,6 +6,7 @@ import { toast } from "sonner";
 import { ArrowDown, ArrowUp, ContactRound, EyeOff, FileText, ListTree, Pencil, Plus, Printer, ReceiptText, Trash2, Truck, X } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { DialogContent, DialogDescription, DialogRoot, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -357,18 +358,18 @@ export function CustomFieldsManager({
                 {errors.selectOptions && <p className="field-error">{errors.selectOptions[0]}</p>}
               </div>
             )}
-            <label className="flex min-h-9 items-center gap-2 text-sm">
-              <input type="checkbox" checked={values.isRequired} onChange={(event) => setValues((current) => ({ ...current, isRequired: event.target.checked }))} className="size-4 accent-[var(--primary)]" />
+            <label className="flex min-h-9 items-center gap-2 text-sm cursor-pointer select-none">
+              <Checkbox checked={values.isRequired} onCheckedChange={(checked) => setValues((current) => ({ ...current, isRequired: Boolean(checked) }))} aria-label="Required" />
               Required
             </label>
             {!values.entityType.endsWith("_line") && (
-              <label className="flex min-h-9 items-center gap-2 text-sm">
-                <input type="checkbox" checked={values.showInList} onChange={(event) => setValues((current) => ({ ...current, showInList: event.target.checked }))} className="size-4 accent-[var(--primary)]" />
+              <label className="flex min-h-9 items-center gap-2 text-sm cursor-pointer select-none">
+                <Checkbox checked={values.showInList} onCheckedChange={(checked) => setValues((current) => ({ ...current, showInList: Boolean(checked) }))} aria-label="Shows in list" />
                 Shows in list
               </label>
             )}
-            <label className="flex min-h-9 items-center gap-2 text-sm">
-              <input type="checkbox" checked={values.showOnPdf} onChange={(event) => setValues((current) => ({ ...current, showOnPdf: event.target.checked }))} className="size-4 accent-[var(--primary)]" />
+            <label className="flex min-h-9 items-center gap-2 text-sm cursor-pointer select-none">
+              <Checkbox checked={values.showOnPdf} onCheckedChange={(checked) => setValues((current) => ({ ...current, showOnPdf: Boolean(checked) }))} aria-label="Show on printed PDFs" />
               Show on printed PDFs &amp; document previews
             </label>
           </div>

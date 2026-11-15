@@ -261,7 +261,12 @@ export function SystemHealthClient({ initialData }: { initialData: SystemHealthD
             <div className="flex justify-between">
               <span>Foreign Keys / Sync:</span>
               <span className="font-mono text-foreground">
-                {initialData.businessDb.foreignKeys ? "ON" : "OFF"} / {initialData.businessDb.synchronous === 1 ? "NORMAL" : initialData.businessDb.synchronous}
+                {initialData.businessDb.foreignKeys ? "ON" : "OFF"} /{" "}
+                {initialData.businessDb.synchronous === 2
+                  ? "FULL"
+                  : initialData.businessDb.synchronous === 1
+                    ? "NORMAL"
+                    : initialData.businessDb.synchronous}
               </span>
             </div>
           </div>

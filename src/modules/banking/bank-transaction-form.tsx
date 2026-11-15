@@ -5,8 +5,9 @@ import Link from "next/link";
 import { useState } from "react";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { LoaderCircle, Plus, Trash2 } from "lucide-react";
-import { useFieldArray, useForm, useWatch } from "react-hook-form";
+import { Controller, useFieldArray, useForm, useWatch } from "react-hook-form";
 import { Button } from "@/components/ui/button";
+import { Combobox } from "@/components/ui/combobox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { formatMoney } from "@/core/format";
@@ -48,7 +49,26 @@ export function BankTransactionForm({ businessId, transactionId, bankAccounts, c
     {serverError && <FormError message={serverError} />}
     <input type="hidden" {...register("statementLineId")} />
     <section className="border-b border-border pb-7"><h2 className="text-base font-semibold">Transaction details</h2><div className="mt-5 grid gap-5 md:grid-cols-3">
-      <div className="space-y-1.5"><Label htmlFor="bankAccountId">Bank Account</Label><SelectNative id="bankAccountId"  {...register("bankAccountId")}><option value="">Choose account</option>{bankAccounts.map((account) => <option key={account.id} value={account.id}>{account.name}</option>)}</SelectNative>{errors.bankAccountId && <p className="field-error">{errors.bankAccountId.message}</p>}</div>
+      <div className="space-y-1.5">
+        <Label htmlFor="bankAccountId">Bank Account</Label>
+        <Controller
+          control={control}
+          name="bankAccountId"
+          render={({ field }) => (
+            <Combobox
+              id="bankAccountId"
+              options={bankAccounts.map((account) => ({ value: account.id, label: account.name }))}
+              value={field.value ?? ""}
+              onValueChange={field.onChange}
+              placeholder="Choose account…"
+              searchPlaceholder="Search accounts…"
+              emptyText="No accounts found."
+              ariaInvalid={!!errors.bankAccountId}
+            />
+          )}
+        />
+        {errors.bankAccountId && <p className="field-error">{errors.bankAccountId.message}</p>}
+      </div>
       <div className="space-y-1.5"><Label htmlFor="type">Direction</Label><SelectNative id="type"  {...register("type")}><option value="money_out">Money Out</option><option value="money_in">Money In</option></SelectNative></div>
       <div className="space-y-1.5"><Label htmlFor="date">Date</Label><Input id="date" type="date" {...register("date")} aria-invalid={!!errors.date} />{errors.date && <p className="field-error">{errors.date.message}</p>}</div>
       <div className="space-y-1.5"><Label htmlFor="taxDate">VAT tax date</Label><Input id="taxDate" type="date" {...register("taxDate")} aria-invalid={!!errors.taxDate} />{errors.taxDate && <p className="field-error">{errors.taxDate.message}</p>}</div>
@@ -59,9 +79,65 @@ export function BankTransactionForm({ businessId, transactionId, bankAccounts, c
     <section><div className="flex items-start justify-between gap-4"><div><h2 className="text-base font-semibold">{type === "money_in" ? "Income allocation" : "Expense allocation"}</h2><p className="mt-1 text-sm text-muted-foreground">Amounts include tax. Project is applied only to the counter-account P&amp;L line.</p></div><Button type="button" variant="secondary" size="sm" onClick={() => append({ accountId: "", taxCodeId: defaultTax, projectId: "", description: "", amount: "0.00" })}><Plus className="size-4" /> Add line</Button></div>
       <div className="mt-4 space-y-3">{fields.map((field, index) => <div key={field.id} className="grid gap-3 rounded-md border border-border bg-surface px-3 py-3 md:grid-cols-[1.3fr_1.3fr_0.9fr_0.9fr_auto]">
         <div className="space-y-1"><Label className="text-xs">Description</Label><Input {...register(`lines.${index}.description`)} /></div>
-        <div className="space-y-1"><Label className="text-xs">Counter account</Label><SelectNative  {...register(`lines.${index}.accountId`)}><option value="">Choose account</option>{accountOptions.map((account) => <option key={account.id} value={account.id}>{account.name}</option>)}</SelectNative></div>
-        <div className="space-y-1"><Label className="text-xs">Tax</Label><SelectNative  {...register(`lines.${index}.taxCodeId`)}>{availableTaxCodes.map((tax) => <option key={tax.id} value={tax.id}>{tax.name}</option>)}</SelectNative></div>
-        <div className="space-y-1"><Label className="text-xs">Project</Label><SelectNative  {...register(`lines.${index}.projectId`)}><option value="">No Project</option>{projects.map((project) => <option key={project.id} value={project.id}>{project.name}</option>)}</SelectNative></div>
+        <div className="space-y-1">
+          <Label className="text-xs">Counter account</Label>
+          <Controller
+            control={control}
+            name={`lines.${index}.accountId`}
+            render={({ field: lineField }) => (
+              <Combobox
+                size="sm"
+                ariaLabel={`Line ${index + 1} counter account`}
+                options={accountOptions.map((account) => ({ value: account.id, label: account.name }))}
+                value={lineField.value ?? ""}
+                onValueChange={lineField.onChange}
+                placeholder="Choose account…"
+                searchPlaceholder="Search accounts…"
+                emptyText="No accounts found."
+              />
+            )}
+          />
+        </div>
+        <div className="space-y-1">
+          <Label className="text-xs">Tax</Label>
+          <Controller
+            control={control}
+            name={`lines.${index}.taxCodeId`}
+            render={({ field: lineField }) => (
+              <Combobox
+                size="sm"
+                ariaLabel={`Line ${index + 1} tax code`}
+                options={availableTaxCodes.map((tax) => ({ value: tax.id, label: tax.name }))}
+                value={lineField.value ?? ""}
+                onValueChange={lineField.onChange}
+                placeholder="Choose tax…"
+                searchPlaceholder="Search tax codes…"
+                emptyText="No tax codes found."
+              />
+            )}
+          />
+        </div>
+        <div className="space-y-1">
+          <Label className="text-xs">Project</Label>
+          <Controller
+            control={control}
+            name={`lines.${index}.projectId`}
+            render={({ field: lineField }) => (
+              <Combobox
+                size="sm"
+                ariaLabel={`Line ${index + 1} project`}
+                options={projects.map((project) => ({ value: project.id, label: project.name }))}
+                value={lineField.value ?? ""}
+                onValueChange={lineField.onChange}
+                allowClear
+                clearLabel="No Project"
+                placeholder="No Project"
+                searchPlaceholder="Search projects…"
+                emptyText="No projects found."
+              />
+            )}
+          />
+        </div>
         <div className="flex items-end gap-1"><div className="space-y-1"><Label className="text-xs">Amount incl. tax</Label><Input className="w-32 text-right tabular" inputMode="decimal" {...register(`lines.${index}.amount`)} /></div><Button type="button" variant="ghost" size="icon" aria-label={`Remove line ${index + 1}`} disabled={fields.length === 1} onClick={() => remove(index)}><Trash2 className="size-4" /></Button></div>
       </div>)}</div>
       {errors.lines?.root?.message && <p className="field-error">{errors.lines.root.message}</p>}

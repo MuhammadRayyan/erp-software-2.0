@@ -16,6 +16,8 @@ import {
   X,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Combobox } from "@/components/ui/combobox";
 import {
   DialogClose,
   DialogContent,
@@ -265,53 +267,64 @@ export function FindAndRecodeView({
           {/* Account Filter */}
           <div className="space-y-1">
             <label className="text-xs font-medium text-muted-foreground">Current Account</label>
-            <select
+            <Combobox
+              size="sm"
+              ariaLabel="Current Account"
+              options={accounts.map((acc) => ({
+                value: acc.id,
+                label: `${acc.name} (${acc.type})`,
+              }))}
               value={accountId}
-              onChange={(e) => setAccountId(e.target.value)}
-              className="h-9 w-full rounded-md border border-border-strong bg-surface-raised px-2.5 text-xs text-foreground focus:border-primary focus:outline-none"
-            >
-              <option value="">Any Account</option>
-              {accounts.map((acc) => (
-                <option key={acc.id} value={acc.id}>
-                  {acc.name} ({acc.type})
-                </option>
-              ))}
-            </select>
+              onValueChange={setAccountId}
+              allowClear
+              clearLabel="Any Account"
+              placeholder="Any Account"
+              searchPlaceholder="Search accounts…"
+              emptyText="No accounts found."
+            />
           </div>
 
           {/* Tax Code Filter */}
           <div className="space-y-1">
             <label className="text-xs font-medium text-muted-foreground">Current Tax Code</label>
-            <select
+            <Combobox
+              size="sm"
+              ariaLabel="Current Tax Code"
+              options={taxCodes.map((tc) => ({
+                value: tc.id,
+                label: `${tc.name} (${tc.rate_basis_points / 100}%)`,
+              }))}
               value={taxCodeId}
-              onChange={(e) => setTaxCodeId(e.target.value)}
-              className="h-9 w-full rounded-md border border-border-strong bg-surface-raised px-2.5 text-xs text-foreground focus:border-primary focus:outline-none"
-            >
-              <option value="">Any Tax Code</option>
-              {taxCodes.map((tc) => (
-                <option key={tc.id} value={tc.id}>
-                  {tc.name} ({tc.rate_basis_points / 100}%)
-                </option>
-              ))}
-            </select>
+              onValueChange={setTaxCodeId}
+              allowClear
+              clearLabel="Any Tax Code"
+              placeholder="Any Tax Code"
+              searchPlaceholder="Search tax codes…"
+              emptyText="No tax codes found."
+            />
           </div>
 
           {/* Project Filter */}
           <div className="space-y-1">
             <label className="text-xs font-medium text-muted-foreground">Current Project</label>
-            <select
+            <Combobox
+              size="sm"
+              ariaLabel="Current Project"
+              options={[
+                { value: "none", label: "No Project Assigned" },
+                ...projects.map((p) => ({
+                  value: p.id,
+                  label: `${p.code} - ${p.name}`,
+                })),
+              ]}
               value={projectId}
-              onChange={(e) => setProjectId(e.target.value)}
-              className="h-9 w-full rounded-md border border-border-strong bg-surface-raised px-2.5 text-xs text-foreground focus:border-primary focus:outline-none"
-            >
-              <option value="">Any Project</option>
-              <option value="none">No Project Assigned</option>
-              {projects.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.code} - {p.name}
-                </option>
-              ))}
-            </select>
+              onValueChange={setProjectId}
+              allowClear
+              clearLabel="Any Project"
+              placeholder="Any Project"
+              searchPlaceholder="Search projects…"
+              emptyText="No projects found."
+            />
           </div>
 
           {/* Date From */}
@@ -442,12 +455,16 @@ export function FindAndRecodeView({
             <thead>
               <tr>
                 <th className="w-10 text-center">
-                  <input
-                    type="checkbox"
-                    checked={allSelected}
-                    onChange={handleToggleSelectAll}
+                  <Checkbox
+                    checked={
+                      allSelected
+                        ? true
+                        : unlockedLines.length > 0 && selectedKeys.size > 0
+                          ? "indeterminate"
+                          : false
+                    }
+                    onCheckedChange={handleToggleSelectAll}
                     disabled={unlockedLines.length === 0}
-                    className="size-4 rounded border-border-strong text-primary focus:ring-primary"
                     aria-label="Select all unlocked lines"
                   />
                 </th>
@@ -482,11 +499,9 @@ export function FindAndRecodeView({
                           <Lock className="mx-auto size-3.5 text-muted-foreground" />
                         </span>
                       ) : (
-                        <input
-                          type="checkbox"
+                        <Checkbox
                           checked={isChecked}
-                          onChange={() => handleToggleLine(line)}
-                          className="size-4 rounded border-border-strong text-primary focus:ring-primary"
+                          onCheckedChange={() => handleToggleLine(line)}
                           aria-label={`Select line ${line.description}`}
                         />
                       )}
@@ -562,18 +577,18 @@ export function FindAndRecodeView({
             {modalType === "account" && (
               <div className="space-y-1.5">
                 <label className="text-xs font-semibold text-foreground">Target GL Account</label>
-                <select
+                <Combobox
+                  ariaLabel="Target GL Account"
+                  options={accounts.map((acc) => ({
+                    value: acc.id,
+                    label: `${acc.name} — ${acc.type} (${acc.subtype})`,
+                  }))}
                   value={targetAccount}
-                  onChange={(e) => setTargetAccount(e.target.value)}
-                  className="h-10 w-full rounded-md border border-border-strong bg-surface px-3 text-sm focus:border-primary focus:outline-none"
-                >
-                  <option value="">Select target account...</option>
-                  {accounts.map((acc) => (
-                    <option key={acc.id} value={acc.id}>
-                      {acc.name} — {acc.type} ({acc.subtype})
-                    </option>
-                  ))}
-                </select>
+                  onValueChange={setTargetAccount}
+                  placeholder="Select target account..."
+                  searchPlaceholder="Search GL accounts…"
+                  emptyText="No accounts found."
+                />
                 <p className="text-[11px] text-muted-foreground">
                   The selected account will replace the revenue/expense account on all checked lines.
                 </p>
@@ -583,18 +598,20 @@ export function FindAndRecodeView({
             {modalType === "project" && (
               <div className="space-y-1.5">
                 <label className="text-xs font-semibold text-foreground">Target Project</label>
-                <select
+                <Combobox
+                  ariaLabel="Target Project"
+                  options={projects.map((p) => ({
+                    value: p.id,
+                    label: `${p.code} - ${p.name}`,
+                  }))}
                   value={targetProject}
-                  onChange={(e) => setTargetProject(e.target.value)}
-                  className="h-10 w-full rounded-md border border-border-strong bg-surface px-3 text-sm focus:border-primary focus:outline-none"
-                >
-                  <option value="">Clear Project (Untagged)</option>
-                  {projects.map((p) => (
-                    <option key={p.id} value={p.id}>
-                      {p.code} - {p.name}
-                    </option>
-                  ))}
-                </select>
+                  onValueChange={setTargetProject}
+                  allowClear
+                  clearLabel="Clear Project (Untagged)"
+                  placeholder="Clear Project (Untagged)"
+                  searchPlaceholder="Search projects…"
+                  emptyText="No projects found."
+                />
                 <p className="text-[11px] text-muted-foreground">
                   Assigning a project updates line reporting across Project Profitability and Job Costing.
                 </p>
@@ -604,18 +621,18 @@ export function FindAndRecodeView({
             {modalType === "taxCode" && (
               <div className="space-y-1.5">
                 <label className="text-xs font-semibold text-foreground">Target Tax Code</label>
-                <select
+                <Combobox
+                  ariaLabel="Target Tax Code"
+                  options={taxCodes.map((tc) => ({
+                    value: tc.id,
+                    label: `${tc.name} (${tc.rate_basis_points / 100}%)`,
+                  }))}
                   value={targetTaxCode}
-                  onChange={(e) => setTargetTaxCode(e.target.value)}
-                  className="h-10 w-full rounded-md border border-border-strong bg-surface px-3 text-sm focus:border-primary focus:outline-none"
-                >
-                  <option value="">Select tax code...</option>
-                  {taxCodes.map((tc) => (
-                    <option key={tc.id} value={tc.id}>
-                      {tc.name} ({tc.rate_basis_points / 100}%)
-                    </option>
-                  ))}
-                </select>
+                  onValueChange={setTargetTaxCode}
+                  placeholder="Select tax code..."
+                  searchPlaceholder="Search tax codes…"
+                  emptyText="No tax codes found."
+                />
                 <p className="text-[11px] text-muted-foreground">
                   Line tax amounts and output/input VAT ledger entries will be recalculated accordingly.
                 </p>

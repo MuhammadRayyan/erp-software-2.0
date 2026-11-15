@@ -1,5 +1,4 @@
 import Link from "next/link";
-import { addMinor } from "@/modules/accounting/calculations/money";
 import { PermissionDenied } from "@/components/permission-denied";
 import { notFound } from "next/navigation";
 import { ArrowRight, Landmark, Mail, ShieldCheck } from "lucide-react";
@@ -19,14 +18,14 @@ import {
   getReceivablesAgingSummary,
 } from "@/modules/reports/report-service";
 import { FinancialSummary } from "./financial-summary";
-import { listInvoices } from "@/modules/sales-invoices/invoice-service";
+import { getOverviewInvoiceMetrics } from "@/modules/sales-invoices/invoice-service";
 import { DocumentStatusBadge, PaymentStatusBadge } from "@/modules/sales-invoices/invoice-status";
 import { listSentEmails } from "@/modules/email/email-service";
 import { parseMailboxes } from "@/modules/email/email-driver";
 import { KpiCards, type KpiCardData } from "./kpi-cards";
 import { OverviewControls, type ServerDateRange } from "./overview-controls";
-import { CashFlowRunwayWidget } from "./cash-flow-runway-widget";
-import { FinancialCharts } from "./financial-charts";
+import { getCashFlowForecast, type CashFlowForecastData } from "@/modules/reports/cash-flow-forecast-service";
+import type { OverviewChartsPayload } from "./overview-charts-panel";
 import { OverviewTabsLayout } from "./overview-tabs-layout";
 
 const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
@@ -68,75 +67,87 @@ export default async function OverviewPage({
   const canViewBanking = hasActionPermission(businessId, user.id, "banking", "view");
   const canViewSales = hasActionPermission(businessId, user.id, "sales", "view");
   const canViewReports = hasActionPermission(businessId, user.id, "reports", "view");
-  const invoiceList = canViewSales ? listInvoices(businessId, user.id) : [];
-  const posted = invoiceList.filter((invoice) => invoice.documentStatus === "posted");
-  // Balance-based KPIs are always "as of today"; only Posted Sales follows the selected period.
-  const outstanding = addMinor(posted.map(invoice => invoice.baseBalanceMinor));
-  const overdue = addMinor(posted.filter((invoice) => invoice.paymentStatus === "overdue").map(invoice => invoice.baseBalanceMinor));
-  const bankBalance = canViewBanking ? getBankBalance(businessId, user.id) : null;
-  const periodPosted = canViewSales && (from || to)
-    ? listInvoices(businessId, user.id, { from, to }).filter((invoice) => invoice.documentStatus === "posted")
-    : posted;
-  const sales = addMinor(periodPosted.map(invoice => invoice.baseTotalMinor));
-  const recentEmails = canViewSales ? listSentEmails(businessId, user.id).slice(0, 4) : [];
+  const isChartView = initialView === "charts";
+
   const periodLabel = from || to
     ? `${from ? formatDate(from, { day: "numeric", month: "short", year: "numeric" }) : "start"} – ${to ? formatDate(to, { day: "numeric", month: "short", year: "numeric" }) : "today"}`
     : "all time";
 
-  const preferences = listPreferences(businessId, user.id);
-  const serverRange = decodeServerRange(preferences);
+  // Defer off-tab work: initial financial view never computes charts/trend/aging/forecast,
+  // and chart view never queries financial KPIs or recent lists.
+  const invoiceMetrics = !isChartView && canViewSales
+    ? getOverviewInvoiceMetrics(businessId, user.id, { from, to })
+    : null;
+  const recentInvoices = invoiceMetrics?.recentInvoices ?? [];
+  const bankBalance = !isChartView && canViewBanking ? getBankBalance(businessId, user.id) : null;
+  const recentEmails = !isChartView && canViewSales ? listSentEmails(businessId, user.id).slice(0, 4) : [];
+  const preferences = !isChartView ? listPreferences(businessId, user.id) : {};
+  const serverRange = !isChartView ? decodeServerRange(preferences) : undefined;
 
   // All 4 primary cards: Posted Sales, Outstanding Receivables, Overdue, and Bank & Cash
-  const allCards: KpiCardData[] = [
-    {
-      id: "posted-sales",
-      icon: "sales",
-      label: "Posted Sales",
-      value: formatMoney(sales, currency),
-      note: `${periodPosted.length} posted invoices`,
-      caption: periodLabel,
-      tooltip: "Total of posted sales invoices in the selected period (base currency).",
-      href: `/b/${businessId}/sales/invoices`,
-    },
-    {
-      id: "outstanding",
-      icon: "receivables",
-      label: "Outstanding Receivables",
-      value: formatMoney(outstanding, currency),
-      note: `${posted.filter((item) => item.balanceMinor > 0).length} open invoices`,
-      caption: "as of today",
-      tooltip: "Unsettled receivable balances across all posted invoices, regardless of the selected period.",
-      href: `/b/${businessId}/sales/invoices?status=unpaid`,
-    },
-    {
-      id: "overdue",
-      icon: "overdue",
-      label: "Overdue",
-      value: formatMoney(overdue, currency),
-      note: `${posted.filter((item) => item.paymentStatus === "overdue").length} overdue invoices`,
-      caption: "as of today",
-      tooltip: "Posted invoices past their due date that still have an open balance.",
-      href: `/b/${businessId}/sales/invoices?status=overdue`,
-    },
-    {
-      id: "bank",
-      icon: "bank",
-      label: "Bank & Cash",
-      value: formatMoney(bankBalance ?? 0, currency),
-      note: "Posted receipt balance",
-      caption: "as of today",
-      tooltip: "Sum of posted bank and cash account balances from the general ledger.",
-      href: `/b/${businessId}/banking/accounts`,
-    },
-  ];
+  const allCards: KpiCardData[] = !isChartView
+    ? [
+        {
+          id: "posted-sales",
+          icon: "sales",
+          label: "Posted Sales",
+          value: formatMoney(invoiceMetrics?.postedSalesBaseMinor ?? 0, currency),
+          note: `${invoiceMetrics?.postedSalesCount ?? 0} posted invoices`,
+          caption: periodLabel,
+          tooltip: "Total of posted sales invoices in the selected period (base currency).",
+          href: `/b/${businessId}/sales/invoices`,
+        },
+        {
+          id: "outstanding",
+          icon: "receivables",
+          label: "Outstanding Receivables",
+          value: formatMoney(invoiceMetrics?.outstandingBaseMinor ?? 0, currency),
+          note: `${invoiceMetrics?.openCount ?? 0} open invoices`,
+          caption: "as of today",
+          tooltip: "Unsettled receivable balances across all posted invoices, regardless of the selected period.",
+          href: `/b/${businessId}/sales/invoices?status=unpaid`,
+        },
+        {
+          id: "overdue",
+          icon: "overdue",
+          label: "Overdue",
+          value: formatMoney(invoiceMetrics?.overdueBaseMinor ?? 0, currency),
+          note: `${invoiceMetrics?.overdueCount ?? 0} overdue invoices`,
+          caption: "as of today",
+          tooltip: "Posted invoices past their due date that still have an open balance.",
+          href: `/b/${businessId}/sales/invoices?status=overdue`,
+        },
+        {
+          id: "bank",
+          icon: "bank",
+          label: "Bank & Cash",
+          value: formatMoney(bankBalance ?? 0, currency),
+          note: "Posted receipt balance",
+          caption: "as of today",
+          tooltip: "Sum of posted bank and cash account balances from the general ledger.",
+          href: `/b/${businessId}/banking/accounts`,
+        },
+      ]
+    : [];
 
   const cards = allCards.filter(card => card.id === "bank" ? canViewBanking : canViewSales);
 
-  // Financial trends & Receivables aging summary
-  const trend = canViewReports ? getMonthlyFinancialTrend(businessId, user.id, 6) : [];
-  const aging = canViewReports ? getReceivablesAgingSummary(businessId, user.id) : null;
-  const pdcSummary = canViewBanking ? getPdcMaturitySummary(businessId, user.id, 30) : null;
-  const pendingApprovals = listApprovalRequests(businessId, user.id, { status: "pending" });
+  // Financial trends & Receivables aging summary (only when chart view is active on initial SSR load)
+  const trend = isChartView && canViewReports ? getMonthlyFinancialTrend(businessId, user.id, 6) : [];
+  const aging = isChartView && canViewReports ? getReceivablesAgingSummary(businessId, user.id) : null;
+  let initialForecast: CashFlowForecastData | null = null;
+  if (isChartView && canViewReports) {
+    try {
+      initialForecast = getCashFlowForecast(businessId, user.id, { horizonDays: 30 });
+    } catch {
+      initialForecast = null;
+    }
+  }
+  const initialChartData: OverviewChartsPayload | null = isChartView
+    ? { canViewReports, currency, trend, aging, forecast: initialForecast }
+    : null;
+  const pdcSummary = !isChartView && canViewBanking ? getPdcMaturitySummary(businessId, user.id, 30) : null;
+  const pendingApprovals = !isChartView ? listApprovalRequests(businessId, user.id, { status: "pending" }) : [];
   const actionableApprovals = pendingApprovals.filter((r) => r.canApprove);
 
 
@@ -151,8 +162,11 @@ export default async function OverviewPage({
       </div>
 
       <OverviewTabsLayout
+        businessId={businessId}
         initialView={initialView}
+        initialChartData={initialChartData}
         financialView={
+          isChartView ? null : (
           <div className="space-y-5">
             <OverviewControls from={from} to={to} serverRange={serverRange} businessId={businessId} />
             {pendingApprovals.length > 0 && (
@@ -189,7 +203,7 @@ export default async function OverviewPage({
                     View all <ArrowRight className="size-3.5" />
                   </Link>
                 </div>
-                {invoiceList.length ? (
+                {recentInvoices.length ? (
                   <div className="overflow-x-auto">
                     <table className="data-table min-w-[760px]">
                       <thead>
@@ -202,7 +216,7 @@ export default async function OverviewPage({
                         </tr>
                       </thead>
                       <tbody>
-                        {invoiceList.slice(0, 6).map((invoice) => (
+                        {recentInvoices.map((invoice) => (
                           <tr key={invoice.id} className="hover:bg-surface-muted/40">
                             <td>
                               <Link href={`/b/${businessId}/sales/invoices/${invoice.id}`} className="tabular font-medium text-primary hover:underline">
@@ -332,18 +346,7 @@ export default async function OverviewPage({
               )}
             </div>
           </div>
-        }
-        chartViews={
-          <div className="space-y-6">
-            {canViewReports && aging ? <FinancialCharts businessId={businessId} currency={currency} trend={trend} aging={aging} /> : <PermissionDenied module="financial reports" returnHref={`/b/${businessId}/overview`} returnLabel="Return to overview" />}
-            {canViewReports && (
-              <CashFlowRunwayWidget
-                businessId={businessId}
-                userId={user.id}
-                currency={currency}
-              />
-            )}
-          </div>
+          )
         }
       />
     </div>

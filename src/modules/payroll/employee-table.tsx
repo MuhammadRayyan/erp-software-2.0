@@ -1,18 +1,20 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Plus, MoreHorizontal, ChevronRight, FileEdit, CheckCircle2, Ban } from "lucide-react";
+import { MoreHorizontal, ChevronRight, FileEdit, CheckCircle2, Ban } from "lucide-react";
 import { 
   useLegacyTable as useTable,
   getCoreRowModel as createCoreRowModel,
+  getPaginationRowModel as createPaginationRowModel,
   getSortedRowModel as createSortedRowModel
 } from "@tanstack/react-table/legacy";
 import { type SortingState } from "@tanstack/react-table";
-import { Button } from "@/components/ui/button";
 import { StatusBadge } from "@/components/status-badge";
 import { ListToolbar, SearchInput, ToolbarSelect, ActiveFiltersRow, FilterChip } from "@/components/list-toolbar";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
-import { DataTable } from "@/components/ui/data-table";
+import { Button } from "@/components/ui/button";
+import { DataTable, ListTableCard } from "@/components/ui/data-table";
+import { ClientListPagination, useTablePagination } from "@/components/list-pagination";
 import { DensityToggle } from "@/components/density-toggle";
 import { useTableDensity } from "@/components/use-table-density";
 import { useColumns } from "@/components/columns-dropdown";
@@ -28,7 +30,6 @@ interface EmployeeTableProps {
   serverSnapshot?: ColumnVisibility;
   onEditEmployee: (employee: EmployeeRecord) => void;
   onToggleActive: (employee: EmployeeRecord) => void;
-  onNewEmployee: () => void;
 }
 
 const columnLabels: Record<string, string> = {
@@ -46,11 +47,10 @@ export function EmployeeTable({
   serverSnapshot,
   onEditEmployee,
   onToggleActive,
-  onNewEmployee,
 }: EmployeeTableProps) {
   const { density } = useTableDensity(businessId);
   const [query, setQuery] = useState("");
-  const [statusFilter, setStatusFilter] = useState<string>("all");
+  const [statusFilter, setStatusFilter] = useState<string>("");
   const [sorting, setSorting] = useState<SortingState>([{ id: "name", desc: false }]);
 
   const initialColumns = useMemo(
@@ -228,24 +228,29 @@ export function EmployeeTable({
     },
   ], [currency, onEditEmployee, onToggleActive]);
 
+  const { pagination, onPaginationChange, paginationInfo, setPage, setPageSize } = useTablePagination(filteredRows.length);
+
   const table = useTable({
     data: filteredRows,
     columns,
     state: {
       sorting,
+      pagination,
       columnVisibility: colVisibility,
     },
     onSortingChange: setSorting,
+    onPaginationChange,
     getCoreRowModel: createCoreRowModel(),
     getSortedRowModel: createSortedRowModel(),
+    getPaginationRowModel: createPaginationRowModel(),
   });
 
   const clearFilters = () => {
     setQuery("");
-    setStatusFilter("all");
+    setStatusFilter("");
   };
 
-  const hasActiveFilter = Boolean(query || statusFilter !== "all");
+  const hasActiveFilter = Boolean(query || statusFilter);
 
   const totalBasic = useMemo(() => {
     return filteredRows.reduce((sum, e) => sum + (e.basicSalaryMinor ?? 0), 0);
@@ -281,52 +286,57 @@ export function EmployeeTable({
           onChange={setStatusFilter}
           ariaLabel="Filter by status"
           options={[
-            { value: "all", label: "All Statuses" },
-            { value: "active", label: "Active Only" },
-            { value: "inactive", label: "Inactive Only" },
+            { value: "", label: "All statuses" },
+            { value: "active", label: "Active only" },
+            { value: "inactive", label: "Inactive only" },
           ]}
         />
         <div className="ml-auto flex items-center gap-1.5 shrink-0">
           <DensityToggle businessId={businessId} />
           {dropdown}
-          <Button onClick={onNewEmployee} className="h-9">
-            <Plus className="size-4 mr-1.5" /> New Employee
-          </Button>
         </div>
       </ListToolbar>
 
       {hasActiveFilter && (
         <ActiveFiltersRow onClearAll={clearFilters}>
-          {statusFilter !== "all" && (
-            <FilterChip onRemove={() => setStatusFilter("all")}>
-              Status: {statusFilter === "active" ? "Active Only" : "Inactive Only"}
+          {statusFilter && (
+            <FilterChip onRemove={() => setStatusFilter("")}>
+              Status: {statusFilter === "active" ? "Active only" : "Inactive only"}
             </FilterChip>
           )}
           {query && <FilterChip onRemove={() => setQuery("")}>Search: {query}</FilterChip>}
         </ActiveFiltersRow>
       )}
 
-      <DataTable
-        table={table}
-        density={density}
-        minWidth="min-w-[850px]"
-        noResultsMessage="No employees found matching your criteria"
-        noResultsSubtext="Try adjusting your search query or status filter."
-        onClearFilters={clearFilters}
-      />
-
-      {filteredRows.length > 0 && (
-        <TableTotalsBar
-          filteredCount={filteredRows.length}
-          totalCount={employees.length}
-          itemLabel="employees"
-          metrics={[
-            { label: "Active", value: `${activeCount} active`, tone: "success" },
-            { label: "Total Basic", value: formatMoney(totalBasic, currency) },
-            { label: "Total Standard Pay", value: formatMoney(totalPayroll, currency), tone: "primary" },
-          ]}
+      <ListTableCard>
+        <DataTable
+          table={table}
+          density={density}
+          framed={false}
+          minWidth="min-w-[850px]"
+          noResultsMessage="No employees found matching your criteria"
+          noResultsSubtext="Try adjusting your search query or status filter."
+          onClearFilters={clearFilters}
         />
-      )}
+
+        {filteredRows.length > 0 && (
+          <TableTotalsBar
+            filteredCount={filteredRows.length}
+            totalCount={employees.length}
+            itemLabel="employees"
+            metrics={[
+              { label: "Active", value: `${activeCount} active`, tone: "success" },
+              { label: "Total Basic", value: formatMoney(totalBasic, currency) },
+              { label: "Total Standard Pay", value: formatMoney(totalPayroll, currency), tone: "primary" },
+            ]}
+          />
+        )}
+        <ClientListPagination
+          info={paginationInfo}
+          onPageChange={setPage}
+          onPageSizeChange={setPageSize}
+        />
+      </ListTableCard>
     </>
   );
 }

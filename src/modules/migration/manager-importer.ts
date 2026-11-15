@@ -5,6 +5,7 @@ import Database from "better-sqlite3";
 import { randomUUID } from "node:crypto";
 import { createBusiness } from "@/core/businesses/business-service";
 import { openBusinessDatabase, closeBusinessConnection } from "@/core/db/business";
+import { applyStandardSqlitePragmas } from "@/core/db/pragmas";
 import {
   extractManagerData,
   type ManagerExtractedData,
@@ -1201,9 +1202,8 @@ export function importManagerBackupToNewBusiness(
       }
     })();
 
-    // 5. Restore SQLite pragmas to production defaults
-    context.sqlite.pragma("synchronous = FULL");
-    context.sqlite.pragma("journal_mode = WAL");
+    // 5. Restore SQLite pragmas to runtime defaults
+    applyStandardSqlitePragmas(context.sqlite);
 
     // 6. Log migration event in the new business activity log
     recordActivity(businessId, {
@@ -1267,8 +1267,7 @@ export function importManagerBackupToNewBusiness(
     };
   } catch (err) {
     try {
-      context.sqlite.pragma("synchronous = FULL");
-      context.sqlite.pragma("journal_mode = WAL");
+      applyStandardSqlitePragmas(context.sqlite);
     } catch {}
     closeBusinessConnection(directoryKey);
     throw err;

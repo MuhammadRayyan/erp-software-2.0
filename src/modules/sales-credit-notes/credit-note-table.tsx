@@ -6,15 +6,18 @@ import { ChevronRight, MoreHorizontal, Eye, FileEdit, Download, FileText } from 
 import { 
   useLegacyTable as useTable,
   getCoreRowModel as createCoreRowModel,
+  getPaginationRowModel as createPaginationRowModel,
   getSortedRowModel as createSortedRowModel
 } from "@tanstack/react-table/legacy";
 import { type SortingState } from "@tanstack/react-table";
 import { StatusBadge, statusLabel } from "@/components/status-badge";
-import { ListToolbar, SearchInput, ToolbarSelect, ActiveFiltersRow, FilterChip } from "@/components/list-toolbar";
+import { ListToolbar, SearchInput, ToolbarSelect, DateRangeFilter, ActiveFiltersRow, FilterChip } from "@/components/list-toolbar";
 import { Button } from "@/components/ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { useColumns } from "@/components/columns-dropdown";
-import { DataTable } from "@/components/ui/data-table";
+import { DataTable, ListTableCard } from "@/components/ui/data-table";
+import { ClientListPagination, useTablePagination } from "@/components/list-pagination";
+import { TableTotalsBar, renderMultiCurrencyString } from "@/components/table-totals-bar";
 import { formatDate, formatMoney } from "@/core/format";
 import type { CreditNoteStatus } from "./credit-note-service";
 import { DensityToggle } from "@/components/density-toggle";
@@ -46,17 +49,32 @@ export function CreditNoteTable({
   businessId,
   creditNotes,
   serverSnapshot,
+  initialFrom = "",
+  initialTo = "",
 }: {
   businessId: string;
   creditNotes: Omit<Row, "businessId">[];
   serverSnapshot?: import("@/components/use-column-visibility").ColumnVisibility;
+  initialFrom?: string;
+  initialTo?: string;
 }) {
   const { density } = useTableDensity(businessId);
 
   const [query, setQuery] = useState("");
+  const [customerName, setCustomerName] = useState("");
   const [status, setStatus] = useState("");
   const [projectId, setProjectId] = useState("");
+  const [fromDate, setFromDate] = useState(initialFrom);
+  const [toDate, setToDate] = useState(initialTo);
   const [sorting, setSorting] = useState<SortingState>([]);
+
+  const customerOptions = useMemo(
+    () =>
+      Array.from(new Set(creditNotes.map((note) => note.customer_name).filter(Boolean))).sort((a, b) =>
+        a.localeCompare(b),
+      ),
+    [creditNotes],
+  );
 
   const projects = useMemo(() => {
     const choices = new Map<string, string>();
@@ -84,12 +102,15 @@ export function CreditNoteTable({
           const matchesQuery = `${note.credit_note_number} ${note.customer_name} ${note.invoice_number} ${note.projectNames.join(" ")}`.toLowerCase().includes(query.trim().toLowerCase());
           return (
             (!status || note.document_status === status) &&
+            (!customerName || note.customer_name === customerName) &&
             (!projectId || note.projectIds.includes(projectId)) &&
+            (!fromDate || note.date >= fromDate) &&
+            (!toDate || note.date <= toDate) &&
             matchesQuery
           );
         })
         .map((note) => ({ ...note, businessId })),
-    [creditNotes, projectId, query, status, businessId],
+    [creditNotes, customerName, projectId, fromDate, toDate, query, status, businessId],
   );
 
   const columns: any[] = useMemo(
@@ -230,35 +251,72 @@ export function CreditNoteTable({
     [],
   );
 
+  const { pagination, onPaginationChange, paginationInfo, setPage, setPageSize } = useTablePagination(rows.length);
+
   const table = useTable({
     data: rows,
     columns,
     state: {
       sorting,
+      pagination,
       columnVisibility: colVisibility,
     },
     onSortingChange: setSorting,
+    onPaginationChange,
     getCoreRowModel: createCoreRowModel(),
     getSortedRowModel: createSortedRowModel(),
+    getPaginationRowModel: createPaginationRowModel(),
   });
 
   const clearFilters = () => {
     setQuery("");
+    setCustomerName("");
     setStatus("");
     setProjectId("");
+    setFromDate("");
+    setToDate("");
   };
-  const hasActiveFilter = Boolean(projectId || status || query);
+  const hasActiveFilter = Boolean(customerName || projectId || fromDate || toDate || status || query);
+
+  const totalCreditStr = useMemo(
+    () =>
+      renderMultiCurrencyString(
+        rows
+          .filter((r) => r.document_status !== "void")
+          .map((r) => ({
+            amount: r.total_minor,
+            currency: r.currency_code,
+            minorUnit: r.currency_minor_unit,
+          })),
+      ),
+    [rows],
+  );
 
   return (
     <>
       <ListToolbar>
         <SearchInput value={query} onChange={setQuery} placeholder="Search credit notes…" ariaLabel="Search credit notes" />
         <ToolbarSelect
+          value={customerName}
+          onChange={setCustomerName}
+          ariaLabel="Filter by customer"
+          className="min-w-36 max-w-52"
+          options={[{ value: "", label: "All customers" }, ...customerOptions.map((name) => ({ value: name, label: name }))]}
+        />
+        <ToolbarSelect
           value={projectId}
           onChange={setProjectId}
           ariaLabel="Filter by project"
           className="min-w-36 max-w-52"
           options={[{ value: "", label: "All projects" }, ...projects.map((project) => ({ value: project.id, label: project.name }))]}
+        />
+        <DateRangeFilter
+          fromDate={fromDate}
+          toDate={toDate}
+          onFromChange={setFromDate}
+          onToChange={setToDate}
+          fromAriaLabel="Credit note date from"
+          toAriaLabel="Credit note date to"
         />
         <ToolbarSelect
           value={status}
@@ -278,23 +336,42 @@ export function CreditNoteTable({
       </ListToolbar>
       {hasActiveFilter && (
         <ActiveFiltersRow onClearAll={clearFilters}>
+          {customerName && <FilterChip onRemove={() => setCustomerName("")}>Customer: {customerName}</FilterChip>}
           {projectId && (
             <FilterChip onRemove={() => setProjectId("")}>
               Project: {projects.find((p) => p.id === projectId)?.name}
             </FilterChip>
           )}
+          {fromDate && <FilterChip onRemove={() => setFromDate("")}>From: {formatDate(fromDate)}</FilterChip>}
+          {toDate && <FilterChip onRemove={() => setToDate("")}>To: {formatDate(toDate)}</FilterChip>}
           {status && <FilterChip onRemove={() => setStatus("")}>Status: {statusLabel(status)}</FilterChip>}
           {query && <FilterChip onRemove={() => setQuery("")}>Search: {query}</FilterChip>}
         </ActiveFiltersRow>
       )}
 
-      <DataTable 
-        table={table}
-        density={density}
-        minWidth="min-w-[900px]" 
-        noResultsMessage="No credit notes match" 
-        onClearFilters={clearFilters}
-      />
+      <ListTableCard>
+        <DataTable 
+          table={table}
+          density={density}
+          framed={false}
+          minWidth="min-w-[900px]" 
+          noResultsMessage="No credit notes match" 
+          onClearFilters={clearFilters}
+        />
+        {rows.length > 0 && (
+          <TableTotalsBar
+            filteredCount={rows.length}
+            totalCount={creditNotes.length}
+            itemLabel="credit notes"
+            metrics={[{ label: "Total Credited", value: totalCreditStr, tone: "primary" }]}
+          />
+        )}
+        <ClientListPagination
+          info={paginationInfo}
+          onPageChange={setPage}
+          onPageSizeChange={setPageSize}
+        />
+      </ListTableCard>
     </>
   );
 }

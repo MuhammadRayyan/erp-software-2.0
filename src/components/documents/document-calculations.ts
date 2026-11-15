@@ -83,6 +83,21 @@ export function previewDocumentLine(
   }
 }
 
+export function computeDocumentTotals(
+  lines: any[],
+  taxCodes: DocumentLineTaxOption[],
+  minorUnit: number,
+  amountsIncludeTax: boolean,
+) {
+  const previews = (lines ?? []).map((line) =>
+    previewDocumentLine(line, taxCodes, minorUnit, amountsIncludeTax)
+  );
+  const subtotalMinor = previews.reduce((sum, row) => sum + row.netMinor, 0);
+  const taxMinor = previews.reduce((sum, row) => sum + row.taxMinor, 0);
+  const totalMinor = previews.reduce((sum, row) => sum + row.grossMinor, 0);
+  return { previews, subtotalMinor, taxMinor, totalMinor };
+}
+
 export function useDocumentTotals<TFieldValues extends FieldValues = any>({
   control,
   taxCodes,
@@ -97,23 +112,9 @@ export function useDocumentTotals<TFieldValues extends FieldValues = any>({
   const amountsIncludeTax =
     (useWatch({ control, name: "amountsIncludeTax" as any }) as boolean) ?? false;
 
-  const previews = useMemo(() => {
-    return lines.map((line) =>
-      previewDocumentLine(line, taxCodes, minorUnit, amountsIncludeTax)
-    );
-  }, [lines, taxCodes, minorUnit, amountsIncludeTax]);
-
-  const subtotalMinor = useMemo(
-    () => previews.reduce((sum, row) => sum + row.netMinor, 0),
-    [previews]
-  );
-  const taxMinor = useMemo(
-    () => previews.reduce((sum, row) => sum + row.taxMinor, 0),
-    [previews]
-  );
-  const totalMinor = useMemo(
-    () => previews.reduce((sum, row) => sum + row.grossMinor, 0),
-    [previews]
+  const { previews, subtotalMinor, taxMinor, totalMinor } = useMemo(
+    () => computeDocumentTotals(lines, taxCodes, minorUnit, amountsIncludeTax),
+    [lines, taxCodes, minorUnit, amountsIncludeTax]
   );
 
   return {

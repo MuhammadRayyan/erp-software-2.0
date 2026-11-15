@@ -1,11 +1,12 @@
 "use client";
 import { useRouter } from "next/navigation";
-import { FormError } from "@/components/form-error";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Coins, LoaderCircle } from "lucide-react";
-import { useFieldArray, useForm, useWatch } from "react-hook-form";
+import { Controller, useFieldArray, useForm, useWatch } from "react-hook-form";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Combobox, type ComboboxOption } from "@/components/ui/combobox";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
@@ -23,8 +24,13 @@ import {
   type DocumentRateOption,
 } from "@/modules/currency/document-currency-fields";
 import { DocumentFormFooter } from "@/components/document-form-footer";
-import { SelectNative } from "@/components/ui/select-native";
-import { DocumentLineTable, useDocumentTotals } from "@/components/documents";
+import {
+  DocumentColumnToggles,
+  DocumentLineTable,
+  DocumentWorkspaceLayout,
+  IsolatedDocumentTotals,
+  useDocumentColumnVisibility,
+} from "@/components/documents";
 import { useUnsavedChanges } from "@/hooks/use-unsaved-changes";
 import { useActionPermission, useApprovalPolicy } from "@/components/permissions-provider";
 import type { CustomFieldInputDefinition } from "@/modules/custom-fields/custom-field-inputs";
@@ -110,12 +116,15 @@ export function PurchaseInvoiceForm({
     handleSubmit,
     setError,
     setValue,
+    getValues,
     formState: { errors, isSubmitting, isDirty, isSubmitSuccessful },
   } = form;
   useUnsavedChanges(isDirty && !isSubmitSuccessful);
   const { fields, append, remove, insert, move } = useFieldArray({ control, name: "lines" });
+  const colVis = useDocumentColumnVisibility({ lineTaxCodes: false, lines: initial.lines });
+
   function duplicateLine(index: number) {
-    const currentLine = form.getValues(`lines.${index}`);
+    const currentLine = getValues(`lines.${index}`);
     insert(index + 1, { ...currentLine });
   }
   function moveLineUp(index: number) {
@@ -124,26 +133,18 @@ export function PurchaseInvoiceForm({
   function moveLineDown(index: number) {
     if (index < fields.length - 1) move(index, index + 1);
   }
+
   const supplierId = useWatch({ control, name: "supplierId" });
   const currencyCode = useWatch({ control, name: "currencyCode" }) || currency;
-  const exchangeRateToBase =
-    useWatch({ control, name: "exchangeRateToBase" }) || "";
-  const exchangeRateDate =
-    useWatch({ control, name: "exchangeRateDate" }) || "";
-  const exchangeRateSource =
-    useWatch({ control, name: "exchangeRateSource" }) || "";
+  const exchangeRateToBase = useWatch({ control, name: "exchangeRateToBase" }) || "";
+  const exchangeRateDate = useWatch({ control, name: "exchangeRateDate" }) || "";
+  const exchangeRateSource = useWatch({ control, name: "exchangeRateSource" }) || "";
   const invoiceDate = useWatch({ control, name: "invoiceDate" }) || "";
   const taxDate = useWatch({ control, name: "taxDate" }) || invoiceDate;
-  const minorUnit =
-    currencies.find((entry) => entry.code === currencyCode)?.minorUnit ?? 2;
-  const totals = useDocumentTotals<PurchaseInvoiceInput>({
-    control,
-    taxCodes,
-    minorUnit,
-  });
-  const lines = totals.lines;
-  const billTotalMinor = totals.totalMinor ?? (totals.subtotalMinor + totals.taxMinor);
   const applyAvailablePrepayment = useWatch({ control, name: "applyAvailablePrepayment" });
+  const minorUnit = currencies.find((entry) => entry.code === currencyCode)?.minorUnit ?? 2;
+  const baseMinorUnit = currencies.find((entry) => entry.code === currency)?.minorUnit ?? 2;
+
   const currentPrepayments: SupplierPrepaymentOption[] = (availableSupplierPrepayments?.[supplierId] || []).filter(
     (p: SupplierPrepaymentOption) => p.currencyCode === currencyCode
   );
@@ -151,33 +152,59 @@ export function PurchaseInvoiceForm({
     (s: number, p: SupplierPrepaymentOption) => s + p.unallocatedAmountMinor,
     0
   );
-  const prepaymentAppliedMinor =
+  const availablePrepaymentForTotals =
     !invoiceId && applyAvailablePrepayment && totalAvailablePrepaymentMinor > 0
-      ? Math.min(billTotalMinor, totalAvailablePrepaymentMinor)
+      ? totalAvailablePrepaymentMinor
       : 0;
-      
+
+  const supplierOptions = useMemo<ComboboxOption[]>(
+    () => suppliers.map((s) => ({ value: s.id, label: s.name })),
+    [suppliers],
+  );
+  const availableOrders = useMemo(
+    () => orders.filter((order) => !supplierId || order.supplierId === supplierId),
+    [orders, supplierId],
+  );
+  const orderOptions = useMemo<ComboboxOption[]>(
+    () => availableOrders.map((order) => ({ value: order.id, label: order.orderNumber })),
+    [availableOrders],
+  );
+  const projectOptions = useMemo<ComboboxOption[]>(
+    () => projects.map((p) => ({ value: p.id, label: `${p.code} — ${p.name}`, keywords: [p.code, p.name] })),
+    [projects],
+  );
+  const taxOptions = useMemo<ComboboxOption[]>(
+    () => taxCodes.map((t) => ({ value: t.id, label: t.name })),
+    [taxCodes],
+  );
+
   function updateGlobalTax(newTaxId: string) {
+    if (!newTaxId) return;
     setGlobalTaxCodeId(newTaxId);
-    lines.forEach((_, i) => form.setValue(`lines.${i}.taxCodeId`, newTaxId));
+    const currentLines = getValues("lines") ?? [];
+    currentLines.forEach((_, i) => setValue(`lines.${i}.taxCodeId`, newTaxId, { shouldDirty: true, shouldTouch: true }));
   }
 
   const defaultExpense = expenseAccounts[0]?.id ?? "";
   function selectItem(index: number, itemId: string) {
     const item = items.find((entry) => entry.id === itemId);
     if (!item) {
-      form.setValue(`lines.${index}.expenseAccountId`, defaultExpense);
+      setValue(`lines.${index}.expenseAccountId`, defaultExpense, { shouldDirty: true });
       return;
     }
-    form.setValue(`lines.${index}.description`, item.name);
-    form.setValue(
+    setValue(`lines.${index}.description`, item.name, { shouldDirty: true, shouldTouch: true });
+    setValue(
       `lines.${index}.unitPrice`,
-      minorToCurrencyInput(item.purchasePriceMinor ?? 0, minorUnit)
+      minorToCurrencyInput(item.purchasePriceMinor ?? 0, minorUnit),
+      { shouldDirty: true, shouldTouch: true },
     );
-    form.setValue(
+    setValue(
       `lines.${index}.expenseAccountId`,
-      item.inventoryAssetAccountId
+      item.inventoryAssetAccountId,
+      { shouldDirty: true },
     );
   }
+
   async function save(values: PurchaseInvoiceInput, intent: PurchaseInvoiceIntent) {
     setServerError("");
     const result = await savePurchaseInvoiceAction(
@@ -191,68 +218,102 @@ export function PurchaseInvoiceForm({
         setError(field as keyof PurchaseInvoiceInput, { message: messages[0] });
     if (result.error) setServerError(result.error);
   }
+
   const cancelHref = invoiceId
     ? `/b/${businessId}/purchases/invoices/${invoiceId}`
     : `/b/${businessId}/purchases/invoices`;
+
   return (
-    <form className="space-y-5 max-w-none" noValidate>
-      {serverError && <FormError message={serverError} />}
-      <section className="form-section">
-        <div className="flex items-center justify-between">
-          <h2 className="text-base font-semibold">Bill details</h2>
-          <span className="text-xs text-muted-foreground font-medium bg-muted/60 px-2 py-0.5 rounded border border-border/50">
-            Internal Bill # Auto-allocated on save
-          </span>
-        </div>
-        <p className="mt-1 text-sm text-muted-foreground">
-          Posting creates the Accounts Payable, expense, and Input VAT journal
-          atomically.
-        </p>
-        <div className="mt-5 grid gap-5 md:grid-cols-3">
+    <DocumentWorkspaceLayout
+      serverError={serverError}
+      headerTitle="Bill details"
+      headerSubtitle="Posting creates the Accounts Payable, expense, and Input VAT journal atomically."
+      headerBadge={
+        <span className="text-xs text-muted-foreground font-medium bg-muted/60 px-2 py-0.5 rounded border border-border/50">
+          Internal Bill # Auto-allocated on save
+        </span>
+      }
+      header={
+        <div className="grid gap-4 md:grid-cols-3">
           <div className="space-y-1.5">
             <Label htmlFor="supplierId">Supplier</Label>
-            <SelectNative
-              id="supplierId"
-              {...register("supplierId", {
-                onChange: (event) => {
-                  setValue("purchaseOrderId", "");
-                  if (documentStatus === "draft") {
-                    const code =
-                      suppliers.find(
-                        (supplier) => supplier.id === event.target.value,
-                      )?.defaultCurrencyCode ?? currency;
-                    setValue("currencyCode", code);
-                    setValue(
-                      "exchangeRateToBase",
-                      code === currency ? "1" : "",
-                    );
-                    setValue(
-                      "exchangeRateDate",
-                      code === currency ? taxDate || invoiceDate : "",
-                    );
-                    setValue(
-                      "exchangeRateSource",
-                      code === currency ? "Base" : "",
-                    );
-                  }
-                },
-              })}
-              aria-invalid={!!errors.supplierId}
-            >
-              <option value="">Choose a supplier…</option>
-              {suppliers.map((supplier) => (
-                <option key={supplier.id} value={supplier.id}>
-                  {supplier.name}
-                </option>
-              ))}
-            </SelectNative>
+            <Controller
+              control={control}
+              name="supplierId"
+              render={({ field }) => (
+                <Combobox
+                  id="supplierId"
+                  ariaLabel="Supplier"
+                  ariaInvalid={!!errors.supplierId}
+                  options={supplierOptions}
+                  value={field.value ?? ""}
+                  onValueChange={(next) => {
+                    field.onChange(next);
+                    setValue("purchaseOrderId", "");
+                    if (documentStatus === "draft" && next) {
+                      const code =
+                        suppliers.find((supplier) => supplier.id === next)
+                          ?.defaultCurrencyCode ?? currency;
+                      setValue("currencyCode", code);
+                      setValue("exchangeRateToBase", code === currency ? "1" : "");
+                      setValue("exchangeRateDate", code === currency ? taxDate || invoiceDate : "");
+                      setValue("exchangeRateSource", code === currency ? "Base" : "");
+                    }
+                  }}
+                  placeholder="Choose a supplier…"
+                  searchPlaceholder="Search supplier..."
+                />
+              )}
+            />
             {errors.supplierId && (
               <p className="field-error">{errors.supplierId.message}</p>
             )}
           </div>
 
+          <div className="space-y-1.5">
+            <Label htmlFor="supplierInvoiceNumber">Supplier invoice #</Label>
+            <Input
+              id="supplierInvoiceNumber"
+              {...register("supplierInvoiceNumber")}
+              aria-invalid={!!errors.supplierInvoiceNumber}
+            />
+            {errors.supplierInvoiceNumber && (
+              <p className="field-error">{errors.supplierInvoiceNumber.message}</p>
+            )}
+          </div>
+
+          <div className="space-y-1.5">
+            <Label htmlFor="purchaseOrderId">
+              Purchase order <span className="font-normal text-muted-foreground">(optional)</span>
+            </Label>
+            <Controller
+              control={control}
+              name="purchaseOrderId"
+              render={({ field }) => (
+                <Combobox
+                  id="purchaseOrderId"
+                  ariaLabel="Purchase order"
+                  options={orderOptions}
+                  value={field.value ?? ""}
+                  onValueChange={(next) => {
+                    field.onChange(next);
+                    const ord = orders.find((o) => o.id === next);
+                    if (ord) {
+                      if (!getValues("supplierId")) setValue("supplierId", ord.supplierId);
+                      if (!getValues("reference")) setValue("reference", `PO ${ord.orderNumber}`);
+                    }
+                  }}
+                  allowClear
+                  clearLabel="No linked order"
+                  placeholder="No linked order"
+                  searchPlaceholder="Search purchase order..."
+                />
+              )}
+            />
+          </div>
+
           {!invoiceId && totalAvailablePrepaymentMinor > 0 && (
-            <div className="md:col-span-3 rounded-lg border border-emerald-500/30 bg-emerald-500/10 p-3.5 text-sm dark:bg-emerald-950/25">
+            <div className="md:col-span-3 rounded-lg border border-emerald-500/30 bg-emerald-500/10 p-3 text-sm dark:bg-emerald-950/25">
               <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
                 <div className="flex items-start gap-2.5">
                   <Coins className="size-5 shrink-0 text-emerald-600 dark:text-emerald-400 mt-0.5" />
@@ -267,81 +328,24 @@ export function PurchaseInvoiceForm({
                     </p>
                   </div>
                 </div>
-                <div className="flex items-center gap-3">
-                  <label className="flex items-center gap-2 cursor-pointer select-none font-medium text-emerald-900 dark:text-emerald-200">
-                    <input
-                      type="checkbox"
-                      className="size-4 rounded border-emerald-300 text-emerald-600 focus:ring-emerald-500"
-                      {...register("applyAvailablePrepayment")}
-                    />
-                    <span className="text-xs sm:text-sm">Apply prepayment upon posting</span>
-                  </label>
-                </div>
+                <label className="flex items-center gap-2 cursor-pointer select-none font-medium text-emerald-900 dark:text-emerald-200">
+                  <Controller
+                    control={control}
+                    name="applyAvailablePrepayment"
+                    render={({ field }) => (
+                      <Checkbox
+                        checked={Boolean(field.value)}
+                        onCheckedChange={(checked) => field.onChange(Boolean(checked))}
+                        aria-label="Apply prepayment upon posting"
+                      />
+                    )}
+                  />
+                  <span className="text-xs sm:text-sm">Apply prepayment upon posting</span>
+                </label>
               </div>
             </div>
           )}
-          <div className="space-y-1.5">
-            <Label htmlFor="supplierInvoiceNumber">Supplier invoice #</Label>
-            <Input
-              id="supplierInvoiceNumber"
-              {...register("supplierInvoiceNumber")}
-              aria-invalid={!!errors.supplierInvoiceNumber}
-            />
-            {errors.supplierInvoiceNumber && (
-              <p className="field-error">
-                {errors.supplierInvoiceNumber.message}
-              </p>
-            )}
-          </div>
-          <div className="space-y-1.5">
-            <Label htmlFor="purchaseOrderId">
-              Purchase order{" "}
-              <span className="font-normal text-muted-foreground">
-                (optional)
-              </span>
-            </Label>
-            <SelectNative
-              id="purchaseOrderId"
-              {...register("purchaseOrderId", {
-                onChange: (e) => {
-                  const ord = orders.find((o) => o.id === e.target.value);
-                  if (ord) {
-                    if (!form.getValues("supplierId")) {
-                      form.setValue("supplierId", ord.supplierId);
-                    }
-                    if (!form.getValues("reference")) {
-                      form.setValue("reference", `PO ${ord.orderNumber}`);
-                    }
-                  }
-                }
-              })}
-            >
-              <option value="">No linked order</option>
-              {orders
-                .filter((order) => !supplierId || order.supplierId === supplierId)
-                .map((order) => (
-                  <option key={order.id} value={order.id}>
-                    {order.orderNumber}
-                  </option>
-                ))}
-            </SelectNative>
-          </div>
-          <div className="space-y-1.5">
-            <Label htmlFor="projectId">
-              Project{" "}
-              <span className="font-normal text-muted-foreground">
-                (optional)
-              </span>
-            </Label>
-            <SelectNative id="projectId" {...register("projectId")}>
-              <option value="">No project</option>
-              {projects.map((project) => (
-                <option key={project.id} value={project.id}>
-                  {project.code} — {project.name}
-                </option>
-              ))}
-            </SelectNative>
-          </div>
+
           <div className="space-y-1.5">
             <Label htmlFor="invoiceDate">Invoice date</Label>
             <Input
@@ -350,10 +354,9 @@ export function PurchaseInvoiceForm({
               {...register("invoiceDate")}
               aria-invalid={!!errors.invoiceDate}
             />
-            {errors.invoiceDate && (
-              <p className="field-error">{errors.invoiceDate.message}</p>
-            )}
+            {errors.invoiceDate && <p className="field-error">{errors.invoiceDate.message}</p>}
           </div>
+
           <div className="space-y-1.5">
             <Label htmlFor="taxDate">VAT tax date</Label>
             <Input
@@ -362,10 +365,9 @@ export function PurchaseInvoiceForm({
               {...register("taxDate")}
               aria-invalid={!!errors.taxDate}
             />
-            {errors.taxDate && (
-              <p className="field-error">{errors.taxDate.message}</p>
-            )}
+            {errors.taxDate && <p className="field-error">{errors.taxDate.message}</p>}
           </div>
+
           <div className="space-y-1.5">
             <Label htmlFor="dueDate">Due date</Label>
             <Input
@@ -374,10 +376,9 @@ export function PurchaseInvoiceForm({
               {...register("dueDate")}
               aria-invalid={!!errors.dueDate}
             />
-            {errors.dueDate && (
-              <p className="field-error">{errors.dueDate.message}</p>
-            )}
+            {errors.dueDate && <p className="field-error">{errors.dueDate.message}</p>}
           </div>
+
           <DocumentCurrencyFields
             baseCurrencyCode={currency}
             currencies={currencies}
@@ -390,61 +391,63 @@ export function PurchaseInvoiceForm({
             disabled={documentStatus === "posted"}
             onChange={(field, value) => setValue(field, value)}
           />
+
           <div className="space-y-1.5">
+            <Label htmlFor="projectId">
+              Project <span className="font-normal text-muted-foreground">(optional)</span>
+            </Label>
+            <Controller
+              control={control}
+              name="projectId"
+              render={({ field }) => (
+                <Combobox
+                  id="projectId"
+                  ariaLabel="Project"
+                  options={projectOptions}
+                  value={field.value ?? ""}
+                  onValueChange={field.onChange}
+                  allowClear
+                  clearLabel="No project"
+                  placeholder="No project"
+                  searchPlaceholder="Search project..."
+                />
+              )}
+            />
+          </div>
+
+          <div className="space-y-1.5 md:col-span-2">
             <Label htmlFor="reference">
-              Reference{" "}
-              <span className="font-normal text-muted-foreground">
-                (optional)
-              </span>
+              Reference <span className="font-normal text-muted-foreground">(optional)</span>
             </Label>
             <Input id="reference" {...register("reference")} />
           </div>
-          <div className="space-y-1.5 md:col-span-3 grid md:grid-cols-2 gap-5">
-            <div className="space-y-1.5">
-              <Label htmlFor="notes">
-                Notes <span className="font-normal text-muted-foreground">(optional)</span>
-              </Label>
-              <Textarea id="notes" rows={2} placeholder="Notes..." {...register("notes")} />
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="terms">
-                Terms & conditions <span className="font-normal text-muted-foreground">(optional)</span>
-              </Label>
-              <Textarea id="terms" rows={2} placeholder="Payment terms, delivery instructions..." {...register("terms")} />
-            </div>
-          </div>
         </div>
-      </section>
-      <section className="form-section">
-        <div className="mb-3 flex flex-wrap items-end justify-between gap-3">
-          <div>
-            <h2 className="text-base font-semibold">Line items</h2>
-            <p className="mt-1 text-sm text-muted-foreground">Select an item or service, or leave it blank for a service line.</p>
-          </div>
-          <div className="flex items-center gap-2">
-            <Label htmlFor="globalTax" className="text-sm font-medium">Default Tax:</Label>
-            <SelectNative
+      }
+      linesTitle="Line items"
+      linesSubtitle="Select an item or service, or leave it blank for a service line."
+      linesActions={
+        <div className="flex items-center gap-2">
+          <Label htmlFor="globalTax" className="text-sm font-medium whitespace-nowrap">Default Tax:</Label>
+          <div className="w-44">
+            <Combobox
               id="globalTax"
-              className="w-40"
+              options={taxOptions}
               value={globalTaxCodeId}
-              onChange={(e) => updateGlobalTax(e.target.value)}
-            >
-              {taxCodes.map((taxCode) => (
-                <option key={taxCode.id} value={taxCode.id}>
-                  {taxCode.name}
-                </option>
-              ))}
-            </SelectNative>
+              onValueChange={updateGlobalTax}
+              size="sm"
+              placeholder="Default Tax"
+              searchPlaceholder="Search tax..."
+            />
           </div>
         </div>
-
+      }
+      lines={
         <DocumentLineTable
           register={register}
           control={control}
-          setValue={form.setValue}
+          setValue={setValue}
           errors={errors}
           fields={fields}
-          lines={lines}
           onAppend={(custom) =>
             append({
               itemId: "",
@@ -468,74 +471,110 @@ export function PurchaseInvoiceForm({
           accounts={expenseAccounts}
           accountFieldName="expenseAccountId"
           accountAriaLabel="expense account"
-          initialShowLineTaxCodes={false}
           taxCodes={taxCodes}
           projects={projects}
           currencyCode={currencyCode}
           minorUnit={minorUnit}
-          previews={totals.previews}
-          amountsIncludeTax={totals.amountsIncludeTax}
           lineCustomFields={lineCustomFields}
-          registerAmountsIncludeTax={register("amountsIncludeTax")}
-          subtotalMinor={totals.subtotalMinor}
-          taxMinor={totals.taxMinor}
-          totalMinor={totals.totalMinor}
+          showTotalsSection={false}
+          {...colVis.tableProps}
         />
-      </section>
-      <DocumentFormFooter
-        onCancel={() => router.push(cancelHref)}
-        status={documentStatus}
-        totals={{
-          subtotalMinor: totals.subtotalMinor,
-          taxMinor: totals.taxMinor,
-          creditAppliedMinor: prepaymentAppliedMinor,
-          totalMinor: billTotalMinor,
-          currencyCode,
-          minorUnit,
-        }}
-      >
-        {documentStatus === "posted" ? (
-          <Button permission={["save", "post"]}
-            type="button"
-            disabled={isSubmitting}
-            onClick={handleSubmit((values) => save(values, "post"))}
-          >
-            {isSubmitting && <LoaderCircle className="size-4 animate-spin" />}{" "}
-            Save Changes
-          </Button>
-        ) : (
-          <div className="flex flex-wrap items-center gap-2">
-            <Button permission={"save"}
-              variant="secondary"
+      }
+      bottomLeft={
+        <>
+          <DocumentColumnToggles
+            {...colVis.togglesProps}
+            control={control}
+            showAmountsIncludeTaxToggle
+            className="max-w-none"
+          />
+
+          <div className="form-section grid gap-4 sm:grid-cols-2">
+            <div className="space-y-1.5">
+              <Label htmlFor="notes">
+                Notes <span className="font-normal text-muted-foreground">(optional)</span>
+              </Label>
+              <Textarea id="notes" rows={2} placeholder="Notes..." {...register("notes")} />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="terms">
+                Terms &amp; conditions <span className="font-normal text-muted-foreground">(optional)</span>
+              </Label>
+              <Textarea id="terms" rows={2} placeholder="Payment terms, delivery instructions..." {...register("terms")} />
+            </div>
+          </div>
+        </>
+      }
+      bottomRight={
+        <IsolatedDocumentTotals
+          control={control}
+          taxCodes={taxCodes}
+          currencyCode={currencyCode}
+          minorUnit={minorUnit}
+          availableCreditMinor={availablePrepaymentForTotals}
+          creditLabel="Supplier prepayment"
+          baseCurrencyCode={currency}
+          baseMinorUnit={baseMinorUnit}
+          exchangeRateToBase={exchangeRateToBase}
+        />
+      }
+      footer={
+        <DocumentFormFooter
+          onCancel={() => router.push(cancelHref)}
+          status={documentStatus}
+          liveTotals={{
+            control,
+            taxCodes,
+            currencyCode,
+            minorUnit,
+            availableCreditMinor: availablePrepaymentForTotals,
+          }}
+        >
+          {documentStatus === "posted" ? (
+            <Button
+              permission={["save", "post"]}
               type="button"
               disabled={isSubmitting}
-              onClick={handleSubmit((values) => save(values, "draft"))}
+              onClick={handleSubmit((values) => save(values, "post"))}
             >
-              {isSubmitting && <LoaderCircle className="size-4 animate-spin" />}{" "}
-              {invoiceId ? "Save Draft" : "Save Draft Bill"}
+              {isSubmitting && <LoaderCircle className="size-4 animate-spin" />} Save Changes
             </Button>
-            {mustSubmitForApproval ? (
-              <Button permission={"save"}
+          ) : (
+            <div className="flex flex-wrap items-center gap-2">
+              <Button
+                permission={"save"}
+                variant="secondary"
                 type="button"
                 disabled={isSubmitting}
-                onClick={handleSubmit((values) => save(values, "submit_approval"))}
+                onClick={handleSubmit((values) => save(values, "draft"))}
               >
                 {isSubmitting && <LoaderCircle className="size-4 animate-spin" />}{" "}
-                Submit for Approval
+                {invoiceId ? "Save Draft" : "Save Draft Bill"}
               </Button>
-            ) : (
-              <Button permission={["save", "post"]}
-                type="button"
-                disabled={isSubmitting}
-                onClick={handleSubmit((values) => save(values, "post"))}
-              >
-                {isSubmitting && <LoaderCircle className="size-4 animate-spin" />}{" "}
-                {invoiceId ? "Save & Post" : "Create & Post"}
-              </Button>
-            )}
-          </div>
-        )}
-      </DocumentFormFooter>
-    </form>
+              {mustSubmitForApproval ? (
+                <Button
+                  permission={"save"}
+                  type="button"
+                  disabled={isSubmitting}
+                  onClick={handleSubmit((values) => save(values, "submit_approval"))}
+                >
+                  {isSubmitting && <LoaderCircle className="size-4 animate-spin" />} Submit for Approval
+                </Button>
+              ) : (
+                <Button
+                  permission={["save", "post"]}
+                  type="button"
+                  disabled={isSubmitting}
+                  onClick={handleSubmit((values) => save(values, "post"))}
+                >
+                  {isSubmitting && <LoaderCircle className="size-4 animate-spin" />}{" "}
+                  {invoiceId ? "Save & Post" : "Create & Post"}
+                </Button>
+              )}
+            </div>
+          )}
+        </DocumentFormFooter>
+      }
+    />
   );
 }

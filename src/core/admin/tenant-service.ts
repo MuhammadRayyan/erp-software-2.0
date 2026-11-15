@@ -57,60 +57,185 @@ export type TenantSummaryRow = {
   storageFormatted: string;
 };
 
-export function listTenantsWithStats(): TenantSummaryRow[] {
+export type AdminBusinessSummaryRow = {
+  id: string;
+  name: string;
+  country: string;
+  currency: string;
+  directoryKey: string;
+  status: "active" | "suspended" | "trash";
+  archived: boolean;
+  ownerUserId?: string | null;
+  ownerName?: string | null;
+  ownerEmail?: string | null;
+  createdAt: string;
+  lastOpenedAt: string | null;
+  admins: { name: string; email: string }[];
+  storageFormatted: string;
+  storageBytes: number;
+  memberCount: number;
+};
+
+export type AdminOverviewStats = {
+  clientTenantsCount: number;
+  totalTenantsCount: number;
+  activeTenantsCount: number;
+  suspendedTenantsCount: number;
+  totalBusinessesCount: number;
+  totalUsersCount: number;
+  totalStorageBytes: number;
+  auditLogsCount: number;
+};
+
+export type AdminControlTab = "tenants" | "businesses" | "audit";
+
+export type AdminSystemAuditLogRow = {
+  id: string;
+  level: "debug" | "info" | "warn" | "error";
+  message: string;
+  userId: string | null;
+  businessId: string | null;
+  createdAt: string;
+};
+
+type AdminDirectorySnapshot = {
+  allUsers: (typeof users.$inferSelect)[];
+  allBusinesses: (typeof businesses.$inferSelect)[];
+  userById: Map<string, typeof users.$inferSelect>;
+  membersByBusinessId: Map<string, (typeof memberships.$inferSelect)[]>;
+  firstAdminUserIdByBusinessId: Map<string, string>;
+  adminsByBusinessId: Map<string, { name: string; email: string }[]>;
+  ownedNonTrashByUser: Map<string, (typeof businesses.$inferSelect)[]>;
+  legacyOwnedByUser: Map<string, (typeof businesses.$inferSelect)[]>;
+  accountHolders: (typeof users.$inferSelect)[];
+};
+
+function getCachedStorageBytes(
+  directoryKey: string,
+  cache: Map<string, number>,
+): number {
+  const existing = cache.get(directoryKey);
+  if (existing !== undefined) return existing;
+  const computed = getBusinessStorageBytes(directoryKey);
+  cache.set(directoryKey, computed);
+  return computed;
+}
+
+/**
+ * Load system-wide users, businesses, and memberships in 3 bulk queries and
+ * pre-index relationships in memory so Admin tabs never suffer N+1 queries.
+ */
+function loadAdminDirectorySnapshot(): AdminDirectorySnapshot {
   const db = getSystemDb();
   const allUsers = db.select().from(users).orderBy(desc(users.createdAt)).all();
-  const allBusinesses = db.select().from(businesses).all();
+  const allBusinesses = db.select().from(businesses).orderBy(desc(businesses.createdAt)).all();
   const allMemberships = db.select().from(memberships).all();
+
+  const userById = new Map<string, typeof users.$inferSelect>();
+  for (const user of allUsers) {
+    userById.set(user.id, user);
+  }
+
+  const membersByBusinessId = new Map<string, (typeof memberships.$inferSelect)[]>();
+  const adminsByBusinessId = new Map<string, { name: string; email: string }[]>();
+  const adminMembershipEntriesByBusinessId = new Map<string, (typeof memberships.$inferSelect)[]>();
+
+  for (const membership of allMemberships) {
+    const bucket = membersByBusinessId.get(membership.businessId) ?? [];
+    bucket.push(membership);
+    membersByBusinessId.set(membership.businessId, bucket);
+
+    if (membership.role === "administrator") {
+      const adminBucket = adminMembershipEntriesByBusinessId.get(membership.businessId) ?? [];
+      adminBucket.push(membership);
+      adminMembershipEntriesByBusinessId.set(membership.businessId, adminBucket);
+
+      const adminUser = userById.get(membership.userId);
+      if (adminUser) {
+        const list = adminsByBusinessId.get(membership.businessId) ?? [];
+        list.push({ name: adminUser.name, email: adminUser.email });
+        adminsByBusinessId.set(membership.businessId, list);
+      }
+    }
+  }
+
+  const firstAdminUserIdByBusinessId = new Map<string, string>();
+  for (const [businessId, adminEntries] of adminMembershipEntriesByBusinessId) {
+    let earliest = adminEntries[0];
+    for (let i = 1; i < adminEntries.length; i++) {
+      if (adminEntries[i].createdAt.localeCompare(earliest.createdAt) < 0) {
+        earliest = adminEntries[i];
+      }
+    }
+    if (earliest) {
+      firstAdminUserIdByBusinessId.set(businessId, earliest.userId);
+    }
+  }
+
+  const ownedNonTrashByUser = new Map<string, (typeof businesses.$inferSelect)[]>();
+  const legacyOwnedByUser = new Map<string, (typeof businesses.$inferSelect)[]>();
+
+  for (const business of allBusinesses) {
+    if (business.ownerUserId) {
+      if (business.status !== "trash") {
+        const list = ownedNonTrashByUser.get(business.ownerUserId) ?? [];
+        list.push(business);
+        ownedNonTrashByUser.set(business.ownerUserId, list);
+      }
+    } else {
+      const firstAdminId = firstAdminUserIdByBusinessId.get(business.id);
+      if (firstAdminId) {
+        const list = legacyOwnedByUser.get(firstAdminId) ?? [];
+        list.push(business);
+        legacyOwnedByUser.set(firstAdminId, list);
+      }
+    }
+  }
 
   // Filter for Account Holders (Super-Admin, Tenant Admins, or Users who own at least one business).
   // Sub-users / team members invited to a business without ownership or tenant admin rights are excluded.
   const accountHolders = allUsers.filter((u) => {
     if (u.isSuperAdmin || u.isTenantAdmin) return true;
-    const hasOwnedBusiness = allBusinesses.some(
-      (b) => b.ownerUserId === u.id && b.status !== "trash"
-    );
-    if (hasOwnedBusiness) return true;
-    const hasLegacyOwned = allBusinesses.some((b) => {
-      if (b.ownerUserId) return false;
-      const firstAdmin = allMemberships
-        .filter((m) => m.businessId === b.id && m.role === "administrator")
-        .sort((a, b) => a.createdAt.localeCompare(b.createdAt))[0];
-      return firstAdmin?.userId === u.id;
-    });
-    return hasLegacyOwned;
+    if ((ownedNonTrashByUser.get(u.id)?.length ?? 0) > 0) return true;
+    return (legacyOwnedByUser.get(u.id)?.length ?? 0) > 0;
   });
 
-  return accountHolders.map((u) => {
-    // Find businesses owned by this user
-    const ownedBusinesses = allBusinesses.filter(
-      (b) => b.ownerUserId === u.id && b.status !== "trash"
-    );
+  return {
+    allUsers,
+    allBusinesses,
+    userById,
+    membersByBusinessId,
+    firstAdminUserIdByBusinessId,
+    adminsByBusinessId,
+    ownedNonTrashByUser,
+    legacyOwnedByUser,
+    accountHolders,
+  };
+}
 
-    // If no explicit ownerUserId was populated (e.g. legacy), fallback to first admin
-    const legacyOwned = allBusinesses.filter((b) => {
-      if (b.ownerUserId) return false;
-      const firstAdmin = allMemberships
-        .filter((m) => m.businessId === b.id && m.role === "administrator")
-        .sort((a, b) => a.createdAt.localeCompare(b.createdAt))[0];
-      return firstAdmin?.userId === u.id;
-    });
-
+function buildTenantSummaryRows(
+  snapshot: AdminDirectorySnapshot,
+  storageCache: Map<string, number>,
+): TenantSummaryRow[] {
+  return snapshot.accountHolders.map((u) => {
+    const ownedBusinesses = snapshot.ownedNonTrashByUser.get(u.id) ?? [];
+    const legacyOwned = snapshot.legacyOwnedByUser.get(u.id) ?? [];
     const combinedBusinesses = [...ownedBusinesses, ...legacyOwned];
     const uniqueBusinessIds = Array.from(new Set(combinedBusinesses.map((b) => b.id)));
 
-    // Calculate sub-users across all owned businesses
     const subUserIds = new Set<string>();
     for (const bId of uniqueBusinessIds) {
-      const bMembers = allMemberships.filter((m) => m.businessId === bId && m.userId !== u.id);
+      const bMembers = snapshot.membersByBusinessId.get(bId) ?? [];
       for (const m of bMembers) {
-        subUserIds.add(m.userId);
+        if (m.userId !== u.id) {
+          subUserIds.add(m.userId);
+        }
       }
     }
 
     let storageBytes = 0;
     for (const b of combinedBusinesses) {
-      storageBytes += getBusinessStorageBytes(b.directoryKey);
+      storageBytes += getCachedStorageBytes(b.directoryKey, storageCache);
     }
 
     return {
@@ -129,6 +254,149 @@ export function listTenantsWithStats(): TenantSummaryRow[] {
       storageFormatted: formatBytes(storageBytes),
     };
   });
+}
+
+function buildBusinessSummaryRows(
+  snapshot: AdminDirectorySnapshot,
+  options: { includeStorageBytes: boolean; storageCache: Map<string, number> },
+): AdminBusinessSummaryRow[] {
+  return snapshot.allBusinesses.map((b) => {
+    const admins = snapshot.adminsByBusinessId.get(b.id) ?? [];
+    const memberCount = (snapshot.membersByBusinessId.get(b.id) ?? []).length;
+    const storageBytes = options.includeStorageBytes
+      ? getCachedStorageBytes(b.directoryKey, options.storageCache)
+      : 0;
+    const owner = b.ownerUserId ? snapshot.userById.get(b.ownerUserId) : undefined;
+
+    return {
+      id: b.id,
+      name: b.name,
+      country: b.country,
+      currency: b.currency,
+      directoryKey: b.directoryKey,
+      status: b.status,
+      archived: b.archived,
+      ownerUserId: b.ownerUserId,
+      ownerName: owner?.name ?? (admins[0]?.name ?? null),
+      ownerEmail: owner?.email ?? (admins[0]?.email ?? null),
+      createdAt: b.createdAt,
+      lastOpenedAt: b.lastOpenedAt,
+      admins,
+      storageFormatted: formatBytes(storageBytes),
+      storageBytes,
+      memberCount,
+    };
+  });
+}
+
+function countSystemAuditLogs(): number {
+  const row = getSystemSqlite()
+    .prepare("SELECT COUNT(*) AS total FROM system_logs")
+    .get() as { total: number } | undefined;
+  return Number(row?.total ?? 0);
+}
+
+function buildAdminOverviewStats(
+  snapshot: AdminDirectorySnapshot,
+  storageCache: Map<string, number>,
+  auditLogsCount: number,
+): AdminOverviewStats {
+  let clientTenantsCount = 0;
+  let activeTenantsCount = 0;
+  let suspendedTenantsCount = 0;
+  for (const holder of snapshot.accountHolders) {
+    if (!holder.isSuperAdmin) clientTenantsCount++;
+    const status = (holder.status as "active" | "suspended") || "active";
+    if (status === "active") activeTenantsCount++;
+    else if (status === "suspended") suspendedTenantsCount++;
+  }
+
+  let totalStorageBytes = 0;
+  for (const b of snapshot.allBusinesses) {
+    totalStorageBytes += getCachedStorageBytes(b.directoryKey, storageCache);
+  }
+
+  return {
+    clientTenantsCount,
+    totalTenantsCount: snapshot.accountHolders.length,
+    activeTenantsCount,
+    suspendedTenantsCount,
+    totalBusinessesCount: snapshot.allBusinesses.length,
+    totalUsersCount: snapshot.allUsers.length,
+    totalStorageBytes,
+    auditLogsCount,
+  };
+}
+
+export function listTenantsWithStats(): TenantSummaryRow[] {
+  const snapshot = loadAdminDirectorySnapshot();
+  return buildTenantSummaryRows(snapshot, new Map<string, number>());
+}
+
+/**
+ * List all platform businesses with pre-joined owner/admin/member stats in
+ * 3 bulk queries (zero per-business N+1 membership/admin queries).
+ */
+export function listBusinessesWithStats(options?: {
+  includeStorageBytes?: boolean;
+}): AdminBusinessSummaryRow[] {
+  const snapshot = loadAdminDirectorySnapshot();
+  return buildBusinessSummaryRows(snapshot, {
+    includeStorageBytes: options?.includeStorageBytes ?? true,
+    storageCache: new Map<string, number>(),
+  });
+}
+
+export function getAdminOverviewStats(): AdminOverviewStats {
+  const snapshot = loadAdminDirectorySnapshot();
+  return buildAdminOverviewStats(snapshot, new Map<string, number>(), countSystemAuditLogs());
+}
+
+/**
+ * Fetch compact counts for the shared `/admin` sub-navigation bar (`tenants`,
+ * `businesses`, `audit`) using the Drizzle directory snapshot without hitting
+ * per-business filesystem storage stats.
+ */
+export function getAdminNavCounts(): { tenants: number; businesses: number; audit: number } {
+  const snapshot = loadAdminDirectorySnapshot();
+  return {
+    tenants: snapshot.accountHolders.length,
+    businesses: snapshot.allBusinesses.length,
+    audit: countSystemAuditLogs(),
+  };
+}
+
+export function getAdminPageData(tab: AdminControlTab): {
+  stats: AdminOverviewStats;
+  tenantRows: TenantSummaryRow[];
+  businessRows: AdminBusinessSummaryRow[];
+  auditLogs: AdminSystemAuditLogRow[];
+} {
+  const snapshot = loadAdminDirectorySnapshot();
+  const storageCache = new Map<string, number>();
+
+  let tenantRows: TenantSummaryRow[] = [];
+  let businessRows: AdminBusinessSummaryRow[] = [];
+  let auditLogs: AdminSystemAuditLogRow[] = [];
+  let auditLogsCount: number;
+
+  if (tab === "audit") {
+    auditLogs = listSystemAuditLogs(100);
+    auditLogsCount = Math.max(auditLogs.length, countSystemAuditLogs());
+  } else {
+    auditLogsCount = countSystemAuditLogs();
+    if (tab === "tenants") {
+      tenantRows = buildTenantSummaryRows(snapshot, storageCache);
+    } else {
+      businessRows = buildBusinessSummaryRows(snapshot, {
+        includeStorageBytes: true,
+        storageCache,
+      });
+    }
+  }
+
+  const stats = buildAdminOverviewStats(snapshot, storageCache, auditLogsCount);
+  return { stats, tenantRows, businessRows, auditLogs };
 }
 
 export type TenantDetails = {

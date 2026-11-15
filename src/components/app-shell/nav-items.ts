@@ -109,10 +109,16 @@ export const primaryNav: { label?: string; items: NavItem[] }[] = [
 ];
 
 export const settingsNav: NavItem = { label: "Settings", path: "/settings", icon: Settings, module: "settings" };
+export const customizeNav: NavItem = {
+  label: "Customize",
+  path: "/settings/customize",
+  icon: SlidersHorizontal,
+  module: "settings",
+};
 export const systemHealthNav: NavItem = {
   label: "System Health",
   path: "/settings/system-health",
   icon: Activity,
   module: "settings",
 };
-export const settingsNavItems: NavItem[] = [settingsNav, systemHealthNav];
+export const settingsNavItems: NavItem[] = [customizeNav, settingsNav, systemHealthNav];

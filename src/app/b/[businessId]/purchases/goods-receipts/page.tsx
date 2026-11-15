@@ -2,15 +2,13 @@ import Link from "next/link";
 import { ArrowLeft, Plus } from "lucide-react";
 import { EmptyState } from "@/components/empty-state";
 import { PageHeader } from "@/components/page-header";
-import { StatusBadge } from "@/components/status-badge";
-import { DensityToggle } from "@/components/density-toggle";
 import { Button } from "@/components/ui/button";
-import { formatDate, formatMoney } from "@/core/format";
 import { requireModule } from "@/core/permissions/require-module";
 import { DATE_PATTERN } from "@/lib/params";
 import { listGoodsReceipts } from "@/modules/inventory/goods-receipt-service";
-import { formatQuantityMicros } from "@/modules/inventory/inventory-valuation";
-import { GoodsReceiptRowActions } from "@/modules/inventory/goods-receipt-row-actions";
+import { GoodsReceiptTable, type GoodsReceiptRow } from "@/modules/inventory/goods-receipt-table";
+import { listPreferences } from "@/modules/preferences/preference-service";
+import { decodeColumnSnapshots } from "@/modules/preferences/snapshot-codec";
 
 export const metadata = { title: "Goods Receipts" };
 
@@ -27,7 +25,8 @@ export default async function GoodsReceiptsPage({
   const from = DATE_PATTERN.test(sp.from ?? "") ? sp.from : undefined;
   const to = DATE_PATTERN.test(sp.to ?? "") ? sp.to : undefined;
 
-  const rows = listGoodsReceipts(businessId, user.id, { from, to });
+  const rows = listGoodsReceipts(businessId, user.id, { from, to }) as unknown as GoodsReceiptRow[];
+  const columnSnapshots = decodeColumnSnapshots(listPreferences(businessId, user.id));
 
   return (
     <div className="page-container">
@@ -39,78 +38,31 @@ export default async function GoodsReceiptsPage({
       </Link>
       <PageHeader
         title="Goods Receipts"
-        description="Supplier receipts change physical stock without duplicating AP accounting."
+        description="Supplier receipts update physical stock valuation."
       >
-        <DensityToggle businessId={businessId} />
         <Button permission="create" asChild>
           <Link href={`/b/${businessId}/purchases/goods-receipts/new`}>
             <Plus className="size-4" /> New Goods Receipt
           </Link>
         </Button>
       </PageHeader>
-      
+
       {rows.length ? (
-        <div className="data-panel overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="data-table min-w-[800px]">
-              <thead>
-                <tr>
-                  <th>Receipt</th>
-                  <th>Supplier</th>
-                  <th>Date</th>
-                  <th>Location</th>
-                  <th className="text-right!">Quantity</th>
-                  <th className="text-right!">Value</th>
-                  <th>Status</th>
-                  <th className="w-16 text-right"><span className="sr-only">Actions</span></th>
-                </tr>
-              </thead>
-              <tbody>
-                {rows.map((row) => (
-                  <tr key={String(row.id)}>
-                    <td>
-                      <Link
-                        href={`/b/${businessId}/purchases/goods-receipts/${String(row.id)}`}
-                        className="tabular font-medium text-primary hover:underline"
-                      >
-                        {String(row.receipt_number)}
-                      </Link>
-                    </td>
-                    <td>{String(row.supplier_name)}</td>
-                    <td>{formatDate(String(row.date))}</td>
-                    <td>{String(row.location_code)}</td>
-                    <td className="money text-right">
-                      {formatQuantityMicros(Number(row.quantity_micros))}
-                    </td>
-                    <td className="money text-right">
-                      {formatMoney(Number(row.value_minor), access.business.currency)}
-                    </td>
-                    <td>
-                      <StatusBadge status={String(row.document_status)} />
-                    </td>
-                    <td>
-                      <GoodsReceiptRowActions
-                        businessId={businessId}
-                        receiptId={String(row.id)}
-                        receiptNumber={String(row.receipt_number)}
-                        documentStatus={String(row.document_status)}
-                      />
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
+        <GoodsReceiptTable
+          businessId={businessId}
+          currency={access.business.currency}
+          rows={rows}
+          initialFrom={from}
+          initialTo={to}
+          serverSnapshot={columnSnapshots["goods-receipts"]}
+        />
       ) : (
         <EmptyState
           title="No goods receipts yet"
-          description="Receive against a Purchase Order or create a direct receipt."
+          description="Record a supplier receipt from a Purchase Order or directly."
           action={
             <Button permission="create" asChild>
-              <Link href={`/b/${businessId}/purchases/goods-receipts/new`}>
-                Create Goods Receipt
-              </Link>
+              <Link href={`/b/${businessId}/purchases/goods-receipts/new`}>Create Goods Receipt</Link>
             </Button>
           }
         />

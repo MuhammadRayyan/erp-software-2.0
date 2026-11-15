@@ -41,13 +41,11 @@ export default async function OrderListPage({
         </Button>
       </PageHeader>
       {orders.length ? (
-        <div className="data-panel overflow-hidden">
-          <SalesOrderTable
-            businessId={businessId}
-            orders={orders}
-            serverSnapshot={columnSnapshots["sales-orders"]}
-          />
-        </div>
+        <SalesOrderTable
+          businessId={businessId}
+          orders={orders}
+          serverSnapshot={columnSnapshots["sales-orders"]}
+        />
       ) : (
         <EmptyState
           icon={<ReceiptText className="mx-auto mb-3 size-7 text-muted-foreground" />}

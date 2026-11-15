@@ -6,6 +6,7 @@ import { ChevronRight, MoreHorizontal, Eye, FileEdit, ReceiptText, FileInput, Ba
 import { 
   useLegacyTable as useTable,
   getCoreRowModel as createCoreRowModel,
+  getPaginationRowModel as createPaginationRowModel,
   getSortedRowModel as createSortedRowModel
 } from "@tanstack/react-table/legacy";
 import { type SortingState } from "@tanstack/react-table";
@@ -13,8 +14,10 @@ import { ListToolbar, SearchInput, ToolbarSelect, DateRangeFilter, ActiveFilters
 import { Button } from "@/components/ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { useColumns } from "@/components/columns-dropdown";
-import { DataTable } from "@/components/ui/data-table";
-import { formatMoney } from "@/core/format";
+import { DataTable, ListTableCard } from "@/components/ui/data-table";
+import { ClientListPagination, useTablePagination } from "@/components/list-pagination";
+import { TableTotalsBar } from "@/components/table-totals-bar";
+import { formatDate, formatMoney } from "@/core/format";
 import type { ProjectListRow } from "./project-service";
 import { ProjectStatusBadge } from "./project-status";
 import { DensityToggle } from "@/components/density-toggle";
@@ -195,16 +198,21 @@ export function ProjectTable({
     [],
   );
 
+  const { pagination, onPaginationChange, paginationInfo, setPage, setPageSize } = useTablePagination(rows.length);
+
   const table = useTable({
     data: rows,
     columns,
     state: {
       sorting,
+      pagination,
       columnVisibility: colVisibility,
     },
     onSortingChange: setSorting,
+    onPaginationChange,
     getCoreRowModel: createCoreRowModel(),
     getSortedRowModel: createSortedRowModel(),
+    getPaginationRowModel: createPaginationRowModel(),
   });
 
   const clearFilters = () => {
@@ -217,23 +225,13 @@ export function ProjectTable({
   const hasActiveFilter = Boolean(customerId || status || query || fromDate || toDate);
   const statusLabel = (s: string) => s === "draft" ? "Draft" : s === "active" ? "Active" : s === "on_hold" ? "On Hold" : s === "completed" ? "Completed" : s === "cancelled" ? "Cancelled" : s;
 
+  const totalRevenue = useMemo(() => rows.reduce((sum, r) => sum + (r.revenueMinor ?? 0), 0), [rows]);
+  const totalCost = useMemo(() => rows.reduce((sum, r) => sum + (r.costMinor ?? 0), 0), [rows]);
+  const totalProfit = totalRevenue - totalCost;
+
   return <>
     <ListToolbar>
       <SearchInput value={query} onChange={setQuery} placeholder="Search projects…" ariaLabel="Search projects" />
-      <ToolbarSelect
-        value={status}
-        onChange={setStatus}
-        ariaLabel="Filter by project status"
-        className="min-w-32 max-w-44"
-        options={[
-          { value: "", label: "All statuses" },
-          { value: "draft", label: "Draft" },
-          { value: "active", label: "Active" },
-          { value: "on_hold", label: "On Hold" },
-          { value: "completed", label: "Completed" },
-          { value: "cancelled", label: "Cancelled" },
-        ]}
-      />
       <ToolbarSelect
         value={customerId}
         onChange={setCustomerId}
@@ -249,6 +247,20 @@ export function ProjectTable({
         fromAriaLabel="Project start date from"
         toAriaLabel="Project target end date to"
       />
+      <ToolbarSelect
+        value={status}
+        onChange={setStatus}
+        ariaLabel="Filter by project status"
+        className="min-w-32 max-w-44"
+        options={[
+          { value: "", label: "All statuses" },
+          { value: "draft", label: "Draft" },
+          { value: "active", label: "Active" },
+          { value: "on_hold", label: "On Hold" },
+          { value: "completed", label: "Completed" },
+          { value: "cancelled", label: "Cancelled" },
+        ]}
+      />
       <div className="ml-auto flex items-center gap-1.5 shrink-0">
         <DensityToggle businessId={businessId} />
         {dropdown}
@@ -261,18 +273,38 @@ export function ProjectTable({
             Customer: {customerOptions.find(([id]) => id === customerId)?.[1]}
           </FilterChip>
         )}
+        {fromDate && <FilterChip onRemove={() => setFromDate("")}>From: {formatDate(fromDate)}</FilterChip>}
+        {toDate && <FilterChip onRemove={() => setToDate("")}>To: {formatDate(toDate)}</FilterChip>}
         {status && <FilterChip onRemove={() => setStatus("")}>Status: {statusLabel(status)}</FilterChip>}
-        {fromDate && <FilterChip onRemove={() => setFromDate("")}>From: {fromDate}</FilterChip>}
-        {toDate && <FilterChip onRemove={() => setToDate("")}>To: {toDate}</FilterChip>}
         {query && <FilterChip onRemove={() => setQuery("")}>Search: {query}</FilterChip>}
       </ActiveFiltersRow>
     )}
-    <DataTable 
-      table={table}
-      density={density} 
-      minWidth="min-w-[860px]" 
-      noResultsMessage="No projects match these filters" 
-      onClearFilters={clearFilters}
-    />
+    <ListTableCard>
+      <DataTable 
+        table={table}
+        density={density}
+        framed={false}
+        minWidth="min-w-[860px]" 
+        noResultsMessage="No projects match these filters" 
+        onClearFilters={clearFilters}
+      />
+      {rows.length > 0 && (
+        <TableTotalsBar
+          filteredCount={rows.length}
+          totalCount={projects.length}
+          itemLabel="projects"
+          metrics={[
+            { label: "Revenue", value: formatMoney(totalRevenue, currency) },
+            { label: "Cost", value: formatMoney(totalCost, currency) },
+            { label: "Net Profit", value: formatMoney(totalProfit, currency), tone: totalProfit < 0 ? "danger" : "primary" },
+          ]}
+        />
+      )}
+      <ClientListPagination
+        info={paginationInfo}
+        onPageChange={setPage}
+        onPageSizeChange={setPageSize}
+      />
+    </ListTableCard>
   </>;
 }

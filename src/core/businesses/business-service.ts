@@ -11,7 +11,11 @@ import { getSystemDb } from "@/core/db/system";
 import { moduleKeys } from "@/core/permissions/module-access";
 import { businessInputSchema, type BusinessInput } from "./business-input";
 import { synchronizeBusinessBaseCurrency } from "@/modules/currency/exchange-rate";
-import { listInvoices } from "@/modules/sales-invoices/invoice-service";
+import {
+  SALES_ALLOCATED_BASE_EXPR,
+  SALES_ALLOCATED_CTE,
+  SALES_ALLOCATED_FOREIGN_EXPR,
+} from "@/modules/shared/list-query-helpers";
 
 export function listBusinessesForUser(
   userId: string,
@@ -274,16 +278,30 @@ export function getBusinessQuickKpis(businessId: string, userId: string): Busine
     let overdueCount = 0;
     let overdueMinor = 0;
     try {
-      const invList = listInvoices(businessId, userId).filter(
-        (inv) => inv.documentStatus === "posted" && inv.baseBalanceMinor > 0,
-      );
-      for (const inv of invList) {
-        outstandingReceivablesMinor += inv.baseBalanceMinor;
-        if (inv.paymentStatus === "overdue") {
-          overdueCount++;
-          overdueMinor += inv.baseBalanceMinor;
-        }
-      }
+      const todayUtc = new Date().toISOString().slice(0, 10);
+      const arRow = sqlite
+        .prepare(`
+          WITH ${SALES_ALLOCATED_CTE}
+          SELECT
+            COALESCE(SUM(i.base_total_minor - (${SALES_ALLOCATED_BASE_EXPR})), 0) AS outstanding_minor,
+            COALESCE(SUM(CASE
+              WHEN (i.total_minor - (${SALES_ALLOCATED_FOREIGN_EXPR})) > 0 AND i.due_date < @today
+              THEN 1 ELSE 0 END), 0) AS overdue_count,
+            COALESCE(SUM(CASE
+              WHEN (i.total_minor - (${SALES_ALLOCATED_FOREIGN_EXPR})) > 0 AND i.due_date < @today
+              THEN (i.base_total_minor - (${SALES_ALLOCATED_BASE_EXPR})) ELSE 0 END), 0) AS overdue_minor
+          FROM sales_invoices i
+          LEFT JOIN receipt_alloc ra ON ra.invoice_id = i.id
+          LEFT JOIN credit_alloc ca ON ca.invoice_id = i.id
+          WHERE i.document_status = 'posted'
+            AND (i.base_total_minor - (${SALES_ALLOCATED_BASE_EXPR})) > 0
+        `)
+        .get({ today: todayUtc }) as
+        | { outstanding_minor: number; overdue_count: number; overdue_minor: number }
+        | undefined;
+      outstandingReceivablesMinor = Number(arRow?.outstanding_minor ?? 0);
+      overdueCount = Number(arRow?.overdue_count ?? 0);
+      overdueMinor = Number(arRow?.overdue_minor ?? 0);
     } catch {
       // fallback
     }

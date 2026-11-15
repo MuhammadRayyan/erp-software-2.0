@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   AlertTriangle,
@@ -12,10 +12,23 @@ import {
   Plus,
   Send,
 } from "lucide-react";
+import {
+  useLegacyTable as useTable,
+  getCoreRowModel as createCoreRowModel,
+  getPaginationRowModel as createPaginationRowModel,
+  getSortedRowModel as createSortedRowModel,
+} from "@tanstack/react-table/legacy";
+import { type SortingState } from "@tanstack/react-table";
 import { toast } from "sonner";
 import { PageHeader } from "@/components/page-header";
-import { StatusBadge } from "@/components/status-badge";
+import { StatusBadge, statusLabel } from "@/components/status-badge";
 import { Button } from "@/components/ui/button";
+import { DataTable, ListTableCard } from "@/components/ui/data-table";
+import { useColumns } from "@/components/columns-dropdown";
+import { DensityToggle } from "@/components/density-toggle";
+import { useTableDensity } from "@/components/use-table-density";
+import { ClientListPagination, useTablePagination } from "@/components/list-pagination";
+import { TableTotalsBar } from "@/components/table-totals-bar";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { SelectNative } from "@/components/ui/select-native";
@@ -25,7 +38,7 @@ import {
   DialogTitle,
   DialogDescription,
 } from "@/components/ui/dialog";
-import { ListToolbar, SearchInput, ToolbarSelect } from "@/components/list-toolbar";
+import { ActiveFiltersRow, DateRangeFilter, FilterChip, ListToolbar, SearchInput, ToolbarSelect } from "@/components/list-toolbar";
 import { FormError } from "@/components/form-error";
 import { formatDate, formatMoney } from "@/core/format";
 import type { PdcMaturitySummary, PdcRecord } from "@/modules/banking/pdc-service";
@@ -47,6 +60,16 @@ interface PdcsClientProps {
   suppliers: { id: string; name: string }[];
 }
 
+const PDC_COLUMN_LABELS: Record<string, string> = {
+  direction: "Type",
+  chequeNumber: "Cheque #",
+  party: "Party",
+  bankAccountName: "Clearing Account",
+  maturityDate: "Maturity",
+  amountMinor: "Amount",
+  status: "Status",
+};
+
 export function PdcsClient({
   businessId,
   currency,
@@ -57,9 +80,13 @@ export function PdcsClient({
   suppliers,
 }: PdcsClientProps) {
   const router = useRouter();
+  const { density } = useTableDensity(businessId);
   const [query, setQuery] = useState("");
-  const [directionFilter, setDirectionFilter] = useState("all");
-  const [statusFilter, setStatusFilter] = useState("all");
+  const [directionFilter, setDirectionFilter] = useState("");
+  const [statusFilter, setStatusFilter] = useState("");
+  const [fromDate, setFromDate] = useState("");
+  const [toDate, setToDate] = useState("");
+  const [sorting, setSorting] = useState<SortingState>([]);
 
   const [createOpen, setCreateOpen] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -81,11 +108,33 @@ export function PdcsClient({
   const [bounceTarget, setBounceTarget] = useState<PdcRecord | null>(null);
   const [bounceReason, setBounceReason] = useState("");
 
+  const initialColumns = useMemo(
+    () => ({
+      direction: true,
+      chequeNumber: true,
+      party: true,
+      bankAccountName: true,
+      maturityDate: true,
+      amountMinor: true,
+      status: true,
+    }),
+    [],
+  );
+
+  const { columns: colVisibility, dropdown } = useColumns({
+    storageKey: "banking-pdcs",
+    businessId,
+    initial: initialColumns,
+    labels: PDC_COLUMN_LABELS,
+  });
+
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
     return initialPdcs.filter((pdc) => {
-      if (directionFilter !== "all" && pdc.direction !== directionFilter) return false;
-      if (statusFilter !== "all" && pdc.status !== statusFilter) return false;
+      if (directionFilter && pdc.direction !== directionFilter) return false;
+      if (statusFilter && pdc.status !== statusFilter) return false;
+      if (fromDate && pdc.maturityDate < fromDate) return false;
+      if (toDate && pdc.maturityDate > toDate) return false;
       if (!q) return true;
       return (
         pdc.pdcNumber.toLowerCase().includes(q) ||
@@ -95,7 +144,7 @@ export function PdcsClient({
         (pdc.chequeBankName?.toLowerCase().includes(q) ?? false)
       );
     });
-  }, [initialPdcs, query, directionFilter, statusFilter]);
+  }, [initialPdcs, query, directionFilter, statusFilter, fromDate, toDate]);
 
   async function handleCreate(e: React.FormEvent) {
     e.preventDefault();
@@ -128,26 +177,26 @@ export function PdcsClient({
     router.refresh();
   }
 
-  async function handleDeposit(pdc: PdcRecord) {
+  const handleDeposit = useCallback(async (pdc: PdcRecord) => {
     const res = await depositPdcAction(businessId, pdc.id);
     if (res.error) return toast.error(res.error);
     toast.success(`${pdc.pdcNumber} marked as deposited at bank.`);
     router.refresh();
-  }
+  }, [businessId, router]);
 
-  async function handleClear(pdc: PdcRecord) {
+  const handleClear = useCallback(async (pdc: PdcRecord) => {
     const res = await clearPdcAction(businessId, pdc.id);
     if (res.error) return toast.error(res.error);
     toast.success(`${pdc.pdcNumber} cleared and posted to bank GL.`);
     router.refresh();
-  }
+  }, [businessId, router]);
 
-  async function handleCancel(pdc: PdcRecord) {
+  const handleCancel = useCallback(async (pdc: PdcRecord) => {
     const res = await cancelPdcAction(businessId, pdc.id);
     if (res.error) return toast.error(res.error);
     toast.success(`${pdc.pdcNumber} cancelled and reversed.`);
     router.refresh();
-  }
+  }, [businessId, router]);
 
   async function handleConfirmBounce(e: React.FormEvent) {
     e.preventDefault();
@@ -161,6 +210,165 @@ export function PdcsClient({
     setBounceReason("");
     router.refresh();
   }
+
+  const columns: any[] = useMemo(
+    () => [
+      {
+        accessorKey: "pdcNumber",
+        header: "PDC #",
+        meta: { className: "font-mono text-xs font-semibold" },
+      },
+      {
+        accessorKey: "direction",
+        header: "Type",
+        cell: ({ row }: { row: { original: PdcRecord } }) => (
+          <span className="inline-flex items-center gap-1 text-xs font-medium">
+            {row.original.direction === "receivable" ? (
+              <>
+                <ArrowDownLeft className="size-3.5 text-success" /> Receivable
+              </>
+            ) : (
+              <>
+                <ArrowUpRight className="size-3.5 text-warning-foreground" /> Payable
+              </>
+            )}
+          </span>
+        ),
+      },
+      {
+        accessorKey: "chequeNumber",
+        header: "Cheque # / Issuing Bank",
+        cell: ({ row }: { row: { original: PdcRecord } }) => (
+          <div>
+            <div className="font-medium">{row.original.chequeNumber}</div>
+            {row.original.chequeBankName && (
+              <div className="text-xs text-muted-foreground">{row.original.chequeBankName}</div>
+            )}
+          </div>
+        ),
+      },
+      {
+        id: "party",
+        header: "Party",
+        accessorFn: (r: PdcRecord) => r.customerName || r.supplierName || "—",
+      },
+      {
+        accessorKey: "bankAccountName",
+        header: "Clearing Account",
+        meta: { className: "text-xs text-muted-foreground" },
+      },
+      {
+        accessorKey: "maturityDate",
+        header: "Maturity",
+        cell: ({ row }: { row: { original: PdcRecord } }) => {
+          const pdc = row.original;
+          const isOverdue = (pdc.status === "held" || pdc.status === "deposited") && pdc.maturityDate < today;
+          return (
+            <div>
+              <div className={isOverdue ? "font-medium text-danger" : ""}>{formatDate(pdc.maturityDate)}</div>
+              {isOverdue && <span className="text-[11px] text-danger">Matured / Overdue</span>}
+            </div>
+          );
+        },
+      },
+      {
+        accessorKey: "amountMinor",
+        header: "Amount",
+        meta: { numeric: true },
+        cell: ({ row }: { row: { original: PdcRecord } }) => (
+          <span className="money font-medium">{formatMoney(row.original.amountMinor, row.original.currencyCode)}</span>
+        ),
+      },
+      {
+        accessorKey: "status",
+        header: "Status",
+        cell: ({ row }: { row: { original: PdcRecord } }) => {
+          const pdc = row.original;
+          return (
+            <div>
+              <StatusBadge status={pdc.status} />
+              {pdc.bounceReason && (
+                <div className="mt-1 text-[11px] text-danger max-w-[180px] truncate" title={pdc.bounceReason}>
+                  {pdc.bounceReason}
+                </div>
+              )}
+            </div>
+          );
+        },
+      },
+      {
+        id: "actions",
+        header: () => <span className="block text-right">Actions</span>,
+        enableSorting: false,
+        enableHiding: false,
+        meta: { className: "text-right" },
+        cell: ({ row }: { row: { original: PdcRecord } }) => {
+          const pdc = row.original;
+          return (
+            <div className="inline-flex items-center gap-1.5">
+              {pdc.status === "held" && (
+                <Button permission="edit" size="sm" variant="secondary" onClick={() => handleDeposit(pdc)} title="Mark cheque deposited at bank">
+                  <Send className="size-3.5" /> Deposit
+                </Button>
+              )}
+              {(pdc.status === "held" || pdc.status === "deposited") && (
+                <>
+                  <Button permission="approve" size="sm" onClick={() => handleClear(pdc)} title="Clear cheque to bank ledger">
+                    <CheckCircle2 className="size-3.5" /> Clear
+                  </Button>
+                  <Button
+                    permission="approve"
+                    size="sm"
+                    variant="secondary"
+                    onClick={() => {
+                      setBounceTarget(pdc);
+                      setBounceReason("");
+                    }}
+                    title="Record cheque bounced"
+                  >
+                    <AlertTriangle className="size-3.5 text-danger" /> Bounce
+                  </Button>
+                </>
+              )}
+              {pdc.status === "held" && (
+                <Button permission="edit" size="sm" variant="ghost" onClick={() => handleCancel(pdc)} title="Cancel held cheque">
+                  <Ban className="size-3.5" />
+                </Button>
+              )}
+            </div>
+          );
+        },
+      },
+    ],
+    [handleCancel, handleClear, handleDeposit, today],
+  );
+
+  const { pagination, onPaginationChange, paginationInfo, setPage, setPageSize } = useTablePagination(filtered.length);
+
+  const table = useTable({
+    data: filtered,
+    columns,
+    state: { sorting, pagination, columnVisibility: colVisibility },
+    onSortingChange: setSorting,
+    onPaginationChange,
+    getCoreRowModel: createCoreRowModel(),
+    getSortedRowModel: createSortedRowModel(),
+    getPaginationRowModel: createPaginationRowModel(),
+  });
+
+  const clearFilters = () => {
+    setQuery("");
+    setDirectionFilter("");
+    setStatusFilter("");
+    setFromDate("");
+    setToDate("");
+  };
+  const hasActiveFilter = Boolean(query || directionFilter || statusFilter || fromDate || toDate);
+
+  const totalPdcMinor = useMemo(
+    () => filtered.filter((p) => p.status !== "cancelled").reduce((sum, p) => sum + p.amountMinor, 0),
+    [filtered],
+  );
 
   return (
     <div className="page-container space-y-6">
@@ -211,7 +419,7 @@ export function PdcsClient({
         <SearchInput
           value={query}
           onChange={setQuery}
-          placeholder="Search PDC #, cheque #, party, issuing bank..."
+          placeholder="Search PDC #, cheque #, party, bank..."
           ariaLabel="Search PDCs"
         />
         <ToolbarSelect
@@ -219,17 +427,25 @@ export function PdcsClient({
           onChange={setDirectionFilter}
           ariaLabel="Filter by direction"
           options={[
-            { value: "all", label: "All Directions" },
+            { value: "", label: "All directions" },
             { value: "receivable", label: "Receivable (Customer)" },
             { value: "payable", label: "Payable (Supplier)" },
           ]}
+        />
+        <DateRangeFilter
+          fromDate={fromDate}
+          toDate={toDate}
+          onFromChange={setFromDate}
+          onToChange={setToDate}
+          fromAriaLabel="Maturity date from"
+          toAriaLabel="Maturity date to"
         />
         <ToolbarSelect
           value={statusFilter}
           onChange={setStatusFilter}
           ariaLabel="Filter by status"
           options={[
-            { value: "all", label: "All Statuses" },
+            { value: "", label: "All statuses" },
             { value: "held", label: "Held" },
             { value: "deposited", label: "Deposited" },
             { value: "cleared", label: "Cleared" },
@@ -237,132 +453,60 @@ export function PdcsClient({
             { value: "cancelled", label: "Cancelled" },
           ]}
         />
+        <div className="ml-auto flex items-center gap-2">
+          <DensityToggle businessId={businessId} />
+          {dropdown}
+        </div>
       </ListToolbar>
 
-      <div className="data-panel overflow-x-auto">
-        <table className="data-table min-w-[980px]">
-          <thead>
-            <tr>
-              <th>PDC #</th>
-              <th>Type</th>
-              <th>Cheque # / Issuing Bank</th>
-              <th>Party</th>
-              <th>Clearing Account</th>
-              <th>Maturity</th>
-              <th className="text-right!">Amount</th>
-              <th>Status</th>
-              <th className="text-right!">Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            {filtered.length > 0 ? (
-              filtered.map((pdc) => {
-                const isOverdue =
-                  (pdc.status === "held" || pdc.status === "deposited") && pdc.maturityDate < today;
-                return (
-                  <tr key={pdc.id}>
-                    <td className="font-mono text-xs font-semibold">{pdc.pdcNumber}</td>
-                    <td>
-                      <span className="inline-flex items-center gap-1 text-xs font-medium">
-                        {pdc.direction === "receivable" ? (
-                          <>
-                            <ArrowDownLeft className="size-3.5 text-success" /> Receivable
-                          </>
-                        ) : (
-                          <>
-                            <ArrowUpRight className="size-3.5 text-warning-foreground" /> Payable
-                          </>
-                        )}
-                      </span>
-                    </td>
-                    <td>
-                      <div className="font-medium">{pdc.chequeNumber}</div>
-                      {pdc.chequeBankName && (
-                        <div className="text-xs text-muted-foreground">{pdc.chequeBankName}</div>
-                      )}
-                    </td>
-                    <td>{pdc.customerName || pdc.supplierName || "—"}</td>
-                    <td className="text-xs text-muted-foreground">{pdc.bankAccountName}</td>
-                    <td>
-                      <div className={isOverdue ? "font-medium text-danger" : ""}>
-                        {formatDate(pdc.maturityDate)}
-                      </div>
-                      {isOverdue && <span className="text-[11px] text-danger">Matured / Overdue</span>}
-                    </td>
-                    <td className="money text-right font-medium">
-                      {formatMoney(pdc.amountMinor, pdc.currencyCode)}
-                    </td>
-                    <td>
-                      <StatusBadge status={pdc.status} />
-                      {pdc.bounceReason && (
-                        <div className="mt-1 text-[11px] text-danger max-w-[180px] truncate" title={pdc.bounceReason}>
-                          {pdc.bounceReason}
-                        </div>
-                      )}
-                    </td>
-                    <td className="text-right">
-                      <div className="inline-flex items-center gap-1.5">
-                        {pdc.status === "held" && (
-                          <Button
-                            permission="edit"
-                            size="sm"
-                            variant="secondary"
-                            onClick={() => handleDeposit(pdc)}
-                            title="Mark cheque deposited at bank"
-                          >
-                            <Send className="size-3.5" /> Deposit
-                          </Button>
-                        )}
-                        {(pdc.status === "held" || pdc.status === "deposited") && (
-                          <>
-                            <Button
-                              permission="approve"
-                              size="sm"
-                              onClick={() => handleClear(pdc)}
-                              title="Clear cheque to bank ledger"
-                            >
-                              <CheckCircle2 className="size-3.5" /> Clear
-                            </Button>
-                            <Button
-                              permission="approve"
-                              size="sm"
-                              variant="secondary"
-                              onClick={() => {
-                                setBounceTarget(pdc);
-                                setBounceReason("");
-                              }}
-                              title="Record cheque bounced"
-                            >
-                              <AlertTriangle className="size-3.5 text-danger" /> Bounce
-                            </Button>
-                          </>
-                        )}
-                        {pdc.status === "held" && (
-                          <Button
-                            permission="edit"
-                            size="sm"
-                            variant="ghost"
-                            onClick={() => handleCancel(pdc)}
-                            title="Cancel held cheque"
-                          >
-                            <Ban className="size-3.5" />
-                          </Button>
-                        )}
-                      </div>
-                    </td>
-                  </tr>
-                );
-              })
-            ) : (
-              <tr>
-                <td colSpan={9} className="py-10 text-center text-muted-foreground">
-                  No post-dated cheques recorded yet.
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
-      </div>
+      {hasActiveFilter && (
+        <ActiveFiltersRow onClearAll={clearFilters}>
+          {query && <FilterChip onRemove={() => setQuery("")}>Search: {query}</FilterChip>}
+          {directionFilter && (
+            <FilterChip onRemove={() => setDirectionFilter("")}>
+              Direction: {directionFilter === "receivable" ? "Receivable" : "Payable"}
+            </FilterChip>
+          )}
+          {fromDate && <FilterChip onRemove={() => setFromDate("")}>From: {fromDate}</FilterChip>}
+          {toDate && <FilterChip onRemove={() => setToDate("")}>To: {toDate}</FilterChip>}
+          {statusFilter && (
+            <FilterChip onRemove={() => setStatusFilter("")}>
+              Status: {statusLabel(statusFilter)}
+            </FilterChip>
+          )}
+        </ActiveFiltersRow>
+      )}
+
+      <ListTableCard>
+        <DataTable
+          table={table}
+          density={density}
+          framed={false}
+          minWidth="min-w-[980px]"
+          noResultsMessage={initialPdcs.length === 0 ? "No post-dated cheques recorded yet." : "No post-dated cheques match"}
+          noResultsSubtext={initialPdcs.length === 0 ? "Register a cheque to start tracking maturity and clearing." : "Try adjusting your search or filter criteria."}
+          onClearFilters={hasActiveFilter ? clearFilters : undefined}
+        />
+        {filtered.length > 0 && (
+          <TableTotalsBar
+            filteredCount={filtered.length}
+            totalCount={initialPdcs.length}
+            itemLabel="cheques"
+            metrics={[
+              {
+                label: "Total Active Face Value",
+                value: formatMoney(totalPdcMinor, currency),
+                tone: "primary",
+              },
+            ]}
+          />
+        )}
+        <ClientListPagination
+          info={paginationInfo}
+          onPageChange={setPage}
+          onPageSizeChange={setPageSize}
+        />
+      </ListTableCard>
 
       <DialogRoot open={createOpen} onOpenChange={setCreateOpen}>
         <DialogContent className="max-w-xl max-h-[90vh] overflow-y-auto">

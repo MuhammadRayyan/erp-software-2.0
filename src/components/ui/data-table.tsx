@@ -1,8 +1,19 @@
 
 "use client";
 
+import type { ReactNode } from "react";
 import { flexRender } from "@tanstack/react-table";
 import { ArrowDown, ArrowUp, ChevronsUpDown, Search } from "lucide-react";
+import { cn } from "@/lib/cn";
+
+/** Outer bordered card wrapping `<DataTable framed={false} />`, `<TableTotalsBar />`, and `<ListPagination />`. */
+export function ListTableCard({ children, className }: { children: ReactNode; className?: string }) {
+  return (
+    <div className={cn("overflow-hidden rounded-[8px] border border-border bg-surface-raised", className)}>
+      {children}
+    </div>
+  );
+}
 
 interface DataTableProps {
   table: any;
@@ -10,6 +21,7 @@ interface DataTableProps {
   density?: "compact" | "default" | "comfortable";
   pinFirstColumn?: boolean;
   maxHeight?: string;
+  framed?: boolean;
   noResultsMessage?: string;
   noResultsSubtext?: string;
   onClearFilters?: () => void;
@@ -21,6 +33,7 @@ export function DataTable({
   density = "default",
   pinFirstColumn = false,
   maxHeight,
+  framed = true,
   noResultsMessage = "No results found",
   noResultsSubtext = "Try adjusting your filters.",
   onClearFilters,
@@ -29,7 +42,13 @@ export function DataTable({
 
   if (rows.length === 0) {
     return (
-      <div className="rounded-lg border border-border bg-surface-raised py-12 px-4 text-center">
+      <div
+        className={
+          framed
+            ? "rounded-lg border border-border bg-surface-raised py-12 px-4 text-center"
+            : "bg-surface-raised py-12 px-4 text-center"
+        }
+      >
         <div className="mx-auto mb-3 flex size-11 items-center justify-center rounded-full bg-surface-muted text-muted-foreground">
           <Search className="size-5" />
         </div>
@@ -50,8 +69,8 @@ export function DataTable({
 
   return (
     <div 
-      className="data-panel" 
-      style={{ ...(maxHeight ? { "--table-max-height": maxHeight } as any : {}) }}
+      className={framed ? "data-panel" : "overflow-x-auto overflow-y-auto"} 
+      style={{ ...(maxHeight ? (framed ? { "--table-max-height": maxHeight } : { maxHeight }) as any : {}) }}
     >
       <table className={`data-table ${minWidth}`} data-density={density}>
         <thead>
@@ -64,7 +83,7 @@ export function DataTable({
                 
                 const isSticky = pinFirstColumn && index === 0;
                 let classes = meta?.className || "";
-                if (meta?.numeric) classes += " col-numeric";
+                if (meta?.numeric) classes += " col-numeric whitespace-nowrap min-w-[118px]";
                 if (meta?.wrap) classes += " col-wrap";
                 else classes += " truncate";
                 if (isSticky) classes += " sticky-col";
@@ -103,7 +122,7 @@ export function DataTable({
                 
                 const isSticky = pinFirstColumn && index === 0;
                 let classes = meta?.className || "";
-                if (meta?.numeric) classes += " col-numeric";
+                if (meta?.numeric) classes += " col-numeric whitespace-nowrap min-w-[118px]";
                 if (meta?.wrap) classes += " col-wrap";
                 else classes += " truncate";
                 if (isSticky) classes += " sticky-col";

@@ -1,12 +1,12 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { FormError } from "@/components/form-error";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { LoaderCircle } from "lucide-react";
-import { useFieldArray, useForm, useWatch } from "react-hook-form";
+import { Controller, useFieldArray, useForm, useWatch } from "react-hook-form";
 import { Button } from "@/components/ui/button";
+import { Combobox, type ComboboxOption } from "@/components/ui/combobox";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
@@ -16,10 +16,16 @@ import { purchaseQuoteInputSchema, type PurchaseQuoteInput } from "./purchase-qu
 import type { PurchaseQuoteStatus } from "./purchase-quote-service";
 import { DocumentCurrencyFields, type DocumentCurrencyOption, type DocumentRateOption } from "@/modules/currency/document-currency-fields";
 import { DocumentFormFooter } from "@/components/document-form-footer";
-import { SelectNative } from "@/components/ui/select-native";
-import { DocumentLineTable, useDocumentTotals } from "@/components/documents";
+import {
+  DocumentColumnToggles,
+  DocumentLineTable,
+  DocumentWorkspaceLayout,
+  IsolatedDocumentTotals,
+  useDocumentColumnVisibility,
+} from "@/components/documents";
 import { broadcastLiveRefresh } from "@/components/use-live-refresh";
 import { useUnsavedChanges } from "@/hooks/use-unsaved-changes";
+import { useActionPermission } from "@/components/permissions-provider";
 import type { CustomFieldInputDefinition } from "@/modules/custom-fields/custom-field-inputs";
 
 type Option = { id: string; name: string; defaultCurrencyCode: string | null };
@@ -58,6 +64,7 @@ export function PurchaseQuoteForm({
   lineCustomFields?: CustomFieldInputDefinition[];
 }) {
   const router = useRouter();
+  const canApprove = useActionPermission("approve");
   const [serverError, setServerError] = useState("");
   const [globalTaxCodeId, setGlobalTaxCodeId] = useState(
     () => initial.lines[0]?.taxCodeId || taxCodes.find((taxCode) => taxCode.rateBasisPoints === 500)?.id || taxCodes[0]?.id || "",
@@ -74,12 +81,15 @@ export function PurchaseQuoteForm({
     handleSubmit,
     setError,
     setValue,
+    getValues,
     formState: { errors, isSubmitting, isDirty, isSubmitSuccessful },
   } = form;
   useUnsavedChanges(isDirty && !isSubmitSuccessful);
   const { fields, append, remove, insert, move } = useFieldArray({ control, name: "lines" });
+  const colVis = useDocumentColumnVisibility({ lineTaxCodes: false, lines: initial.lines });
+
   function duplicateLine(index: number) {
-    const currentLine = form.getValues(`lines.${index}`);
+    const currentLine = getValues(`lines.${index}`);
     insert(index + 1, { ...currentLine });
   }
   function moveLineUp(index: number) {
@@ -88,40 +98,52 @@ export function PurchaseQuoteForm({
   function moveLineDown(index: number) {
     if (index < fields.length - 1) move(index, index + 1);
   }
+
   const currencyCode = useWatch({ control, name: "currencyCode" }) || currency;
   const exchangeRateToBase = useWatch({ control, name: "exchangeRateToBase" }) || "";
   const exchangeRateDate = useWatch({ control, name: "exchangeRateDate" }) || "";
   const exchangeRateSource = useWatch({ control, name: "exchangeRateSource" }) || "";
   const quoteDate = useWatch({ control, name: "date" }) || "";
   const minorUnit = currencies.find((entry) => entry.code === currencyCode)?.minorUnit ?? 2;
-  const totals = useDocumentTotals<PurchaseQuoteInput>({
-    control,
-    taxCodes,
-    minorUnit,
-  });
-  const lines = totals.lines;
+  const baseMinorUnit = currencies.find((entry) => entry.code === currency)?.minorUnit ?? 2;
   const defaultExpense = expenseAccounts[0]?.id ?? "";
 
+  const supplierOptions = useMemo<ComboboxOption[]>(
+    () => suppliers.map((s) => ({ value: s.id, label: s.name })),
+    [suppliers],
+  );
+  const projectOptions = useMemo<ComboboxOption[]>(
+    () => projects.map((p) => ({ value: p.id, label: `${p.code} — ${p.name}`, keywords: [p.code, p.name] })),
+    [projects],
+  );
+  const taxOptions = useMemo<ComboboxOption[]>(
+    () => taxCodes.map((t) => ({ value: t.id, label: t.name })),
+    [taxCodes],
+  );
+
   function updateGlobalTax(newTaxId: string) {
+    if (!newTaxId) return;
     setGlobalTaxCodeId(newTaxId);
-    lines.forEach((_, i) => form.setValue(`lines.${i}.taxCodeId`, newTaxId));
+    const currentLines = getValues("lines") ?? [];
+    currentLines.forEach((_, i) => setValue(`lines.${i}.taxCodeId`, newTaxId, { shouldDirty: true, shouldTouch: true }));
   }
 
   function selectItem(index: number, itemId: string) {
     const item = items.find((i) => i.id === itemId);
     if (!item) {
-      form.setValue(`lines.${index}.expenseAccountId`, defaultExpense);
+      setValue(`lines.${index}.expenseAccountId`, defaultExpense, { shouldDirty: true });
       return;
     }
-    form.setValue(`lines.${index}.description`, item.name);
+    setValue(`lines.${index}.description`, item.name, { shouldDirty: true, shouldTouch: true });
     if (item.purchasePriceMinor != null) {
-      form.setValue(
+      setValue(
         `lines.${index}.unitPrice`,
         minorToCurrencyInput(item.purchasePriceMinor, minorUnit),
+        { shouldDirty: true, shouldTouch: true },
       );
     }
     if (item.inventoryAssetAccountId) {
-      form.setValue(`lines.${index}.expenseAccountId`, item.inventoryAssetAccountId);
+      setValue(`lines.${index}.expenseAccountId`, item.inventoryAssetAccountId, { shouldDirty: true });
     }
   }
 
@@ -140,56 +162,60 @@ export function PurchaseQuoteForm({
   const cancelHref = quoteId ? `/b/${businessId}/purchases/quotes/${quoteId}` : `/b/${businessId}/purchases/quotes`;
 
   return (
-    <form className="space-y-5 max-w-none" noValidate>
-      {serverError && <FormError message={serverError} />}
-      <section className="form-section">
-        <div className="flex items-center justify-between">
-          <h2 className="text-base font-semibold">Quote details</h2>
-          <span className="text-xs text-muted-foreground font-medium bg-muted/60 px-2 py-0.5 rounded border border-border/50">
-            Quote # Auto-allocated on save
-          </span>
-        </div>
-        <p className="mt-1 text-sm text-muted-foreground">
-          Purchase quotes (RFQs) are operational supplier documents and never affect the ledger.
-        </p>
-        <div className="mt-5 grid gap-5 md:grid-cols-3">
+    <DocumentWorkspaceLayout
+      serverError={serverError}
+      headerTitle="Quote details"
+      headerSubtitle="Purchase quotes (RFQs) are operational supplier documents and never affect the ledger."
+      headerBadge={
+        <span className="text-xs text-muted-foreground font-medium bg-muted/60 px-2 py-0.5 rounded border border-border/50">
+          Quote # Auto-allocated on save
+        </span>
+      }
+      header={
+        <div className="grid gap-4 md:grid-cols-3">
           <div className="space-y-1.5">
             <Label htmlFor="supplierId">Supplier</Label>
-            <SelectNative
-              id="supplierId"
-              {...register("supplierId", {
-                onChange: (event) => {
-                  if (status === "draft") {
-                    const code = suppliers.find((s) => s.id === event.target.value)?.defaultCurrencyCode ?? currency;
-                    setValue("currencyCode", code);
-                    setValue("exchangeRateToBase", code === currency ? "1" : "");
-                    setValue("exchangeRateDate", code === currency ? quoteDate : "");
-                    setValue("exchangeRateSource", code === currency ? "Base" : "");
-                  }
-                },
-              })}
-              aria-invalid={!!errors.supplierId}
-            >
-              <option value="">Choose a supplier…</option>
-              {suppliers.map((supplier) => (
-                <option key={supplier.id} value={supplier.id}>
-                  {supplier.name}
-                </option>
-              ))}
-            </SelectNative>
+            <Controller
+              control={control}
+              name="supplierId"
+              render={({ field }) => (
+                <Combobox
+                  id="supplierId"
+                  ariaLabel="Supplier"
+                  ariaInvalid={!!errors.supplierId}
+                  options={supplierOptions}
+                  value={field.value ?? ""}
+                  onValueChange={(next) => {
+                    field.onChange(next);
+                    if (status === "draft" && next) {
+                      const code = suppliers.find((s) => s.id === next)?.defaultCurrencyCode ?? currency;
+                      setValue("currencyCode", code);
+                      setValue("exchangeRateToBase", code === currency ? "1" : "");
+                      setValue("exchangeRateDate", code === currency ? quoteDate : "");
+                      setValue("exchangeRateSource", code === currency ? "Base" : "");
+                    }
+                  }}
+                  placeholder="Choose a supplier…"
+                  searchPlaceholder="Search supplier..."
+                />
+              )}
+            />
             {errors.supplierId && <p className="field-error">{errors.supplierId.message}</p>}
           </div>
+
           <div className="space-y-1.5">
             <Label htmlFor="date">Quote date</Label>
             <Input id="date" type="date" {...register("date")} aria-invalid={!!errors.date} />
             {errors.date && <p className="field-error">{errors.date.message}</p>}
           </div>
+
           <div className="space-y-1.5">
             <Label htmlFor="expiryDate">
               Expiry date <span className="font-normal text-muted-foreground">(optional)</span>
             </Label>
             <Input id="expiryDate" type="date" {...register("expiryDate")} />
           </div>
+
           <DocumentCurrencyFields
             baseCurrencyCode={currency}
             currencies={currencies}
@@ -202,76 +228,63 @@ export function PurchaseQuoteForm({
             disabled={status === "sent"}
             onChange={(field, value) => setValue(field, value)}
           />
+
           <div className="space-y-1.5">
             <Label htmlFor="projectId">
               Project <span className="font-normal text-muted-foreground">(optional)</span>
             </Label>
-            <SelectNative id="projectId" {...register("projectId")}>
-              <option value="">No project</option>
-              {projects.map((project) => (
-                <option key={project.id} value={project.id}>
-                  {project.code} — {project.name}
-                </option>
-              ))}
-            </SelectNative>
+            <Controller
+              control={control}
+              name="projectId"
+              render={({ field }) => (
+                <Combobox
+                  id="projectId"
+                  ariaLabel="Project"
+                  options={projectOptions}
+                  value={field.value ?? ""}
+                  onValueChange={field.onChange}
+                  allowClear
+                  clearLabel="No project"
+                  placeholder="No project"
+                  searchPlaceholder="Search project..."
+                />
+              )}
+            />
           </div>
-          <div className="space-y-1.5">
+
+          <div className="space-y-1.5 md:col-span-2">
             <Label htmlFor="reference">
               Supplier RFQ / Reference <span className="font-normal text-muted-foreground">(optional)</span>
             </Label>
             <Input id="reference" {...register("reference")} />
           </div>
-          <div className="space-y-1.5 md:col-span-3 grid md:grid-cols-2 gap-5">
-            <div className="space-y-1.5">
-              <Label htmlFor="notes">
-                Notes <span className="font-normal text-muted-foreground">(optional)</span>
-              </Label>
-              <Textarea id="notes" rows={2} placeholder="Notes..." {...register("notes")} />
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="terms">
-                Terms & conditions <span className="font-normal text-muted-foreground">(optional)</span>
-              </Label>
-              <Textarea id="terms" rows={2} placeholder="Supplier terms and delivery conditions..." {...register("terms")} />
-            </div>
-          </div>
         </div>
-      </section>
-
-      <section className="form-section">
-        <div className="mb-3 flex flex-wrap items-end justify-between gap-3">
-          <div>
-            <h2 className="text-base font-semibold">Line items</h2>
-            <p className="mt-1 text-sm text-muted-foreground">
-              Select an inventory item or enter free-text service details.
-            </p>
-          </div>
-          <div className="flex items-center gap-2">
-            <Label htmlFor="globalTax" className="text-sm font-medium">
-              Default Tax:
-            </Label>
-            <SelectNative
+      }
+      linesTitle="Line items"
+      linesSubtitle="Select an inventory item or enter free-text service details."
+      linesActions={
+        <div className="flex items-center gap-2">
+          <Label htmlFor="globalTax" className="text-sm font-medium whitespace-nowrap">Default Tax:</Label>
+          <div className="w-44">
+            <Combobox
               id="globalTax"
-              className="w-40"
+              options={taxOptions}
               value={globalTaxCodeId}
-              onChange={(e) => updateGlobalTax(e.target.value)}
-            >
-              {taxCodes.map((taxCode) => (
-                <option key={taxCode.id} value={taxCode.id}>
-                  {taxCode.name}
-                </option>
-              ))}
-            </SelectNative>
+              onValueChange={updateGlobalTax}
+              size="sm"
+              placeholder="Default Tax"
+              searchPlaceholder="Search tax..."
+            />
           </div>
         </div>
-
+      }
+      lines={
         <DocumentLineTable
           register={register}
           control={control}
-          setValue={form.setValue}
+          setValue={setValue}
           errors={errors}
           fields={fields}
-          lines={lines}
           onAppend={(custom) =>
             append({
               itemId: "",
@@ -296,46 +309,80 @@ export function PurchaseQuoteForm({
           accounts={expenseAccounts}
           accountFieldName="expenseAccountId"
           accountAriaLabel="expense account"
-          initialShowLineTaxCodes={false}
           taxCodes={taxCodes}
           projects={projects}
           lineCustomFields={lineCustomFields}
           currencyCode={currencyCode}
           minorUnit={minorUnit}
-          previews={totals.previews}
-          amountsIncludeTax={totals.amountsIncludeTax}
-          registerAmountsIncludeTax={register("amountsIncludeTax")}
-          subtotalMinor={totals.subtotalMinor}
-          taxMinor={totals.taxMinor}
-          totalMinor={totals.totalMinor}
+          showTotalsSection={false}
+          {...colVis.tableProps}
         />
-      </section>
+      }
+      bottomLeft={
+        <>
+          <DocumentColumnToggles
+            {...colVis.togglesProps}
+            control={control}
+            showAmountsIncludeTaxToggle
+            className="max-w-none"
+          />
 
-      <DocumentFormFooter
-        onCancel={() => router.push(cancelHref)}
-        status={status}
-        totals={{
-          subtotalMinor: totals.subtotalMinor,
-          taxMinor: totals.taxMinor,
-          totalMinor: totals.totalMinor,
-          currencyCode,
-          minorUnit,
-        }}
-      >
-        {status === "sent" ? (
-          <Button permission={["save", "approve"]} type="button" disabled={isSubmitting} onClick={handleSubmit((values) => save(values, "issue"))}>
-            {isSubmitting && <LoaderCircle className="size-4 animate-spin" />} Save Changes
-          </Button>
-        ) : (
-          <Button permission={"save"}
-            type="button"
-            disabled={isSubmitting}
-            onClick={handleSubmit((values) => save(values, "draft"))}
-          >
-            {isSubmitting && <LoaderCircle className="size-4 animate-spin" />} {quoteId ? "Save Draft" : "Save Draft Quote"}
-          </Button>
-        )}
-      </DocumentFormFooter>
-    </form>
+          <div className="form-section grid gap-4 sm:grid-cols-2">
+            <div className="space-y-1.5">
+              <Label htmlFor="notes">
+                Notes <span className="font-normal text-muted-foreground">(optional)</span>
+              </Label>
+              <Textarea id="notes" rows={2} placeholder="Notes..." {...register("notes")} />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="terms">
+                Terms &amp; conditions <span className="font-normal text-muted-foreground">(optional)</span>
+              </Label>
+              <Textarea id="terms" rows={2} placeholder="Supplier terms and delivery conditions..." {...register("terms")} />
+            </div>
+          </div>
+        </>
+      }
+      bottomRight={
+        <IsolatedDocumentTotals
+          control={control}
+          taxCodes={taxCodes}
+          currencyCode={currencyCode}
+          minorUnit={minorUnit}
+          baseCurrencyCode={currency}
+          baseMinorUnit={baseMinorUnit}
+          exchangeRateToBase={exchangeRateToBase}
+        />
+      }
+      footer={
+        <DocumentFormFooter
+          onCancel={() => router.push(cancelHref)}
+          status={status}
+          liveTotals={{
+            control,
+            taxCodes,
+            currencyCode,
+            minorUnit,
+          }}
+        >
+          {status === "sent" ? (
+            <Button permission={["save", "approve"]} type="button" disabled={isSubmitting} onClick={handleSubmit((values) => save(values, "issue"))}>
+              {isSubmitting && <LoaderCircle className="size-4 animate-spin" />} Save Changes
+            </Button>
+          ) : (
+            <div className="flex flex-wrap items-center gap-2">
+              <Button permission={"save"} variant={canApprove ? "secondary" : "primary"} type="button" disabled={isSubmitting} onClick={handleSubmit((values) => save(values, "draft"))}>
+                {isSubmitting && <LoaderCircle className="size-4 animate-spin" />} {quoteId ? "Save Draft" : "Save Draft Quote"}
+              </Button>
+              {canApprove && (
+                <Button permission={["save", "approve"]} type="button" disabled={isSubmitting} onClick={handleSubmit((values) => save(values, "issue"))}>
+                  {isSubmitting && <LoaderCircle className="size-4 animate-spin" />} Save &amp; Issue
+                </Button>
+              )}
+            </div>
+          )}
+        </DocumentFormFooter>
+      }
+    />
   );
 }

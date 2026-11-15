@@ -24,6 +24,8 @@
   --color-warning-foreground: var(--warning-foreground);
   --color-danger: var(--danger);
   --color-danger-foreground: var(--danger-foreground);
+  --color-destructive: var(--danger);
+  --color-destructive-foreground: var(--danger-foreground);
   --color-info: var(--info);
   --color-info-foreground: var(--info-foreground);
   --color-ring: var(--ring);
@@ -98,6 +100,7 @@ html {
   overflow-x: clip;
   background: var(--background);
   scrollbar-gutter: stable;
+  font-size: calc(16px * var(--text-scale, 1));
 }
 
 /* Custom sleek, unobtrusive scrollbars */
@@ -145,7 +148,7 @@ body {
   background: var(--background);
   color: var(--foreground);
   font-family: var(--font-base, var(--font-inter));
-  font-size: calc(14px * var(--text-scale, 1));
+  font-size: 0.875rem;
   text-rendering: optimizeLegibility;
 }
 
@@ -177,59 +180,67 @@ button, a { -webkit-tap-highlight-color: transparent; }
 
 
 
-.data-panel { 
-  overflow-y: auto; 
-  overflow-x: auto; 
-  max-height: var(--table-max-height, 100%); 
-  border: 1px solid var(--border); 
-  border-radius: 8px; 
-  background: var(--surface-raised); 
+.data-panel {
+  overflow-y: auto;
+  overflow-x: auto;
+  max-height: var(--table-max-height, 100%);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface-raised);
 }
-.data-table { width: 100%; border-collapse: collapse; font-size: 13.5px; }
-.data-table th { 
-  padding: 0 12px; 
-  background: var(--surface); 
-  color: var(--muted-foreground); 
-  font-size: 12px; 
-  font-weight: 600; 
-  text-align: left; 
-  border-bottom: 1px solid var(--border-strong); 
-  position: sticky; 
-  top: 0; 
-  z-index: 1; 
+.data-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.data-table th {
+  padding: 0 10px;
+  background: var(--surface);
+  color: var(--muted-foreground);
+  font-size: 11.5px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  text-align: left;
+  border-bottom: 1px solid var(--border-strong);
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  height: 34px;
 }
-.data-table td { 
-  border-top: 1px solid var(--border); 
-  padding: 0 12px; 
+.data-table td {
+  border-top: 1px solid var(--border);
+  padding: 0 10px;
 }
 /* Density overrides: table-level, container-level, and root-level */
-:root[data-table-density="compact"] .data-table td,
 :root[data-table-density="compact"] .data-table th,
-[data-density="compact"] .data-table td,
 [data-density="compact"] .data-table th,
-.data-table[data-density="compact"] td,
 .data-table[data-density="compact"] th {
-  height: 40px;
+  height: 32px;
+}
+:root[data-table-density="compact"] .data-table td,
+[data-density="compact"] .data-table td,
+.data-table[data-density="compact"] td {
+  height: 32px;
 }
 
-:root[data-table-density="default"] .data-table td,
 :root[data-table-density="default"] .data-table th,
-[data-density="default"] .data-table td,
 [data-density="default"] .data-table th,
+.data-table[data-density="default"] th {
+  height: 34px;
+}
+:root[data-table-density="default"] .data-table td,
+[data-density="default"] .data-table td,
 .data-table[data-density="default"] td,
-.data-table[data-density="default"] th,
-.data-table td,
-.data-table th {
-  height: 48px; /* default fallback */
+.data-table td {
+  height: 38px; /* crisp ERP default */
 }
 
-:root[data-table-density="comfortable"] .data-table td,
 :root[data-table-density="comfortable"] .data-table th,
-[data-density="comfortable"] .data-table td,
 [data-density="comfortable"] .data-table th,
-.data-table[data-density="comfortable"] td,
 .data-table[data-density="comfortable"] th {
-  height: 56px;
+  height: 34px;
+}
+:root[data-table-density="comfortable"] .data-table td,
+[data-density="comfortable"] .data-table td,
+.data-table[data-density="comfortable"] td {
+  height: 44px;
+  padding: 0 12px;
 }
 
 /* Numeric and wrap utilities handled via Tailwind classes in DataTable, but adding these just in case */
@@ -252,15 +263,15 @@ button, a { -webkit-tap-highlight-color: transparent; }
 
 /* Sticky first column (seamless without harsh vertical divider) */
 .data-table th.sticky-col {
-  position: sticky; 
-  left: 0; 
+  position: sticky;
+  left: 0;
   z-index: 3; /* above other headers */
   background: var(--surface);
 }
 .data-table td.sticky-col {
-  position: sticky; 
-  left: 0; 
-  z-index: 2; 
+  position: sticky;
+  left: 0;
+  z-index: 2;
   background: var(--surface-raised);
 }
 
@@ -275,10 +286,12 @@ button, a { -webkit-tap-highlight-color: transparent; }
 .data-table tbody tr:focus-within .row-actions { opacity: 1; }
 
 @media (max-width: 767px) {
-  .page-container { padding: 18px 16px 32px; }
-  .page-header { align-items: center; margin-bottom: 18px; }
-  .page-title { font-size: 21px; }
-  .data-table th, .data-table td { height: 46px; }
+  .page-container { padding: 16px 14px 28px; }
+  .page-header { align-items: center; margin-bottom: 16px; }
+  .page-title { font-size: 20px; }
+  .data-table th { height: 34px; }
+  .data-table td { height: 40px; }
+  .form-section { padding: 14px 16px; }
 }
 
 @media (max-width: 479px) {
@@ -293,13 +306,13 @@ button, a { -webkit-tap-highlight-color: transparent; }
   border: 1px solid var(--border);
   border-radius: 10px;
   background: var(--surface-raised);
-  padding: 24px 28px;
+  padding: 16px 20px;
 }
 
-input[aria-invalid="true"], select[aria-invalid="true"] {
+input[aria-invalid="true"], select[aria-invalid="true"], button[role="combobox"][aria-invalid="true"] {
   border-color: var(--danger) !important;
 }
-input[aria-invalid="true"]:focus, select[aria-invalid="true"]:focus {
+input[aria-invalid="true"]:focus, select[aria-invalid="true"]:focus, button[role="combobox"][aria-invalid="true"]:focus-visible {
   --ring-color: color-mix(in srgb, var(--danger) 25%, transparent) !important;
   box-shadow: 0 0 0 2px var(--ring-color) !important;
 }
@@ -325,12 +338,12 @@ input[aria-invalid="true"]:focus, select[aria-invalid="true"]:focus {
   color: var(--muted-foreground);
   transition: all 150ms ease;
   border-radius: 8px;
-  height: 44px;
+  height: 38px;
   display: flex;
   align-items: center;
   justify-content: center;
   gap: 8px;
-  font-size: 13.5px;
+  font-size: 13px;
   font-weight: 500;
 }
 .dashed-add-button:hover {
@@ -343,24 +356,25 @@ input[aria-invalid="true"]:focus, select[aria-invalid="true"]:focus {
 .line-item-table {
   width: 100%;
   border-collapse: separate;
-  border-spacing: 0 6px;
-  font-size: 13.5px;
+  border-spacing: 0 4px;
+  font-size: 13px;
 }
 .line-item-table th {
   font-weight: 600;
   color: var(--muted-foreground);
   text-align: left;
-  padding: 0 8px 4px;
+  padding: 2px 6px 4px;
   white-space: nowrap;
   border: none;
   background: transparent;
-  font-size: 11.5px;
+  font-size: 11px;
   text-transform: uppercase;
   letter-spacing: 0.03em;
+  height: 32px;
 }
 .line-item-table td {
   background: var(--surface-raised);
-  padding: 7px 8px;
+  padding: 5px 6px;
   border-top: 1px solid var(--border);
   border-bottom: 1px solid var(--border);
   vertical-align: top;
@@ -386,8 +400,14 @@ input[aria-invalid="true"]:focus, select[aria-invalid="true"]:focus {
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
 }
 .line-item-table input,
-.line-item-table select {
+.line-item-table select,
+.line-item-table button[role="combobox"] {
   min-width: 0;
+}
+.line-item-table input:not([type="checkbox"]),
+.line-item-table select {
+  height: 32px;
+  font-size: 13px;
 }
 
 @media print {

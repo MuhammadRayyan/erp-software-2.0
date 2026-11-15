@@ -1,11 +1,12 @@
 "use client";
 
+import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { SelectNative } from "@/components/ui/select-native";
 import type { CustomFieldFieldType } from "./custom-field-input";
 
-// Definition shape rendered inside the customer/supplier forms.
+// Definition shape rendered inside the customer/supplier/document forms.
 export type CustomFieldInputDefinition = {
   id: string;
   name: string;
@@ -21,7 +22,6 @@ export function CustomFieldInputs({
   values,
   onChange,
   className,
-  checkboxClassName = "size-4 accent-[var(--primary)]",
 }: {
   definitions: CustomFieldInputDefinition[];
   values: Record<string, string>;
@@ -30,20 +30,21 @@ export function CustomFieldInputs({
   checkboxClassName?: string;
 }) {
   return (
-    <div className={className ?? "mt-5 grid gap-5 sm:grid-cols-2"}>
+    <div className={className ?? "mt-4 grid gap-4 sm:grid-cols-2"}>
       {definitions.map((definition) => {
         const value = values[definition.id] ?? "";
         if (definition.fieldType === "checkbox") {
           return (
             <div className="space-y-1.5" key={definition.id}>
-              <label className="flex items-center gap-2 text-sm font-medium leading-none">
-                <input
-                  type="checkbox"
-                  className={checkboxClassName}
+              <label className="flex min-h-9 cursor-pointer items-center gap-2 text-sm font-medium leading-none">
+                <Checkbox
+                  id={`custom-field-${definition.id}`}
                   checked={value === "true"}
-                  onChange={(event) => onChange(definition.id, event.target.checked ? "true" : "false")}
+                  onCheckedChange={(checked) =>
+                    onChange(definition.id, Boolean(checked) ? "true" : "false")
+                  }
                 />
-                {definition.name}
+                <span>{definition.name}</span>
               </label>
             </div>
           );
@@ -52,7 +53,9 @@ export function CustomFieldInputs({
           <div className="space-y-1.5" key={definition.id}>
             <Label htmlFor={`custom-field-${definition.id}`}>
               {definition.name}
-              {!definition.isRequired && <span className="font-normal text-muted-foreground"> (optional)</span>}
+              {!definition.isRequired && (
+                <span className="font-normal text-muted-foreground"> (optional)</span>
+              )}
             </Label>
             {definition.fieldType === "select" ? (
               <SelectNative
@@ -62,7 +65,9 @@ export function CustomFieldInputs({
               >
                 <option value=""></option>
                 {definition.selectOptions.map((option) => (
-                  <option key={option} value={option}>{option}</option>
+                  <option key={option} value={option}>
+                    {option}
+                  </option>
                 ))}
               </SelectNative>
             ) : (

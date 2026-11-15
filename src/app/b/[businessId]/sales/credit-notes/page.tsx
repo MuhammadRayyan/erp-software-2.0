@@ -35,9 +35,7 @@ export default async function CreditNotesPage({
         </Button>
       </PageHeader>
       {notes.length ? (
-        <div className="data-panel overflow-hidden">
-          <CreditNoteTable businessId={businessId} creditNotes={notes} />
-        </div>
+        <CreditNoteTable businessId={businessId} creditNotes={notes} initialFrom={from} initialTo={to} />
       ) : (
         <EmptyState
           icon={<FileMinus2 className="mx-auto mb-3 size-7 text-muted-foreground" />}

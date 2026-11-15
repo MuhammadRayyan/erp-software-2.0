@@ -605,6 +605,8 @@ export const receipts = sqliteTable(
   (table) => [
     uniqueIndex("receipt_number_idx").on(table.receiptNumber),
     index("receipt_customer_idx").on(table.customerId),
+    index("receipt_date_idx").on(table.date),
+    index("receipt_status_date_idx").on(table.documentStatus, table.date),
   ],
 );
 
@@ -801,6 +803,8 @@ export const supplierPayments = sqliteTable(
   (table) => [
     uniqueIndex("supplier_payment_number_idx").on(table.paymentNumber),
     index("supplier_payment_supplier_idx").on(table.supplierId),
+    index("supplier_payment_date_idx").on(table.date),
+    index("supplier_payment_status_date_idx").on(table.documentStatus, table.date),
   ],
 );
 
@@ -874,6 +878,8 @@ export const salesCreditNotes = sqliteTable(
     index("sales_credit_note_customer_idx").on(table.customerId),
     index("sales_credit_note_invoice_idx").on(table.sourceInvoiceId),
     index("sales_credit_note_project_idx").on(table.projectId),
+    index("sales_credit_note_date_idx").on(table.date),
+    index("sales_credit_note_status_date_idx").on(table.documentStatus, table.date),
   ],
 );
 

@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { DialogContent, DialogDescription, DialogRoot, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -97,8 +98,24 @@ export function TaxCodeManager({
             <div className="grid gap-4 sm:grid-cols-2"><div className="space-y-1.5"><Label htmlFor="tax-direction">Direction</Label><SelectNative id="tax-direction"  value={values.direction} onChange={(event) => setValues((current) => ({ ...current, direction: event.target.value as TaxDirection }))}><option value="sales">Sales</option><option value="purchases">Purchases</option><option value="both">Both</option></SelectNative></div><div className="space-y-1.5"><Label htmlFor="vat-category">VAT category</Label><SelectNative id="vat-category"  value={values.vatCategory} onChange={(event) => setValues((current) => ({ ...current, vatCategory: event.target.value as VatCategory }))}><option value="standard">Standard</option><option value="zero_rated">Zero Rated</option><option value="exempt">Exempt</option><option value="out_of_scope">Out of Scope</option><option value="reverse_charge">Reverse Charge</option><option value="import">Import</option></SelectNative></div></div>
             <div className="space-y-1.5"><Label htmlFor="tax-account">Sales tax account</Label><SelectNative id="tax-account"  value={values.salesTaxAccountId} onChange={(event) => setValues((current) => ({ ...current, salesTaxAccountId: event.target.value }))}><option value="">Not required for 0%</option>{liabilityAccounts.map((account) => <option key={account.id} value={account.id}>{account.name}</option>)}</SelectNative></div>
             <div className="space-y-1.5"><Label htmlFor="purchase-tax-account">Purchase tax account</Label><SelectNative id="purchase-tax-account"  value={values.purchaseTaxAccountId} onChange={(event) => setValues((current) => ({ ...current, purchaseTaxAccountId: event.target.value }))}><option value="">Not required for 0%</option>{assetAccounts.map((account) => <option key={account.id} value={account.id}>{account.name}</option>)}</SelectNative></div>
-            <label className="flex min-h-9 items-center gap-2 text-sm"><input type="checkbox" checked={values.isRecoverable} onChange={(event) => setValues((current) => ({ ...current, isRecoverable: event.target.checked }))} className="size-4 accent-[var(--primary)]" /> Recoverable Input VAT</label>
-            <label className="flex min-h-9 items-center gap-2 text-sm"><input type="checkbox" checked={values.isActive} onChange={(event) => setValues((current) => ({ ...current, isActive: event.target.checked }))} className="size-4 accent-[var(--primary)]" /> Active tax code</label>
+            <label className="flex min-h-9 cursor-pointer items-center gap-2 text-sm">
+              <Checkbox
+                checked={values.isRecoverable}
+                onCheckedChange={(checked) =>
+                  setValues((current) => ({ ...current, isRecoverable: Boolean(checked) }))
+                }
+              />
+              <span>Recoverable Input VAT</span>
+            </label>
+            <label className="flex min-h-9 cursor-pointer items-center gap-2 text-sm">
+              <Checkbox
+                checked={values.isActive}
+                onCheckedChange={(checked) =>
+                  setValues((current) => ({ ...current, isActive: Boolean(checked) }))
+                }
+              />
+              <span>Active tax code</span>
+            </label>
           </div>
           {serverError && <FormError message={serverError} />}
           <div className="mt-5 flex justify-end gap-2"><Button variant="ghost" onClick={() => setEditing(undefined)}>Cancel</Button><Button permission={"save"} onClick={save} disabled={pending}>{editing ? "Save changes" : "Create tax code"}</Button></div>

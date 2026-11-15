@@ -6,15 +6,17 @@ import { ChevronRight, MoreHorizontal, Eye, FileEdit, Download, ShoppingCart } f
 import { 
   useLegacyTable as useTable,
   getCoreRowModel as createCoreRowModel,
+  getPaginationRowModel as createPaginationRowModel,
   getSortedRowModel as createSortedRowModel
 } from "@tanstack/react-table/legacy";
 import { type SortingState } from "@tanstack/react-table";
 import { StatusBadge, statusLabel } from "@/components/status-badge";
-import { ListToolbar, SearchInput, ToolbarSelect, ActiveFiltersRow, FilterChip } from "@/components/list-toolbar";
+import { ListToolbar, SearchInput, ToolbarSelect, DateRangeFilter, ActiveFiltersRow, FilterChip } from "@/components/list-toolbar";
 import { Button } from "@/components/ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { useColumns } from "@/components/columns-dropdown";
-import { DataTable } from "@/components/ui/data-table";
+import { DataTable, ListTableCard } from "@/components/ui/data-table";
+import { ClientListPagination, useTablePagination } from "@/components/list-pagination";
 import { formatDate, formatMoney } from "@/core/format";
 import type { PurchaseQuoteStatus } from "./purchase-quote-service";
 import { DensityToggle } from "@/components/density-toggle";
@@ -60,6 +62,8 @@ export function PurchaseQuoteTable({
   const [status, setStatus] = useState("");
   const [supplierId, setSupplierId] = useState("");
   const [projectId, setProjectId] = useState("");
+  const [fromDate, setFromDate] = useState("");
+  const [toDate, setToDate] = useState("");
   const [sorting, setSorting] = useState<SortingState>([]);
 
   const supplierOptions = useMemo(
@@ -102,11 +106,13 @@ export function PurchaseQuoteTable({
             (!status || quote.documentStatus === status) &&
             (!supplierId || quote.supplier_id === supplierId) &&
             (!projectId || quote.projectIds.includes(projectId)) &&
+            (!fromDate || quote.date >= fromDate) &&
+            (!toDate || quote.date <= toDate) &&
             matchesQuery
           );
         })
         .map((quote) => ({ ...quote, businessId })),
-    [quotes, projectId, query, status, supplierId, businessId],
+    [quotes, projectId, query, status, supplierId, fromDate, toDate, businessId],
   );
 
   const columns: any[] = useMemo(
@@ -220,16 +226,21 @@ export function PurchaseQuoteTable({
     [],
   );
 
+  const { pagination, onPaginationChange, paginationInfo, setPage, setPageSize } = useTablePagination(rows.length);
+
   const table = useTable({
     data: rows,
     columns,
     state: {
       sorting,
+      pagination,
       columnVisibility: colVisibility,
     },
     onSortingChange: setSorting,
+    onPaginationChange,
     getCoreRowModel: createCoreRowModel(),
     getSortedRowModel: createSortedRowModel(),
+    getPaginationRowModel: createPaginationRowModel(),
   });
 
   const clearFilters = () => {
@@ -237,9 +248,11 @@ export function PurchaseQuoteTable({
     setStatus("");
     setSupplierId("");
     setProjectId("");
+    setFromDate("");
+    setToDate("");
   };
 
-  const hasActiveFilter = Boolean(supplierId || projectId || status || query);
+  const hasActiveFilter = Boolean(supplierId || projectId || fromDate || toDate || status || query);
 
   const totalQuoteValueStr = useMemo(() => {
     const activeRows = (status === "cancelled" || status === "rejected")
@@ -281,6 +294,14 @@ export function PurchaseQuoteTable({
           className="min-w-36 max-w-52"
           options={[{ value: "", label: "All projects" }, ...projectOptions.map(([id, name]) => ({ value: id, label: name }))]}
         />
+        <DateRangeFilter
+          fromDate={fromDate}
+          toDate={toDate}
+          onFromChange={setFromDate}
+          onToChange={setToDate}
+          fromAriaLabel="Quote date from"
+          toAriaLabel="Quote date to"
+        />
         <ToolbarSelect
           value={status}
           onChange={setStatus}
@@ -312,31 +333,41 @@ export function PurchaseQuoteTable({
               Project: {projectOptions.find(([id]) => id === projectId)?.[1]}
             </FilterChip>
           )}
+          {fromDate && <FilterChip onRemove={() => setFromDate("")}>From: {formatDate(fromDate)}</FilterChip>}
+          {toDate && <FilterChip onRemove={() => setToDate("")}>To: {formatDate(toDate)}</FilterChip>}
           {status && <FilterChip onRemove={() => setStatus("")}>Status: {statusLabel(status)}</FilterChip>}
           {query && <FilterChip onRemove={() => setQuery("")}>Search: {query}</FilterChip>}
         </ActiveFiltersRow>
       )}
-      <DataTable
-        table={table}
-        density={density}
-        minWidth="min-w-[780px]"
-        noResultsMessage="No purchase quotes match"
-        onClearFilters={clearFilters}
-      />
-
-      {rows.length > 0 && (
-        <TableTotalsBar
-          filteredCount={rows.length}
-          totalCount={quotes.length}
-          itemLabel="quotes"
-          metrics={[
-            { label: "Total Quoted Value", value: totalQuoteValueStr, tone: "primary" },
-            ...(acceptedCount > 0
-              ? [{ label: "Accepted", value: `${acceptedCount} quotes`, tone: "success" as const }]
-              : []),
-          ]}
+      <ListTableCard>
+        <DataTable
+          table={table}
+          density={density}
+          framed={false}
+          minWidth="min-w-[780px]"
+          noResultsMessage="No purchase quotes match"
+          onClearFilters={clearFilters}
         />
-      )}
+
+        {rows.length > 0 && (
+          <TableTotalsBar
+            filteredCount={rows.length}
+            totalCount={quotes.length}
+            itemLabel="quotes"
+            metrics={[
+              { label: "Total Quoted Value", value: totalQuoteValueStr, tone: "primary" },
+              ...(acceptedCount > 0
+                ? [{ label: "Accepted", value: `${acceptedCount} quotes`, tone: "success" as const }]
+                : []),
+            ]}
+          />
+        )}
+        <ClientListPagination
+          info={paginationInfo}
+          onPageChange={setPage}
+          onPageSizeChange={setPageSize}
+        />
+      </ListTableCard>
     </>
   );
 }

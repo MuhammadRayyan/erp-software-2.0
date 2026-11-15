@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { Printer, Download, FileText, Layers } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { DocumentPaperSheet } from "./document-paper-sheet";
 import type { DocumentTemplateData, DocumentTemplateVariant } from "../types";
 import type { TemplateSettings } from "../template-settings";
@@ -37,39 +38,24 @@ export function DocumentViewLayout({
   return (
     <div className="w-full space-y-4">
       {/* View Switcher Bar */}
-      <div className="flex flex-wrap items-center justify-between gap-3 no-print border-b border-border pb-3">
-        <div role="tablist" aria-label="Document view modes" className="flex items-center gap-1.5 p-1 rounded-lg bg-surface-muted border border-border">
-          <button
-            type="button"
-            role="tab"
-            aria-selected={activeTab === "document"}
-            onClick={() => setActiveTab("document")}
-            className={`flex items-center gap-2 px-3 py-1.5 rounded-md text-xs font-semibold transition-all ${
-              activeTab === "document"
-                ? "bg-surface-raised text-foreground shadow-sm"
-                : "text-muted-foreground hover:text-foreground"
-            }`}
-          >
-            <FileText className="size-3.5" />
-            <span>Document View (Paper)</span>
-          </button>
-          {children && (
-            <button
-              type="button"
-              role="tab"
-              aria-selected={activeTab === "operations"}
-              onClick={() => setActiveTab("operations")}
-              className={`flex items-center gap-2 px-3 py-1.5 rounded-md text-xs font-semibold transition-all ${
-                activeTab === "operations"
-                  ? "bg-surface-raised text-foreground shadow-sm"
-                  : "text-muted-foreground hover:text-foreground"
-              }`}
-            >
-              <Layers className="size-3.5" />
-              <span>Operational & Ledger</span>
-            </button>
-          )}
-        </div>
+      <div className="no-print flex flex-wrap items-center justify-between gap-3 border-b border-border pb-3">
+        <Tabs
+          value={activeTab}
+          onValueChange={(next) => setActiveTab(next === "operations" ? "operations" : "document")}
+        >
+          <TabsList aria-label="Document view modes">
+            <TabsTrigger value="document" className="gap-2">
+              <FileText className="size-3.5" />
+              <span>Document View (Paper)</span>
+            </TabsTrigger>
+            {children && (
+              <TabsTrigger value="operations" className="gap-2">
+                <Layers className="size-3.5" />
+                <span>Operational & Ledger</span>
+              </TabsTrigger>
+            )}
+          </TabsList>
+        </Tabs>
 
         {activeTab === "document" && (
           <div className="flex items-center gap-2">

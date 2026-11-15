@@ -5,19 +5,20 @@ import Link from "next/link";
 import { useState } from "react";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Columns3, LoaderCircle, Plus, Trash2 } from "lucide-react";
-import { useFieldArray, useForm } from "react-hook-form";
+import { Controller, useFieldArray, useForm } from "react-hook-form";
 import { Button } from "@/components/ui/button";
+import { Combobox } from "@/components/ui/combobox";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { minorToCurrencyInput } from "@/modules/currency/conversion";
 import { saveGoodsReceiptAction } from "./goods-receipt-actions";
+import { useUnsavedChanges } from "@/hooks/use-unsaved-changes";
 import {
   goodsReceiptInputSchema,
   type GoodsReceiptInput,
 } from "./goods-receipt-input";
 import type { InventoryDocumentStatus } from "./inventory-document";
-import { SelectNative } from "@/components/ui/select-native";
 
 type ItemOption = {
   id: string;
@@ -71,8 +72,9 @@ export function GoodsReceiptForm({
     setError,
     setValue,
     control,
-    formState: { errors, isSubmitting },
+    formState: { errors, isSubmitting, isDirty, isSubmitSuccessful },
   } = form;
+  useUnsavedChanges(isDirty && !isSubmitSuccessful);
   const { fields, append, remove } = useFieldArray({ control, name: "lines" });
 
   async function save(values: GoodsReceiptInput, intent: "draft" | "post") {
@@ -94,10 +96,11 @@ export function GoodsReceiptForm({
   function selectItem(index: number, itemId: string) {
     const item = items.find((entry) => entry.id === itemId);
     if (!item) return;
-    setValue(`lines.${index}.description`, item.name);
+    setValue(`lines.${index}.description`, item.name, { shouldDirty: true, shouldTouch: true });
     setValue(
       `lines.${index}.unitCost`,
       minorToCurrencyInput(item.purchasePriceMinor ?? 0, baseMinorUnit),
+      { shouldDirty: true, shouldTouch: true },
     );
   }
 
@@ -114,12 +117,24 @@ export function GoodsReceiptForm({
         <div className="mt-5 grid gap-5 md:grid-cols-3">
           <div className="space-y-1.5">
             <Label htmlFor="supplierId">Supplier</Label>
-            <SelectNative id="supplierId"  {...register("supplierId")}>
-              <option value="">Choose a supplier…</option>
-              {suppliers.map((supplier) => (
-                <option key={supplier.id} value={supplier.id}>{supplier.name}</option>
-              ))}
-            </SelectNative>
+            <Controller
+              control={control}
+              name="supplierId"
+              render={({ field }) => (
+                <Combobox
+                  id="supplierId"
+                  options={suppliers.map((supplier) => ({ value: supplier.id, label: supplier.name }))}
+                  value={field.value ?? ""}
+                  onValueChange={field.onChange}
+                  allowClear
+                  clearLabel="No supplier"
+                  placeholder="Choose a supplier…"
+                  searchPlaceholder="Search suppliers…"
+                  emptyText="No suppliers found."
+                  ariaInvalid={!!errors.supplierId}
+                />
+              )}
+            />
             {errors.supplierId && <p className="field-error">{errors.supplierId.message}</p>}
           </div>
           <div className="space-y-1.5">
@@ -128,46 +143,93 @@ export function GoodsReceiptForm({
           </div>
           <div className="space-y-1.5">
             <Label htmlFor="locationId">Location</Label>
-            <SelectNative id="locationId"  {...register("locationId")}>
-              {locations.map((location) => (
-                <option key={location.id} value={location.id}>
-                  {location.code} — {location.name}
-                </option>
-              ))}
-            </SelectNative>
+            <Controller
+              control={control}
+              name="locationId"
+              render={({ field }) => (
+                <Combobox
+                  id="locationId"
+                  options={locations.map((location) => ({
+                    value: location.id,
+                    label: `${location.code} — ${location.name}`,
+                  }))}
+                  value={field.value ?? ""}
+                  onValueChange={field.onChange}
+                  placeholder="Choose location…"
+                  searchPlaceholder="Search locations…"
+                  emptyText="No locations found."
+                />
+              )}
+            />
           </div>
           <div className="space-y-1.5">
             <Label htmlFor="purchaseOrderId">
               Purchase Order <span className="font-normal text-muted-foreground">(optional)</span>
             </Label>
-            <SelectNative id="purchaseOrderId"  {...register("purchaseOrderId")}>
-              <option value="">No linked order</option>
-              {orders.map((order) => (
-                <option key={order.id} value={order.id}>{order.number}</option>
-              ))}
-            </SelectNative>
+            <Controller
+              control={control}
+              name="purchaseOrderId"
+              render={({ field }) => (
+                <Combobox
+                  id="purchaseOrderId"
+                  options={orders.map((order) => ({ value: order.id, label: order.number }))}
+                  value={field.value ?? ""}
+                  onValueChange={field.onChange}
+                  allowClear
+                  clearLabel="No linked order"
+                  placeholder="No linked order"
+                  searchPlaceholder="Search orders…"
+                  emptyText="No purchase orders found."
+                />
+              )}
+            />
           </div>
           <div className="space-y-1.5">
             <Label htmlFor="purchaseInvoiceId">
               Purchase Invoice <span className="font-normal text-muted-foreground">(optional)</span>
             </Label>
-            <SelectNative id="purchaseInvoiceId"  {...register("purchaseInvoiceId")}>
-              <option value="">No linked invoice</option>
-              {invoices.map((invoice) => (
-                <option key={invoice.id} value={invoice.id}>{invoice.number}</option>
-              ))}
-            </SelectNative>
+            <Controller
+              control={control}
+              name="purchaseInvoiceId"
+              render={({ field }) => (
+                <Combobox
+                  id="purchaseInvoiceId"
+                  options={invoices.map((invoice) => ({ value: invoice.id, label: invoice.number }))}
+                  value={field.value ?? ""}
+                  onValueChange={field.onChange}
+                  allowClear
+                  clearLabel="No linked invoice"
+                  placeholder="No linked invoice"
+                  searchPlaceholder="Search invoices…"
+                  emptyText="No purchase invoices found."
+                />
+              )}
+            />
           </div>
           <div className="space-y-1.5">
             <Label htmlFor="projectId">
               Project <span className="font-normal text-muted-foreground">(optional)</span>
             </Label>
-            <SelectNative id="projectId"  {...register("projectId")}>
-              <option value="">No project</option>
-              {projects.map((project) => (
-                <option key={project.id} value={project.id}>{project.code} — {project.name}</option>
-              ))}
-            </SelectNative>
+            <Controller
+              control={control}
+              name="projectId"
+              render={({ field }) => (
+                <Combobox
+                  id="projectId"
+                  options={projects.map((project) => ({
+                    value: project.id,
+                    label: `${project.code} — ${project.name}`,
+                  }))}
+                  value={field.value ?? ""}
+                  onValueChange={field.onChange}
+                  allowClear
+                  clearLabel="No project"
+                  placeholder="No project"
+                  searchPlaceholder="Search projects…"
+                  emptyText="No projects found."
+                />
+              )}
+            />
           </div>
           <div className="space-y-1.5">
             <Label htmlFor="reference">
@@ -231,20 +293,30 @@ export function GoodsReceiptForm({
               {fields.map((field, index) => (
                 <tr key={field.id} className="hover:bg-transparent!">
                   <td>
-                    <SelectNative
-                      
-                      aria-label={`Line ${index + 1} item`}
-                      {...register(`lines.${index}.itemId`, {
-                        onChange: (event) => selectItem(index, event.target.value),
-                      })}
-                    >
-                      <option value="">Choose item…</option>
-                      {items.map((item) => (
-                        <option key={item.id} value={item.id}>
-                          {item.sku ? `${item.sku} — ` : ""}{item.name}
-                        </option>
-                      ))}
-                    </SelectNative>
+                    <Controller
+                      control={control}
+                      name={`lines.${index}.itemId`}
+                      render={({ field: itemField }) => (
+                        <Combobox
+                          size="sm"
+                          ariaLabel={`Line ${index + 1} item`}
+                          options={items.map((item) => ({
+                            value: item.id,
+                            label: `${item.sku ? `${item.sku} — ` : ""}${item.name}`,
+                          }))}
+                          value={itemField.value ?? ""}
+                          onValueChange={(next) => {
+                            itemField.onChange(next);
+                            selectItem(index, next);
+                          }}
+                          allowClear
+                          clearLabel="Clear item"
+                          placeholder="Choose item…"
+                          searchPlaceholder="Search items…"
+                          emptyText="No items found."
+                        />
+                      )}
+                    />
                     <input type="hidden" {...register(`lines.${index}.purchaseOrderLineId`)} />
                     <input type="hidden" {...register(`lines.${index}.purchaseInvoiceLineId`)} />
                   </td>
@@ -253,12 +325,27 @@ export function GoodsReceiptForm({
                   <td><Input aria-label={`Line ${index + 1} unit cost`} className="money text-right" type="number" min="0" step="0.01" {...register(`lines.${index}.unitCost`)} /></td>
                   {showProjects && (
                     <td>
-                      <SelectNative  {...register(`lines.${index}.projectId`)}>
-                        <option value="">Use document Project</option>
-                        {projects.map((project) => (
-                          <option key={project.id} value={project.id}>{project.code} — {project.name}</option>
-                        ))}
-                      </SelectNative>
+                      <Controller
+                        control={control}
+                        name={`lines.${index}.projectId`}
+                        render={({ field: projField }) => (
+                          <Combobox
+                            size="sm"
+                            ariaLabel={`Line ${index + 1} project`}
+                            options={projects.map((project) => ({
+                              value: project.id,
+                              label: `${project.code} — ${project.name}`,
+                            }))}
+                            value={projField.value ?? ""}
+                            onValueChange={projField.onChange}
+                            allowClear
+                            clearLabel="Use document Project"
+                            placeholder="Use document Project"
+                            searchPlaceholder="Search projects…"
+                            emptyText="No projects found."
+                          />
+                        )}
+                      />
                     </td>
                   )}
                   <td>

@@ -1,4 +1,3 @@
-import { PageHeader } from "@/components/page-header";
 import { requireModule } from "@/core/permissions/require-module";
 import { listPayslips, listEmployees } from "@/modules/payroll/services/payroll-service";
 import { PayslipsClient } from "./payslips-client";
@@ -19,11 +18,7 @@ export default async function PayslipsPage({
   const employees = listEmployees(businessId, user.id);
 
   return (
-    <div className="page-container space-y-6">
-      <PageHeader
-        title="Payslips"
-        description="Employee wage slips, earnings breakdowns, deductions, and General Ledger posting."
-      />
+    <div className="page-container">
       <PayslipsClient
         businessId={businessId}
         payslips={payslips}

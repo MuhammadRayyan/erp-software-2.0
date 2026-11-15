@@ -34,6 +34,8 @@ export interface DocumentGridRowProps<TLine = any> {
   removeLine: (index: number) => void;
   moveLineUp?: (index: number) => void;
   moveLineDown?: (index: number) => void;
+  virtualIndex?: number;
+  measureRef?: (node: HTMLTableRowElement | null) => void;
 }
 
 function DocumentGridRowInner<TLine = any>({
@@ -56,20 +58,32 @@ function DocumentGridRowInner<TLine = any>({
   removeLine,
   moveLineUp,
   moveLineDown,
+  virtualIndex,
+  measureRef,
 }: DocumentGridRowProps<TLine>) {
-  // Row-level subscription: only this row re-renders when its own fields change!
+  // Row-level subscription: only this row re-renders when its own fields or tax mode change!
   const watchedLine = useWatch({
     control,
     name: `lines.${index}` as any,
   });
+  const watchedAmountsIncludeTax = useWatch({
+    control,
+    name: "amountsIncludeTax" as any,
+  });
+
+  const effectiveAmountsIncludeTax = Boolean(
+    control && watchedAmountsIncludeTax !== undefined
+      ? watchedAmountsIncludeTax
+      : amountsIncludeTax
+  );
 
   const line = useMemo((): TLine => {
     return (watchedLine ?? fallbackLine ?? {}) as TLine;
   }, [watchedLine, fallbackLine]);
 
   const calculatedPreview = useMemo(() => {
-    return previewDocumentLine(line as any, taxCodes, minorUnit, amountsIncludeTax);
-  }, [line, taxCodes, minorUnit, amountsIncludeTax]);
+    return previewDocumentLine(line as any, taxCodes, minorUnit, effectiveAmountsIncludeTax);
+  }, [line, taxCodes, minorUnit, effectiveAmountsIncludeTax]);
 
   const preview = control ? calculatedPreview : (fallbackPreview ?? calculatedPreview);
 
@@ -86,7 +100,7 @@ function DocumentGridRowInner<TLine = any>({
     handleKeyDown,
     currencyCode,
     minorUnit,
-    amountsIncludeTax,
+    amountsIncludeTax: effectiveAmountsIncludeTax,
     duplicateLine,
     removeLine,
     moveLineUp,
@@ -95,6 +109,8 @@ function DocumentGridRowInner<TLine = any>({
 
   return (
     <tr
+      ref={measureRef}
+      data-index={virtualIndex}
       data-line-index={index}
       className="group transition-colors hover:bg-surface-muted/30"
     >

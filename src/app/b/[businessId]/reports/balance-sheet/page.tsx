@@ -121,7 +121,7 @@ export default async function BalanceSheetReportPage({
           <tr key={row.id} className="hover:bg-surface-muted/40">
             <td className="pl-6 py-2">
               <Link
-                href={`/b/${businessId}/accounting/chart-of-accounts/${row.id}`}
+                href={`/b/${businessId}/reports/general-ledger?accountId=${encodeURIComponent(row.id)}${dates[0]?.throughDate ? `&dateTo=${encodeURIComponent(dates[0].throughDate)}` : ""}`}
                 className="hover:underline"
               >
                 {row.name}

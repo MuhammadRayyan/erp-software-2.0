@@ -3,14 +3,13 @@ import { Plus } from "lucide-react";
 import { BackLink } from "@/components/back-link";
 import { EmptyState } from "@/components/empty-state";
 import { PageHeader } from "@/components/page-header";
-import { StatusBadge } from "@/components/status-badge";
 import { Button } from "@/components/ui/button";
 import { requireModule } from "@/core/permissions/require-module";
-import { formatDate, formatMoney } from "@/core/format";
 import { DATE_PATTERN } from "@/lib/params";
 import { listDeliveryNotes } from "@/modules/inventory/delivery-note-service";
-import { formatQuantityMicros } from "@/modules/inventory/inventory-valuation";
-import { DeliveryNoteRowActions } from "@/modules/inventory/delivery-note-row-actions";
+import { DeliveryNoteTable, type DeliveryNoteRow } from "@/modules/inventory/delivery-note-table";
+import { listPreferences } from "@/modules/preferences/preference-service";
+import { decodeColumnSnapshots } from "@/modules/preferences/snapshot-codec";
 
 export const metadata = { title: "Delivery Notes" };
 
@@ -27,12 +26,13 @@ export default async function DeliveryNotesPage({
   const from = DATE_PATTERN.test(sp.from ?? "") ? sp.from : undefined;
   const to = DATE_PATTERN.test(sp.to ?? "") ? sp.to : undefined;
 
-  const rows = listDeliveryNotes(businessId, user.id, { from, to });
+  const rows = listDeliveryNotes(businessId, user.id, { from, to }) as unknown as DeliveryNoteRow[];
+  const columnSnapshots = decodeColumnSnapshots(listPreferences(businessId, user.id));
 
   return (
     <div className="page-container">
       <BackLink href={`/b/${businessId}/inventory/items`}>Inventory</BackLink>
-      <PageHeader title="Delivery Notes" description="Customer deliveries reduce stock and post moving-average Cost of Sales.">
+      <PageHeader title="Delivery Notes" description="Customer deliveries and moving-average Cost of Sales.">
         <Button permission="create" asChild>
           <Link href={`/b/${businessId}/sales/delivery-notes/new`}>
             <Plus className="size-4" /> New Delivery Note
@@ -40,49 +40,14 @@ export default async function DeliveryNotesPage({
         </Button>
       </PageHeader>
       {rows.length ? (
-        <div className="data-panel overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="data-table min-w-[800px]">
-              <thead>
-                <tr>
-                  <th>Delivery</th>
-                  <th>Customer</th>
-                  <th>Date</th>
-                  <th>Location</th>
-                  <th className="text-right!">Quantity</th>
-                  <th className="text-right!">COGS</th>
-                  <th>Status</th>
-                  <th className="w-16 text-right"><span className="sr-only">Actions</span></th>
-                </tr>
-              </thead>
-              <tbody>
-                {rows.map((row) => (
-                  <tr key={String(row.id)}>
-                    <td>
-                      <Link href={`/b/${businessId}/sales/delivery-notes/${String(row.id)}`} className="tabular font-medium text-primary hover:underline">
-                        {String(row.delivery_number)}
-                      </Link>
-                    </td>
-                    <td>{String(row.customer_name)}</td>
-                    <td>{formatDate(String(row.date))}</td>
-                    <td>{String(row.location_code)}</td>
-                    <td className="money text-right">{formatQuantityMicros(Number(row.quantity_micros))}</td>
-                    <td className="money text-right">{formatMoney(Number(row.value_minor), access.business.currency)}</td>
-                    <td><StatusBadge status={String(row.document_status)} /></td>
-                    <td>
-                      <DeliveryNoteRowActions
-                        businessId={businessId}
-                        deliveryId={String(row.id)}
-                        deliveryNumber={String(row.delivery_number)}
-                        documentStatus={String(row.document_status)}
-                      />
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
+        <DeliveryNoteTable
+          businessId={businessId}
+          currency={access.business.currency}
+          rows={rows}
+          initialFrom={from}
+          initialTo={to}
+          serverSnapshot={columnSnapshots["delivery-notes"]}
+        />
       ) : (
         <EmptyState
           title="No delivery notes yet"

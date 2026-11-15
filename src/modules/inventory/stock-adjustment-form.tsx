@@ -5,8 +5,9 @@ import Link from "next/link";
 import { useState } from "react";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { LoaderCircle } from "lucide-react";
-import { useForm, useWatch } from "react-hook-form";
+import { Controller, useForm, useWatch } from "react-hook-form";
 import { Button } from "@/components/ui/button";
+import { Combobox } from "@/components/ui/combobox";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
@@ -95,25 +96,45 @@ export function StockAdjustmentForm({
           </div>
           <div className="space-y-1.5">
             <Label htmlFor="locationId">Location</Label>
-            <SelectNative id="locationId"  {...register("locationId")}>
-              {locations.map((location) => (
-                <option key={location.id} value={location.id}>
-                  {location.code} — {location.name}
-                </option>
-              ))}
-            </SelectNative>
+            <Controller
+              control={control}
+              name="locationId"
+              render={({ field }) => (
+                <Combobox
+                  id="locationId"
+                  options={locations.map((location) => ({
+                    value: location.id,
+                    label: `${location.code} — ${location.name}`,
+                  }))}
+                  value={field.value ?? ""}
+                  onValueChange={field.onChange}
+                  placeholder="Choose location…"
+                  searchPlaceholder="Search locations…"
+                  emptyText="No locations found."
+                />
+              )}
+            />
           </div>
           <div className="space-y-1.5">
             <Label htmlFor="itemId">Inventory Item</Label>
-            <SelectNative id="itemId"  {...register("itemId")}>
-              <option value="">Choose item…</option>
-              {items.map((item) => (
-                <option key={item.id} value={item.id}>
-                  {item.sku ? `${item.sku} — ` : ""}
-                  {item.name}
-                </option>
-              ))}
-            </SelectNative>
+            <Controller
+              control={control}
+              name="itemId"
+              render={({ field }) => (
+                <Combobox
+                  id="itemId"
+                  options={items.map((item) => ({
+                    value: item.id,
+                    label: `${item.sku ? `${item.sku} — ` : ""}${item.name}`,
+                  }))}
+                  value={field.value ?? ""}
+                  onValueChange={field.onChange}
+                  placeholder="Choose item…"
+                  searchPlaceholder="Search inventory items…"
+                  emptyText="No items found."
+                />
+              )}
+            />
           </div>
           <div className="space-y-1.5">
             <Label htmlFor="quantityChange">Quantity change</Label>
@@ -155,14 +176,26 @@ export function StockAdjustmentForm({
             <Label htmlFor="projectId">
               Project <span className="font-normal text-muted-foreground">(optional)</span>
             </Label>
-            <SelectNative id="projectId"  {...register("projectId")}>
-              <option value="">No project</option>
-              {projects.map((project) => (
-                <option key={project.id} value={project.id}>
-                  {project.code} — {project.name}
-                </option>
-              ))}
-            </SelectNative>
+            <Controller
+              control={control}
+              name="projectId"
+              render={({ field }) => (
+                <Combobox
+                  id="projectId"
+                  options={projects.map((project) => ({
+                    value: project.id,
+                    label: `${project.code} — ${project.name}`,
+                  }))}
+                  value={field.value ?? ""}
+                  onValueChange={field.onChange}
+                  allowClear
+                  clearLabel="No project"
+                  placeholder="No project"
+                  searchPlaceholder="Search projects…"
+                  emptyText="No projects found."
+                />
+              )}
+            />
           </div>
           <div className="space-y-1.5 md:col-span-2">
             <Label htmlFor="notes">
