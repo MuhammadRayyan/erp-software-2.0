@@ -2,7 +2,10 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { Plus } from "lucide-react";
 import { toast } from "sonner";
+import { PageHeader } from "@/components/page-header";
+import { Button } from "@/components/ui/button";
 import { type EmployeeRecord } from "@/modules/payroll/services/payroll-service";
 import { toggleEmployeeActiveAction } from "@/modules/payroll/actions/payroll-actions";
 import { EmployeeTable } from "@/modules/payroll/employee-table";
@@ -38,7 +41,21 @@ export function EmployeesClient({ businessId, employees, currency }: EmployeesCl
   };
 
   return (
-    <div className="space-y-4">
+    <>
+      <PageHeader
+        title="Employees"
+        description="Master directory of workforce, job designations, and compensation structures."
+      >
+        <Button
+          permission="create"
+          onClick={() => {
+            setSelectedEmployee(null);
+            setDialogOpen(true);
+          }}
+        >
+          <Plus className="size-4" /> New Employee
+        </Button>
+      </PageHeader>
       <EmployeeTable
         businessId={businessId}
         employees={employees}
@@ -48,10 +65,6 @@ export function EmployeesClient({ businessId, employees, currency }: EmployeesCl
           setDialogOpen(true);
         }}
         onToggleActive={handleToggleActive}
-        onNewEmployee={() => {
-          setSelectedEmployee(null);
-          setDialogOpen(true);
-        }}
       />
 
       <EmployeeDialog
@@ -61,6 +74,6 @@ export function EmployeesClient({ businessId, employees, currency }: EmployeesCl
         onOpenChange={setDialogOpen}
         onSaved={() => router.refresh()}
       />
-    </div>
+    </>
   );
 }

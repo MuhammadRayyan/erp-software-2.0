@@ -1,4 +1,3 @@
-import { PageHeader } from "@/components/page-header";
 import { requireModule } from "@/core/permissions/require-module";
 import { listPayslipItems } from "@/modules/payroll/services/payroll-service";
 import { listAccounts } from "@/modules/accounting/services/account-service";
@@ -21,10 +20,6 @@ export default async function PayslipItemsPage({
 
   return (
     <div className="page-container space-y-6">
-      <PageHeader
-        title="Payslip Items"
-        description="Predefined earnings and deduction line items mapped to General Ledger accounts."
-      />
       <ItemsClient
         businessId={businessId}
         items={items}

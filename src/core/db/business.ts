@@ -1,4 +1,5 @@
 import { mkdirSync } from "node:fs";
+import { cache } from "react";
 import Database from "better-sqlite3";
 import { and, eq } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/better-sqlite3";
@@ -6,6 +7,7 @@ import { businesses, memberships, users } from "./system-schema";
 import { getBusinessPaths } from "./paths";
 import { getSystemDb } from "./system";
 import { migrateBusinessDatabase } from "./business-migrations";
+import { applyStandardSqlitePragmas, checkpointAndOptimizeSqlite } from "./pragmas";
 import { moduleKeys } from "@/core/permissions/module-access";
 import * as schema from "./business-schema";
 import { businessMigrations } from "./business-migrations";
@@ -32,11 +34,7 @@ function closeConnection(directoryKey: string) {
   const conn = connections.get(directoryKey);
   if (!conn) return;
   if (conn.idleTimer) clearTimeout(conn.idleTimer);
-  try {
-    conn.sqlite.pragma("wal_checkpoint(PASSIVE)");
-  } catch {
-    // Ignore checkpoint error if database is busy during passive checkpoint
-  }
+  checkpointAndOptimizeSqlite(conn.sqlite);
   conn.sqlite.close();
   connections.delete(directoryKey);
 }
@@ -80,10 +78,7 @@ export function openBusinessDatabase(directoryKey: string, options: { create?: b
     const external = process.env.ERP_MIGRATION_MODE === "external" && !options.create;
     const sqlite = new Database(paths.database, { timeout: 5000, fileMustExist: external });
     try {
-    sqlite.pragma("journal_mode = WAL");
-    sqlite.pragma("busy_timeout = 5000");
-    sqlite.pragma("synchronous = FULL");
-    sqlite.pragma("foreign_keys = ON");
+    applyStandardSqlitePragmas(sqlite);
     if (external) {
       if (!readMigrationState(sqlite, businessMigrations, `business database ${directoryKey}`).current) throw new Error("Business migrations are pending.");
     } else migrateBusinessDatabase(sqlite, `business database ${directoryKey}`);
@@ -100,7 +95,7 @@ export function openBusinessDatabase(directoryKey: string, options: { create?: b
   return { sqlite: conn.sqlite, db: conn.db, paths: conn.paths };
 }
 
-export function getBusinessDb(businessId: string, userId?: string) {
+const resolveBusinessDbAccess = cache((businessId: string, userId?: string) => {
   if (userId) {
     const row = getSystemDb()
       .select({ business: businesses, membership: memberships })
@@ -125,7 +120,7 @@ export function getBusinessDb(businessId: string, userId?: string) {
           .get();
         if (b) {
           return {
-            ...openBusinessDatabase(b.directoryKey),
+            directoryKey: b.directoryKey,
             business: b,
             membership: {
               id: `super-admin-${userId}-${businessId}`,
@@ -146,8 +141,8 @@ export function getBusinessDb(businessId: string, userId?: string) {
     }
 
     return {
-      ...openBusinessDatabase(row.business.directoryKey),
-      ...row,
+      directoryKey: row.business.directoryKey,
+      business: row.business,
       membership: isSuper
         ? {
             ...row.membership,
@@ -165,7 +160,16 @@ export function getBusinessDb(businessId: string, userId?: string) {
     .get();
 
   if (!b) throw new Error("BUSINESS_NOT_FOUND");
-  return { ...openBusinessDatabase(b.directoryKey), business: b, membership: null as any };
+  return { directoryKey: b.directoryKey, business: b, membership: null as any };
+});
+
+export function getBusinessDb(businessId: string, userId?: string) {
+  const resolved = resolveBusinessDbAccess(businessId, userId);
+  return {
+    ...openBusinessDatabase(resolved.directoryKey),
+    business: resolved.business,
+    membership: resolved.membership,
+  };
 }
 
 export function closeBusinessConnection(directoryKey: string) {

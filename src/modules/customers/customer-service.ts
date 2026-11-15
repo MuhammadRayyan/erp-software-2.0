@@ -1,12 +1,19 @@
 import { assertMutationPermission } from "@/core/permissions/mutation-permissions";
 import { randomUUID } from "node:crypto";
-import { asc, eq } from "drizzle-orm";
+import { and, asc, desc, eq, or, sql, type SQL } from "drizzle-orm";
 import { getBusinessDb } from "@/core/db/business";
 import { customers } from "@/core/db/business-schema";
 import { saveCustomFieldValuesInTransaction } from "@/modules/custom-fields/custom-field-service";
 import { customerInputSchema, type CustomerInput } from "./customer-input";
 import { getBaseCurrency, getCurrency } from "@/modules/currency/currency";
 import { recordActivity } from "@/modules/activity-log/activity-log-service";
+import type { ListSortDir } from "@/lib/list-query-params";
+import {
+  buildLikePattern,
+  clampPositiveInt,
+  DEFAULT_LIST_PAGE_SIZE,
+  MAX_LIST_PAGE_SIZE,
+} from "@/modules/shared/list-query-helpers";
 
 export function listCustomers(businessId: string, userId: string, includeInactive = false) {
   const db = getBusinessDb(businessId, userId).db;
@@ -22,20 +29,30 @@ export function listCustomers(businessId: string, userId: string, includeInactiv
  *  shaped as an object so future filters (search term, status) can be added without
  *  breaking the call signature. */
 export type CustomerListFilters = {
-  /** When true, inactive customers are included in the result set. */
+  /** When true, inactive customers are included unless `status` narrows further. */
   includeInactive?: boolean;
+  q?: string;
+  status?: "" | "active" | "inactive" | string;
+  sort?: string;
+  dir?: ListSortDir;
   /** Maximum rows to return (server-side LIMIT). */
   take?: number;
   /** Number of rows to skip (server-side OFFSET). */
   skip?: number;
 };
 
+export type DirectoryListSummary = {
+  unfilteredTotal: number;
+  filteredTotal: number;
+  activeCount: number;
+};
+
 /** Result of `listCustomersPaginated`. The `rows` slice is just the rows for the requested
- *  page; `total` is the unfiltered-over-rows count for the same filters (so the UI can
- *  render "Page X of Y"). */
+ *  page; `total` is the filtered count across the database. */
 export type PaginatedCustomers = {
   rows: ReturnType<typeof listCustomers>;
   total: number;
+  summary: DirectoryListSummary;
   /** 1-indexed page number actually returned (clamped to the last valid page). */
   page: number;
   /** Rows per page that were requested. */
@@ -44,61 +61,94 @@ export type PaginatedCustomers = {
   totalPages: number;
 };
 
-const DEFAULT_CUSTOMER_PAGE_SIZE = 50;
-const MAX_CUSTOMER_PAGE_SIZE = 200;
-
-function clampPositiveInt(value: number | undefined, fallback: number, max: number): number {
-  if (value === undefined || !Number.isInteger(value) || value < 1) return fallback;
-  return Math.min(value, max);
-}
-
 /**
- * Count customers matching `filters` using the same `includeInactive` flag as
- * `listCustomers`. Returns the row count used by `listCustomersPaginated` to
- * compute total pages. Uses the raw sqlite handle directly because the count
- * query is trivial and avoids a Drizzle COUNT builder round-trip.
- */
-function countCustomers(businessId: string, userId: string, filters?: CustomerListFilters): number {
-  const { sqlite } = getBusinessDb(businessId, userId);
-  const where = filters?.includeInactive ? "" : "WHERE is_active = 1";
-  const row = sqlite.prepare(`SELECT COUNT(*) AS total FROM customers ${where}`).get() as { total: number };
-  return row.total;
-}
-
-/**
- * Paginated customer list for the list page. Server-side LIMIT/OFFSET keeps the
- * query cheap as the customer table grows past thousands of rows. The returned
- * `total` is the count for the same `filters` excluding the page bounds — the
- * UI uses it to render "Page X of Y" and disable the Next button on the last
- * page. Page is clamped to the last valid page so out-of-range URLs (e.g.
- * `?page=999`) still render the last page rather than 0 rows.
- *
- * @param page 1-indexed page number (clamped to >= 1).
- * @param pageSize rows per page (defaults to 50, capped at 200).
+ * Paginated customer list with SQL filtering, sorting, and DB-wide counts.
  */
 export function listCustomersPaginated(
   businessId: string,
   userId: string,
   filters: CustomerListFilters & { page?: number; pageSize?: number } = {},
 ): PaginatedCustomers {
+  const { db, sqlite } = getBusinessDb(businessId, userId);
   const page = clampPositiveInt(filters.page, 1, Number.MAX_SAFE_INTEGER);
-  const pageSize = clampPositiveInt(filters.pageSize, DEFAULT_CUSTOMER_PAGE_SIZE, MAX_CUSTOMER_PAGE_SIZE);
-  const total = countCustomers(businessId, userId, filters);
-  // Clamp the page number to the last valid page so out-of-range URLs
-  // (e.g. `?page=999`) still render the last page rather than 0 rows.
+  const pageSize = clampPositiveInt(filters.pageSize, DEFAULT_LIST_PAGE_SIZE, MAX_LIST_PAGE_SIZE);
+
+  const drizzleConditions: SQL[] = [];
+  const sqlConditions: string[] = [];
+  const sqlValues: Array<string | number> = [];
+
+  if (filters.status === "active" || (!filters.status && !filters.includeInactive)) {
+    drizzleConditions.push(eq(customers.isActive, true));
+    sqlConditions.push("is_active = 1");
+  } else if (filters.status === "inactive") {
+    drizzleConditions.push(eq(customers.isActive, false));
+    sqlConditions.push("is_active = 0");
+  }
+
+  const likePattern = buildLikePattern(filters.q);
+  if (likePattern) {
+    const dLike = or(
+      sql`lower(${customers.name}) LIKE ${likePattern} ESCAPE '\\'`,
+      sql`lower(COALESCE(${customers.email}, '')) LIKE ${likePattern} ESCAPE '\\'`,
+      sql`lower(COALESCE(${customers.phone}, '')) LIKE ${likePattern} ESCAPE '\\'`,
+    );
+    if (dLike) drizzleConditions.push(dLike);
+    sqlConditions.push(
+      "(lower(name) LIKE ? ESCAPE '\\' OR lower(COALESCE(email, '')) LIKE ? ESCAPE '\\' OR lower(COALESCE(phone, '')) LIKE ? ESCAPE '\\')",
+    );
+    sqlValues.push(likePattern, likePattern, likePattern);
+  }
+
+  const sqlWhere = sqlConditions.length ? `WHERE ${sqlConditions.join(" AND ")}` : "";
+  const unfilteredRow = sqlite.prepare("SELECT COUNT(*) AS total FROM customers").get() as { total: number };
+  const summaryRow = sqlite
+    .prepare(
+      `SELECT COUNT(*) AS filtered_total, COALESCE(SUM(CASE WHEN is_active = 1 THEN 1 ELSE 0 END), 0) AS active_count FROM customers ${sqlWhere}`,
+    )
+    .get(...sqlValues) as { filtered_total: number; active_count: number };
+
+  const total = summaryRow.filtered_total;
   const maxPage = Math.max(1, Math.ceil(total / pageSize));
   const effectivePage = Math.min(page, maxPage);
   const offset = (effectivePage - 1) * pageSize;
-  const db = getBusinessDb(businessId, userId).db;
+
+  const isDesc = filters.dir === "desc";
+  const sortOrder = (() => {
+    switch (filters.sort) {
+      case "email":
+        return [isDesc ? desc(sql`lower(COALESCE(${customers.email}, ''))`) : asc(sql`lower(COALESCE(${customers.email}, ''))`), asc(customers.name)];
+      case "phone":
+        return [isDesc ? desc(sql`COALESCE(${customers.phone}, '')`) : asc(sql`COALESCE(${customers.phone}, '')`), asc(customers.name)];
+      case "status":
+        return [isDesc ? desc(customers.isActive) : asc(customers.isActive), asc(customers.name)];
+      case "name":
+      default:
+        return [isDesc ? desc(customers.name) : asc(customers.name), asc(customers.id)];
+    }
+  })();
+
+  const whereExpr = drizzleConditions.length ? and(...drizzleConditions) : undefined;
   const rows = db
     .select()
     .from(customers)
-    .where(filters.includeInactive ? undefined : eq(customers.isActive, true))
-    .orderBy(asc(customers.name))
+    .where(whereExpr)
+    .orderBy(...sortOrder)
     .limit(pageSize)
     .offset(offset)
     .all();
-  return { rows, total, page: effectivePage, pageSize, totalPages: maxPage };
+
+  return {
+    rows,
+    total,
+    summary: {
+      unfilteredTotal: unfilteredRow.total,
+      filteredTotal: total,
+      activeCount: summaryRow.active_count,
+    },
+    page: effectivePage,
+    pageSize,
+    totalPages: maxPage,
+  };
 }
 
 export function getCustomer(businessId: string, userId: string, customerId: string) {

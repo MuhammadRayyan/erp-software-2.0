@@ -1,25 +1,31 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useTransition, type ReactNode } from "react";
 import Link from "next/link";
-import { Filter, ChevronRight, MoreHorizontal, Eye, FileEdit, FileText, ShoppingCart, BookOpenText } from "lucide-react";
-import { 
+import { debounce, useQueryStates } from "nuqs";
+import { ChevronRight, MoreHorizontal, Eye, FileEdit, FileText, ShoppingCart, BookOpenText } from "lucide-react";
+import {
   useLegacyTable as useTable,
   getCoreRowModel as createCoreRowModel,
-  getSortedRowModel as createSortedRowModel
 } from "@tanstack/react-table/legacy";
-import { type SortingState } from "@tanstack/react-table";
 import { Badge } from "@/components/ui/badge";
 import { type ColumnVisibility } from "@/components/use-column-visibility";
 import { useColumns } from "@/components/columns-dropdown";
-import { ListToolbar, SearchInput, ActiveFiltersRow, FilterChip } from "@/components/list-toolbar";
+import { ListToolbar, SearchInput, ToolbarSelect, ActiveFiltersRow, FilterChip } from "@/components/list-toolbar";
 import { Button } from "@/components/ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
-import { DataTable } from "@/components/ui/data-table";
+import { DataTable, ListTableCard } from "@/components/ui/data-table";
 import { formatCustomFieldValue, type CustomFieldColumn } from "@/modules/custom-fields/custom-field-display";
 import { formatMoney } from "@/core/format";
 import { DensityToggle } from "@/components/density-toggle";
 import { useTableDensity } from "@/components/use-table-density";
+import { TableTotalsBar } from "@/components/table-totals-bar";
+import type { SupplierListSummary } from "./supplier-service";
+import {
+  directoryListParsers,
+  resolveNextSortFromUpdater,
+  toSortingState,
+} from "@/lib/list-query-params";
 
 type SupplierRow = {
   id: string; name: string; email: string | null; is_active: number;
@@ -32,22 +38,37 @@ export function SupplierTable({
   businessId,
   currency,
   suppliers,
+  summary,
   customFields = [],
   customValues = {},
   serverSnapshot,
+  footer,
 }: {
   businessId: string;
   currency: string;
   suppliers: SupplierRow[];
+  summary: SupplierListSummary;
   customFields?: CustomFieldColumn[];
   customValues?: Record<string, Record<string, string>>;
   serverSnapshot?: ColumnVisibility;
+  footer?: ReactNode;
 }) {
   const { density } = useTableDensity(businessId);
 
-  const [query, setQuery] = useState("");
-  const [activeOnly, setActiveOnly] = useState(false);
-  const [sorting, setSorting] = useState<SortingState>([]);
+  const [, startTransition] = useTransition();
+  const [urlState, setUrlState] = useQueryStates(directoryListParsers, {
+    shallow: false,
+    history: "replace",
+    scroll: false,
+    startTransition,
+  });
+
+  const query = urlState.q;
+  const statusFilter = urlState.status;
+  const sorting = useMemo(
+    () => toSortingState(urlState.sort, urlState.dir),
+    [urlState.sort, urlState.dir],
+  );
 
   // Memoized so the shared visibility hook sees a stable defaults reference.
   const initialColumns = useMemo(
@@ -76,12 +97,7 @@ export function SupplierTable({
     labels,
   });
 
-  const rows = useMemo(() => {
-    return suppliers.filter((supplier) => {
-      const matches = `${supplier.name} ${supplier.email ?? ""}`.toLowerCase().includes(query.trim().toLowerCase());
-      return matches && (!activeOnly || supplier.is_active === 1);
-    });
-  }, [activeOnly, query, suppliers]);
+  const rows = suppliers;
 
   const columns: any[] = useMemo(
     () => [
@@ -130,6 +146,7 @@ export function SupplierTable({
         id: field.id,
         accessorFn: (row: any) => customValues[row.id]?.[field.id],
         header: field.name,
+        enableSorting: false,
         cell: ({ row }: any) => (
           <span className="text-muted-foreground">
             {formatCustomFieldValue(field.fieldType, customValues[row.original.id]?.[field.id])}
@@ -141,6 +158,7 @@ export function SupplierTable({
         header: () => <span className="sr-only">Actions</span>,
         meta: { className: "w-16 text-right" },
         enableSorting: false,
+        enableHiding: false,
         cell: ({ row }: any) => {
           const sup = row.original;
           return (
@@ -196,34 +214,44 @@ export function SupplierTable({
   const table = useTable({
     data: rows,
     columns,
+    manualSorting: true,
     state: {
       sorting,
       columnVisibility: colVisibility,
     },
-    onSortingChange: setSorting,
+    onSortingChange: (updater) => {
+      const next = resolveNextSortFromUpdater(updater, urlState.sort, urlState.dir, "asc");
+      void setUrlState({ sort: next.sort, dir: next.dir, page: 1 });
+    },
     getCoreRowModel: createCoreRowModel(),
-    getSortedRowModel: createSortedRowModel(),
   });
 
   const clearFilters = () => {
-    setQuery("");
-    setActiveOnly(false);
+    void setUrlState({ q: "", status: "", page: 1 });
   };
-  const hasActiveFilter = Boolean(query || activeOnly);
+  const hasActiveFilter = Boolean(query || statusFilter);
 
   return (
     <>
       <ListToolbar>
-        <SearchInput value={query} onChange={setQuery} placeholder="Search suppliers…" ariaLabel="Search suppliers" />
-        <Button
-          type="button"
-          variant={activeOnly ? "primary" : "secondary"}
-          size="sm"
-          className="h-9 gap-1.5 text-xs font-medium"
-          onClick={() => setActiveOnly((value) => !value)}
-        >
-          <Filter className="size-3.5" /> Active only
-        </Button>
+        <SearchInput
+          value={query}
+          onChange={(value) => {
+            void setUrlState({ q: value, page: 1 }, { limitUrlUpdates: value ? debounce(250) : undefined });
+          }}
+          placeholder="Search suppliers…"
+          ariaLabel="Search suppliers"
+        />
+        <ToolbarSelect
+          value={statusFilter}
+          onChange={(value) => void setUrlState({ status: value, page: 1 })}
+          ariaLabel="Filter by status"
+          options={[
+            { value: "", label: "All statuses" },
+            { value: "active", label: "Active only" },
+            { value: "inactive", label: "Inactive only" },
+          ]}
+        />
         <div className="ml-auto flex items-center gap-1.5 shrink-0">
           <DensityToggle businessId={businessId} />
           {dropdown}
@@ -231,22 +259,41 @@ export function SupplierTable({
       </ListToolbar>
       {hasActiveFilter && (
         <ActiveFiltersRow onClearAll={clearFilters}>
-          {activeOnly && (
-            <FilterChip onRemove={() => setActiveOnly(false)}>
-              Status: Active only
+          {statusFilter && (
+            <FilterChip onRemove={() => void setUrlState({ status: "", page: 1 })}>
+              Status: {statusFilter === "inactive" ? "Inactive only" : "Active only"}
             </FilterChip>
           )}
-          {query && <FilterChip onRemove={() => setQuery("")}>Search: {query}</FilterChip>}
+          {query && <FilterChip onRemove={() => void setUrlState({ q: "", page: 1 })}>Search: {query}</FilterChip>}
         </ActiveFiltersRow>
       )}
-      <DataTable
-        table={table}
-        density={density}
-        minWidth="min-w-[720px]"
-        noResultsMessage="No suppliers match these filters"
-        noResultsSubtext="Clear the search or active-status filter."
-        onClearFilters={clearFilters}
-      />
+      <ListTableCard>
+        <DataTable
+          table={table}
+          density={density}
+          framed={false}
+          minWidth="min-w-[720px]"
+          noResultsMessage="No suppliers match these filters"
+          noResultsSubtext="Clear the search or active-status filter."
+          onClearFilters={clearFilters}
+        />
+        {summary.filteredTotal > 0 && (
+          <TableTotalsBar
+            filteredCount={summary.filteredTotal}
+            totalCount={summary.unfilteredTotal}
+            itemLabel="suppliers"
+            metrics={[
+              { label: "Active", value: String(summary.activeCount), tone: "primary" },
+              {
+                label: "Total Outstanding",
+                value: formatMoney(summary.totalOutstandingMinor, currency),
+                tone: summary.totalOutstandingMinor > 0 ? "danger" : "default",
+              },
+            ]}
+          />
+        )}
+        {footer}
+      </ListTableCard>
     </>
   );
 }

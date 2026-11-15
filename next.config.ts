@@ -17,9 +17,12 @@ const nextConfig: NextConfig = {
   // Keep manifest paths distinct when old hashed assets are retained across releases.
   generateBuildId: async () => process.env.APP_REVISION ?? randomUUID(),
   // Allows validation builds to target a separate directory (NEXT_DIST_DIR=.next-validate)
-  // so they never clobber the running dev server's .next output.
+  // so they never clobber the running dev server's .next output or base tsconfig.json.
   ...(process.env.NEXT_DIST_DIR ? { distDir: process.env.NEXT_DIST_DIR } : {}),
-  serverExternalPackages: ["better-sqlite3", "puppeteer"],
+  ...(process.env.NEXT_DIST_DIR === ".next-validate"
+    ? { typescript: { tsconfigPath: "tsconfig.validate.json" } }
+    : {}),
+  serverExternalPackages: ["better-sqlite3", "puppeteer", "yazl"],
   experimental: {
     cpus: 2,
     serverActions: {
@@ -44,12 +47,13 @@ const nextConfig: NextConfig = {
             key: "Content-Security-Policy",
             value: [
               "default-src 'self'",
-              "script-src 'self' 'unsafe-inline' 'unsafe-eval'",
+              `script-src 'self' 'unsafe-inline'${process.env.NODE_ENV !== "production" ? " 'unsafe-eval'" : ""}`,
               "worker-src 'self' blob:",
               "style-src 'self' 'unsafe-inline'",
               "font-src 'self' data:",
               "img-src 'self' data: blob:",
               "connect-src 'self' https://*.ingest.de.sentry.io https://*.sentry.io ws: wss:",
+              "object-src 'self' blob:",
               "frame-src 'self' blob: data:",
               "frame-ancestors 'self'",
               "base-uri 'self'",

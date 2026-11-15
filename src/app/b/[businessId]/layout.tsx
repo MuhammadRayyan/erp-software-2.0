@@ -1,5 +1,5 @@
 import { notFound, redirect } from "next/navigation";
-import { headers } from "next/headers";
+import { cookies, headers } from "next/headers";
 import Link from "next/link";
 import { AppShell } from "@/components/app-shell/app-shell";
 import { requireUser } from "@/core/auth/session";
@@ -11,6 +11,7 @@ import { PermissionsProvider } from "@/components/permissions-provider";
 import { PermissionDenied } from "@/components/permission-denied";
 import { getUnreadNotificationCount } from "@/modules/notifications/notification-service";
 import { getPendingApprovalCount } from "@/modules/approvals/approval-service";
+import { getHiddenNavPaths } from "@/modules/preferences/nav-customization-service";
 
 export default async function BusinessLayout({ children, params }: { children: React.ReactNode; params: Promise<{ businessId: string }> }) {
   const { businessId } = await params;
@@ -60,11 +61,16 @@ export default async function BusinessLayout({ children, params }: { children: R
 
   const unreadNotificationsCount = getUnreadNotificationCount(businessId, user.id);
   const pendingApprovalsCount = getPendingApprovalCount(businessId, user.id);
+  const hiddenNavPaths = getHiddenNavPaths(businessId, user.id);
+  const cookieStore = await cookies();
+  const initialSidebarCollapsed = cookieStore.get("ui-sidebar-collapsed")?.value === "1";
 
   return (
     <AppShell
       business={{ id: access.business.id, name: access.business.name }}
+      initialSidebarCollapsed={initialSidebarCollapsed}
       modules={access.modules}
+      hiddenNavPaths={hiddenNavPaths}
       user={{ name: user.name, email: user.email, isSuperAdmin: isSuper }}
       unreadNotificationsCount={unreadNotificationsCount}
       pendingApprovalsCount={pendingApprovalsCount}

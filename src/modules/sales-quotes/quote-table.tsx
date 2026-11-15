@@ -6,15 +6,18 @@ import { ChevronRight, MoreHorizontal, Eye, FileEdit, Download, ShoppingCart, Fi
 import { 
   useLegacyTable as useTable,
   getCoreRowModel as createCoreRowModel,
+  getPaginationRowModel as createPaginationRowModel,
   getSortedRowModel as createSortedRowModel
 } from "@tanstack/react-table/legacy";
 import { type SortingState, type RowSelectionState } from "@tanstack/react-table";
 import { StatusBadge, statusLabel } from "@/components/status-badge";
-import { ListToolbar, SearchInput, ToolbarSelect, ActiveFiltersRow, FilterChip } from "@/components/list-toolbar";
+import { Checkbox } from "@/components/ui/checkbox";
+import { ListToolbar, SearchInput, ToolbarSelect, DateRangeFilter, ActiveFiltersRow, FilterChip } from "@/components/list-toolbar";
 import { Button } from "@/components/ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { useColumns } from "@/components/columns-dropdown";
-import { DataTable } from "@/components/ui/data-table";
+import { DataTable, ListTableCard } from "@/components/ui/data-table";
+import { ClientListPagination, useTablePagination } from "@/components/list-pagination";
 import { formatDate, formatMoney } from "@/core/format";
 import type { SalesQuoteStatus } from "./quote-service";
 import { DensityToggle } from "@/components/density-toggle";
@@ -62,6 +65,8 @@ export function SalesQuoteTable({
   const [status, setStatus] = useState("");
   const [customerId, setCustomerId] = useState("");
   const [projectId, setProjectId] = useState("");
+  const [fromDate, setFromDate] = useState("");
+  const [toDate, setToDate] = useState("");
   const [sorting, setSorting] = useState<SortingState>([]);
   const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
 
@@ -104,11 +109,13 @@ export function SalesQuoteTable({
             (!status || quote.documentStatus === status) &&
             (!customerId || quote.customer_id === customerId) &&
             (!projectId || quote.projectIds.includes(projectId)) &&
+            (!fromDate || quote.date >= fromDate) &&
+            (!toDate || quote.date <= toDate) &&
             matchesQuery
           );
         })
         .map((quote) => ({ ...quote, businessId })),
-    [quotes, projectId, query, status, customerId, businessId],
+    [quotes, projectId, query, status, customerId, fromDate, toDate, businessId],
   );
 
   const columns: any[] = useMemo(
@@ -116,32 +123,29 @@ export function SalesQuoteTable({
       {
         id: "select",
         header: ({ table }: any) => (
-          <input
-            type="checkbox"
-            className="size-4 rounded border-border text-primary focus:ring-ring"
-            checked={table.getIsAllPageRowsSelected()}
-            ref={(input) => {
-              if (input) {
-                input.indeterminate = table.getIsSomePageRowsSelected();
-              }
-            }}
-            onChange={table.getToggleAllPageRowsSelectedHandler()}
+          <Checkbox
+            checked={
+              table.getIsAllPageRowsSelected()
+                ? true
+                : table.getIsSomePageRowsSelected()
+                  ? "indeterminate"
+                  : false
+            }
+            onCheckedChange={(checked) => table.toggleAllPageRowsSelected(Boolean(checked))}
             aria-label="Select all quotes on page"
           />
         ),
         cell: ({ row }: any) => (
-          <input
-            type="checkbox"
-            className="size-4 rounded border-border text-primary focus:ring-ring"
+          <Checkbox
             checked={row.getIsSelected()}
             disabled={!row.getCanSelect()}
-            onChange={row.getToggleSelectedHandler()}
+            onCheckedChange={(checked) => row.toggleSelected(Boolean(checked))}
             aria-label={`Select quote ${row.original.quote_number}`}
           />
         ),
         enableSorting: false,
         enableHiding: false,
-        meta: { className: "w-8 text-center" },
+        meta: { className: "w-9 text-center" },
       },
       {
         accessorKey: "quote_number",
@@ -257,19 +261,24 @@ export function SalesQuoteTable({
     [],
   );
 
+  const { pagination, onPaginationChange, paginationInfo, setPage, setPageSize } = useTablePagination(rows.length);
+
   const table = useTable({
     data: rows,
     columns,
     state: {
       sorting,
+      pagination,
       columnVisibility: colVisibility,
       rowSelection,
     },
     enableRowSelection: true,
     onRowSelectionChange: setRowSelection,
     onSortingChange: setSorting,
+    onPaginationChange,
     getCoreRowModel: createCoreRowModel(),
     getSortedRowModel: createSortedRowModel(),
+    getPaginationRowModel: createPaginationRowModel(),
   });
 
   const clearFilters = () => {
@@ -277,8 +286,10 @@ export function SalesQuoteTable({
     setStatus("");
     setCustomerId("");
     setProjectId("");
+    setFromDate("");
+    setToDate("");
   };
-  const hasActiveFilter = Boolean(customerId || projectId || status || query);
+  const hasActiveFilter = Boolean(customerId || projectId || fromDate || toDate || status || query);
 
   const totalQuoteValueStr = useMemo(() => {
     const activeRows = (status === "cancelled" || status === "rejected")
@@ -315,6 +326,14 @@ export function SalesQuoteTable({
           className="min-w-36 max-w-52"
           options={[{ value: "", label: "All projects" }, ...projectOptions.map(([id, name]) => ({ value: id, label: name }))]}
         />
+        <DateRangeFilter
+          fromDate={fromDate}
+          toDate={toDate}
+          onFromChange={setFromDate}
+          onToChange={setToDate}
+          fromAriaLabel="Quote date from"
+          toAriaLabel="Quote date to"
+        />
         <ToolbarSelect
           value={status}
           onChange={setStatus}
@@ -345,32 +364,42 @@ export function SalesQuoteTable({
               Project: {projectOptions.find(([id]) => id === projectId)?.[1]}
             </FilterChip>
           )}
+          {fromDate && <FilterChip onRemove={() => setFromDate("")}>From: {formatDate(fromDate)}</FilterChip>}
+          {toDate && <FilterChip onRemove={() => setToDate("")}>To: {formatDate(toDate)}</FilterChip>}
           {status && <FilterChip onRemove={() => setStatus("")}>Status: {statusLabel(status)}</FilterChip>}
           {query && <FilterChip onRemove={() => setQuery("")}>Search: {query}</FilterChip>}
         </ActiveFiltersRow>
       )}
       
-      <DataTable 
-        table={table}
-        density={density} 
-        minWidth="min-w-[780px]" 
-        noResultsMessage="No sales quotes match" 
-        onClearFilters={clearFilters}
-      />
-
-      {rows.length > 0 && (
-        <TableTotalsBar
-          filteredCount={rows.length}
-          totalCount={quotes.length}
-          itemLabel="quotes"
-          metrics={[
-            { label: "Total Quoted Value", value: totalQuoteValueStr, tone: "primary" },
-            ...(acceptedCount > 0
-              ? [{ label: "Accepted", value: `${acceptedCount} quotes`, tone: "success" as const }]
-              : []),
-          ]}
+      <ListTableCard>
+        <DataTable 
+          table={table}
+          density={density}
+          framed={false}
+          minWidth="min-w-[780px]" 
+          noResultsMessage="No sales quotes match" 
+          onClearFilters={clearFilters}
         />
-      )}
+
+        {rows.length > 0 && (
+          <TableTotalsBar
+            filteredCount={rows.length}
+            totalCount={quotes.length}
+            itemLabel="quotes"
+            metrics={[
+              { label: "Total Quoted Value", value: totalQuoteValueStr, tone: "primary" },
+              ...(acceptedCount > 0
+                ? [{ label: "Accepted", value: `${acceptedCount} quotes`, tone: "success" as const }]
+                : []),
+            ]}
+          />
+        )}
+        <ClientListPagination
+          info={paginationInfo}
+          onPageChange={setPage}
+          onPageSizeChange={setPageSize}
+        />
+      </ListTableCard>
 
       <BatchActionBar
         selectedCount={Object.keys(rowSelection).filter((k) => rowSelection[k]).length}

@@ -1,11 +1,11 @@
 "use client";
 import { useRouter } from "next/navigation";
-import { FormError } from "@/components/form-error";
 import { useMemo, useState } from "react";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { LoaderCircle } from "lucide-react";
-import { useFieldArray, useForm, useWatch } from "react-hook-form";
+import { Controller, useFieldArray, useForm, useWatch } from "react-hook-form";
 import { Button } from "@/components/ui/button";
+import { Combobox, type ComboboxOption } from "@/components/ui/combobox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { formatMoney } from "@/core/format";
@@ -18,7 +18,13 @@ import type { CreditNoteStatus } from "./credit-note-service";
 import { emirateLabels, emirates } from "@/modules/tax/uae-vat-config";
 import { DocumentFormFooter } from "@/components/document-form-footer";
 import { SelectNative } from "@/components/ui/select-native";
-import { DocumentLineTable, useDocumentTotals } from "@/components/documents";
+import {
+  DocumentColumnToggles,
+  DocumentLineTable,
+  DocumentWorkspaceLayout,
+  IsolatedDocumentTotals,
+  useDocumentColumnVisibility,
+} from "@/components/documents";
 import { useUnsavedChanges } from "@/hooks/use-unsaved-changes";
 
 type Option = { id: string; name: string };
@@ -84,12 +90,15 @@ export function CreditNoteForm({
     handleSubmit,
     setError,
     setValue,
+    getValues,
     formState: { errors, isSubmitting, isDirty, isSubmitSuccessful },
   } = form;
   useUnsavedChanges(isDirty && !isSubmitSuccessful);
   const { fields, append, remove, insert, move } = useFieldArray({ control, name: "lines" });
+  const colVis = useDocumentColumnVisibility({ lineTaxCodes: true, lines: initial.lines });
+
   function duplicateLine(index: number) {
-    const currentLine = form.getValues(`lines.${index}`);
+    const currentLine = getValues(`lines.${index}`);
     insert(index + 1, { ...currentLine });
   }
   function moveLineUp(index: number) {
@@ -98,6 +107,7 @@ export function CreditNoteForm({
   function moveLineDown(index: number) {
     if (index < fields.length - 1) move(index, index + 1);
   }
+
   const customerId = useWatch({ control, name: "customerId" });
   const invoiceId = useWatch({ control, name: "sourceInvoiceId" });
   const eligibleInvoices = useMemo(
@@ -132,14 +142,37 @@ export function CreditNoteForm({
     selected?.exchangeRateSource ||
     "Base";
   const minorUnit = selected?.minorUnit ?? 2;
-  const { lines, amountsIncludeTax, previews, subtotalMinor, taxMinor, totalMinor } = useDocumentTotals({ control, taxCodes, minorUnit });
   const defaultSales = salesAccounts[0]?.id ?? "";
-    
+
+  const customerOptions = useMemo<ComboboxOption[]>(
+    () => customers.map((c) => ({ value: c.id, label: c.name })),
+    [customers],
+  );
+  const invoiceOptions = useMemo<ComboboxOption[]>(
+    () =>
+      eligibleInvoices.map((invoice) => ({
+        value: invoice.id,
+        label: invoice.invoiceNumber,
+        badge: `${formatMoney(invoice.balanceMinor, invoice.currencyCode, invoice.minorUnit)} remaining`,
+      })),
+    [eligibleInvoices],
+  );
+  const projectOptions = useMemo<ComboboxOption[]>(
+    () => eligibleProjects.map((p) => ({ value: p.id, label: `${p.code} — ${p.name}`, keywords: [p.code, p.name] })),
+    [eligibleProjects],
+  );
+  const taxOptions = useMemo<ComboboxOption[]>(
+    () => taxCodes.map((t) => ({ value: t.id, label: t.name })),
+    [taxCodes],
+  );
+
   function updateGlobalTax(newTaxId: string) {
+    if (!newTaxId) return;
     setGlobalTaxCodeId(newTaxId);
-    lines.forEach((_, i) => form.setValue(`lines.${i}.taxCodeId`, newTaxId));
+    const currentLines = getValues("lines") ?? [];
+    currentLines.forEach((_, i) => setValue(`lines.${i}.taxCodeId`, newTaxId, { shouldDirty: true, shouldTouch: true }));
   }
-  
+
   async function save(values: CreditNoteInput, intent: "draft" | "post") {
     setServerError("");
     const result = await saveCreditNoteAction(
@@ -153,87 +186,84 @@ export function CreditNoteForm({
         setError(field as keyof CreditNoteInput, { message: messages[0] });
     if (result.error) setServerError(result.error);
   }
+
   const cancelHref = noteId
     ? `/b/${businessId}/sales/credit-notes/${noteId}`
     : `/b/${businessId}/sales/credit-notes`;
+
   return (
-    <form className="space-y-5 max-w-none" noValidate>
-      {serverError && <FormError message={serverError} />}
-      <section className="form-section">
-        <h2 className="text-base font-semibold">Credit details</h2>
-        <p className="mt-1 text-sm text-muted-foreground">
-          A posted credit reverses Sales and output VAT while reducing Accounts
-          Receivable.
-        </p>
-        <div className="mt-5 grid gap-5 md:grid-cols-3">
+    <DocumentWorkspaceLayout
+      serverError={serverError}
+      headerTitle="Credit details"
+      headerSubtitle="A posted credit reverses Sales and output VAT while reducing Accounts Receivable."
+      header={
+        <div className="grid gap-4 md:grid-cols-3">
           <div className="space-y-1.5">
             <Label htmlFor="customerId">Customer</Label>
-            <SelectNative
-              id="customerId"
-              {...register("customerId", {
-                onChange: () => setValue("sourceInvoiceId", ""),
-              })}
-              aria-invalid={!!errors.customerId}
-            >
-              <option value="">Choose a customer…</option>
-              {customers.map((customer) => (
-                <option key={customer.id} value={customer.id}>
-                  {customer.name}
-                </option>
-              ))}
-            </SelectNative>
+            <Controller
+              control={control}
+              name="customerId"
+              render={({ field }) => (
+                <Combobox
+                  id="customerId"
+                  ariaLabel="Customer"
+                  ariaInvalid={!!errors.customerId}
+                  options={customerOptions}
+                  value={field.value ?? ""}
+                  onValueChange={(next) => {
+                    field.onChange(next);
+                    setValue("sourceInvoiceId", "");
+                  }}
+                  placeholder="Choose a customer…"
+                  searchPlaceholder="Search customer..."
+                />
+              )}
+            />
             {errors.customerId && (
               <p className="field-error">{errors.customerId.message}</p>
             )}
           </div>
+
           <div className="space-y-1.5">
             <Label htmlFor="sourceInvoiceId">Apply to invoice</Label>
-            <SelectNative
-              id="sourceInvoiceId"
-              {...register("sourceInvoiceId", {
-                onChange: (event) => {
-                  const invoice = invoices.find(
-                    (entry) => entry.id === event.target.value,
-                  );
-                  if (!invoice) return;
-                  setValue("currencyCode", invoice.currencyCode);
-                  setValue("exchangeRateToBase", invoice.exchangeRateToBase);
-                  setValue("exchangeRateDate", invoice.exchangeRateDate);
-                  setValue(
-                    "exchangeRateSource",
-                    invoice.exchangeRateSource as "Base" | "Manual" | "CBUAE",
-                  );
-                },
-              })}
-              aria-invalid={!!errors.sourceInvoiceId}
-            >
-              <option value="">Choose a posted invoice…</option>
-              {eligibleInvoices.map((invoice) => (
-                <option key={invoice.id} value={invoice.id}>
-                  {invoice.invoiceNumber} ·{" "}
-                  {formatMoney(
-                    invoice.balanceMinor,
-                    invoice.currencyCode,
-                    invoice.minorUnit,
-                  )}{" "}
-                  remaining
-                </option>
-              ))}
-            </SelectNative>
+            <Controller
+              control={control}
+              name="sourceInvoiceId"
+              render={({ field }) => (
+                <Combobox
+                  id="sourceInvoiceId"
+                  ariaLabel="Apply to invoice"
+                  ariaInvalid={!!errors.sourceInvoiceId}
+                  options={invoiceOptions}
+                  value={field.value ?? ""}
+                  onValueChange={(next) => {
+                    field.onChange(next);
+                    const invoice = invoices.find((entry) => entry.id === next);
+                    if (!invoice) return;
+                    setValue("currencyCode", invoice.currencyCode);
+                    setValue("exchangeRateToBase", invoice.exchangeRateToBase);
+                    setValue("exchangeRateDate", invoice.exchangeRateDate);
+                    setValue(
+                      "exchangeRateSource",
+                      invoice.exchangeRateSource as "Base" | "Manual" | "CBUAE",
+                    );
+                  }}
+                  placeholder="Choose a posted invoice…"
+                  searchPlaceholder="Search invoice number..."
+                  emptyText={customerId ? "No posted open invoices for customer." : "Select a customer first."}
+                />
+              )}
+            />
             {selected && (
               <p className="text-xs text-muted-foreground">
-                Maximum credit{" "}
-                {formatMoney(
-                  selected.balanceMinor,
-                  selected.currencyCode,
-                  selected.minorUnit,
-                )}
+                Maximum credit {formatMoney(selected.balanceMinor, selected.currencyCode, selected.minorUnit)}
               </p>
             )}
             {errors.sourceInvoiceId && (
               <p className="field-error">{errors.sourceInvoiceId.message}</p>
             )}
           </div>
+
           <div className="space-y-1.5">
             <Label htmlFor="date">Credit note date</Label>
             <Input
@@ -242,10 +272,9 @@ export function CreditNoteForm({
               {...register("date")}
               aria-invalid={!!errors.date}
             />
-            {errors.date && (
-              <p className="field-error">{errors.date.message}</p>
-            )}
+            {errors.date && <p className="field-error">{errors.date.message}</p>}
           </div>
+
           <div className="space-y-1.5">
             <Label htmlFor="taxDate">VAT tax date</Label>
             <Input
@@ -254,10 +283,9 @@ export function CreditNoteForm({
               {...register("taxDate")}
               aria-invalid={!!errors.taxDate}
             />
-            {errors.taxDate && (
-              <p className="field-error">{errors.taxDate.message}</p>
-            )}
+            {errors.taxDate && <p className="field-error">{errors.taxDate.message}</p>}
           </div>
+
           <div className="space-y-1.5">
             <Label htmlFor="supplyEmirate">Supply Emirate</Label>
             <SelectNative id="supplyEmirate" {...register("supplyEmirate")}>
@@ -269,101 +297,66 @@ export function CreditNoteForm({
               ))}
             </SelectNative>
           </div>
+
           <div className="space-y-1.5">
             <Label htmlFor="projectId">
-              Project{" "}
-              <span className="font-normal text-muted-foreground">
-                (optional)
-              </span>
+              Project <span className="font-normal text-muted-foreground">(optional)</span>
             </Label>
-            <SelectNative id="projectId" {...register("projectId")}>
-              <option value="">No project</option>
-              {eligibleProjects.map((project) => (
-                <option key={project.id} value={project.id}>
-                  {project.code} — {project.name}
-                </option>
-              ))}
-            </SelectNative>
+            <Controller
+              control={control}
+              name="projectId"
+              render={({ field }) => (
+                <Combobox
+                  id="projectId"
+                  ariaLabel="Project"
+                  options={projectOptions}
+                  value={field.value ?? ""}
+                  onValueChange={field.onChange}
+                  allowClear
+                  clearLabel="No project"
+                  placeholder="No project"
+                  searchPlaceholder="Search project..."
+                />
+              )}
+            />
           </div>
+
           <div className="space-y-1.5">
-            <Label htmlFor="reference">
-              Reference{" "}
-              <span className="font-normal text-muted-foreground">
-                (optional)
-              </span>
-            </Label>
-            <Input id="reference" {...register("reference")} />
-          </div>
-          <div className="space-y-1.5 md:col-span-2">
-            <Label htmlFor="reason">
-              Reason{" "}
-              <span className="font-normal text-muted-foreground">
-                (optional)
-              </span>
-            </Label>
-            <Input id="reason" {...register("reason")} />
+            <Label>Currency</Label>
+            <div className="flex h-9 items-center rounded-[6px] border border-border bg-surface-muted/60 px-3 text-sm font-medium text-foreground">
+              {currencyCode}
+            </div>
+            <input type="hidden" name="exchangeRateToBase" value={exchangeRateToBase} readOnly />
+            <input type="hidden" name="exchangeRateDate" value={exchangeRateDate} readOnly />
+            <input type="hidden" name="exchangeRateSource" value={exchangeRateSource} readOnly />
           </div>
         </div>
-      </section>
-      <section className="form-section">
-        <h2 className="text-base font-semibold">Inherited currency snapshot</h2>
-        <p className="mt-1 text-sm text-muted-foreground">
-          A Credit Note always uses the linked invoice currency and original
-          rate, so the correction does not manufacture an FX difference.
-        </p>
-        <dl className="mt-4 grid gap-3 rounded-lg border border-border bg-surface-raised p-4 sm:grid-cols-2 lg:grid-cols-4">
-          <div>
-            <dt className="text-xs text-muted-foreground">Currency</dt>
-            <dd className="mt-1 font-mono font-semibold">{currencyCode}</dd>
-          </div>
-          <div>
-            <dt className="text-xs text-muted-foreground">Rate</dt>
-            <dd className="money mt-1">
-              1 {currencyCode} = {exchangeRateToBase} {currency}
-            </dd>
-          </div>
-          <div>
-            <dt className="text-xs text-muted-foreground">Rate date</dt>
-            <dd className="mt-1">{exchangeRateDate || "—"}</dd>
-          </div>
-          <div>
-            <dt className="text-xs text-muted-foreground">Source</dt>
-            <dd className="mt-1">{exchangeRateSource}</dd>
-          </div>
-        </dl>
-      </section>
-      
-      <section className="form-section">
-        <div className="mb-3 flex flex-wrap items-end justify-between gap-3">
-          <div>
-            <h2 className="text-base font-semibold">Credited items</h2>
-            <p className="mt-1 text-sm text-muted-foreground">
-              Use the original revenue, VAT, and Project allocations for a clean reversal.
-            </p>
-          </div>
-          <div className="flex items-center gap-2">
-            <Label htmlFor="globalTax" className="text-sm font-medium">Default Tax:</Label>
-            <SelectNative
+      }
+      linesTitle="Credited items"
+      linesSubtitle="Use the original revenue, VAT, and Project allocations for a clean reversal."
+      linesActions={
+        <div className="flex items-center gap-2">
+          <Label htmlFor="globalTax" className="text-sm font-medium whitespace-nowrap">Default Tax:</Label>
+          <div className="w-44">
+            <Combobox
               id="globalTax"
-              className="w-40"
+              options={taxOptions}
               value={globalTaxCodeId}
-              onChange={(e) => updateGlobalTax(e.target.value)}
-            >
-              {taxCodes.map((taxCode) => (
-                <option key={taxCode.id} value={taxCode.id}>
-                  {taxCode.name}
-                </option>
-              ))}
-            </SelectNative>
+              onValueChange={updateGlobalTax}
+              size="sm"
+              placeholder="Default Tax"
+              searchPlaceholder="Search tax..."
+            />
           </div>
         </div>
+      }
+      lines={
         <DocumentLineTable
           register={register}
           control={control}
           setValue={setValue}
           errors={errors}
           fields={fields}
-          lines={lines}
           onAppend={(custom) =>
             append({
               description: "",
@@ -386,60 +379,87 @@ export function CreditNoteForm({
           accountAriaLabel="sales account"
           accountPlaceholder="Choose an account..."
           taxCodes={taxCodes}
-          initialShowLineTaxCodes={true}
           projects={eligibleProjects}
           currencyCode={currencyCode}
           minorUnit={minorUnit}
-          previews={previews}
-          amountsIncludeTax={amountsIncludeTax}
-          subtotalMinor={subtotalMinor}
-          taxMinor={taxMinor}
-          totalMinor={totalMinor}
-          registerAmountsIncludeTax={register("amountsIncludeTax")}
+          showTotalsSection={false}
+          {...colVis.tableProps}
         />
-      </section>
-
-      <DocumentFormFooter
-        onCancel={() => router.push(cancelHref)}
-        status={documentStatus}
-        totals={{
-          subtotalMinor,
-          taxMinor,
-          totalMinor,
-          currencyCode,
-          minorUnit,
-        }}
-      >
-        {documentStatus === "posted" ? (
-          <Button permission={["save", "post"]}
-            type="button"
-            disabled={isSubmitting}
-            onClick={handleSubmit((values) => save(values, "post"))}
-          >
-            {isSubmitting && <LoaderCircle className="size-4 animate-spin" />}{" "}
-            Update Posted Credit
-          </Button>
-        ) : (
-          <div className="flex gap-2">
-            <Button permission={"save"}
-              type="button"
-              variant="secondary"
-              disabled={isSubmitting}
-              onClick={handleSubmit((values) => save(values, "draft"))}
-            >
-              Save Draft
-            </Button>
+      }
+      bottomLeft={
+        <>
+          <DocumentColumnToggles
+            {...colVis.togglesProps}
+            control={control}
+            showAmountsIncludeTaxToggle
+            className="max-w-none"
+          />
+          <div className="form-section grid gap-4 sm:grid-cols-2">
+            <div className="space-y-1.5">
+              <Label htmlFor="reference">
+                Reference <span className="font-normal text-muted-foreground">(optional)</span>
+              </Label>
+              <Input id="reference" {...register("reference")} />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="reason">
+                Reason <span className="font-normal text-muted-foreground">(optional)</span>
+              </Label>
+              <Input id="reason" {...register("reason")} />
+            </div>
+          </div>
+        </>
+      }
+      bottomRight={
+        <IsolatedDocumentTotals
+          control={control}
+          taxCodes={taxCodes}
+          currencyCode={currencyCode}
+          minorUnit={minorUnit}
+        />
+      }
+      footer={
+        <DocumentFormFooter
+          onCancel={() => router.push(cancelHref)}
+          status={documentStatus}
+          liveTotals={{
+            control,
+            taxCodes,
+            currencyCode,
+            minorUnit,
+          }}
+        >
+          {documentStatus === "posted" ? (
             <Button permission={["save", "post"]}
               type="button"
               disabled={isSubmitting}
               onClick={handleSubmit((values) => save(values, "post"))}
             >
               {isSubmitting && <LoaderCircle className="size-4 animate-spin" />}{" "}
-              Post Credit Note
+              Update Posted Credit
             </Button>
-          </div>
-        )}
-      </DocumentFormFooter>
-    </form>
+          ) : (
+            <div className="flex gap-2">
+              <Button permission={"save"}
+                type="button"
+                variant="secondary"
+                disabled={isSubmitting}
+                onClick={handleSubmit((values) => save(values, "draft"))}
+              >
+                Save Draft
+              </Button>
+              <Button permission={["save", "post"]}
+                type="button"
+                disabled={isSubmitting}
+                onClick={handleSubmit((values) => save(values, "post"))}
+              >
+                {isSubmitting && <LoaderCircle className="size-4 animate-spin" />}{" "}
+                Post Credit Note
+              </Button>
+            </div>
+          )}
+        </DocumentFormFooter>
+      }
+    />
   );
 }

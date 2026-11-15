@@ -1,6 +1,6 @@
 import { assertMutationPermission, assertSavePermission } from "@/core/permissions/mutation-permissions";
 import { getBusinessAccess } from "@/core/permissions/permissions";
-import { getPurchaseSettlement, purchaseSettlementSql } from "./purchase-balance";
+import { getPurchaseSettlement } from "./purchase-balance";
 import { randomUUID } from "node:crypto";
 import { asc, eq } from "drizzle-orm";
 import { getBusinessDb, runImmediateTransaction } from "@/core/db/business";
@@ -14,6 +14,17 @@ import { replaceTaxEntries, reverseTaxEntries } from "@/modules/tax/tax-entry-se
 import { assertVatDateUnlocked, assertVatSourceUnlocked } from "@/modules/tax/tax-lock-service";
 import { assertDateNotLocked } from "@/modules/accounting/services/financial-lock-service";
 import { purchaseInvoiceInputSchema, type PurchaseInvoiceInput } from "./purchase-invoice-input";
+import type { ListSortDir } from "@/lib/list-query-params";
+import {
+  buildLikePattern,
+  clampPositiveInt,
+  DEFAULT_LIST_PAGE_SIZE,
+  MAX_LIST_PAGE_SIZE,
+  pushInvoiceStatusConditions,
+  resolveSortSql,
+  validIsoDate,
+  type InvoiceListSummary,
+} from "@/modules/shared/list-query-helpers";
 import { convertDocumentLinesToBase, minorToCurrencyInput, parseCurrencyAmountToMinor } from "@/modules/currency/conversion";
 import { getCurrency } from "@/modules/currency/currency";
 import { resolveRateSnapshot } from "@/modules/currency/validation";
@@ -92,41 +103,51 @@ function insertLines(
 }
 
 
-const PAID_MINOR_FRAGMENT = purchaseSettlementSql("pi").foreign;
+const PURCHASE_SETTLEMENT_CTE = `
+  payment_alloc AS (
+    SELECT spa.purchase_invoice_id AS invoice_id,
+      SUM(COALESCE(spa.foreign_amount_allocated, spa.amount_minor)) AS foreign_minor
+    FROM supplier_payment_allocations spa
+    INNER JOIN supplier_payments sp ON sp.id = spa.payment_id AND sp.document_status = 'posted'
+    GROUP BY spa.purchase_invoice_id
+  ),
+  debit_alloc AS (
+    SELECT dn.purchase_invoice_id AS invoice_id,
+      SUM(dn.total_minor) AS foreign_minor
+    FROM debit_notes dn
+    WHERE dn.purchase_invoice_id IS NOT NULL AND dn.document_status = 'posted'
+    GROUP BY dn.purchase_invoice_id
+  )
+`;
+
+const PURCHASE_PAID_FOREIGN_EXPR = "COALESCE(pa.foreign_minor, 0) + COALESCE(da.foreign_minor, 0)";
 
 export type PurchaseInvoiceListFilters = {
+  status?: string;
+  q?: string;
   /** Filter to one supplier (matches the legacy `supplierId` positional arg). */
   supplierId?: string;
+  projectId?: string;
   /** Inclusive lower bound on invoice_date (YYYY-MM-DD). Invalid values are ignored. */
   from?: string;
   /** Inclusive upper bound on invoice_date (YYYY-MM-DD). Invalid values are ignored. */
   to?: string;
+  sort?: string;
+  dir?: ListSortDir;
   /** Maximum rows to return (server-side LIMIT). Used by the paginated list path. */
   take?: number;
   /** Number of rows to skip (server-side OFFSET). Used by the paginated list path. */
   skip?: number;
 };
 
-function validDate(value?: string) {
-  return value && /^\d{4}-\d{2}-\d{2}$/.test(value) ? value : undefined;
-}
-
-const DEFAULT_PAGE_SIZE = 50;
-const MAX_PAGE_SIZE = 200;
-
-function clampPositiveInt(value: number | undefined, fallback: number, max: number): number {
-  if (value === undefined || !Number.isInteger(value) || value < 1) return fallback;
-  return Math.min(value, max);
-}
-
 /**
  * Paginated purchase-invoice list result. The rows slice contains just the
- * rows for the requested page; `total` is the unfiltered-over-rows count for
- * the same `filters` so the UI can show "Page X of Y".
+ * rows for the requested page; `total` is the filtered count across matching rows.
  */
 export type PaginatedPurchaseInvoices = {
   rows: ReturnType<typeof listPurchaseInvoices>;
   total: number;
+  summary: InvoiceListSummary;
   /** 1-indexed page number actually returned (clamped to the last valid page). */
   page: number;
   /** Rows per page that were requested. */
@@ -135,21 +156,41 @@ export type PaginatedPurchaseInvoices = {
   totalPages: number;
 };
 
-/**
- * Count purchase invoices matching `filters` using the same WHERE-clause
- * builder as `listPurchaseInvoiceRows`. Returns the row count used by
- * `listPurchaseInvoicesPaginated` to compute total pages.
- */
-function countPurchaseInvoiceRows(businessId: string, userId: string, filters?: PurchaseInvoiceListFilters): number {
-  const { sqlite } = getBusinessDb(businessId, userId);
+function buildPurchaseInvoiceWhere(
+  supplierId: string | undefined,
+  filters: PurchaseInvoiceListFilters | undefined,
+  todayUtc: string,
+) {
   const conditions: string[] = [];
-  const values: string[] = [];
-  if (filters?.supplierId) {
+  const values: Array<string | number> = [];
+  const scopedSupplierId = supplierId ?? (filters?.supplierId?.trim() || undefined);
+  if (scopedSupplierId) {
     conditions.push("pi.supplier_id = ?");
-    values.push(filters.supplierId);
+    values.push(scopedSupplierId);
   }
-  const dateFrom = validDate(filters?.from);
-  const dateTo = validDate(filters?.to);
+  const projectId = filters?.projectId?.trim();
+  if (projectId) {
+    conditions.push(
+      "(EXISTS (SELECT 1 FROM purchase_invoice_lines pil WHERE pil.purchase_invoice_id = pi.id AND COALESCE(pil.project_id, pi.project_id) = ?) OR (pi.project_id = ? AND NOT EXISTS (SELECT 1 FROM purchase_invoice_lines pil WHERE pil.purchase_invoice_id = pi.id)))",
+    );
+    values.push(projectId, projectId);
+  }
+  const { isVoidFilter } = pushInvoiceStatusConditions(filters?.status, {
+    tableAlias: "pi",
+    allocatedExpr: PURCHASE_PAID_FOREIGN_EXPR,
+    todayUtc,
+    conditions,
+    values,
+  });
+  const likePattern = buildLikePattern(filters?.q);
+  if (likePattern) {
+    conditions.push(
+      "(lower(pi.internal_number) LIKE ? ESCAPE '\\' OR lower(s.name) LIKE ? ESCAPE '\\' OR lower(COALESCE(pi.supplier_invoice_number, '')) LIKE ? ESCAPE '\\' OR lower(COALESCE(pi.reference, '')) LIKE ? ESCAPE '\\')",
+    );
+    values.push(likePattern, likePattern, likePattern, likePattern);
+  }
+  const dateFrom = validIsoDate(filters?.from);
+  const dateTo = validIsoDate(filters?.to);
   if (dateFrom) {
     conditions.push("pi.invoice_date >= ?");
     values.push(dateFrom);
@@ -159,40 +200,106 @@ function countPurchaseInvoiceRows(businessId: string, userId: string, filters?: 
     values.push(dateTo);
   }
   const where = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";
-  const row = sqlite.prepare(`SELECT COUNT(*) AS total FROM purchase_invoices pi ${where}`).get(...values) as { total: number };
-  return row.total;
+  return { where, values, isVoidFilter };
+}
+
+export function listPurchaseInvoiceFilterOptions(businessId: string, userId: string) {
+  const { sqlite } = getBusinessDb(businessId, userId);
+  const supplierRows = sqlite
+    .prepare(
+      `SELECT DISTINCT s.id, s.name
+       FROM suppliers s
+       INNER JOIN purchase_invoices pi ON pi.supplier_id = s.id
+       ORDER BY s.name ASC`,
+    )
+    .all() as Array<{ id: string; name: string }>;
+  const projectRows = sqlite
+    .prepare(
+      `SELECT p.id, p.name
+       FROM projects p
+       WHERE EXISTS (SELECT 1 FROM purchase_invoices pi WHERE pi.project_id = p.id)
+          OR EXISTS (SELECT 1 FROM purchase_invoice_lines l WHERE l.project_id = p.id)
+       ORDER BY p.name ASC`,
+    )
+    .all() as Array<{ id: string; name: string }>;
+  return {
+    suppliers: supplierRows.map((s) => [s.id, s.name] as [string, string]),
+    projects: projectRows.map((p) => [p.id, p.name] as [string, string]),
+  };
 }
 
 /**
- * Paginated list of purchase invoices for the list page. Server-side
- * LIMIT/OFFSET keeps the query cheap as the table grows. The returned
- * `total` is the count for the same `filters` excluding the page bounds.
- *
- * @param page 1-indexed page number (clamped to >= 1).
- * @param pageSize rows per page (defaults to 50, capped at 200).
+ * Paginated list of purchase invoices with SQL filtering, sorting, and
+ * DB-wide multi-currency totals across all matching rows.
  */
 export function listPurchaseInvoicesPaginated(
   businessId: string,
   userId: string,
   filters: PurchaseInvoiceListFilters & { page?: number; pageSize?: number } = {},
 ): PaginatedPurchaseInvoices {
+  const { sqlite } = getBusinessDb(businessId, userId);
   const page = clampPositiveInt(filters.page, 1, Number.MAX_SAFE_INTEGER);
-  const pageSize = clampPositiveInt(filters.pageSize, DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE);
-  const total = countPurchaseInvoiceRows(businessId, userId, filters);
-  // Clamp the page number to the last valid page so out-of-range URLs
-  // (e.g. `?page=999`) still render the last page rather than 0 rows.
-  const maxPage = Math.max(1, Math.ceil(total / pageSize));
+  const pageSize = clampPositiveInt(filters.pageSize, DEFAULT_LIST_PAGE_SIZE, MAX_LIST_PAGE_SIZE);
+  const todayUtc = new Date().toISOString().slice(0, 10);
+  const { where, values, isVoidFilter } = buildPurchaseInvoiceWhere(undefined, filters, todayUtc);
+
+  const unfilteredRow = sqlite.prepare("SELECT COUNT(*) AS total FROM purchase_invoices").get() as { total: number };
+  const summaryRows = sqlite
+    .prepare(`
+      WITH ${PURCHASE_SETTLEMENT_CTE}
+      SELECT
+        pi.currency_code,
+        cur.minor_unit AS currency_minor_unit,
+        COUNT(*) AS row_count,
+        SUM(CASE WHEN pi.document_status = 'posted' THEN 1 ELSE 0 END) AS posted_count,
+        SUM(CASE WHEN ? = 1 OR pi.document_status <> 'void' THEN pi.total_minor ELSE 0 END) AS total_minor,
+        SUM(CASE WHEN pi.document_status = 'posted' THEN MAX(0, pi.total_minor - (${PURCHASE_PAID_FOREIGN_EXPR})) ELSE 0 END) AS balance_minor,
+        SUM(CASE WHEN pi.document_status = 'posted' AND pi.total_minor > (${PURCHASE_PAID_FOREIGN_EXPR}) AND pi.due_date < ? THEN 1 ELSE 0 END) AS overdue_count
+      FROM purchase_invoices pi
+      INNER JOIN suppliers s ON s.id = pi.supplier_id
+      INNER JOIN currencies cur ON cur.code = pi.currency_code
+      LEFT JOIN payment_alloc pa ON pa.invoice_id = pi.id
+      LEFT JOIN debit_alloc da ON da.invoice_id = pi.id
+      ${where}
+      GROUP BY pi.currency_code, cur.minor_unit
+      ORDER BY pi.currency_code ASC
+    `)
+    .all(isVoidFilter ? 1 : 0, todayUtc, ...values) as Array<{
+    currency_code: string;
+    currency_minor_unit: number;
+    row_count: number;
+    posted_count: number;
+    total_minor: number;
+    balance_minor: number;
+    overdue_count: number;
+  }>;
+
+  const filteredTotal = summaryRows.reduce((sum, row) => sum + Number(row.row_count || 0), 0);
+  const overdueCount = summaryRows.reduce((sum, row) => sum + Number(row.overdue_count || 0), 0);
+  const summary: InvoiceListSummary = {
+    unfilteredTotal: unfilteredRow.total,
+    filteredTotal,
+    overdueCount,
+    currencyTotals: summaryRows.map((row) => ({
+      currencyCode: row.currency_code,
+      currencyMinorUnit: row.currency_minor_unit,
+      totalMinor: Number(row.total_minor || 0),
+      balanceMinor: Number(row.balance_minor || 0),
+      hasPosted: Number(row.posted_count || 0) > 0,
+    })),
+  };
+
+  const maxPage = Math.max(1, Math.ceil(filteredTotal / pageSize));
   const effectivePage = Math.min(page, maxPage);
   const offset = (effectivePage - 1) * pageSize;
   const rows = listPurchaseInvoices(businessId, userId, undefined, { ...filters, take: pageSize, skip: offset });
-  return { rows, total, page: effectivePage, pageSize, totalPages: maxPage };
+  return { rows, total: filteredTotal, summary, page: effectivePage, pageSize, totalPages: maxPage };
 }
 
 /**
  * List purchase invoices. The legacy 3rd positional arg is `supplierId`
  * (used by the supplier detail page); a `filters` object is also accepted
- * for the paginated list path. Both are merged so existing call sites keep
- * working while new ones can pass `take`/`skip`/`from`/`to`.
+ * for the paginated list path.
  */
 export function listPurchaseInvoices(
   businessId: string,
@@ -201,39 +308,48 @@ export function listPurchaseInvoices(
   filters?: PurchaseInvoiceListFilters,
 ) {
   const { sqlite } = getBusinessDb(businessId, userId);
-  const conditions: string[] = [];
-  const values: string[] = [];
-  const scopedSupplierId = supplierId ?? filters?.supplierId;
-  if (scopedSupplierId) {
-    conditions.push("pi.supplier_id = ?");
-    values.push(scopedSupplierId);
-  }
-  const dateFrom = validDate(filters?.from);
-  const dateTo = validDate(filters?.to);
-  if (dateFrom) {
-    conditions.push("pi.invoice_date >= ?");
-    values.push(dateFrom);
-  }
-  if (dateTo) {
-    conditions.push("pi.invoice_date <= ?");
-    values.push(dateTo);
-  }
-  const where = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";
-  // Server-side LIMIT/OFFSET supports the paginated list path. When both
-  // are undefined the query returns the full result set (used by the
-  // goods-receipt picker, supplier detail page, etc.).
+  const todayUtc = new Date().toISOString().slice(0, 10);
+  const { where, values } = buildPurchaseInvoiceWhere(supplierId, filters, todayUtc);
+  const sortColumns: Record<string, string> = {
+    internal_number: "pi.internal_number",
+    supplier_name: "s.name",
+    supplierInvoice: "COALESCE(pi.supplier_invoice_number, '')",
+    date: "pi.invoice_date",
+    due: "pi.due_date",
+    total: "pi.total_minor",
+    balance: `CASE WHEN pi.document_status = 'posted' THEN MAX(0, pi.total_minor - (${PURCHASE_PAID_FOREIGN_EXPR})) ELSE 0 END`,
+    document: "pi.document_status",
+    payment: `CASE WHEN pi.document_status <> 'posted' THEN 5 WHEN pi.total_minor <= (${PURCHASE_PAID_FOREIGN_EXPR}) THEN 4 WHEN pi.due_date < '${todayUtc}' THEN 1 WHEN (${PURCHASE_PAID_FOREIGN_EXPR}) > 0 THEN 2 ELSE 3 END`,
+  };
+  const orderByClause = resolveSortSql(
+    filters?.sort,
+    filters?.dir,
+    sortColumns,
+    "pi.invoice_date DESC, pi.created_at DESC, pi.id DESC",
+  );
   const limitClause = filters?.take !== undefined && Number.isFinite(filters.take) && filters.take >= 0 ? `LIMIT ${Math.floor(filters.take)}` : "";
   const offsetClause = filters?.skip !== undefined && Number.isFinite(filters.skip) && filters.skip >= 0 ? `OFFSET ${Math.floor(filters.skip)}` : "";
   const pagination = `${limitClause} ${offsetClause}`.trim();
   const rows = sqlite.prepare(`
+    WITH ${PURCHASE_SETTLEMENT_CTE},
+    inv_projects AS (
+      SELECT l.purchase_invoice_id AS invoice_id,
+        GROUP_CONCAT(DISTINCT COALESCE(l.project_id, pi2.project_id)) AS project_ids
+      FROM purchase_invoice_lines l
+      INNER JOIN purchase_invoices pi2 ON pi2.id = l.purchase_invoice_id
+      GROUP BY l.purchase_invoice_id
+    )
     SELECT pi.*, s.name AS supplier_name, cur.minor_unit AS currency_minor_unit,
-      (SELECT GROUP_CONCAT(DISTINCT COALESCE(l.project_id, pi.project_id)) FROM purchase_invoice_lines l WHERE l.purchase_invoice_id = pi.id) AS project_ids,
-      (${PAID_MINOR_FRAGMENT}) AS paid_minor
+      COALESCE(ip.project_ids, pi.project_id) AS project_ids,
+      (${PURCHASE_PAID_FOREIGN_EXPR}) AS paid_minor
     FROM purchase_invoices pi
     INNER JOIN suppliers s ON s.id = pi.supplier_id
     INNER JOIN currencies cur ON cur.code = pi.currency_code
+    LEFT JOIN payment_alloc pa ON pa.invoice_id = pi.id
+    LEFT JOIN debit_alloc da ON da.invoice_id = pi.id
+    LEFT JOIN inv_projects ip ON ip.invoice_id = pi.id
     ${where}
-    ORDER BY pi.invoice_date DESC, pi.created_at DESC
+    ORDER BY ${orderByClause}
     ${pagination}
   `).all(...values) as {
     id: string; internal_number: string; supplier_id: string; supplier_name: string;
@@ -244,11 +360,26 @@ export function listPurchaseInvoices(
     exchange_rate_to_base: string; exchange_rate_date: string; exchange_rate_source: string;
     created_at: string; updated_at: string; paid_minor: number;
   }[];
-  const projects = sqlite.prepare("SELECT id, name FROM projects").all() as { id: string; name: string }[];
-  const projectById = new Map(projects.map((project) => [project.id, project.name]));
+  const referencedProjectIds = Array.from(
+    new Set(rows.flatMap((row) => row.project_ids?.split(",").filter(Boolean) ?? [])),
+  );
+  const projectById = new Map<string, string>();
+  if (referencedProjectIds.length > 0) {
+    const placeholders = referencedProjectIds.map(() => "?").join(", ");
+    const projects = sqlite
+      .prepare(`SELECT id, name FROM projects WHERE id IN (${placeholders})`)
+      .all(...referencedProjectIds) as { id: string; name: string }[];
+    for (const project of projects) projectById.set(project.id, project.name);
+  }
   return rows.map((row) => {
     const projectIds = row.project_ids?.split(",").filter(Boolean) ?? [];
-    return { ...row, projectIds, projectNames: projectIds.map((id) => projectById.get(id) ?? id), balanceMinor: row.document_status === "posted" ? Math.max(0, row.total_minor - row.paid_minor) : 0, paymentStatus: deriveStatus(row.document_status, row.total_minor, row.paid_minor, row.due_date) };
+    return {
+      ...row,
+      projectIds,
+      projectNames: projectIds.map((id) => projectById.get(id) ?? id),
+      balanceMinor: row.document_status === "posted" ? Math.max(0, row.total_minor - row.paid_minor) : 0,
+      paymentStatus: deriveStatus(row.document_status, row.total_minor, row.paid_minor, row.due_date),
+    };
   });
 }
 

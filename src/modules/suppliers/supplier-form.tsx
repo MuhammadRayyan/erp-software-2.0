@@ -2,35 +2,40 @@
 import { FormError } from "@/components/form-error";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { LoaderCircle } from "lucide-react";
-import { useForm } from "react-hook-form";
+import { Controller, useForm } from "react-hook-form";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { CustomFieldInputs, type CustomFieldInputDefinition } from "@/modules/custom-fields/custom-field-inputs";
-import { firstMissingRequiredCustomField } from "@/modules/custom-fields/custom-field-display";
+import {
+  buildInitialCustomFieldValues,
+  firstMissingRequiredCustomField,
+  haveCustomFieldValuesChanged,
+} from "@/modules/custom-fields/custom-field-display";
+import { useUnsavedChanges } from "@/hooks/use-unsaved-changes";
 import { createSupplierAction, updateSupplierAction } from "./actions";
 import { supplierInputSchema, type SupplierInput } from "./supplier-input";
 
 export function SupplierForm({ businessId, supplierId, currencies, initial, customFields = [], customFieldValues }: { businessId: string; supplierId?: string; currencies: { code: string; name: string }[]; initial: SupplierInput; customFields?: CustomFieldInputDefinition[]; customFieldValues?: Record<string, string> }) {
   const [serverError, setServerError] = useState("");
-  const [customValues, setCustomValues] = useState<Record<string, string>>(() => {
-    const initialCustomValues: Record<string, string> = {};
-    for (const definition of customFields) {
-      initialCustomValues[definition.id] = customFieldValues?.[definition.id]
-        ?? (definition.fieldType === "checkbox" ? "false" : "");
-    }
-    return initialCustomValues;
-  });
+  const initialCustomValues = useMemo(
+    () => buildInitialCustomFieldValues(customFields, customFieldValues),
+    [customFields, customFieldValues],
+  );
+  const [customValues, setCustomValues] = useState<Record<string, string>>(initialCustomValues);
   const form = useForm<SupplierInput>({
     resolver: zodResolver(supplierInputSchema),
     mode: "onTouched",
     defaultValues: initial,
   });
-  const { register, handleSubmit, setError, formState: { errors, isSubmitting } } = form;
+  const { register, control, handleSubmit, setError, formState: { errors, isSubmitting, isDirty, isSubmitSuccessful } } = form;
+  const customDirty = haveCustomFieldValuesChanged(initialCustomValues, customValues);
+  useUnsavedChanges((isDirty || customDirty) && !isSubmitSuccessful);
   async function submit(values: SupplierInput) {
     setServerError("");
     const missingCustomField = firstMissingRequiredCustomField(customFields, customValues);
@@ -62,12 +67,11 @@ export function SupplierForm({ businessId, supplierId, currencies, initial, cust
           {errors.paymentTermsDays && <p className="field-error">{errors.paymentTermsDays.message}</p>}
         </div>
         <div className="space-y-1.5 md:col-span-2"><Label htmlFor="notes">Notes <span className="font-normal text-muted-foreground">(optional)</span></Label><Textarea id="notes" rows={4} {...register("notes")} aria-invalid={!!errors.notes} />{errors.notes && <p className="field-error">{errors.notes.message}</p>}</div>
-        <label className="flex min-h-9 items-center gap-2 text-sm"><input type="checkbox" className="size-4 accent-[var(--primary)]" {...register("isActive")} /> Active supplier</label>
+        <label className="flex min-h-9 items-center gap-2 text-sm cursor-pointer select-none"><Controller control={control} name="isActive" render={({ field }) => <Checkbox checked={Boolean(field.value)} onCheckedChange={(c) => field.onChange(Boolean(c))} aria-label="Active supplier" />} /> Active supplier</label>
       </div>
     </section>
     <section className="border-b border-border pb-7">
       <h2 className="text-base font-semibold">Legal identity</h2>
-      <p className="mt-1 text-sm text-muted-foreground">Strong identifiers (TRN, electronic address) help with supplier matching and tax reporting.</p>
       <div className="mt-5 grid gap-5 md:grid-cols-2">
         <div className="space-y-1.5 md:col-span-2"><Label htmlFor="legalName">Legal name <span className="font-normal text-muted-foreground">(optional)</span></Label><Input id="legalName" {...register("legalName")} aria-invalid={!!errors.legalName} />{errors.legalName && <p className="field-error">{errors.legalName.message}</p>}</div>
         <div className="space-y-1.5"><Label htmlFor="trn">TRN <span className="font-normal text-muted-foreground">(optional)</span></Label><Input id="trn" {...register("trn")} aria-invalid={!!errors.trn} />{errors.trn && <p className="field-error">{errors.trn.message}</p>}</div>
@@ -81,7 +85,6 @@ export function SupplierForm({ businessId, supplierId, currencies, initial, cust
     {customFields.length > 0 && (
       <section className="border-b border-border pb-7">
         <h2 className="text-base font-semibold">Custom Fields</h2>
-        <p className="mt-1 text-sm text-muted-foreground">Fields defined in Settings → Custom Fields.</p>
         <CustomFieldInputs
           definitions={customFields}
           values={customValues}

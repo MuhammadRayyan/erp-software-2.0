@@ -2,18 +2,20 @@
 
 import { useMemo, useState } from "react";
 import Link from "next/link";
-import { Plus, Play, MoreHorizontal, ChevronRight, Eye, FileEdit, FileSpreadsheet } from "lucide-react";
+import { MoreHorizontal, ChevronRight, Eye, FileEdit } from "lucide-react";
 import { 
   useLegacyTable as useTable,
   getCoreRowModel as createCoreRowModel,
+  getPaginationRowModel as createPaginationRowModel,
   getSortedRowModel as createSortedRowModel
 } from "@tanstack/react-table/legacy";
 import { type SortingState } from "@tanstack/react-table";
 import { Button } from "@/components/ui/button";
 import { StatusBadge } from "@/components/status-badge";
-import { ListToolbar, SearchInput, ToolbarSelect, ActiveFiltersRow, FilterChip } from "@/components/list-toolbar";
+import { ListToolbar, SearchInput, ToolbarSelect, DateRangeFilter, ActiveFiltersRow, FilterChip } from "@/components/list-toolbar";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
-import { DataTable } from "@/components/ui/data-table";
+import { DataTable, ListTableCard } from "@/components/ui/data-table";
+import { ClientListPagination, useTablePagination } from "@/components/list-pagination";
 import { DensityToggle } from "@/components/density-toggle";
 import { useTableDensity } from "@/components/use-table-density";
 import { useColumns } from "@/components/columns-dropdown";
@@ -27,8 +29,6 @@ interface PayslipTableProps {
   payslips: PayslipRecord[];
   currency?: string;
   serverSnapshot?: ColumnVisibility;
-  onOpenPayRun: () => void;
-  onOpenWpsExport?: () => void;
 }
 
 const columnLabels: Record<string, string> = {
@@ -45,12 +45,12 @@ export function PayslipTable({
   payslips,
   currency = "AED",
   serverSnapshot,
-  onOpenPayRun,
-  onOpenWpsExport,
 }: PayslipTableProps) {
   const { density } = useTableDensity(businessId);
   const [query, setQuery] = useState("");
-  const [statusFilter, setStatusFilter] = useState<string>("all");
+  const [statusFilter, setStatusFilter] = useState<string>("");
+  const [fromDate, setFromDate] = useState("");
+  const [toDate, setToDate] = useState("");
   const [sorting, setSorting] = useState<SortingState>([{ id: "date", desc: true }]);
 
   const initialColumns = useMemo(
@@ -75,7 +75,9 @@ export function PayslipTable({
 
   const filteredRows = useMemo(() => {
     return payslips.filter((p) => {
-      if (statusFilter !== "all" && p.documentStatus !== statusFilter) return false;
+      if (statusFilter && p.documentStatus !== statusFilter) return false;
+      if (fromDate && p.date < fromDate) return false;
+      if (toDate && p.date > toDate) return false;
 
       if (!query.trim()) return true;
       const term = query.toLowerCase().trim();
@@ -87,7 +89,7 @@ export function PayslipTable({
         (p.employeeDepartment && p.employeeDepartment.toLowerCase().includes(term))
       );
     });
-  }, [payslips, query, statusFilter]);
+  }, [payslips, query, statusFilter, fromDate, toDate]);
 
   const columns: any[] = useMemo(() => [
     {
@@ -225,24 +227,31 @@ export function PayslipTable({
     },
   ], [businessId, currency]);
 
+  const { pagination, onPaginationChange, paginationInfo, setPage, setPageSize } = useTablePagination(filteredRows.length);
+
   const table = useTable({
     data: filteredRows,
     columns,
     state: {
       sorting,
+      pagination,
       columnVisibility: colVisibility,
     },
     onSortingChange: setSorting,
+    onPaginationChange,
     getCoreRowModel: createCoreRowModel(),
     getSortedRowModel: createSortedRowModel(),
+    getPaginationRowModel: createPaginationRowModel(),
   });
 
   const clearFilters = () => {
     setQuery("");
-    setStatusFilter("all");
+    setStatusFilter("");
+    setFromDate("");
+    setToDate("");
   };
 
-  const hasActiveFilter = Boolean(query || statusFilter !== "all");
+  const hasActiveFilter = Boolean(query || statusFilter || fromDate || toDate);
 
   const totalGross = useMemo(() => {
     return filteredRows.reduce((sum, p) => sum + (p.grossAmountMinor ?? 0), 0);
@@ -265,49 +274,37 @@ export function PayslipTable({
           placeholder="Search payslip #, employee, period..."
           ariaLabel="Search payslips"
         />
+        <DateRangeFilter
+          fromDate={fromDate}
+          toDate={toDate}
+          onFromChange={setFromDate}
+          onToChange={setToDate}
+          fromAriaLabel="Payslip date from"
+          toAriaLabel="Payslip date to"
+        />
         <ToolbarSelect
           value={statusFilter}
           onChange={setStatusFilter}
           ariaLabel="Filter by status"
           options={[
-            { value: "all", label: "All Statuses" },
-            { value: "posted", label: "Posted Only" },
-            { value: "draft", label: "Draft Only" },
-            { value: "void", label: "Void Only" },
+            { value: "", label: "All statuses" },
+            { value: "posted", label: "Posted" },
+            { value: "draft", label: "Draft" },
+            { value: "void", label: "Void" },
           ]}
         />
         <div className="ml-auto flex items-center gap-1.5 shrink-0">
           <DensityToggle businessId={businessId} />
           {dropdown}
-          {onOpenWpsExport && (
-            <Button
-              permission="export"
-              variant="secondary"
-              onClick={onOpenWpsExport}
-              className="h-9"
-            >
-              <FileSpreadsheet className="size-3.5 mr-1.5 text-primary" /> Export WPS (.SIF)
-            </Button>
-          )}
-          <Button
-            variant="secondary"
-            onClick={onOpenPayRun}
-            className="h-9"
-          >
-            <Play className="size-3.5 mr-1.5 text-primary" /> Generate Pay Run
-          </Button>
-          <Button permission="create" asChild className="h-9">
-            <Link href={`/b/${businessId}/payroll/payslips/new`}>
-              <Plus className="size-4 mr-1.5" /> New Payslip
-            </Link>
-          </Button>
         </div>
       </ListToolbar>
 
       {hasActiveFilter && (
         <ActiveFiltersRow onClearAll={clearFilters}>
-          {statusFilter !== "all" && (
-            <FilterChip onRemove={() => setStatusFilter("all")}>
+          {fromDate && <FilterChip onRemove={() => setFromDate("")}>From: {formatDate(fromDate)}</FilterChip>}
+          {toDate && <FilterChip onRemove={() => setToDate("")}>To: {formatDate(toDate)}</FilterChip>}
+          {statusFilter && (
+            <FilterChip onRemove={() => setStatusFilter("")}>
               Status: {statusFilter.charAt(0).toUpperCase() + statusFilter.slice(1)}
             </FilterChip>
           )}
@@ -315,27 +312,35 @@ export function PayslipTable({
         </ActiveFiltersRow>
       )}
 
-      <DataTable
-        table={table}
-        density={density}
-        minWidth="min-w-[850px]"
-        noResultsMessage="No payslips match these filters"
-        noResultsSubtext="Create your first payslip or click 'Generate Pay Run'."
-        onClearFilters={clearFilters}
-      />
-
-      {filteredRows.length > 0 && (
-        <TableTotalsBar
-          filteredCount={filteredRows.length}
-          totalCount={payslips.length}
-          itemLabel="payslips"
-          metrics={[
-            { label: "Total Gross", value: formatMoney(totalGross, currency) },
-            { label: "Total Deductions", value: totalDeductions > 0 ? `-${formatMoney(totalDeductions, currency)}` : `0.00 ${currency}` },
-            { label: "Net Payable", value: formatMoney(totalNet, currency), tone: "primary" },
-          ]}
+      <ListTableCard>
+        <DataTable
+          table={table}
+          density={density}
+          framed={false}
+          minWidth="min-w-[850px]"
+          noResultsMessage="No payslips match these filters"
+          noResultsSubtext="Create your first payslip or click 'Generate Pay Run'."
+          onClearFilters={clearFilters}
         />
-      )}
+
+        {filteredRows.length > 0 && (
+          <TableTotalsBar
+            filteredCount={filteredRows.length}
+            totalCount={payslips.length}
+            itemLabel="payslips"
+            metrics={[
+              { label: "Total Gross", value: formatMoney(totalGross, currency) },
+              { label: "Total Deductions", value: totalDeductions > 0 ? `-${formatMoney(totalDeductions, currency)}` : `0.00 ${currency}` },
+              { label: "Net Payable", value: formatMoney(totalNet, currency), tone: "primary" },
+            ]}
+          />
+        )}
+        <ClientListPagination
+          info={paginationInfo}
+          onPageChange={setPage}
+          onPageSizeChange={setPageSize}
+        />
+      </ListTableCard>
     </>
   );
 }

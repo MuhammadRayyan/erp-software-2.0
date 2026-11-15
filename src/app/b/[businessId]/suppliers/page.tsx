@@ -10,7 +10,12 @@ import { listPreferences } from "@/modules/preferences/preference-service";
 import { decodeColumnSnapshots } from "@/modules/preferences/snapshot-codec";
 import { listSuppliersPaginated } from "@/modules/suppliers/supplier-service";
 import { SupplierTable } from "@/modules/suppliers/supplier-table";
-import { parsePageParam, parsePageSizeParam } from "@/lib/params";
+import {
+  buildPreservedSearchParams,
+  loadDirectoryListParams,
+  sanitizePage,
+  sanitizePageSize,
+} from "@/lib/list-query-params";
 import { LiveRefresh } from "@/components/live-refresh";
 
 export const metadata = { title: "Suppliers" };
@@ -21,31 +26,46 @@ export default async function SuppliersPage({
   searchParams,
 }: {
   params: Promise<{ businessId: string }>;
-  searchParams: Promise<{ page?: string; pageSize?: string }>;
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
   const { businessId } = await params;
   const { user, access } = await requireModule(businessId, "purchases");
-  const sp = await searchParams;
-  const page = parsePageParam(sp.page);
-  const pageSize = parsePageSizeParam(sp.pageSize, 50);
+  const sp = await loadDirectoryListParams(searchParams);
+  const page = sanitizePage(sp.page);
+  const pageSize = sanitizePageSize(sp.pageSize, 50);
+  const q = sp.q || undefined;
+  const status = sp.status || undefined;
+  const sort = sp.sort || undefined;
+  const dir = sp.dir;
 
-  const { rows: suppliers, ...pagination } = listSuppliersPaginated(businessId, user.id, { page, pageSize });
-  
+  const { rows: suppliers, summary, ...pagination } = listSuppliersPaginated(businessId, user.id, {
+    q,
+    status,
+    sort,
+    dir,
+    page,
+    pageSize,
+  });
+
   const customFields = listCustomFieldDefinitions(businessId, user.id, "supplier")
     .filter((definition) => definition.showInList)
     .map(({ id, name, fieldType, selectOptions }) => ({ id, name, fieldType, selectOptions }));
-  
+
   const customValues = suppliers.length && customFields.length
     ? Object.fromEntries(getCustomFieldValuesForEntities(businessId, user.id, "supplier", suppliers.map((supplier) => supplier.id)))
     : {};
 
   const preferences = listPreferences(businessId, user.id);
   const columnSnapshots = decodeColumnSnapshots(preferences);
-  
-  const searchParamsUrl = new URLSearchParams();
-  if (sp.pageSize) searchParamsUrl.set("pageSize", sp.pageSize);
-
-  const paginationInfo = pagination;
+  const searchParamsUrl = buildPreservedSearchParams({
+    q,
+    status,
+    sort,
+    dir: sort ? dir : undefined,
+    pageSize,
+  });
+  const hasAnyRecords = summary.unfilteredTotal > 0;
+  const hasActiveFilters = Boolean(q || status);
 
   return (
     <div className="page-container">
@@ -60,26 +80,18 @@ export default async function SuppliersPage({
           </Link>
         </Button>
       </PageHeader>
-      
-      {suppliers.length || pagination.total > 0 ? (
-        <div className="data-panel overflow-hidden">
-          {suppliers.length ? (
-            <SupplierTable
-              businessId={businessId}
-              currency={access.business.currency}
-              suppliers={suppliers}
-              customFields={customFields}
-              customValues={customValues}
-              serverSnapshot={columnSnapshots["suppliers"]}
-            />
-          ) : (
-            <div className="p-10 text-center">
-              <p className="font-medium">No suppliers match these filters</p>
-              <p className="mt-1 text-sm text-muted-foreground">Try a different page or clear the search.</p>
-            </div>
-          )}
-          <ListPagination pathname={`/b/${businessId}/suppliers`} searchParams={searchParamsUrl} info={paginationInfo} />
-        </div>
+
+      {hasAnyRecords || hasActiveFilters ? (
+        <SupplierTable
+          businessId={businessId}
+          currency={access.business.currency}
+          suppliers={suppliers}
+          summary={summary}
+          customFields={customFields}
+          customValues={customValues}
+          serverSnapshot={columnSnapshots["suppliers"]}
+          footer={<ListPagination pathname={`/b/${businessId}/suppliers`} searchParams={searchParamsUrl} info={pagination} />}
+        />
       ) : (
         <EmptyState
           icon={<Truck className="mx-auto mb-3 size-7 text-muted-foreground" />}

@@ -4,7 +4,6 @@ import { useState, useTransition } from "react";
 import Link from "next/link";
 import {
   AlertCircle,
-  ArrowLeft,
   CheckCircle2,
   Clock,
   Cpu,
@@ -25,7 +24,6 @@ import {
   testGlobalEmailDeliveryAction,
   type EngineDiagnostics,
 } from "./actions";
-import { AdminNavTabs } from "../admin-nav-tabs";
 import { toast } from "sonner";
 
 function formatUptime(seconds: number): string {
@@ -123,13 +121,6 @@ export function EngineHealthView({ initialData }: { initialData: EngineDiagnosti
       {/* Navigation & Header */}
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <div className="flex items-center gap-2 text-xs text-muted-foreground mb-1.5">
-            <Link href="/admin" className="hover:text-foreground flex items-center gap-1 transition-colors">
-              <ArrowLeft className="size-3.5" /> Platform Admin
-            </Link>
-            <span>/</span>
-            <span className="text-foreground font-medium">Engine Health</span>
-          </div>
           <div className="flex items-center gap-3">
             <h1 className="text-2xl font-bold tracking-tight text-foreground">Platform Engine Health</h1>
             <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2.5 py-0.5 text-xs font-semibold text-emerald-700 dark:border-emerald-500/40 dark:bg-emerald-500/20 dark:text-emerald-300">
@@ -159,9 +150,6 @@ export function EngineHealthView({ initialData }: { initialData: EngineDiagnosti
           </Button>
         </div>
       </div>
-
-      {/* Navigation View Tabs */}
-      <AdminNavTabs currentTab="engine-health" />
 
       {/* Primary KPI Grid */}
       <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-6">

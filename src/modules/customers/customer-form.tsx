@@ -2,16 +2,22 @@
 import { FormError } from "@/components/form-error";
 
 import Link from "next/link";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { LoaderCircle } from "lucide-react";
-import { useForm, useWatch } from "react-hook-form";
+import { Controller, useForm, useWatch } from "react-hook-form";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { CustomFieldInputs, type CustomFieldInputDefinition } from "@/modules/custom-fields/custom-field-inputs";
-import { firstMissingRequiredCustomField } from "@/modules/custom-fields/custom-field-display";
+import {
+  buildInitialCustomFieldValues,
+  firstMissingRequiredCustomField,
+  haveCustomFieldValuesChanged,
+} from "@/modules/custom-fields/custom-field-display";
+import { useUnsavedChanges } from "@/hooks/use-unsaved-changes";
 import { createCustomerAction, updateCustomerAction } from "./actions";
 import { customerInputSchema, type CustomerInput } from "./customer-input";
 
@@ -39,7 +45,7 @@ export function CustomerForm({
     setError,
     control,
     setValue,
-    formState: { errors, isSubmitting },
+    formState: { errors, isSubmitting, isDirty, isSubmitSuccessful },
   } = useForm<Values>({
     resolver: zodResolver(customerInputSchema),
     mode: "onTouched",
@@ -74,14 +80,13 @@ export function CustomerForm({
 
   const billingAddress = useWatch({ control, name: "billingAddress" });
 
-  const [customValues, setCustomValues] = useState<Record<string, string>>(() => {
-    const initialCustomValues: Record<string, string> = {};
-    for (const definition of customFields) {
-      initialCustomValues[definition.id] =
-        customFieldValues?.[definition.id] ?? (definition.fieldType === "checkbox" ? "false" : "");
-    }
-    return initialCustomValues;
-  });
+  const initialCustomValues = useMemo(
+    () => buildInitialCustomFieldValues(customFields, customFieldValues),
+    [customFields, customFieldValues],
+  );
+  const [customValues, setCustomValues] = useState<Record<string, string>>(initialCustomValues);
+  const customDirty = haveCustomFieldValuesChanged(initialCustomValues, customValues);
+  useUnsavedChanges((isDirty || customDirty) && !isSubmitSuccessful);
 
   useEffect(() => {
     if (sameAsBilling) {
@@ -116,7 +121,6 @@ export function CustomerForm({
       {/* Primary Section: Contact & Billing Information */}
       <section className="border-b border-border pb-7">
         <h2 className="text-base font-semibold">Primary details</h2>
-        <p className="mt-1 text-sm text-muted-foreground">Basic contact information and billing address for invoices and receipts.</p>
         <div className="mt-5 grid gap-5 sm:grid-cols-2">
           <div className="space-y-1.5 sm:col-span-2">
             <Label htmlFor="name">
@@ -170,12 +174,11 @@ export function CustomerForm({
           </div>
 
           <div className="space-y-1.5 sm:col-span-2">
-            <label className="flex items-center gap-2 text-sm font-medium leading-none cursor-pointer">
-              <input
-                type="checkbox"
-                className="size-4 rounded-[4px] border-border-strong accent-primary cursor-pointer"
+            <label className="flex items-center gap-2 text-sm font-medium leading-none cursor-pointer select-none">
+              <Checkbox
                 checked={sameAsBilling}
-                onChange={(e) => setSameAsBilling(e.target.checked)}
+                onCheckedChange={(checked) => setSameAsBilling(Boolean(checked))}
+                aria-label="Delivery address same as billing address"
               />
               Delivery address same as billing address
             </label>
@@ -200,7 +203,6 @@ export function CustomerForm({
       {/* Additional Options Section */}
       <section className="border-b border-border pb-7">
         <h2 className="text-base font-semibold">Additional options</h2>
-        <p className="mt-1 text-sm text-muted-foreground">Optional commercial terms, tax registration, and customer status.</p>
         <div className="mt-5 grid gap-5 sm:grid-cols-2">
           <div className="space-y-1.5">
             <Label htmlFor="taxReference">TRN <span className="font-normal text-muted-foreground">(optional)</span></Label>
@@ -241,15 +243,20 @@ export function CustomerForm({
           </div>
 
           <div className="space-y-1.5 sm:col-span-2 pt-2">
-            <label className="flex items-center gap-2 text-sm font-medium leading-none cursor-pointer">
-              <input
-                type="checkbox"
-                className="size-4 rounded-[4px] border-border-strong accent-primary cursor-pointer"
-                {...register("isActive")}
+            <label className="flex items-center gap-2 text-sm font-medium leading-none cursor-pointer select-none">
+              <Controller
+                control={control}
+                name="isActive"
+                render={({ field }) => (
+                  <Checkbox
+                    checked={Boolean(field.value)}
+                    onCheckedChange={(checked) => field.onChange(Boolean(checked))}
+                    aria-label="Active customer"
+                  />
+                )}
               />
               Active customer
             </label>
-            <p className="text-[13px] text-muted-foreground ml-6">Inactive customers are hidden from standard lists and cannot be used for new invoices.</p>
           </div>
         </div>
       </section>
@@ -258,7 +265,6 @@ export function CustomerForm({
       {customFields.length > 0 && (
         <section className="border-b border-border pb-7">
           <h2 className="text-base font-semibold">Custom Fields</h2>
-          <p className="mt-1 text-sm text-muted-foreground">Fields defined in Settings → Custom Fields.</p>
           <CustomFieldInputs
             definitions={customFields}
             values={customValues}

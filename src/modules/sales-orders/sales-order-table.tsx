@@ -6,15 +6,17 @@ import { ChevronRight, MoreHorizontal, Eye, FileEdit, Download, FileText, Packag
 import { 
   useLegacyTable as useTable,
   getCoreRowModel as createCoreRowModel,
+  getPaginationRowModel as createPaginationRowModel,
   getSortedRowModel as createSortedRowModel
 } from "@tanstack/react-table/legacy";
 import { type SortingState } from "@tanstack/react-table";
 import { StatusBadge, statusLabel } from "@/components/status-badge";
-import { ListToolbar, SearchInput, ToolbarSelect, ActiveFiltersRow, FilterChip } from "@/components/list-toolbar";
+import { ListToolbar, SearchInput, ToolbarSelect, DateRangeFilter, ActiveFiltersRow, FilterChip } from "@/components/list-toolbar";
 import { Button } from "@/components/ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { useColumns } from "@/components/columns-dropdown";
-import { DataTable } from "@/components/ui/data-table";
+import { DataTable, ListTableCard } from "@/components/ui/data-table";
+import { ClientListPagination, useTablePagination } from "@/components/list-pagination";
 import { formatDate, formatMoney } from "@/core/format";
 import type { SalesOrderStatus } from "./sales-order-service";
 import { DensityToggle } from "@/components/density-toggle";
@@ -58,6 +60,8 @@ export function SalesOrderTable({
   const [status, setStatus] = useState("");
   const [customerId, setCustomerId] = useState("");
   const [projectId, setProjectId] = useState("");
+  const [fromDate, setFromDate] = useState("");
+  const [toDate, setToDate] = useState("");
   const [sorting, setSorting] = useState<SortingState>([]);
 
   const customerOptions = useMemo(
@@ -99,11 +103,13 @@ export function SalesOrderTable({
             (!status || order.documentStatus === status) &&
             (!customerId || order.customer_id === customerId) &&
             (!projectId || order.projectIds.includes(projectId)) &&
+            (!fromDate || order.date >= fromDate) &&
+            (!toDate || order.date <= toDate) &&
             matchesQuery
           );
         })
         .map((order) => ({ ...order, businessId })),
-    [orders, projectId, query, status, customerId, businessId],
+    [orders, projectId, query, status, customerId, fromDate, toDate, businessId],
   );
 
   const columns: any[] = useMemo(
@@ -215,16 +221,21 @@ export function SalesOrderTable({
     [],
   );
 
+  const { pagination, onPaginationChange, paginationInfo, setPage, setPageSize } = useTablePagination(rows.length);
+
   const table = useTable({
     data: rows,
     columns,
     state: {
       sorting,
+      pagination,
       columnVisibility: colVisibility,
     },
     onSortingChange: setSorting,
+    onPaginationChange,
     getCoreRowModel: createCoreRowModel(),
     getSortedRowModel: createSortedRowModel(),
+    getPaginationRowModel: createPaginationRowModel(),
   });
 
   const clearFilters = () => {
@@ -232,8 +243,10 @@ export function SalesOrderTable({
     setStatus("");
     setCustomerId("");
     setProjectId("");
+    setFromDate("");
+    setToDate("");
   };
-  const hasActiveFilter = Boolean(customerId || projectId || status || query);
+  const hasActiveFilter = Boolean(customerId || projectId || fromDate || toDate || status || query);
 
   const totalOrderValueStr = useMemo(() => {
     const activeRows = status === "cancelled" ? rows : rows.filter((r) => r.documentStatus !== "cancelled" && r.documentStatus !== "superseded");
@@ -268,6 +281,14 @@ export function SalesOrderTable({
           className="min-w-36 max-w-52"
           options={[{ value: "", label: "All projects" }, ...projectOptions.map(([id, name]) => ({ value: id, label: name }))]}
         />
+        <DateRangeFilter
+          fromDate={fromDate}
+          toDate={toDate}
+          onFromChange={setFromDate}
+          onToChange={setToDate}
+          fromAriaLabel="Order date from"
+          toAriaLabel="Order date to"
+        />
         <ToolbarSelect
           value={status}
           onChange={setStatus}
@@ -297,30 +318,40 @@ export function SalesOrderTable({
               Project: {projectOptions.find(([id]) => id === projectId)?.[1]}
             </FilterChip>
           )}
+          {fromDate && <FilterChip onRemove={() => setFromDate("")}>From: {formatDate(fromDate)}</FilterChip>}
+          {toDate && <FilterChip onRemove={() => setToDate("")}>To: {formatDate(toDate)}</FilterChip>}
           {status && <FilterChip onRemove={() => setStatus("")}>Status: {statusLabel(status)}</FilterChip>}
           {query && <FilterChip onRemove={() => setQuery("")}>Search: {query}</FilterChip>}
         </ActiveFiltersRow>
       )}
       
-      <DataTable 
-        table={table}
-        density={density}
-        minWidth="min-w-[780px]" 
-        noResultsMessage="No sales orders match" 
-        onClearFilters={clearFilters}
-      />
-
-      {rows.length > 0 && (
-        <TableTotalsBar
-          filteredCount={rows.length}
-          totalCount={orders.length}
-          itemLabel="orders"
-          metrics={[
-            { label: "Total Order Value", value: totalOrderValueStr, tone: "primary" },
-            { label: "Active Orders", value: `${activeCount} orders` },
-          ]}
+      <ListTableCard>
+        <DataTable 
+          table={table}
+          density={density}
+          framed={false}
+          minWidth="min-w-[780px]" 
+          noResultsMessage="No sales orders match" 
+          onClearFilters={clearFilters}
         />
-      )}
+
+        {rows.length > 0 && (
+          <TableTotalsBar
+            filteredCount={rows.length}
+            totalCount={orders.length}
+            itemLabel="orders"
+            metrics={[
+              { label: "Total Order Value", value: totalOrderValueStr, tone: "primary" },
+              { label: "Active Orders", value: `${activeCount} orders` },
+            ]}
+          />
+        )}
+        <ClientListPagination
+          info={paginationInfo}
+          onPageChange={setPage}
+          onPageSizeChange={setPageSize}
+        />
+      </ListTableCard>
     </>
   );
 }

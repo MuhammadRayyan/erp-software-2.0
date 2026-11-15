@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useState, useSyncExternalStore, useTransition } from "react";
 import { useTheme } from "next-themes";
 import { Laptop, Moon, Sun, TableProperties, Type, ZoomIn } from "lucide-react";
 import { toast } from "sonner";
@@ -8,12 +8,16 @@ import { Button } from "@/components/ui/button";
 import { useTableDensity, type TableDensity } from "@/components/use-table-density";
 import { upsertUserSettings } from "./actions";
 
+const emptySubscribe = () => () => {};
+
 export function AppearanceForm({ initialFont, initialSize }: { initialFont: string; initialSize: string }) {
   const [isPending, startTransition] = useTransition();
+  const mounted = useSyncExternalStore(emptySubscribe, () => true, () => false);
   const { theme, setTheme } = useTheme();
   const { density, setDensity } = useTableDensity();
   const [selectedFont, setSelectedFont] = useState(initialFont);
   const [selectedSize, setSelectedSize] = useState(initialSize);
+  const displayTheme = mounted ? (theme ?? "system") : "system";
 
   const handleSave = (formData: FormData) => {
     const font = (formData.get("themeFont") as string) || selectedFont;
@@ -49,7 +53,7 @@ export function AppearanceForm({ initialFont, initialSize }: { initialFont: stri
           <div className="mt-3 flex items-center justify-between text-xs text-muted-foreground">
             <span>Font: <strong className="text-foreground capitalize">{selectedFont}</strong></span>
             <span>Scaling: <strong className="text-foreground capitalize">{selectedSize}</strong></span>
-            <span>Theme: <strong className="text-foreground capitalize">{theme ?? "system"}</strong></span>
+            <span>Theme: <strong className="text-foreground capitalize">{displayTheme}</strong></span>
             <span>Density: <strong className="text-foreground capitalize">{density}</strong></span>
           </div>
         </div>
@@ -72,7 +76,7 @@ export function AppearanceForm({ initialFont, initialSize }: { initialFont: stri
               type="button"
               onClick={() => setTheme(item.id)}
               className={`flex flex-col items-start gap-2 rounded-lg border p-4 text-left transition-colors ${
-                theme === item.id
+                mounted && theme === item.id
                   ? "border-primary bg-primary/5 ring-1 ring-primary"
                   : "border-border bg-surface hover:bg-surface-muted"
               }`}
@@ -194,7 +198,7 @@ export function AppearanceForm({ initialFont, initialSize }: { initialFont: stri
       </section>
 
       <div className="flex justify-end pt-2">
-        <Button permission={"save"} type="submit" disabled={isPending}>
+        <Button type="submit" disabled={isPending}>
           {isPending ? "Saving…" : "Save Appearance Settings"}
         </Button>
       </div>

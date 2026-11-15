@@ -5,6 +5,7 @@ import { Plus, Trash2, CheckCircle2, Star, Edit2, X } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
@@ -174,13 +175,12 @@ export function PaymentTermsManager({
           </div>
 
           <div className="flex items-center gap-4">
-            <label className="flex items-center gap-2 cursor-pointer text-sm">
-              <input
-                type="checkbox"
+            <label className="flex items-center gap-2 cursor-pointer text-sm select-none">
+              <Checkbox
                 checked={isDefault}
-                onChange={(e) => setIsDefault(e.target.checked)}
+                onCheckedChange={(checked) => setIsDefault(Boolean(checked))}
                 disabled={pending}
-                className="size-4 rounded border-border text-primary focus:ring-ring"
+                aria-label="Set as default"
               />
               <span>Set as default</span>
             </label>

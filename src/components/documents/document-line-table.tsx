@@ -1,9 +1,11 @@
 "use client";
 
 import React, { useState, useMemo, useCallback } from "react";
-import type { UseFormRegister, FieldErrors, UseFormRegisterReturn } from "react-hook-form";
+import { Controller, type UseFormRegister, type FieldErrors, type UseFormRegisterReturn } from "react-hook-form";
 import { ArrowDown, ArrowUp, Copy, MoreHorizontal, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Combobox, type ComboboxOption } from "@/components/ui/combobox";
 import { Input } from "@/components/ui/input";
 import { SelectNative } from "@/components/ui/select-native";
 import {
@@ -193,6 +195,66 @@ export function resolvePastedTSVRow({
   };
 }
 
+export function useDocumentColumnVisibility(initial?: {
+  lineNumber?: boolean;
+  description?: boolean;
+  discounts?: boolean;
+  projects?: boolean;
+  lineTaxCodes?: boolean;
+  lines?: any[];
+}) {
+  const [showLineNumber, setShowLineNumber] = useState(initial?.lineNumber ?? true);
+  const [showDescription, setShowDescription] = useState(initial?.description ?? true);
+  const [showDiscounts, setShowDiscounts] = useState(
+    () =>
+      initial?.discounts ??
+      (initial?.lines?.some((l) => l?.discountType && l?.discountType !== "none") ?? false),
+  );
+  const [showLineProjects, setShowLineProjects] = useState(
+    () => initial?.projects ?? (initial?.lines?.some((l) => Boolean(l?.projectId)) ?? false),
+  );
+  const [showLineTaxCodes, setShowLineTaxCodes] = useState(
+    () => initial?.lineTaxCodes ?? true,
+  );
+
+  return {
+    showLineNumber,
+    setShowLineNumber,
+    showDescription,
+    setShowDescription,
+    showDiscounts,
+    setShowDiscounts,
+    showLineProjects,
+    setShowLineProjects,
+    showLineTaxCodes,
+    setShowLineTaxCodes,
+    tableProps: {
+      showLineNumber,
+      onShowLineNumberChange: setShowLineNumber,
+      showDescription,
+      onShowDescriptionChange: setShowDescription,
+      showDiscounts,
+      onShowDiscountsChange: setShowDiscounts,
+      showLineProjects,
+      onShowLineProjectsChange: setShowLineProjects,
+      showLineTaxCodes,
+      onShowLineTaxCodesChange: setShowLineTaxCodes,
+    },
+    togglesProps: {
+      showLineNumber,
+      onShowLineNumberChange: setShowLineNumber,
+      showDescription,
+      onShowDescriptionChange: setShowDescription,
+      showDiscounts,
+      onShowDiscountsChange: setShowDiscounts,
+      showLineProjects,
+      onShowLineProjectsChange: setShowLineProjects,
+      showLineTaxCodes,
+      onShowLineTaxCodesChange: setShowLineTaxCodes,
+    },
+  };
+}
+
 export interface DocumentLineTableProps {
   // Form control
   register: UseFormRegister<any>;
@@ -222,7 +284,7 @@ export interface DocumentLineTableProps {
   // Currency & Previews
   currencyCode: string;
   minorUnit: number;
-  previews: DocumentLinePreview[];
+  previews?: DocumentLinePreview[];
   amountsIncludeTax?: boolean;
   lineCustomFields?: CustomFieldInputDefinition[];
 
@@ -253,6 +315,7 @@ export interface DocumentLineTableProps {
   baseEquivalentMinor?: number | null;
   baseCurrencyCode?: string;
   baseMinorUnit?: number;
+  showAmountsIncludeTaxToggle?: boolean;
   registerAmountsIncludeTax?: UseFormRegisterReturn;
 }
 
@@ -283,7 +346,7 @@ export function DocumentLineTable({
   projects,
   currencyCode,
   minorUnit,
-  previews,
+  previews = [],
   amountsIncludeTax = false,
   lineCustomFields = [],
   showLineNumber: controlledShowLineNumber,
@@ -305,6 +368,7 @@ export function DocumentLineTable({
   baseEquivalentMinor,
   baseCurrencyCode,
   baseMinorUnit,
+  showAmountsIncludeTaxToggle = false,
   registerAmountsIncludeTax,
 }: DocumentLineTableProps) {
   // Uncontrolled state fallbacks
@@ -340,6 +404,26 @@ export function DocumentLineTable({
 
   const resolvedAccountAria =
     accountAriaLabel ?? (accountFieldName === "salesAccountId" ? "sales account" : "expense account");
+
+  const accountComboboxOptions = useMemo<ComboboxOption[]>(
+    () => accounts.map((account) => ({ value: account.id, label: account.name })),
+    [accounts],
+  );
+
+  const taxComboboxOptions = useMemo<ComboboxOption[]>(
+    () => taxCodes.map((taxCode) => ({ value: taxCode.id, label: taxCode.name })),
+    [taxCodes],
+  );
+
+  const projectComboboxOptions = useMemo<ComboboxOption[]>(
+    () =>
+      (projects ?? []).map((project) => ({
+        value: project.id,
+        label: "code" in project && project.code ? `${project.code} — ${project.name}` : project.name,
+        keywords: ["code" in project && project.code ? project.code : "", project.name].filter(Boolean),
+      })),
+    [projects],
+  );
 
   // Default multi-row TSV clipboard paste handler (Excel / Google Sheets import)
   const defaultPasteTSV = useCallback(
@@ -426,8 +510,8 @@ export function DocumentLineTable({
             Item <span className="font-normal text-muted-foreground">(opt)</span>
           </>
         ),
-        width: showDescription ? "14%" : "28%",
-        minWidth: "110px",
+        width: showDescription ? "14%" : "24%",
+        minWidth: "126px",
         isEditable: true,
         renderCell: ({ index, line, handleKeyDown }) => (
           <div className="min-w-0">
@@ -438,9 +522,13 @@ export function DocumentLineTable({
               dataGridColId="item"
               onKeyDown={(e) => handleKeyDown(e, "item")}
               onChange={(itemId) => {
-                register(`lines.${index}.itemId`).onChange({
-                  target: { value: itemId, name: `lines.${index}.itemId` },
-                });
+                if (setValue) {
+                  setValue(`lines.${index}.itemId`, itemId, { shouldDirty: true, shouldTouch: true });
+                } else {
+                  register(`lines.${index}.itemId`).onChange({
+                    target: { value: itemId, name: `lines.${index}.itemId` },
+                  });
+                }
                 onItemSelect?.(index, itemId);
               }}
               ariaLabel={`Line ${index + 1} inventory item`}
@@ -456,7 +544,7 @@ export function DocumentLineTable({
       id: "description",
       header: "Description",
       width: "auto",
-      minWidth: "140px",
+      minWidth: "160px",
       isVisible: showDescription,
       isEditable: true,
       renderCell: ({ index, errors: rowErrors, handleKeyDown }) => {
@@ -465,10 +553,11 @@ export function DocumentLineTable({
           <div className="min-w-0">
             <Input
               aria-label={`Line ${index + 1} description`}
+              aria-invalid={Boolean(lineError?.description)}
               data-grid-row={index}
               data-grid-col-id="description"
               className={cn(
-                "w-full min-w-0 text-xs h-9 px-2.5",
+                "w-full min-w-0 text-xs h-8 px-2",
                 lineError?.description && "border-destructive focus-visible:ring-destructive"
               )}
               placeholder="Description..."
@@ -487,8 +576,8 @@ export function DocumentLineTable({
     cols.push({
       id: "quantity",
       header: "Qty",
-      width: "58px",
-      minWidth: "52px",
+      width: "76px",
+      minWidth: "72px",
       align: "right",
       isEditable: true,
       renderCell: ({ index, errors: rowErrors, handleKeyDown }) => {
@@ -498,8 +587,9 @@ export function DocumentLineTable({
             <Input
               data-grid-row={index}
               data-grid-col-id="quantity"
+              aria-invalid={Boolean(lineError?.quantity)}
               className={cn(
-                "money text-right w-full min-w-0 text-xs h-9 px-1.5 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none",
+                "money text-right w-full min-w-0 text-xs h-8 px-1.5 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none",
                 lineError?.quantity && "border-destructive focus-visible:ring-destructive"
               )}
               type="number"
@@ -521,8 +611,8 @@ export function DocumentLineTable({
     cols.push({
       id: "unitPrice",
       header: "Rate",
-      width: "76px",
-      minWidth: "70px",
+      width: "116px",
+      minWidth: "108px",
       align: "right",
       isEditable: true,
       renderCell: ({ index, errors: rowErrors, handleKeyDown }) => {
@@ -532,8 +622,9 @@ export function DocumentLineTable({
             <Input
               data-grid-row={index}
               data-grid-col-id="unitPrice"
+              aria-invalid={Boolean(lineError?.unitPrice)}
               className={cn(
-                "money text-right w-full min-w-0 text-xs h-9 px-1.5 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none",
+                "money text-right w-full min-w-0 text-xs h-8 px-1.5 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none",
                 lineError?.unitPrice && "border-destructive focus-visible:ring-destructive"
               )}
               type="number"
@@ -555,13 +646,13 @@ export function DocumentLineTable({
     cols.push({
       id: "discount",
       header: "Discount",
-      width: "78px",
-      minWidth: "74px",
+      width: "96px",
+      minWidth: "92px",
       align: "right",
       isVisible: showDiscounts,
       isEditable: true,
       renderCell: ({ index, line, handleKeyDown }) => (
-        <div className="flex items-center h-9 w-full min-w-0 rounded-[6px] border border-border-strong bg-surface-raised overflow-hidden focus-within:border-primary focus-within:ring-1 focus-within:ring-ring">
+        <div className="flex items-center h-8 w-full min-w-0 rounded-[6px] border border-border-strong bg-surface-raised overflow-hidden focus-within:border-primary focus-within:ring-1 focus-within:ring-ring">
           <select
             data-grid-row={index}
             data-grid-col-id="discount"
@@ -600,37 +691,56 @@ export function DocumentLineTable({
     cols.push({
       id: "account",
       header: accountColumnLabel,
-      width: showDescription ? "14%" : (showLineProjects ? "22%" : "28%"),
-      minWidth: "110px",
+      width: showDescription ? "15%" : (showLineProjects ? "22%" : "26%"),
+      minWidth: "132px",
       isEditable: true,
       renderCell: ({ index, line, errors: rowErrors, handleKeyDown }) => {
         const lineError = (rowErrors?.lines as any)?.[index];
         return (
           <div className="min-w-0">
             {line?.itemId ? (
-              <div className="h-9 flex items-center px-2 rounded-[6px] bg-surface-muted/40 border border-transparent">
+              <div className="h-8 flex items-center px-2 rounded-[6px] bg-surface-muted/40 border border-transparent">
                 <input type="hidden" {...register(`lines.${index}.${accountFieldName}`)} />
                 <span className="text-xs text-muted-foreground italic truncate">Auto (item)</span>
               </div>
-            ) : (
-              <SelectNative
-                data-grid-row={index}
-                data-grid-col-id="account"
-                aria-label={`Line ${index + 1} ${resolvedAccountAria}`}
-                className={cn(
-                  "w-full text-xs h-9 px-1.5 truncate",
-                  lineError?.[accountFieldName] && "border-destructive focus-visible:ring-destructive"
+            ) : control ? (
+              <Controller
+                control={control}
+                name={`lines.${index}.${accountFieldName}`}
+                render={({ field }) => (
+                  <Combobox
+                    options={accountComboboxOptions}
+                    value={String(field.value ?? "")}
+                    onValueChange={(nextValue) => field.onChange(nextValue)}
+                    placeholder={accountPlaceholder ?? "Select account"}
+                    searchPlaceholder="Search account..."
+                    emptyText="No accounts found."
+                    size="sm"
+                    ariaLabel={`Line ${index + 1} ${resolvedAccountAria}`}
+                    ariaInvalid={Boolean(lineError?.[accountFieldName])}
+                    dataGridRow={index}
+                    dataGridColId="account"
+                    onKeyDown={(e) => handleKeyDown(e, "account")}
+                  />
                 )}
-                {...register(`lines.${index}.${accountFieldName}`)}
+              />
+            ) : (
+              <Combobox
+                options={accountComboboxOptions}
+                value={String(line?.[accountFieldName] ?? "")}
+                onValueChange={(nextValue) =>
+                  setValue?.(`lines.${index}.${accountFieldName}`, nextValue, { shouldDirty: true })
+                }
+                placeholder={accountPlaceholder ?? "Select account"}
+                searchPlaceholder="Search account..."
+                emptyText="No accounts found."
+                size="sm"
+                ariaLabel={`Line ${index + 1} ${resolvedAccountAria}`}
+                ariaInvalid={Boolean(lineError?.[accountFieldName])}
+                dataGridRow={index}
+                dataGridColId="account"
                 onKeyDown={(e) => handleKeyDown(e, "account")}
-              >
-                {accountPlaceholder && <option value="">{accountPlaceholder}</option>}
-                {accounts.map((account) => (
-                  <option key={account.id} value={account.id}>
-                    {account.name}
-                  </option>
-                ))}
-              </SelectNative>
+              />
             )}
             {lineError?.[accountFieldName] && (
               <p className="field-error">{lineError[accountFieldName].message}</p>
@@ -647,31 +757,53 @@ export function DocumentLineTable({
     cols.push({
       id: "taxCode",
       header: "VAT",
-      width: "80px",
-      minWidth: "76px",
+      width: "124px",
+      minWidth: "112px",
       isVisible: showLineTaxCodes,
       isEditable: true,
-      renderCell: ({ index, errors: rowErrors, handleKeyDown }) => {
+      renderCell: ({ index, line, errors: rowErrors, handleKeyDown }) => {
         const lineError = (rowErrors?.lines as any)?.[index];
         return (
           <div className="min-w-0">
-            <SelectNative
-              data-grid-row={index}
-              data-grid-col-id="taxCode"
-              aria-label={`Line ${index + 1} tax code`}
-              className={cn(
-                "w-full text-xs h-9 px-1.5 truncate",
-                lineError?.taxCodeId && "border-destructive focus-visible:ring-destructive"
-              )}
-              {...register(`lines.${index}.taxCodeId`)}
-              onKeyDown={(e) => handleKeyDown(e, "taxCode")}
-            >
-              {taxCodes.map((taxCode) => (
-                <option key={taxCode.id} value={taxCode.id}>
-                  {taxCode.name}
-                </option>
-              ))}
-            </SelectNative>
+            {control ? (
+              <Controller
+                control={control}
+                name={`lines.${index}.taxCodeId`}
+                render={({ field }) => (
+                  <Combobox
+                    options={taxComboboxOptions}
+                    value={String(field.value ?? "")}
+                    onValueChange={(nextValue) => field.onChange(nextValue)}
+                    placeholder="Tax code"
+                    searchPlaceholder="Search VAT code..."
+                    emptyText="No tax codes found."
+                    size="sm"
+                    ariaLabel={`Line ${index + 1} tax code`}
+                    ariaInvalid={Boolean(lineError?.taxCodeId)}
+                    dataGridRow={index}
+                    dataGridColId="taxCode"
+                    onKeyDown={(e) => handleKeyDown(e, "taxCode")}
+                  />
+                )}
+              />
+            ) : (
+              <Combobox
+                options={taxComboboxOptions}
+                value={String(line?.taxCodeId ?? "")}
+                onValueChange={(nextValue) =>
+                  setValue?.(`lines.${index}.taxCodeId`, nextValue, { shouldDirty: true })
+                }
+                placeholder="Tax code"
+                searchPlaceholder="Search VAT code..."
+                emptyText="No tax codes found."
+                size="sm"
+                ariaLabel={`Line ${index + 1} tax code`}
+                ariaInvalid={Boolean(lineError?.taxCodeId)}
+                dataGridRow={index}
+                dataGridColId="taxCode"
+                onKeyDown={(e) => handleKeyDown(e, "taxCode")}
+              />
+            )}
             {lineError?.taxCodeId && (
               <p className="field-error">{lineError.taxCodeId.message}</p>
             )}
@@ -684,28 +816,53 @@ export function DocumentLineTable({
     cols.push({
       id: "project",
       header: "Project",
-      width: "86px",
-      minWidth: "80px",
+      width: "124px",
+      minWidth: "112px",
       isVisible: showLineProjects,
       isEditable: true,
-      renderCell: ({ index, handleKeyDown }) => (
+      renderCell: ({ index, line, handleKeyDown }) => (
         <div className="min-w-0">
-          <SelectNative
-            data-grid-row={index}
-            data-grid-col-id="project"
-            aria-label={`Line ${index + 1} project`}
-            className="w-full text-xs h-9 px-1.5 truncate"
-            {...register(`lines.${index}.projectId`)}
-            onKeyDown={(e) => handleKeyDown(e, "project")}
-          >
-            <option value="">Default</option>
-            {projects?.map((project) => (
-              <option key={project.id} value={project.id}>
-                {"code" in project && project.code ? `${project.code} — ` : ""}
-                {project.name}
-              </option>
-            ))}
-          </SelectNative>
+          {control ? (
+            <Controller
+              control={control}
+              name={`lines.${index}.projectId`}
+              render={({ field }) => (
+                <Combobox
+                  options={projectComboboxOptions}
+                  value={String(field.value ?? "")}
+                  onValueChange={(nextValue) => field.onChange(nextValue)}
+                  placeholder="Default"
+                  clearLabel="Default"
+                  allowClear
+                  searchPlaceholder="Search project..."
+                  emptyText="No projects found."
+                  size="sm"
+                  ariaLabel={`Line ${index + 1} project`}
+                  dataGridRow={index}
+                  dataGridColId="project"
+                  onKeyDown={(e) => handleKeyDown(e, "project")}
+                />
+              )}
+            />
+          ) : (
+            <Combobox
+              options={projectComboboxOptions}
+              value={String(line?.projectId ?? "")}
+              onValueChange={(nextValue) =>
+                setValue?.(`lines.${index}.projectId`, nextValue, { shouldDirty: true })
+              }
+              placeholder="Default"
+              clearLabel="Default"
+              allowClear
+              searchPlaceholder="Search project..."
+              emptyText="No projects found."
+              size="sm"
+              ariaLabel={`Line ${index + 1} project`}
+              dataGridRow={index}
+              dataGridColId="project"
+              onKeyDown={(e) => handleKeyDown(e, "project")}
+            />
+          )}
         </div>
       ),
     });
@@ -726,20 +883,18 @@ export function DocumentLineTable({
           if (cf.fieldType === "checkbox") {
             const checked = line?.customFields?.[cf.id] === "true" || line?.customFields?.[cf.id] === true;
             return (
-              <div className="flex h-9 items-center justify-center">
-                <input
-                  type="checkbox"
+              <div className="flex h-8 items-center justify-center">
+                <Checkbox
                   data-grid-row={index}
                   data-grid-col-id={colId}
                   aria-label={`Line ${index + 1} ${cf.name}`}
                   checked={checked}
-                  onChange={(e) => {
+                  onKeyDown={(e) => handleKeyDown(e, colId)}
+                  onCheckedChange={(nextChecked) => {
                     if (setValue) {
-                      setValue(fieldPath, e.target.checked ? "true" : "false", { shouldDirty: true });
+                      setValue(fieldPath, nextChecked ? "true" : "false", { shouldDirty: true });
                     }
                   }}
-                  onKeyDown={(e) => handleKeyDown(e, colId)}
-                  className="size-4 accent-[var(--primary)]"
                 />
               </div>
             );
@@ -750,7 +905,7 @@ export function DocumentLineTable({
                 data-grid-row={index}
                 data-grid-col-id={colId}
                 aria-label={`Line ${index + 1} ${cf.name}`}
-                className="w-full text-xs h-9 px-1.5 truncate"
+                className="w-full text-xs h-8 px-1.5 truncate"
                 {...register(fieldPath)}
                 onKeyDown={(e) => handleKeyDown(e, colId)}
               >
@@ -770,7 +925,7 @@ export function DocumentLineTable({
               placeholder={cf.isRequired ? "Required" : ""}
               aria-label={`Line ${index + 1} ${cf.name}`}
               className={cn(
-                "w-full min-w-0 text-xs h-9 px-1.5",
+                "w-full min-w-0 text-xs h-8 px-1.5",
                 cf.fieldType === "number" && "money text-right",
               )}
               {...register(fieldPath)}
@@ -785,21 +940,21 @@ export function DocumentLineTable({
     cols.push({
       id: "total",
       header: "Total",
-      width: "84px",
-      minWidth: "80px",
+      width: "132px",
+      minWidth: "120px",
       align: "right",
       isEditable: false,
       renderCell: ({ preview }) => (
-        <div className="text-right pt-2 min-w-0 overflow-hidden">
+        <div className="text-right pt-1.5 min-w-0">
           <span
-            className="money block text-xs font-semibold text-foreground truncate"
+            className="money block text-xs font-semibold text-foreground whitespace-nowrap tabular-nums"
             title={formatMoney(preview?.grossMinor ?? 0, currencyCode, minorUnit)}
           >
             {formatMoney(preview?.grossMinor ?? 0, currencyCode, minorUnit)}
           </span>
           {!amountsIncludeTax && (preview?.taxMinor ?? 0) > 0 && (
             <span
-              className="money block text-[10px] text-muted-foreground truncate"
+              className="money block text-[10px] text-muted-foreground whitespace-nowrap tabular-nums"
               title={`+${formatMoney(preview?.taxMinor ?? 0, currencyCode, minorUnit)} VAT`}
             >
               +{formatMoney(preview?.taxMinor ?? 0, currencyCode, minorUnit)}
@@ -812,7 +967,11 @@ export function DocumentLineTable({
     // 11. Actions
     cols.push({
       id: "actions",
-      header: <span className="sr-only">Actions</span>,
+      header: (
+        <span className="relative inline-block">
+          <span className="sr-only">Actions</span>
+        </span>
+      ),
       width: "36px",
       minWidth: "36px",
       align: "center",
@@ -828,8 +987,8 @@ export function DocumentLineTable({
                 size="icon"
                 className="size-7 text-muted-foreground hover:text-danger hover:bg-danger/10"
                 aria-label={`Remove line ${index + 1}`}
-                disabled={fields.length === 1}
-                title={fields.length === 1 ? "At least one line is required" : "Delete line"}
+                disabled={isFirstRow && isLastRow}
+                title={isFirstRow && isLastRow ? "At least one line is required" : "Delete line"}
                 onClick={() => removeLine(index)}
               >
                 <Trash2 className="size-3.5" />
@@ -871,7 +1030,7 @@ export function DocumentLineTable({
                 )}
                 <DropdownMenuSeparator />
                 <DropdownMenuItem
-                  disabled={fields.length === 1}
+                  disabled={isFirstRow && isLastRow}
                   className="text-danger focus:text-danger"
                   onClick={() => removeLine(index)}
                 >
@@ -894,18 +1053,18 @@ export function DocumentLineTable({
     accountFieldName,
     resolvedAccountAria,
     accountPlaceholder,
-    accounts,
+    accountComboboxOptions,
     showLineTaxCodes,
-    taxCodes,
+    taxComboboxOptions,
     showLineProjects,
-    projects,
+    projectComboboxOptions,
     amountsIncludeTax,
     currencyCode,
     minorUnit,
+    control,
     register,
     setValue,
     onItemSelect,
-    fields,
     lineCustomFields,
   ]);
 
@@ -948,6 +1107,8 @@ export function DocumentLineTable({
             onShowLineProjectsChange={setShowLineProjects}
             showLineTaxCodes={showLineTaxCodes}
             onShowLineTaxCodesChange={setShowLineTaxCodes}
+            control={control}
+            showAmountsIncludeTaxToggle={showAmountsIncludeTaxToggle}
             registerAmountsIncludeTax={registerAmountsIncludeTax}
           />
           <DocumentTotalsPanel

@@ -9,7 +9,7 @@ Use the canonical [deployment guide](../../../docs/DEPLOYMENT.md). Host: ubuntu@
 
 ## Current scope and existing access
 
-The owner is in closed testing with a few businesses and 5–10 users, keeping the repository public and deferring additional hardening/backlog. Read [next steps](../../../docs/NEXT_STEPS.md) and the [operations report](../../../docs/history/TESTING_PHASE_OPERATIONS_2026-10-26.md) before proposing more work. Documentation updates do not authorize deployment, a host reboot, new monitoring/offsite automation, or deferred changes.
+The owner is in closed testing with a few businesses and 5–10 users, keeping the repository public and deferring additional hardening/backlog. Read [deployment & closed UAT scope](../../../docs/DEPLOYMENT.md) and the [operations report](../../../docs/history/TESTING_PHASE_OPERATIONS_2026-10-26.md) before proposing more work. Documentation updates do not authorize deployment, a host reboot, new monitoring/offsite automation, or deferred changes.
 
 The owner workstation already has approved private OCI profile ERP_OPERATIONS in ~/.oci/config and read-only Sentry config ~/.sentryclirc. Check those before requesting another login or creating keys. OCI usage/revocation instructions are in ~/.oci/ERP_API_SETUP.md; the Windows helper ~/.oci/oci.ps1 handles the isolated CLI's ACL-check module-path compatibility. Use --profile ERP_OPERATIONS. These credentials are read-only operational access, separate from deployment; keep them outside Git, images and the VM. See the runbook's access section for verified scopes and limits. Other workstations need separately authorized access.
 

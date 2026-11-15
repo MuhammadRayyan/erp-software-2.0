@@ -1,31 +1,23 @@
 import Handlebars from "handlebars";
+import { withHtmlPdfPage } from "./browser-pool";
+
+const HTML_RENDER_TIMEOUT_MS = 15_000;
 
 /**
- * Renders a custom Handlebars HTML template to PDF through headless Chrome.
- *
- * Puppeteer is imported lazily: the module only loads when a business actually
- * renders a custom-HTML template, so every other PDF route avoids the
- * heavyweight Chromium dependency entirely.
+ * Renders a custom Handlebars HTML template to PDF through a pooled headless
+ * Chrome instance, isolating each render in a fresh incognito browser context
+ * with network requests and client scripts blocked.
  */
 export async function renderHtmlTemplate(
   htmlTemplate: string,
-   
-  data: any,
-   
-  settings: any
+  data: unknown,
+  settings: unknown,
 ): Promise<Buffer> {
   const template = Handlebars.compile(htmlTemplate);
-  const html = template({ ...data, settings });
+  const html = template({ ...(typeof data === "object" && data !== null ? data : {}), settings });
 
-  const { default: puppeteer } = await import("puppeteer");
-  const browser = await puppeteer.launch({
-    headless: true,
-    args: ["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage"],
-  });
-
-  try {
-    const page = await browser.newPage();
-    // Disable client-side JavaScript inside headless Chromium to block XSS and malicious scripts entirely
+  return withHtmlPdfPage(async (page) => {
+    // Disable client-side JavaScript inside headless Chromium to block XSS and malicious scripts entirely.
     await page.setJavaScriptEnabled(false);
     // The template renders fully offline: block any external network request
     // (images, fonts, scripts) so template HTML cannot exfiltrate data or
@@ -38,19 +30,18 @@ export async function renderHtmlTemplate(
         url.startsWith("about:") ||
         url.startsWith("blob:");
       if (isLocal) {
-        request.continue();
+        void request.continue();
       } else {
-        request.abort();
+        void request.abort();
       }
     });
-    await page.setContent(html, { waitUntil: "load" });
+    await page.setContent(html, { waitUntil: "load", timeout: HTML_RENDER_TIMEOUT_MS });
     const pdf = await page.pdf({
       format: "A4",
       printBackground: true,
+      timeout: HTML_RENDER_TIMEOUT_MS,
       margin: { top: "40px", right: "40px", bottom: "40px", left: "40px" },
     });
     return Buffer.from(pdf);
-  } finally {
-    await browser.close();
-  }
+  });
 }

@@ -1,22 +1,72 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
-import { Search, type LucideIcon } from "lucide-react";
-import { DialogContent, DialogRoot, DialogTitle } from "@/components/ui/dialog";
-import { cn } from "@/lib/cn";
+import * as React from "react";
+import { CommandGroup, CommandItem as CmdkItem, CommandSeparator } from "@/components/ui/command";
+import {
+  CommandDialog,
+  CommandEmpty,
+  CommandInput,
+  CommandList,
+  CommandShortcut,
+} from "@/components/ui/command";
+import type { LucideIcon } from "lucide-react";
 
 export type CommandItem = {
+  id?: string;
   label: string;
   hint?: string;
+  group?: "Create" | "Navigation" | "Settings" | "Switch Business" | string;
   icon?: LucideIcon;
   keywords?: string;
+  shortcut?: string;
   onSelect: () => void;
 };
 
+const GROUP_ORDER = ["Create", "Navigation", "Settings", "Switch Business"];
+
+function getGroupName(item: CommandItem): string {
+  return item.group ?? (item.hint === "Create" ? "Create" : "Navigation");
+}
+
+function getGroupPriority(groupName: string): number {
+  const idx = GROUP_ORDER.indexOf(groupName);
+  return idx >= 0 ? idx : GROUP_ORDER.length;
+}
+
+export function scoreCommandItem(item: CommandItem, rawQuery: string): number {
+  const query = rawQuery.trim().toLowerCase();
+  if (!query) return 1;
+
+  const label = item.label.toLowerCase();
+  if (label === query) return 1000;
+  if (label.startsWith(query)) return 800;
+
+  const labelWords = label.split(/[\s/&_-]+/).filter(Boolean);
+  if (labelWords.some((word) => word.startsWith(query))) return 650;
+  if (label.includes(query)) return 500;
+
+  const tokens = query.split(/\s+/).filter(Boolean);
+  if (tokens.length > 1 && tokens.every((tok) => label.includes(tok))) {
+    return 400;
+  }
+
+  const groupName = getGroupName(item).toLowerCase();
+  const hint = (item.hint ?? "").toLowerCase();
+  const extra = (item.keywords ?? "").toLowerCase();
+  const haystack = `${label} ${hint} ${groupName} ${extra}`;
+  if (!tokens.every((tok) => haystack.includes(tok))) {
+    return 0;
+  }
+
+  const metaWords = `${hint} ${groupName} ${extra}`.split(/[\s/&_-]+/).filter(Boolean);
+  if (metaWords.some((word) => word.startsWith(tokens[0]))) {
+    return 250;
+  }
+  return 150;
+}
+
 /**
- * Compact Ctrl/Cmd+K command palette built on the existing Dialog primitive.
- * Arrow keys move the highlight, Enter runs the highlighted command, Escape
- * closes (handled by the dialog). Mouse hover moves the highlight, click runs.
+ * Global Ctrl/Cmd+K command palette backed by cmdk and @radix-ui/react-dialog.
  */
 export function CommandPalette({
   open,
@@ -27,126 +77,107 @@ export function CommandPalette({
   onOpenChange: (open: boolean) => void;
   items: CommandItem[];
 }) {
-  // Mounted only while open so every open starts from a clean query/highlight.
-  if (!open) return null;
-  return <PaletteDialog onOpenChange={onOpenChange} items={items} />;
-}
+  const [search, setSearch] = React.useState("");
 
-function PaletteDialog({ onOpenChange, items }: { onOpenChange: (open: boolean) => void; items: CommandItem[] }) {
-  const [query, setQuery] = useState("");
-  const [activeIndex, setActiveIndex] = useState(0);
-  const inputRef = useRef<HTMLInputElement>(null);
-  const listRef = useRef<HTMLDivElement>(null);
+  React.useEffect(() => {
+    if (!open) setSearch("");
+  }, [open]);
 
-  const filtered = useMemo(() => {
-    const needle = query.trim().toLowerCase();
-    if (!needle) return items;
-    return items.filter((item) => `${item.label} ${item.keywords ?? ""}`.toLowerCase().includes(needle));
-  }, [items, query]);
+  const grouped = React.useMemo(() => {
+    const hasQuery = search.trim().length > 0;
+    const buckets = new Map<string, Array<{ item: CommandItem; score: number; index: number }>>();
 
-  // Derived so the highlight can never point outside the filtered list,
-  // even if the list shrinks between keystrokes.
-  const highlighted = Math.min(activeIndex, Math.max(filtered.length - 1, 0));
+    items.forEach((item, index) => {
+      const score = scoreCommandItem(item, search);
+      if (score <= 0) return;
+      const groupName = getGroupName(item);
+      const bucket = buckets.get(groupName) ?? [];
+      bucket.push({ item, score, index });
+      buckets.set(groupName, bucket);
+    });
 
-  // Keep the highlighted row visible while arrowing through a long list.
-  useEffect(() => {
-    listRef.current?.querySelector<HTMLElement>(`[data-index="${highlighted}"]`)?.scrollIntoView({ block: "nearest" });
-  }, [highlighted, filtered]);
+    const entries: Array<{ groupName: string; items: CommandItem[]; maxScore: number }> = [];
+    for (const [groupName, bucket] of buckets.entries()) {
+      if (hasQuery) {
+        bucket.sort((a, b) => b.score - a.score || a.index - b.index);
+      }
+      const maxScore = bucket.reduce((max, entry) => Math.max(max, entry.score), 0);
+      entries.push({
+        groupName,
+        items: bucket.map((entry) => entry.item),
+        maxScore,
+      });
+    }
 
-  function setHighlighted(index: number) {
-    setActiveIndex(Math.min(Math.max(index, 0), Math.max(filtered.length - 1, 0)));
-  }
+    entries.sort((a, b) => {
+      if (hasQuery && b.maxScore !== a.maxScore) {
+        return b.maxScore - a.maxScore;
+      }
+      const pa = getGroupPriority(a.groupName);
+      const pb = getGroupPriority(b.groupName);
+      if (pa !== pb) return pa - pb;
+      return a.groupName.localeCompare(b.groupName);
+    });
+
+    return entries.map(({ groupName, items: groupItems }) => [groupName, groupItems] as const);
+  }, [items, search]);
 
   function run(item: CommandItem) {
     onOpenChange(false);
     item.onSelect();
   }
 
-  function handleKeyDown(event: React.KeyboardEvent<HTMLInputElement>) {
-    if (event.key === "ArrowDown") {
-      event.preventDefault();
-      if (filtered.length) setHighlighted((highlighted + 1) % filtered.length);
-    } else if (event.key === "ArrowUp") {
-      event.preventDefault();
-      if (filtered.length) setHighlighted((highlighted - 1 + filtered.length) % filtered.length);
-    } else if (event.key === "Enter") {
-      event.preventDefault();
-      const item = filtered[highlighted];
-      if (item) run(item);
-    }
-  }
-
   return (
-    <DialogRoot open onOpenChange={onOpenChange}>
-      <DialogContent
-        // Mobile: full-width bottom sheet pinned to the viewport bottom (with
-        // safe-area inset so iOS notches/home indicators don't cover the input).
-        // Desktop (sm+): centered card with max-w-lg, top-aligned so the list
-        // has room to grow downward without overflowing the viewport.
-        // `w-auto` overrides the default `w-[calc(100%-2rem)]` so `left-3 right-3`
-        // can pin both edges simultaneously (CSS only honors left+right when
-        // width is auto).
-        className="top-auto bottom-3 left-3 right-3 w-auto max-w-none translate-x-0 translate-y-0 rounded-xl p-0 sm:bottom-auto sm:left-1/2 sm:right-auto sm:top-[12%] sm:max-w-lg sm:-translate-x-1/2 sm:translate-y-0"
-        aria-describedby={undefined}
-        onOpenAutoFocus={(event) => {
-          event.preventDefault();
-          inputRef.current?.focus();
-        }}
-      >
-        <DialogTitle className="sr-only">Command palette</DialogTitle>
-        <div className="flex h-12 shrink-0 items-center gap-2.5 border-b border-border px-3.5">
-          <Search className="size-4 shrink-0 text-muted-foreground" />
-          <input
-            ref={inputRef}
-            value={query}
-            onChange={(event) => {
-              setQuery(event.target.value);
-              setActiveIndex(0);
-            }}
-            onKeyDown={handleKeyDown}
-            placeholder="Search or jump to…"
-            aria-label="Search commands"
-            role="combobox"
-            aria-expanded="true"
-            aria-controls="command-palette-listbox"
-            aria-activedescendant={filtered.length ? `command-palette-option-${highlighted}` : undefined}
-            // Larger text + no zoom on focus (iOS Safari zooms on <16px inputs).
-            className="h-full w-full bg-transparent pr-11 text-base text-foreground outline-none placeholder:text-muted-foreground sm:text-sm"
-          />
-        </div>
-        <div ref={listRef} id="command-palette-listbox" role="listbox" aria-label="Commands" className="max-h-[60vh] overflow-y-auto p-1.5">
-          {filtered.length ? (
-            filtered.map((item, index) => {
-              const Icon = item.icon;
-              const active = index === highlighted;
-              return (
-                <div
-                  key={`${item.label}-${index}`}
-                  id={`command-palette-option-${index}`}
-                  role="option"
-                  aria-selected={active}
-                  data-index={index}
-                  tabIndex={-1}
-                  // Larger touch target on mobile (h-11) so each row is comfortable
-                  // to tap; tighter on desktop (sm:h-9) for density.
-                  onMouseMove={() => setActiveIndex(index)}
-                  onClick={() => run(item)}
-                  className={cn(
-                    "flex h-11 cursor-pointer items-center gap-2.5 rounded-md px-2.5 text-[15px] outline-none sm:h-9 sm:text-[13px]",
-                    active ? "bg-accent text-accent-foreground" : "text-foreground",
-                  )}
-                >
-                  {Icon ? <Icon className="size-4 shrink-0 text-muted-foreground" /> : null}
-                  <span className="truncate">{item.label}</span>
-                  {item.hint ? <span className="ml-auto shrink-0 text-xs text-muted-foreground">{item.hint}</span> : null}
-                </div>
-              );
-            })
-          ) : (
-            <p className="px-3 py-8 text-center text-sm text-muted-foreground">No commands match “{query.trim()}”.</p>
-          )}
-        </div>
-      </DialogContent>
-    </DialogRoot>
+    <CommandDialog
+      open={open}
+      onOpenChange={onOpenChange}
+      title="Command palette"
+      shouldFilter={false}
+    >
+      <CommandInput
+        value={search}
+        onValueChange={setSearch}
+        placeholder="Search pages, actions, settings, or switch business…"
+        aria-label="Search commands"
+        className="h-11 pr-8 text-base sm:text-sm"
+      />
+      <CommandList className="max-h-[60vh]">
+        <CommandEmpty>
+          {search.trim()
+            ? `No commands match “${search.trim()}”.`
+            : "No commands available."}
+        </CommandEmpty>
+        {grouped.map(([groupName, groupItems], idx) => (
+          <React.Fragment key={groupName}>
+            {idx > 0 && <CommandSeparator />}
+            <CommandGroup heading={groupName}>
+              {groupItems.map((item) => {
+                const Icon = item.icon;
+                return (
+                  <CmdkItem
+                    key={item.id ?? `${groupName}-${item.label}-${item.hint ?? ""}`}
+                    value={`${item.label} ${item.hint ?? ""} ${groupName}`}
+                    onSelect={() => run(item)}
+                    className="min-h-10 sm:min-h-8"
+                  >
+                    <div className="flex min-w-0 flex-1 items-center gap-2.5">
+                      {Icon ? <Icon className="size-4 shrink-0 text-muted-foreground" /> : null}
+                      <span className="truncate">{item.label}</span>
+                    </div>
+                    {item.shortcut ? (
+                      <CommandShortcut>{item.shortcut}</CommandShortcut>
+                    ) : item.hint ? (
+                      <span className="ml-auto shrink-0 text-[11px] text-muted-foreground">
+                        {item.hint}
+                      </span>
+                    ) : null}
+                  </CmdkItem>
+                );
+              })}
+            </CommandGroup>
+          </React.Fragment>
+        ))}
+      </CommandList>
+    </CommandDialog>
   );
 }

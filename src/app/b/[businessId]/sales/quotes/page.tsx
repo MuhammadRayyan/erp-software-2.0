@@ -41,13 +41,11 @@ export default async function QuoteListPage({
         </Button>
       </PageHeader>
       {quotes.length ? (
-        <div className="data-panel overflow-hidden">
-          <SalesQuoteTable
-            businessId={businessId}
-            quotes={quotes}
-            serverSnapshot={columnSnapshots["sales-quotes"]}
-          />
-        </div>
+        <SalesQuoteTable
+          businessId={businessId}
+          quotes={quotes}
+          serverSnapshot={columnSnapshots["sales-quotes"]}
+        />
       ) : (
         <EmptyState
           icon={<ReceiptText className="mx-auto mb-3 size-7 text-muted-foreground" />}

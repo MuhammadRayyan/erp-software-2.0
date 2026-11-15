@@ -2,6 +2,7 @@
 
 import React, { useRef, useMemo, useCallback } from "react";
 import type { UseFormRegister } from "react-hook-form";
+import { useVirtualizer } from "@tanstack/react-virtual";
 import { Plus } from "lucide-react";
 import { cn } from "@/lib/cn";
 import type { DocumentLinePreview, DocumentLineTaxOption } from "../document-calculations";
@@ -94,7 +95,18 @@ export function DocumentGrid<TLine = any>({
   className,
   emptyState,
 }: DocumentGridProps<TLine>) {
+  "use no memo";
   const containerRef = useRef<HTMLDivElement>(null);
+  const VIRTUALIZATION_THRESHOLD = 25;
+  const shouldVirtualize = fields.length > VIRTUALIZATION_THRESHOLD;
+
+  // eslint-disable-next-line react-hooks/incompatible-library -- TanStack Virtual returns imperative layout helpers; component opts out via "use no memo"
+  const rowVirtualizer = useVirtualizer({
+    count: shouldVirtualize ? fields.length : 0,
+    getScrollElement: () => containerRef.current,
+    estimateSize: () => 48,
+    overscan: 6,
+  });
 
   // Filter visible columns
   const visibleColumns = useMemo(
@@ -149,22 +161,6 @@ export function DocumentGrid<TLine = any>({
     requestAnimationFrame(tryFocus);
   }, []);
 
-  const focusCellWithRetry = useCallback((row: number, cellIndex: number) => {
-    let attempts = 0;
-    const tryFocus = () => {
-      attempts++;
-      const elems = containerRef.current?.querySelectorAll<HTMLElement>(`[data-grid-row="${row}"]`);
-      const target = elems && elems.length > 0 ? (elems[cellIndex] || elems[0]) : null;
-      if (target) {
-        target.focus();
-        if (target instanceof HTMLInputElement) target.select();
-      } else if (attempts < 8) {
-        requestAnimationFrame(tryFocus);
-      }
-    };
-    requestAnimationFrame(tryFocus);
-  }, []);
-
   const focusLastCellOfRow = useCallback((row: number) => {
     const elems = containerRef.current?.querySelectorAll<HTMLElement>(`[data-grid-row="${row}"]`);
     if (elems && elems.length > 0) {
@@ -209,9 +205,17 @@ export function DocumentGrid<TLine = any>({
             // Enter: Move DOWN to same column on next row
             if (rowIndex === totalRows - 1) {
               onAppend();
+              if (totalRows + 1 > VIRTUALIZATION_THRESHOLD) {
+                requestAnimationFrame(() => rowVirtualizer.scrollToIndex(rowIndex + 1));
+              }
               focusColWithRetry(rowIndex + 1, targetColId);
             } else {
-              focusCol(rowIndex + 1, targetColId);
+              if (shouldVirtualize) {
+                rowVirtualizer.scrollToIndex(rowIndex + 1);
+                focusColWithRetry(rowIndex + 1, targetColId);
+              } else {
+                focusCol(rowIndex + 1, targetColId);
+              }
             }
           }
           return;
@@ -235,20 +239,18 @@ export function DocumentGrid<TLine = any>({
             nextElem.focus();
             if (nextElem instanceof HTMLInputElement) nextElem.select();
           } else {
-            // Last cell of row -> wrap to first cell of next row or append
-            e.preventDefault();
+            // Last cell of row -> wrap to first cell of next row; exit naturally on final row
             if (rowIndex === totalRows - 1) {
-              onAppend();
-              focusCellWithRetry(rowIndex + 1, 0);
-            } else {
-              const nextRowElems = containerRef.current?.querySelectorAll<HTMLElement>(
-                `[data-grid-row="${rowIndex + 1}"]`
-              );
-              const targetCell = nextRowElems?.[0];
-              if (targetCell) {
-                targetCell.focus();
-                if (targetCell instanceof HTMLInputElement) targetCell.select();
-              }
+              return;
+            }
+            e.preventDefault();
+            const nextRowElems = containerRef.current?.querySelectorAll<HTMLElement>(
+              `[data-grid-row="${rowIndex + 1}"]`
+            );
+            const targetCell = nextRowElems?.[0];
+            if (targetCell) {
+              targetCell.focus();
+              if (targetCell instanceof HTMLInputElement) targetCell.select();
             }
           }
         } else {
@@ -265,7 +267,7 @@ export function DocumentGrid<TLine = any>({
         }
       }
     },
-    [fields.length, onAppend, focusCol, focusColWithRetry, focusCellWithRetry, focusLastCellOfRow]
+    [fields.length, onAppend, focusCol, focusColWithRetry, focusLastCellOfRow, rowVirtualizer, shouldVirtualize]
   );
 
   // Multi-row TSV clipboard paste handler for Excel / Google Sheets
@@ -314,14 +316,24 @@ export function DocumentGrid<TLine = any>({
     [onPasteTSV, visibleColumns]
   );
 
+  const virtualItems = shouldVirtualize ? rowVirtualizer.getVirtualItems() : [];
+  const paddingTop = virtualItems.length > 0 ? virtualItems[0].start : 0;
+  const paddingBottom =
+    virtualItems.length > 0
+      ? rowVirtualizer.getTotalSize() - virtualItems[virtualItems.length - 1].end
+      : 0;
+
   return (
-    <div className={cn("w-full space-y-3", className)}>
+    <div className={cn("w-full min-w-0 space-y-3", className)}>
       <div
         ref={containerRef}
         onPaste={handlePaste}
-        className="w-full overflow-x-auto rounded-lg border border-border/80 bg-surface shadow-xs"
+        className={cn(
+          "relative w-full min-w-0 overflow-x-auto rounded-lg border border-border/80 bg-surface shadow-xs",
+          shouldVirtualize && "max-h-[540px] overflow-y-auto"
+        )}
       >
-        <table className="w-full table-fixed border-collapse text-left">
+        <table className="line-item-table w-full min-w-[780px] table-fixed border-collapse text-left">
           <colgroup>
             {visibleColumns.map((col) => {
               const widthStyle: React.CSSProperties = {
@@ -331,7 +343,12 @@ export function DocumentGrid<TLine = any>({
             })}
           </colgroup>
           <thead>
-            <tr className="border-b border-border/80 bg-surface-muted/50 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground select-none">
+            <tr
+              className={cn(
+                "border-b border-border/80 bg-surface-muted/60 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground select-none",
+                shouldVirtualize && "sticky top-0 z-10 bg-surface-muted/95 backdrop-blur-xs"
+              )}
+            >
               {visibleColumns.map((col) => {
                 const widthStyle: React.CSSProperties = {
                   width: typeof col.width === "number" ? `${col.width}px` : col.width,
@@ -341,7 +358,7 @@ export function DocumentGrid<TLine = any>({
                     key={col.id}
                     style={widthStyle}
                     className={cn(
-                      "py-2.5 px-2 font-semibold truncate",
+                      "py-2 px-2 font-semibold truncate",
                       col.align === "right" && "text-right",
                       col.align === "center" && "text-center",
                       col.headerClassName
@@ -363,6 +380,50 @@ export function DocumentGrid<TLine = any>({
                   {emptyState ?? "No lines added yet. Click 'Add line' below to start."}
                 </td>
               </tr>
+            ) : shouldVirtualize ? (
+              <>
+                {paddingTop > 0 && (
+                  <tr aria-hidden="true">
+                    <td colSpan={visibleColumns.length} style={{ height: `${paddingTop}px`, padding: 0, border: 0 }} />
+                  </tr>
+                )}
+                {virtualItems.map((virtualRow) => {
+                  const index = virtualRow.index;
+                  const field = fields[index];
+                  if (!field) return null;
+                  return (
+                    <DocumentGridRow
+                      key={field.id}
+                      index={index}
+                      virtualIndex={virtualRow.index}
+                      measureRef={rowVirtualizer.measureElement}
+                      fieldId={field.id}
+                      isLastRow={index === fields.length - 1}
+                      isFirstRow={index === 0}
+                      columns={visibleColumns}
+                      register={register}
+                      control={control}
+                      errors={errors}
+                      taxCodes={taxCodes}
+                      minorUnit={minorUnit}
+                      currencyCode={currencyCode}
+                      amountsIncludeTax={amountsIncludeTax}
+                      fallbackLine={lines?.[index]}
+                      fallbackPreview={previews?.[index]}
+                      handleKeyDown={handleKeyDown}
+                      duplicateLine={onDuplicate}
+                      removeLine={onRemove}
+                      moveLineUp={onMoveUp}
+                      moveLineDown={onMoveDown}
+                    />
+                  );
+                })}
+                {paddingBottom > 0 && (
+                  <tr aria-hidden="true">
+                    <td colSpan={visibleColumns.length} style={{ height: `${paddingBottom}px`, padding: 0, border: 0 }} />
+                  </tr>
+                )}
+              </>
             ) : (
               fields.map((field, index) => (
                 <DocumentGridRow
@@ -396,7 +457,13 @@ export function DocumentGrid<TLine = any>({
       <button
         type="button"
         className="dashed-add-button"
-        onClick={() => onAppend()}
+        onClick={() => {
+          const nextIndex = fields.length;
+          onAppend();
+          if (fields.length + 1 > VIRTUALIZATION_THRESHOLD) {
+            requestAnimationFrame(() => rowVirtualizer.scrollToIndex(nextIndex));
+          }
+        }}
       >
         <Plus className="size-4" /> Add line
       </button>

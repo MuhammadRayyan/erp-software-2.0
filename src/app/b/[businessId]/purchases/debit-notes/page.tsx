@@ -37,9 +37,7 @@ export default async function DebitNoteListPage({
         </Button>
       </PageHeader>
       {debitNotes.length ? (
-        <div className="data-panel overflow-hidden">
-          <DebitNoteTable businessId={businessId} debitNotes={debitNotes} />
-        </div>
+        <DebitNoteTable businessId={businessId} debitNotes={debitNotes} initialFrom={from} initialTo={to} />
       ) : (
         <EmptyState
           icon={<ReceiptText className="mx-auto mb-3 size-7 text-muted-foreground" />}

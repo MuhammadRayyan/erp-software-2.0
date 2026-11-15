@@ -5,18 +5,19 @@ import Link from "next/link";
 import { useState } from "react";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { ArrowRight, LoaderCircle } from "lucide-react";
-import { useForm } from "react-hook-form";
+import { Controller, useForm } from "react-hook-form";
 import { Button } from "@/components/ui/button";
+import { Combobox } from "@/components/ui/combobox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { createBankTransferAction } from "./actions";
 import { bankTransferInputSchema, type BankTransferInput } from "./bank-transfer-input";
-import { SelectNative } from "@/components/ui/select-native";
 
 export function BankTransferForm({ businessId, accounts, initial }: { businessId: string; accounts: { id: string; name: string; currency_code: string }[]; initial: BankTransferInput }) {
   const [serverError, setServerError] = useState("");
   const form = useForm<BankTransferInput>({ resolver: zodResolver(bankTransferInputSchema), defaultValues: initial });
-  const { register, handleSubmit, setError, formState: { errors, isSubmitting } } = form;
+  const { register, control, handleSubmit, setError, formState: { errors, isSubmitting } } = form;
+  const accountOptions = accounts.map((a) => ({ value: a.id, label: `${a.name} · ${a.currency_code}` }));
   async function save(values: BankTransferInput) {
     setServerError(""); const result = await createBankTransferAction(businessId, values);
     if (result.fieldErrors) for (const [field, messages] of Object.entries(result.fieldErrors)) setError(field as keyof BankTransferInput, { message: messages[0] });
@@ -25,7 +26,7 @@ export function BankTransferForm({ businessId, accounts, initial }: { businessId
   return <form onSubmit={handleSubmit(save)} className="space-y-7" noValidate>
     {serverError && <FormError message={serverError} />}
     <section className="border-b border-border pb-7"><h2 className="text-base font-semibold">Transfer details</h2><p className="mt-1 text-sm text-muted-foreground">One source document posts a debit to the destination and a credit to the source.</p><div className="mt-5 grid items-end gap-4 md:grid-cols-[1fr_auto_1fr]">
-      <div className="space-y-1.5"><Label htmlFor="fromBankAccountId">From Account</Label><SelectNative id="fromBankAccountId"  {...register("fromBankAccountId")}><option value="">Choose source</option>{accounts.map((a) => <option key={a.id} value={a.id}>{a.name} · {a.currency_code}</option>)}</SelectNative>{errors.fromBankAccountId && <p className="field-error">{errors.fromBankAccountId.message}</p>}</div><ArrowRight className="mb-2 hidden size-5 text-muted-foreground md:block" /><div className="space-y-1.5"><Label htmlFor="toBankAccountId">To Account</Label><SelectNative id="toBankAccountId"  {...register("toBankAccountId")}><option value="">Choose destination</option>{accounts.map((a) => <option key={a.id} value={a.id}>{a.name} · {a.currency_code}</option>)}</SelectNative>{errors.toBankAccountId && <p className="field-error">{errors.toBankAccountId.message}</p>}</div>
+      <div className="space-y-1.5"><Label htmlFor="fromBankAccountId">From Account</Label><Controller control={control} name="fromBankAccountId" render={({ field }) => <Combobox id="fromBankAccountId" options={accountOptions} value={field.value ?? ""} onValueChange={field.onChange} placeholder="Choose source…" searchPlaceholder="Search accounts…" emptyText="No accounts found." ariaInvalid={!!errors.fromBankAccountId} />} />{errors.fromBankAccountId && <p className="field-error">{errors.fromBankAccountId.message}</p>}</div><ArrowRight className="mb-2 hidden size-5 text-muted-foreground md:block" /><div className="space-y-1.5"><Label htmlFor="toBankAccountId">To Account</Label><Controller control={control} name="toBankAccountId" render={({ field }) => <Combobox id="toBankAccountId" options={accountOptions} value={field.value ?? ""} onValueChange={field.onChange} placeholder="Choose destination…" searchPlaceholder="Search accounts…" emptyText="No accounts found." ariaInvalid={!!errors.toBankAccountId} />} />{errors.toBankAccountId && <p className="field-error">{errors.toBankAccountId.message}</p>}</div>
     </div><div className="mt-5 grid gap-5 sm:grid-cols-3">
       <div className="space-y-1.5">
         <Label htmlFor="date">Date</Label>

@@ -1,5 +1,7 @@
+import Link from "next/link";
 import { statSync } from "node:fs";
 import { notFound } from "next/navigation";
+import { Button } from "@/components/ui/button";
 import { requireModule } from "@/core/permissions/require-module";
 import { getBusinessForUser } from "@/core/businesses/business-service";
 import { getBusinessPaths, SYSTEM_DB_PATH } from "@/core/db/paths";
@@ -101,8 +103,13 @@ export default async function SystemHealthPage({
   return (
     <SettingsShell
       businessId={businessId}
-      title="System Health & Diagnostics"
-      description="Live database engine metrics, write-ahead log (WAL) utilization, memory telemetry, and correlated OpenTelemetry/Sentry traces."
+      title="Workspace System Health & Diagnostics"
+      description="Live workspace database engine metrics, write-ahead log (WAL) utilization, memory telemetry, and correlated OpenTelemetry/Sentry traces."
+      actions={
+        <Button asChild variant="secondary" size="sm">
+          <Link href="/admin/engine-health">Platform Engine Health →</Link>
+        </Button>
+      }
     >
       <SystemHealthClient initialData={healthData} />
     </SettingsShell>

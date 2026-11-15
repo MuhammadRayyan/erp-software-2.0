@@ -3119,6 +3119,20 @@ export const businessMigrations = [
         rebuildTable("supplier_payments", updateSettlementSql);
       },
     },
+    {
+      version: 38,
+      name: "38_settlement_date_indexes",
+      up: (sqlite) => {
+        sqlite.exec(`
+          CREATE INDEX IF NOT EXISTS receipt_date_idx ON receipts(date);
+          CREATE INDEX IF NOT EXISTS receipt_status_date_idx ON receipts(document_status, date);
+          CREATE INDEX IF NOT EXISTS supplier_payment_date_idx ON supplier_payments(date);
+          CREATE INDEX IF NOT EXISTS supplier_payment_status_date_idx ON supplier_payments(document_status, date);
+          CREATE INDEX IF NOT EXISTS sales_credit_note_date_idx ON sales_credit_notes(date);
+          CREATE INDEX IF NOT EXISTS sales_credit_note_status_date_idx ON sales_credit_notes(document_status, date);
+        `);
+      },
+    },
   ] satisfies readonly SqliteMigration[];
 
 

@@ -135,7 +135,7 @@ export default async function ProfitAndLossReportPage({
           <tr key={row.id} className="hover:bg-surface-muted/40">
             <td className="pl-6 py-2">
               <Link
-                href={`/b/${businessId}/accounting/chart-of-accounts/${row.id}`}
+                href={`/b/${businessId}/reports/general-ledger?accountId=${encodeURIComponent(row.id)}${periods[0]?.dateFrom ? `&dateFrom=${encodeURIComponent(periods[0].dateFrom)}` : ""}${periods[0]?.dateTo ? `&dateTo=${encodeURIComponent(periods[0].dateTo)}` : ""}`}
                 className="hover:underline"
               >
                 {row.name}

@@ -6,15 +6,18 @@ import { ChevronRight, MoreHorizontal, Eye, FileEdit, Download } from "lucide-re
 import { 
   useLegacyTable as useTable,
   getCoreRowModel as createCoreRowModel,
+  getPaginationRowModel as createPaginationRowModel,
   getSortedRowModel as createSortedRowModel
 } from "@tanstack/react-table/legacy";
 import { type SortingState } from "@tanstack/react-table";
-import { StatusBadge } from "@/components/status-badge";
-import { ListToolbar, SearchInput, ToolbarSelect, ActiveFiltersRow, FilterChip } from "@/components/list-toolbar";
+import { StatusBadge, statusLabel } from "@/components/status-badge";
+import { ListToolbar, SearchInput, ToolbarSelect, DateRangeFilter, ActiveFiltersRow, FilterChip } from "@/components/list-toolbar";
 import { Button } from "@/components/ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { useColumns } from "@/components/columns-dropdown";
-import { DataTable } from "@/components/ui/data-table";
+import { DataTable, ListTableCard } from "@/components/ui/data-table";
+import { ClientListPagination, useTablePagination } from "@/components/list-pagination";
+import { TableTotalsBar, renderMultiCurrencyString } from "@/components/table-totals-bar";
 import { formatDate, formatMoney } from "@/core/format";
 import type { DebitNoteStatus } from "./debit-note-service";
 import { DensityToggle } from "@/components/density-toggle";
@@ -46,17 +49,32 @@ export function DebitNoteTable({
   businessId,
   debitNotes,
   serverSnapshot,
+  initialFrom = "",
+  initialTo = "",
 }: {
   businessId: string;
   debitNotes: Omit<Row, "businessId">[];
   serverSnapshot?: import("@/components/use-column-visibility").ColumnVisibility;
+  initialFrom?: string;
+  initialTo?: string;
 }) {
   const { density } = useTableDensity(businessId);
 
   const [query, setQuery] = useState("");
+  const [supplierId, setSupplierId] = useState("");
   const [status, setStatus] = useState("");
   const [projectId, setProjectId] = useState("");
+  const [fromDate, setFromDate] = useState(initialFrom);
+  const [toDate, setToDate] = useState(initialTo);
   const [sorting, setSorting] = useState<SortingState>([]);
+
+  const supplierOptions = useMemo(
+    () =>
+      Array.from(new Map(debitNotes.map((note) => [note.supplier_id, note.supplier_name])).entries()).sort((a, b) =>
+        a[1].localeCompare(b[1]),
+      ),
+    [debitNotes],
+  );
 
   const projects = useMemo(() => {
     const choices = new Map<string, string>();
@@ -80,11 +98,14 @@ export function DebitNoteTable({
         .filter(
           (note) =>
             (!status || note.document_status === status) &&
+            (!supplierId || note.supplier_id === supplierId) &&
             (!projectId || note.projectIds.includes(projectId)) &&
+            (!fromDate || note.debit_note_date >= fromDate) &&
+            (!toDate || note.debit_note_date <= toDate) &&
             `${note.debit_note_number} ${note.supplier_name}`.toLowerCase().includes(query.trim().toLowerCase()),
         )
         .map((note) => ({ ...note, businessId })),
-    [debitNotes, projectId, query, status, businessId],
+    [debitNotes, supplierId, projectId, fromDate, toDate, query, status, businessId],
   );
 
   const columns: any[] = useMemo(
@@ -183,35 +204,72 @@ export function DebitNoteTable({
     [],
   );
 
+  const { pagination, onPaginationChange, paginationInfo, setPage, setPageSize } = useTablePagination(rows.length);
+
   const table = useTable({
     data: rows,
     columns,
     state: {
       sorting,
+      pagination,
       columnVisibility: colVisibility,
     },
     onSortingChange: setSorting,
+    onPaginationChange,
     getCoreRowModel: createCoreRowModel(),
     getSortedRowModel: createSortedRowModel(),
+    getPaginationRowModel: createPaginationRowModel(),
   });
 
   const clearFilters = () => {
     setQuery("");
+    setSupplierId("");
     setStatus("");
     setProjectId("");
+    setFromDate("");
+    setToDate("");
   };
-  const hasActiveFilter = Boolean(projectId || status || query);
+  const hasActiveFilter = Boolean(supplierId || projectId || fromDate || toDate || status || query);
+
+  const totalDebitStr = useMemo(
+    () =>
+      renderMultiCurrencyString(
+        rows
+          .filter((r) => r.document_status !== "void")
+          .map((r) => ({
+            amount: r.total_minor,
+            currency: r.currency_code,
+            minorUnit: r.currency_minor_unit,
+          })),
+      ),
+    [rows],
+  );
 
   return (
     <>
       <ListToolbar>
         <SearchInput value={query} onChange={setQuery} placeholder="Search debit notes…" ariaLabel="Search debit notes" />
         <ToolbarSelect
+          value={supplierId}
+          onChange={setSupplierId}
+          ariaLabel="Filter by supplier"
+          className="min-w-36 max-w-52"
+          options={[{ value: "", label: "All suppliers" }, ...supplierOptions.map(([id, name]) => ({ value: id, label: name }))]}
+        />
+        <ToolbarSelect
           value={projectId}
           onChange={setProjectId}
           ariaLabel="Filter by project"
           className="min-w-36 max-w-52"
           options={[{ value: "", label: "All projects" }, ...projects.map((project) => ({ value: project.id, label: project.name }))]}
+        />
+        <DateRangeFilter
+          fromDate={fromDate}
+          toDate={toDate}
+          onFromChange={setFromDate}
+          onToChange={setToDate}
+          fromAriaLabel="Debit note date from"
+          toAriaLabel="Debit note date to"
         />
         <ToolbarSelect
           value={status}
@@ -231,23 +289,46 @@ export function DebitNoteTable({
       </ListToolbar>
       {hasActiveFilter && (
         <ActiveFiltersRow onClearAll={clearFilters}>
+          {supplierId && (
+            <FilterChip onRemove={() => setSupplierId("")}>
+              Supplier: {supplierOptions.find(([id]) => id === supplierId)?.[1]}
+            </FilterChip>
+          )}
           {projectId && (
             <FilterChip onRemove={() => setProjectId("")}>
               Project: {projects.find((p) => p.id === projectId)?.name}
             </FilterChip>
           )}
-          {status && <FilterChip onRemove={() => setStatus("")}>Status: {status}</FilterChip>}
+          {fromDate && <FilterChip onRemove={() => setFromDate("")}>From: {formatDate(fromDate)}</FilterChip>}
+          {toDate && <FilterChip onRemove={() => setToDate("")}>To: {formatDate(toDate)}</FilterChip>}
+          {status && <FilterChip onRemove={() => setStatus("")}>Status: {statusLabel(status)}</FilterChip>}
           {query && <FilterChip onRemove={() => setQuery("")}>Search: {query}</FilterChip>}
         </ActiveFiltersRow>
       )}
 
-      <DataTable 
-        table={table}
-        density={density}
-        minWidth="min-w-[760px]" 
-        noResultsMessage="No debit notes match" 
-        onClearFilters={clearFilters}
-      />
+      <ListTableCard>
+        <DataTable 
+          table={table}
+          density={density}
+          framed={false}
+          minWidth="min-w-[760px]" 
+          noResultsMessage="No debit notes match" 
+          onClearFilters={clearFilters}
+        />
+        {rows.length > 0 && (
+          <TableTotalsBar
+            filteredCount={rows.length}
+            totalCount={debitNotes.length}
+            itemLabel="debit notes"
+            metrics={[{ label: "Total Debited", value: totalDebitStr, tone: "primary" }]}
+          />
+        )}
+        <ClientListPagination
+          info={paginationInfo}
+          onPageChange={setPage}
+          onPageSizeChange={setPageSize}
+        />
+      </ListTableCard>
     </>
   );
 }

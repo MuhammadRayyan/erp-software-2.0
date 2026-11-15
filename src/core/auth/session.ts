@@ -1,13 +1,14 @@
+import { cache } from "react";
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { auth } from "./auth";
 import { assertActiveUser } from "./active-user";
 
-export async function getCurrentSession() {
+export const getCurrentSession = cache(async () => {
   return auth.api.getSession({ headers: await headers() });
-}
+});
 
-export async function requireUser() {
+export const requireUser = cache(async () => {
   const session = await getCurrentSession();
   if (!session) redirect("/login");
   try { assertActiveUser(session.user.id); } catch { redirect("/login?suspended=1"); }
@@ -16,7 +17,7 @@ export async function requireUser() {
     redirect("/login?suspended=1");
   }
   return session.user;
-}
+});
 
 export async function requireSuperAdmin() {
   const user = await requireUser();

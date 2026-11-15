@@ -30,26 +30,22 @@
   },
   "include": [
     "next-env.d.ts",
-    "**/*.ts",
-    "**/*.tsx",
+    "next.config.ts",
+    "drizzle.config.ts",
+    "playwright*.config.ts",
+    "src/**/*.ts",
+    "src/**/*.tsx",
+    "tests/**/*.ts",
+    "scripts/**/*.ts",
     ".next/types/**/*.ts",
-    ".next/dev/types/**/*.ts",
-    ".next-validate/types/**/*.ts",
-    ".next-validate/dev/types/**/*.ts"
+    ".next/dev/types/**/*.ts"
   ],
   "exclude": [
     "node_modules",
-    "examples",
-    "skills",
-    "upload",
-    "download",
-    "mini-services",
     "playwright-report",
     "test-results",
-    "pdf-tests",
-    ".zscripts",
     ".next/dev",
-    ".next-validate/dev",
+    ".next-validate",
     "scratch"
   ]
 }

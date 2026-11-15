@@ -1,9 +1,7 @@
 "use client";
 
-import { useEffect, useId, useMemo, useRef, useState } from "react";
-import { createPortal } from "react-dom";
-import { Check, ChevronsUpDown, Search, X } from "lucide-react";
-import { cn } from "@/lib/cn";
+import { useMemo } from "react";
+import { Combobox, type ComboboxOption } from "@/components/ui/combobox";
 import type { DocumentLineItemOption } from "./document-line-table";
 
 export interface SearchableItemSelectProps {
@@ -31,283 +29,34 @@ export function SearchableItemSelect({
   dataGridRow,
   dataGridColId,
 }: SearchableItemSelectProps) {
-  const [isOpen, setIsOpen] = useState(false);
-  const [query, setQuery] = useState("");
-  const [focusedIndex, setFocusedIndex] = useState(-1);
-  const [dropdownPosition, setDropdownPosition] = useState<{ top: number; left: number; width: number } | null>(null);
-  const containerRef = useRef<HTMLDivElement>(null);
-  const portalRef = useRef<HTMLDivElement>(null);
-  const inputRef = useRef<HTMLInputElement>(null);
-  const listRef = useRef<HTMLUListElement>(null);
-  const listboxId = useId();
-
-  const selectedItem = useMemo(
-    () => items.find((item) => item.id === value),
-    [items, value]
+  const options = useMemo<ComboboxOption[]>(
+    () =>
+      items.map((item) => ({
+        value: item.id,
+        label: item.sku ? `${item.sku} · ${item.name}` : item.name,
+        keywords: [item.sku ?? "", item.name].filter(Boolean),
+      })),
+    [items],
   );
 
-  const filteredItems = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    if (!q) return items;
-    return items.filter((item) => {
-      const nameMatch = item.name.toLowerCase().includes(q);
-      const skuMatch = item.sku?.toLowerCase().includes(q);
-      return nameMatch || skuMatch;
-    });
-  }, [items, query]);
-
-  // Dropdown position tracking
-  useEffect(() => {
-    if (!isOpen) return;
-    function updatePosition() {
-      if (!containerRef.current) return;
-      const rect = containerRef.current.getBoundingClientRect();
-      const dropdownHeight = 280;
-      const spaceBelow = window.innerHeight - rect.bottom;
-      const showAbove = spaceBelow < dropdownHeight && rect.top > dropdownHeight;
-      setDropdownPosition({
-        top: showAbove ? Math.max(8, rect.top - dropdownHeight - 4) : rect.bottom + 4,
-        left: Math.max(8, Math.min(rect.left, window.innerWidth - 300)),
-        width: Math.max(rect.width, 280),
-      });
-    }
-    updatePosition();
-    window.addEventListener("scroll", updatePosition, true);
-    window.addEventListener("resize", updatePosition);
-    return () => {
-      window.removeEventListener("scroll", updatePosition, true);
-      window.removeEventListener("resize", updatePosition);
-    };
-  }, [isOpen]);
-
-  // Click outside listener
-  useEffect(() => {
-    if (!isOpen) return;
-    function handlePointerDown(e: PointerEvent) {
-      const target = e.target as Node;
-      const isInsideContainer = containerRef.current?.contains(target);
-      const isInsidePortal = portalRef.current?.contains(target);
-      if (!isInsideContainer && !isInsidePortal) {
-        setIsOpen(false);
-        setQuery("");
-        setFocusedIndex(-1);
-      }
-    }
-    window.addEventListener("pointerdown", handlePointerDown);
-    return () => window.removeEventListener("pointerdown", handlePointerDown);
-  }, [isOpen]);
-
-  // Focus search input on open
-  useEffect(() => {
-    if (isOpen) {
-      inputRef.current?.focus();
-    }
-  }, [isOpen]);
-
-  function handleSelect(itemId: string) {
-    onChange(itemId);
-    setIsOpen(false);
-    setQuery("");
-    setFocusedIndex(-1);
-  }
-
-  function handleTriggerKeyDown(e: React.KeyboardEvent<HTMLButtonElement>) {
-    if (disabled) return;
-    if (e.key === "ArrowDown" || e.key === " ") {
-      e.preventDefault();
-      setIsOpen(true);
-    } else if (e.key === "Enter") {
-      if (onKeyDown) {
-        onKeyDown(e);
-      } else {
-        e.preventDefault();
-        setIsOpen(true);
-      }
-    } else if (onKeyDown) {
-      onKeyDown(e);
-    }
-  }
-
-  function handleSearchKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
-    if (e.key === "Escape") {
-      e.preventDefault();
-      setIsOpen(false);
-      setQuery("");
-      setFocusedIndex(-1);
-    } else if (e.key === "ArrowDown") {
-      e.preventDefault();
-      setFocusedIndex((prev) => {
-        const total = filteredItems.length + 1; // +1 for "none" option
-        return (prev + 1) % total;
-      });
-    } else if (e.key === "ArrowUp") {
-      e.preventDefault();
-      setFocusedIndex((prev) => {
-        const total = filteredItems.length + 1;
-        return (prev - 1 + total) % total;
-      });
-    } else if (e.key === "Enter") {
-      e.preventDefault();
-      if (focusedIndex === 0) {
-        handleSelect("");
-      } else if (focusedIndex > 0 && filteredItems[focusedIndex - 1]) {
-        handleSelect(filteredItems[focusedIndex - 1].id);
-      } else if (filteredItems.length === 1) {
-        handleSelect(filteredItems[0].id);
-      }
-    } else if (e.key === "Tab") {
-      setIsOpen(false);
-      setQuery("");
-      setFocusedIndex(-1);
-      if (onKeyDown) onKeyDown(e);
-    }
-  }
-
   return (
-    <div ref={containerRef} className={cn("relative w-full", className)}>
-      <button
-        type="button"
-        disabled={disabled}
-        aria-label={ariaLabel}
-        aria-expanded={isOpen}
-        aria-haspopup="listbox"
-        data-grid-row={dataGridRow}
-        data-grid-col-id={dataGridColId}
-        onClick={() => {
-          if (!disabled) setIsOpen((prev) => !prev);
-        }}
-        onKeyDown={handleTriggerKeyDown}
-        className={cn(
-          "flex h-9 w-full min-w-0 items-center justify-between rounded-[6px] border border-border-strong bg-surface-raised px-2 text-xs text-foreground outline-none transition-colors",
-          "hover:border-border-strong hover:bg-surface-muted/60 focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-ring/25",
-          disabled && "cursor-not-allowed opacity-60",
-          !selectedItem && "text-muted-foreground italic"
-        )}
-      >
-        <span className="truncate pr-1 text-left min-w-0 flex-1">
-          {selectedItem ? (
-            <span className="font-medium not-italic text-foreground">
-              {selectedItem.sku ? (
-                <span className="font-mono text-muted-foreground mr-1.5">{selectedItem.sku} ·</span>
-              ) : null}
-              {selectedItem.name}
-            </span>
-          ) : (
-            placeholder
-          )}
-        </span>
-        <ChevronsUpDown className="size-3.5 shrink-0 text-muted-foreground opacity-70" />
-      </button>
-
-      {isOpen && typeof document !== "undefined" && dropdownPosition && createPortal(
-        <div
-          ref={portalRef}
-          style={{
-            position: "fixed",
-            top: `${dropdownPosition.top}px`,
-            left: `${dropdownPosition.left}px`,
-            width: `${dropdownPosition.width}px`,
-            zIndex: 9999,
-          }}
-          className="max-w-[85vw] rounded-lg border border-border bg-surface-raised shadow-xl animate-in fade-in-0 zoom-in-95 duration-100"
-          role="dialog"
-          aria-label="Filter items"
-        >
-          <div className="flex items-center gap-2 border-b border-border px-2.5 py-2">
-            <Search className="size-3.5 shrink-0 text-muted-foreground" />
-            <input
-              ref={inputRef}
-              type="text"
-              value={query}
-              onChange={(e) => {
-                setQuery(e.target.value);
-                setFocusedIndex(0);
-              }}
-              onKeyDown={handleSearchKeyDown}
-              placeholder="Search SKU or item name..."
-              className="w-full bg-transparent text-xs text-foreground outline-none placeholder:text-muted-foreground"
-            />
-            {query && (
-              <button
-                type="button"
-                onClick={() => setQuery("")}
-                className="text-muted-foreground hover:text-foreground"
-                aria-label="Clear search"
-              >
-                <X className="size-3.5" />
-              </button>
-            )}
-          </div>
-
-          <ul
-            ref={listRef}
-            id={listboxId}
-            role="listbox"
-            className="max-h-56 overflow-y-auto p-1 text-xs divide-y divide-border/20"
-          >
-            {/* Free text / None option */}
-            <li
-              role="option"
-              aria-selected={!selectedItem}
-              onClick={() => handleSelect("")}
-              onMouseEnter={() => setFocusedIndex(0)}
-              className={cn(
-                "flex cursor-pointer items-center justify-between rounded-md px-2 py-1.5 transition-colors",
-                focusedIndex === 0
-                  ? "bg-primary/10 text-primary font-medium"
-                  : "hover:bg-surface-muted text-muted-foreground italic"
-              )}
-            >
-              <span>Service / free text</span>
-              {!selectedItem && <Check className="size-3.5 text-primary" />}
-            </li>
-
-            {/* Filtered items */}
-            {filteredItems.map((item, idx) => {
-              const itemIndex = idx + 1;
-              const isSelected = selectedItem?.id === item.id;
-              const isFocused = focusedIndex === itemIndex;
-
-              return (
-                <li
-                  key={item.id}
-                  role="option"
-                  aria-selected={isSelected}
-                  onClick={() => handleSelect(item.id)}
-                  onMouseEnter={() => setFocusedIndex(itemIndex)}
-                  className={cn(
-                    "flex cursor-pointer items-center justify-between rounded-md px-2 py-1.5 transition-colors",
-                    isFocused
-                      ? "bg-primary/10 text-primary font-medium"
-                      : isSelected
-                      ? "bg-surface-muted text-foreground font-medium"
-                      : "hover:bg-surface-muted text-foreground"
-                  )}
-                >
-                  <div className="min-w-0 pr-2">
-                    <div className="flex items-center gap-1.5 truncate">
-                      {item.sku && (
-                        <span className="rounded bg-surface-muted px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground font-semibold">
-                          {item.sku}
-                        </span>
-                      )}
-                      <span className="truncate">{item.name}</span>
-                    </div>
-                  </div>
-                  {isSelected && <Check className="size-3.5 shrink-0 text-primary" />}
-                </li>
-              );
-            })}
-
-            {filteredItems.length === 0 && (
-              <li className="px-3 py-4 text-center text-muted-foreground text-[11px]">
-                No items match &quot;{query}&quot;
-              </li>
-            )}
-          </ul>
-        </div>,
-        document.body
-      )}
-    </div>
+    <Combobox
+      options={options}
+      value={value ?? ""}
+      onValueChange={onChange}
+      placeholder={placeholder}
+      searchPlaceholder="Search SKU or item name..."
+      emptyText="No matching items found."
+      clearLabel={placeholder}
+      allowClear
+      disabled={disabled}
+      size="sm"
+      ariaLabel={ariaLabel}
+      className={className}
+      contentClassName="w-[300px]"
+      dataGridRow={dataGridRow}
+      dataGridColId={dataGridColId}
+      onKeyDown={onKeyDown ? (event) => onKeyDown(event) : undefined}
+    />
   );
 }

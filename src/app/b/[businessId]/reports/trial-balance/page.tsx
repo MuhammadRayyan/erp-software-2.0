@@ -71,7 +71,7 @@ export default async function TrialBalancePage({
               <tr key={account.id}>
                 <td>
                   <Link
-                    href={`/b/${businessId}/accounting/chart-of-accounts/${account.id}`}
+                    href={`/b/${businessId}/reports/general-ledger?accountId=${encodeURIComponent(account.id)}&dateTo=${encodeURIComponent(throughDate)}`}
                     className="font-medium text-foreground hover:underline"
                   >
                     {account.name}

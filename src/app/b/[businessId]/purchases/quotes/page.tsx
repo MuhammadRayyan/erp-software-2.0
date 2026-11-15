@@ -44,13 +44,11 @@ export default async function PurchaseQuotesPage({
         </Button>
       </PageHeader>
       {quotes.length ? (
-        <div className="data-panel overflow-hidden">
-          <PurchaseQuoteTable
-            businessId={businessId}
-            quotes={quotes}
-            serverSnapshot={columnSnapshots["purchase-quotes"]}
-          />
-        </div>
+        <PurchaseQuoteTable
+          businessId={businessId}
+          quotes={quotes}
+          serverSnapshot={columnSnapshots["purchase-quotes"]}
+        />
       ) : (
         <EmptyState
           icon={<FileText className="mx-auto mb-3 size-7 text-muted-foreground" />}

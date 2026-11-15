@@ -166,16 +166,12 @@ export function LocalizationForm({
                 </option>
               ))}
             </select>
-            <p className="text-xs text-muted-foreground">
-              Used for financial statements, period comparison, and annual Profit & Loss calculations.
-            </p>
           </div>
-
-          <div className="rounded-md border border-border bg-surface-muted/50 p-4 space-y-1">
-            <span className="text-xs font-semibold text-foreground">Base Currency Notice</span>
-            <p className="text-xs text-muted-foreground">
-              The base accounting currency is <strong>{initial.baseCurrency}</strong>. Base currency changes are handled under Currencies & Exchange Rates.
-            </p>
+          <div className="space-y-1.5">
+            <Label>Base Currency</Label>
+            <div className="flex h-10 items-center rounded-md border border-border bg-surface-muted/50 px-3 text-sm font-medium text-foreground">
+              {initial.baseCurrency}
+            </div>
           </div>
         </div>
       </section>

@@ -76,21 +76,6 @@ export function resolveRateSnapshot(
     };
   }
 
-  const rateDate = input.exchangeRateDate?.trim() || input.relevantDate;
-  const source = input.exchangeRateSource;
-  const requestedRate = input.exchangeRateToBase?.trim();
-  if (!requestedRate || !source || !["Manual", "CBUAE"].includes(source)) {
-    throw new Error(`An exchange rate is required for ${currency.code} on ${rateDate}.`);
-  }
-  validateExchangeRate(requestedRate);
-  const stored = sqlite.prepare(`
-    SELECT rate_to_base FROM exchange_rates
-    WHERE currency_code = ? AND rate_date = ? AND source = ?
-  `).get(currency.code, rateDate, source) as { rate_to_base: string } | undefined;
-  if (!stored || stored.rate_to_base !== requestedRate) {
-    throw new Error(`An exchange rate is required for ${currency.code} on ${rateDate}.`);
-  }
-
   const vatSettings = sqlite.prepare(`
     SELECT vat_registered FROM business_tax_settings WHERE id = 'default'
   `).get() as { vat_registered: number } | undefined;
@@ -99,17 +84,80 @@ export function resolveRateSnapshot(
     && vatSettings?.vat_registered
     && isVatRelevant(sqlite, input.taxCodeIds ?? []),
   );
-  if (vatRelevant && (source !== "CBUAE" || rateDate !== input.relevantDate)) {
-    throw new Error(
-      "A UAE VAT foreign-currency document requires the applicable CBUAE rate for its tax date.",
-    );
+
+  const rawRate = input.exchangeRateToBase?.trim();
+  const rawSource = input.exchangeRateSource;
+  const hasExplicitSnapshot = Boolean(rawRate && rawSource && ["Manual", "CBUAE"].includes(rawSource));
+
+  let resolvedRateToBase: string;
+  let resolvedRateDate: string;
+  let resolvedSource: "Manual" | "CBUAE";
+
+  if (hasExplicitSnapshot) {
+    const rateDate = input.exchangeRateDate?.trim() || input.relevantDate;
+    const source = rawSource as "Manual" | "CBUAE";
+    validateExchangeRate(rawRate!);
+    const stored = sqlite.prepare(`
+      SELECT rate_to_base FROM exchange_rates
+      WHERE currency_code = ? AND rate_date = ? AND source = ?
+    `).get(currency.code, rateDate, source) as { rate_to_base: string } | undefined;
+    if (!stored || stored.rate_to_base !== rawRate) {
+      throw new Error(`An exchange rate is required for ${currency.code} on ${rateDate}.`);
+    }
+    if (vatRelevant && (source !== "CBUAE" || rateDate !== input.relevantDate)) {
+      throw new Error(
+        "A UAE VAT foreign-currency document requires the applicable CBUAE rate for its tax date.",
+      );
+    }
+    resolvedRateToBase = stored.rate_to_base;
+    resolvedRateDate = rateDate;
+    resolvedSource = source;
+  } else if (vatRelevant) {
+    const cbuaeRow = sqlite.prepare(`
+      SELECT rate_to_base, rate_date, source FROM exchange_rates
+      WHERE currency_code = ? AND rate_date = ? AND source = 'CBUAE'
+      ORDER BY created_at DESC LIMIT 1
+    `).get(currency.code, input.relevantDate) as
+      | { rate_to_base: string; rate_date: string; source: "CBUAE" }
+      | undefined;
+    if (!cbuaeRow) {
+      throw new Error(
+        "A UAE VAT foreign-currency document requires the applicable CBUAE rate for its tax date.",
+      );
+    }
+    validateExchangeRate(cbuaeRow.rate_to_base);
+    resolvedRateToBase = cbuaeRow.rate_to_base;
+    resolvedRateDate = cbuaeRow.rate_date;
+    resolvedSource = cbuaeRow.source;
+  } else {
+    const preferredRow = (sqlite.prepare(`
+      SELECT rate_to_base, rate_date, source FROM exchange_rates
+      WHERE currency_code = ? AND rate_date <= ?
+      ORDER BY rate_date DESC, CASE source WHEN 'CBUAE' THEN 0 ELSE 1 END, created_at DESC
+      LIMIT 1
+    `).get(currency.code, input.relevantDate) ??
+      sqlite.prepare(`
+        SELECT rate_to_base, rate_date, source FROM exchange_rates
+        WHERE currency_code = ?
+        ORDER BY rate_date DESC, CASE source WHEN 'CBUAE' THEN 0 ELSE 1 END, created_at DESC
+        LIMIT 1
+      `).get(currency.code)) as
+      | { rate_to_base: string; rate_date: string; source: "Manual" | "CBUAE" }
+      | undefined;
+    if (!preferredRow) {
+      throw new Error(`An exchange rate is required for ${currency.code} on ${input.relevantDate}.`);
+    }
+    validateExchangeRate(preferredRow.rate_to_base);
+    resolvedRateToBase = preferredRow.rate_to_base;
+    resolvedRateDate = preferredRow.rate_date;
+    resolvedSource = preferredRow.source;
   }
 
   return {
     currencyCode: currency.code,
-    exchangeRateToBase: stored.rate_to_base,
-    exchangeRateDate: rateDate,
-    exchangeRateSource: source as "Manual" | "CBUAE",
+    exchangeRateToBase: resolvedRateToBase,
+    exchangeRateDate: resolvedRateDate,
+    exchangeRateSource: resolvedSource,
     currencyMinorUnit: currency.minor_unit,
     baseCurrencyCode: base.code,
     baseMinorUnit: base.minor_unit,

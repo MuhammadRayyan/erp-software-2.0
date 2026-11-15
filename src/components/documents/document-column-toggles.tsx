@@ -1,10 +1,15 @@
 "use client";
 
-import type { UseFormRegisterReturn } from "react-hook-form";
+import { Controller, type Control, type FieldValues, type Path, type UseFormRegisterReturn } from "react-hook-form";
 import { SlidersHorizontal } from "lucide-react";
+import { Checkbox } from "@/components/ui/checkbox";
 import { cn } from "@/lib/cn";
 
-export interface DocumentColumnTogglesProps {
+export interface DocumentColumnTogglesProps<
+  TFieldValues extends FieldValues = FieldValues,
+  TContext = any,
+  TTransformedValues = TFieldValues,
+> {
   showLineNumber: boolean;
   onShowLineNumberChange: (show: boolean) => void;
   showDescription: boolean;
@@ -15,11 +20,19 @@ export interface DocumentColumnTogglesProps {
   onShowLineProjectsChange: (show: boolean) => void;
   showLineTaxCodes?: boolean;
   onShowLineTaxCodesChange?: (show: boolean) => void;
+  control?: Control<TFieldValues, TContext, TTransformedValues>;
+  amountsIncludeTax?: boolean;
+  onAmountsIncludeTaxChange?: (checked: boolean) => void;
+  showAmountsIncludeTaxToggle?: boolean;
   registerAmountsIncludeTax?: UseFormRegisterReturn;
   className?: string;
 }
 
-export function DocumentColumnToggles({
+export function DocumentColumnToggles<
+  TFieldValues extends FieldValues = FieldValues,
+  TContext = any,
+  TTransformedValues = TFieldValues,
+>({
   showLineNumber,
   onShowLineNumberChange,
   showDescription,
@@ -30,9 +43,62 @@ export function DocumentColumnToggles({
   onShowLineProjectsChange,
   showLineTaxCodes,
   onShowLineTaxCodesChange,
+  control,
+  amountsIncludeTax,
+  onAmountsIncludeTaxChange,
+  showAmountsIncludeTaxToggle = false,
   registerAmountsIncludeTax,
   className,
-}: DocumentColumnTogglesProps) {
+}: DocumentColumnTogglesProps<TFieldValues, TContext, TTransformedValues>) {
+  const renderTaxInclusiveToggle = () => {
+    if (onAmountsIncludeTaxChange !== undefined && amountsIncludeTax !== undefined) {
+      return (
+        <label className="flex items-center gap-2 text-xs font-medium text-foreground cursor-pointer select-none col-span-full pb-1.5 mb-0.5 border-b border-border/60">
+          <Checkbox
+            checked={amountsIncludeTax}
+            onCheckedChange={(checked) => onAmountsIncludeTaxChange(Boolean(checked))}
+            aria-label="Amounts are tax inclusive"
+          />
+          <span>Amounts are tax inclusive</span>
+        </label>
+      );
+    }
+
+    if (control && (showAmountsIncludeTaxToggle || registerAmountsIncludeTax)) {
+      return (
+        <Controller
+          control={control as unknown as Control<FieldValues>}
+          name={"amountsIncludeTax" as Path<FieldValues>}
+          render={({ field }) => (
+            <label className="flex items-center gap-2 text-xs font-medium text-foreground cursor-pointer select-none col-span-full pb-1.5 mb-0.5 border-b border-border/60">
+              <Checkbox
+                checked={Boolean(field.value)}
+                onCheckedChange={(checked) => field.onChange(Boolean(checked))}
+                aria-label="Amounts are tax inclusive"
+              />
+              <span>Amounts are tax inclusive</span>
+            </label>
+          )}
+        />
+      );
+    }
+
+    if (registerAmountsIncludeTax) {
+      return (
+        <label className="flex items-center gap-2 text-xs font-medium text-foreground cursor-pointer select-none col-span-full pb-1.5 mb-0.5 border-b border-border/60">
+          <input
+            type="checkbox"
+            className="size-4 rounded-[4px] border-border-strong accent-primary cursor-pointer"
+            {...registerAmountsIncludeTax}
+          />
+          <span>Amounts are tax inclusive</span>
+        </label>
+      );
+    }
+
+    return null;
+  };
+
   return (
     <div
       className={cn(
@@ -48,65 +114,51 @@ export function DocumentColumnToggles({
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-2.5">
-        {registerAmountsIncludeTax && (
-          <label className="flex items-center gap-2 text-xs font-medium text-foreground cursor-pointer select-none col-span-full pb-1.5 mb-0.5 border-b border-border/60">
-            <input
-              type="checkbox"
-              className="size-4 rounded-[4px] border-border-strong accent-primary cursor-pointer"
-              {...registerAmountsIncludeTax}
-            />
-            <span>Amounts are tax inclusive</span>
-          </label>
-        )}
+        {renderTaxInclusiveToggle()}
 
         <label className="flex items-center gap-2 text-xs text-muted-foreground hover:text-foreground cursor-pointer select-none transition-colors">
-          <input
-            type="checkbox"
-            className="size-4 rounded-[4px] border-border-strong accent-primary cursor-pointer"
+          <Checkbox
             checked={showLineNumber}
-            onChange={(e) => onShowLineNumberChange(e.target.checked)}
+            onCheckedChange={(checked) => onShowLineNumberChange(Boolean(checked))}
+            aria-label="Column Line number"
           />
           <span>Column · Line number</span>
         </label>
 
         <label className="flex items-center gap-2 text-xs text-muted-foreground hover:text-foreground cursor-pointer select-none transition-colors">
-          <input
-            type="checkbox"
-            className="size-4 rounded-[4px] border-border-strong accent-primary cursor-pointer"
+          <Checkbox
             checked={showDescription}
-            onChange={(e) => onShowDescriptionChange(e.target.checked)}
+            onCheckedChange={(checked) => onShowDescriptionChange(Boolean(checked))}
+            aria-label="Column Description"
           />
           <span>Column · Description</span>
         </label>
 
         <label className="flex items-center gap-2 text-xs text-muted-foreground hover:text-foreground cursor-pointer select-none transition-colors">
-          <input
-            type="checkbox"
-            className="size-4 rounded-[4px] border-border-strong accent-primary cursor-pointer"
+          <Checkbox
             checked={showDiscounts}
-            onChange={(e) => onShowDiscountsChange(e.target.checked)}
+            onCheckedChange={(checked) => onShowDiscountsChange(Boolean(checked))}
+            aria-label="Column Discount"
           />
           <span>Column · Discount</span>
         </label>
 
         {onShowLineTaxCodesChange && showLineTaxCodes !== undefined && (
           <label className="flex items-center gap-2 text-xs text-muted-foreground hover:text-foreground cursor-pointer select-none transition-colors">
-            <input
-              type="checkbox"
-              className="size-4 rounded-[4px] border-border-strong accent-primary cursor-pointer"
+            <Checkbox
               checked={showLineTaxCodes}
-              onChange={(e) => onShowLineTaxCodesChange(e.target.checked)}
+              onCheckedChange={(checked) => onShowLineTaxCodesChange(Boolean(checked))}
+              aria-label="Column Tax code"
             />
             <span>Column · Tax code</span>
           </label>
         )}
 
         <label className="flex items-center gap-2 text-xs text-muted-foreground hover:text-foreground cursor-pointer select-none transition-colors">
-          <input
-            type="checkbox"
-            className="size-4 rounded-[4px] border-border-strong accent-primary cursor-pointer"
+          <Checkbox
             checked={showLineProjects}
-            onChange={(e) => onShowLineProjectsChange(e.target.checked)}
+            onCheckedChange={(checked) => onShowLineProjectsChange(Boolean(checked))}
+            aria-label="Column Project"
           />
           <span>Column · Project</span>
         </label>

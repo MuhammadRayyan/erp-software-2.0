@@ -1,7 +1,11 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { FileSpreadsheet, Play, Plus } from "lucide-react";
+import { PageHeader } from "@/components/page-header";
+import { Button } from "@/components/ui/button";
 import { type PayslipRecord, type EmployeeRecord } from "@/modules/payroll/services/payroll-service";
 import { PayslipTable } from "@/modules/payroll/payslip-table";
 import { PayRunDialog } from "./pay-run-dialog";
@@ -20,13 +24,27 @@ export function PayslipsClient({ businessId, payslips, employees, currency }: Pa
   const [wpsOpen, setWpsOpen] = useState(false);
 
   return (
-    <div className="space-y-4">
+    <>
+      <PageHeader
+        title="Payslips"
+        description="Employee wage slips, earnings breakdowns, deductions, and General Ledger posting."
+      >
+        <Button permission="export" variant="secondary" onClick={() => setWpsOpen(true)}>
+          <FileSpreadsheet className="size-4 text-primary" /> Export WPS (.SIF)
+        </Button>
+        <Button variant="secondary" onClick={() => setPayRunOpen(true)}>
+          <Play className="size-4 text-primary" /> Generate Pay Run
+        </Button>
+        <Button permission="create" asChild>
+          <Link href={`/b/${businessId}/payroll/payslips/new`}>
+            <Plus className="size-4" /> New Payslip
+          </Link>
+        </Button>
+      </PageHeader>
       <PayslipTable
         businessId={businessId}
         payslips={payslips}
         currency={currency}
-        onOpenPayRun={() => setPayRunOpen(true)}
-        onOpenWpsExport={() => setWpsOpen(true)}
       />
 
       <PayRunDialog
@@ -44,6 +62,6 @@ export function PayslipsClient({ businessId, payslips, employees, currency }: Pa
         open={wpsOpen}
         onOpenChange={setWpsOpen}
       />
-    </div>
+    </>
   );
 }
