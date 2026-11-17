@@ -282,7 +282,6 @@ export function AppShell({
                     businessId={business.id}
                     modules={modules}
                     hiddenNavPaths={hiddenNavPaths}
-                    isSuperAdmin={isSuperAdmin}
                     onNavigate={() => setMobileOpen(false)}
                   />
                 </div>
@@ -352,7 +351,6 @@ export function AppShell({
               businessId={business.id}
               modules={modules}
               hiddenNavPaths={hiddenNavPaths}
-              isSuperAdmin={isSuperAdmin}
               collapsed={sidebarCollapsed}
             />
 

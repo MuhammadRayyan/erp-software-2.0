@@ -121,4 +121,3 @@ export const systemHealthNav: NavItem = {
   icon: Activity,
   module: "settings",
 };
-export const settingsNavItems: NavItem[] = [customizeNav, settingsNav, systemHealthNav];

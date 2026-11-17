@@ -7,7 +7,7 @@ import { ChevronDown, ChevronRight } from "lucide-react";
 import { cn } from "@/lib/cn";
 import type { ModuleKey } from "@/core/permissions/permissions";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { customizeNav, primaryNav, settingsNav, systemHealthNav, type NavItem } from "./nav-items";
+import { primaryNav, settingsNav, type NavItem } from "./nav-items";
 import { isNavPathVisible } from "./nav-customization";
 
 const COLLAPSED_GROUPS_STORAGE_KEY = "uaemanager.navGroupsCollapsed";
@@ -77,14 +77,12 @@ export function SidebarNav({
   businessId,
   modules,
   hiddenNavPaths = [],
-  isSuperAdmin,
   collapsed = false,
   onNavigate,
 }: {
   businessId: string;
   modules: ModuleKey[];
   hiddenNavPaths?: readonly string[];
-  isSuperAdmin?: boolean;
   collapsed?: boolean;
   onNavigate?: () => void;
 }) {
@@ -166,27 +164,13 @@ export function SidebarNav({
       </div>
 
       {modules.includes("settings") && (
-        <div className="mt-auto space-y-0.5 border-t border-border pt-2">
-          <NavLink
-            businessId={businessId}
-            item={customizeNav}
-            collapsed={collapsed}
-            onNavigate={onNavigate}
-          />
+        <div className="mt-auto border-t border-border pt-2">
           <NavLink
             businessId={businessId}
             item={settingsNav}
             collapsed={collapsed}
             onNavigate={onNavigate}
           />
-          {isSuperAdmin && (
-            <NavLink
-              businessId={businessId}
-              item={systemHealthNav}
-              collapsed={collapsed}
-              onNavigate={onNavigate}
-            />
-          )}
         </div>
       )}
     </nav>

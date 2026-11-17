@@ -46,7 +46,7 @@ Do not hardcode Tailwind palette colors (like `bg-gray-100` or `text-red-600`) i
 
 - **App Shell** ([app-shell.tsx](../src/components/app-shell/app-shell.tsx)):
   - **Collapsible left sidebar**: Persists user collapse state (`uaemanager.sidebarCollapsed` + `ui-sidebar-collapsed` cookie) with tooltip labels when collapsed and an accessible mobile drawer on `< lg` viewports.
-  - **Active Business Label & Sticky Customize Footer**: Displays the active workspace name cleanly at the top-left (switching/creating workspaces lives exclusively in `AccountMenu` → `/businesses`) and provides sticky bottom links for **Customize** ([customize/page.tsx](../src/app/b/[businessId]/settings/customize/page.tsx)) and **Settings**.
+  - **Active Business Label & Settings Footer**: Displays the active workspace name cleanly at the top-left (switching/creating workspaces lives exclusively in `AccountMenu` → `/businesses`) and provides a sticky bottom **Settings** link (**Customize Modules** via [customize/page.tsx](../src/app/b/[businessId]/settings/customize/page.tsx) and Super-Admin **System Health & Diagnostics** live inside Settings).
   - **Header utilities**: Notification bell with unread/pending-approval badges, Quick-search trigger button, and Account menu.
 - **Global Command Palette (`Ctrl/Cmd + K`)** ([command-palette.tsx](../src/components/command-palette.tsx) & [command.tsx](../src/components/ui/command.tsx)):
   - Built on `cmdk` inside Radix `DialogRoot` (`CommandDialog`).

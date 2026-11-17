@@ -22,7 +22,7 @@ export default async function CustomizeNavigationPage({
     <SettingsShell
       businessId={businessId}
       title="Customize Modules"
-      description="Show or hide modules and sub-tabs in the workspace navigation. Settings and Customize stay available."
+      description="Show or hide modules and sub-tabs in the workspace navigation. Settings always stays available."
       maxWidth="max-w-5xl"
     >
       <NavCustomizationForm
