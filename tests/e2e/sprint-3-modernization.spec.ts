@@ -180,16 +180,24 @@ test.describe("Sprint 3 UI & Workflow Modernization", () => {
     await expect(rail.getByRole("button", { name: "Switch business", exact: true })).toHaveCount(0);
     await expect(page.getByRole("button", { name: /Audit Guide/i })).toHaveCount(0);
 
-    // 4. Clean single-column Settings layout (left settings rail removed) + Customize sticky nav link
-    await page.goto(`/b/${f.businessId}/settings`);
+    // 4. Left sidebar footer shows only Settings (Customize and System Health live inside Settings even for Super Admin)
+    await expect(rail.getByRole("link", { name: "Settings", exact: true })).toBeVisible();
+    await expect(rail.getByRole("link", { name: "Customize", exact: true })).toHaveCount(0);
+    await expect(rail.getByRole("link", { name: "System Health", exact: true })).toHaveCount(0);
+
+    // Clean single-column Settings layout (left settings rail removed) + Customize/System Health tiles in Hub
+    await rail.getByRole("link", { name: "Settings", exact: true }).click();
+    await expect(page).toHaveURL(new RegExp(`/b/${f.businessId}/settings$`));
     await expect(page.getByLabel("Settings navigation")).toHaveCount(0);
+    await expect(page.getByRole("link", { name: /System Health & Diagnostics/i })).toBeVisible();
     await page.getByRole("link", { name: /My Profile & Security/i }).click();
     await expect(page).toHaveURL(new RegExp(`/b/${f.businessId}/settings/profile`));
     await expect(page.getByLabel("Settings navigation")).toHaveCount(0);
-    await expect(page.locator("main").getByRole("link", { name: "Settings", exact: true })).toBeVisible();
+    await page.locator("main").getByRole("link", { name: "Settings", exact: true }).click();
+    await expect(page).toHaveURL(new RegExp(`/b/${f.businessId}/settings$`));
 
-    // 4b. Customize navigation toggles (hide EOSB Calculator, then hide HR group, then restore)
-    await rail.getByRole("link", { name: "Customize", exact: true }).click();
+    // 4b. Customize navigation toggles via Settings Hub (hide EOSB Calculator, then hide HR group, then restore)
+    await page.getByRole("link", { name: /Customize Modules/i }).click();
     await expect(page).toHaveURL(new RegExp(`/b/${f.businessId}/settings/customize`));
     await page.getByLabel("EOSB Calculator", { exact: true }).uncheck();
     await page.getByRole("button", { name: "Save changes", exact: true }).click();
