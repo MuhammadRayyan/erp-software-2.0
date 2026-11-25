@@ -3133,6 +3133,43 @@ export const businessMigrations = [
         `);
       },
     },
+    {
+      version: 39,
+      name: "statement_match_items",
+      up: (sqlite) => {
+        // One row per book entry matched to a statement line, so a single bank
+        // deposit can clear several receipts (and vice versa). Lines matched to
+        // one source keep matched_source_type/id; split matches use
+        // matched_source_type = 'multiple'. This table is the source of truth
+        // for "is this book entry already matched".
+        sqlite.exec(`
+          CREATE TABLE IF NOT EXISTS "bank_statement_match_items" (
+            "id" TEXT PRIMARY KEY NOT NULL,
+            "statement_line_id" TEXT NOT NULL REFERENCES bank_statement_lines(id) ON DELETE CASCADE,
+            "bank_account_id" TEXT NOT NULL REFERENCES bank_accounts(id),
+            "source_type" TEXT NOT NULL,
+            "source_id" TEXT NOT NULL,
+            "created_at" TEXT NOT NULL
+          );
+          CREATE UNIQUE INDEX IF NOT EXISTS bank_statement_match_item_unique_idx
+            ON bank_statement_match_items(statement_line_id, source_type, source_id);
+          CREATE UNIQUE INDEX IF NOT EXISTS bank_statement_match_item_source_idx
+            ON bank_statement_match_items(bank_account_id, source_type, source_id);
+
+          INSERT OR IGNORE INTO bank_statement_match_items (id, statement_line_id, bank_account_id, source_type, source_id, created_at)
+          SELECT lower(hex(randomblob(16))), id, bank_account_id, matched_source_type, matched_source_id, created_at
+          FROM bank_statement_lines
+          WHERE match_status IN ('matched', 'created')
+            AND matched_source_type IS NOT NULL AND matched_source_type <> 'multiple';
+
+          DROP INDEX IF EXISTS bank_reconciliation_statement_line_idx;
+          CREATE UNIQUE INDEX IF NOT EXISTS bank_reconciliation_line_journal_idx
+            ON bank_reconciliation_items(statement_line_id, journal_entry_id);
+          CREATE INDEX IF NOT EXISTS bank_reconciliation_statement_line_idx2
+            ON bank_reconciliation_items(statement_line_id);
+        `);
+      },
+    },
   ] satisfies readonly SqliteMigration[];
 
 

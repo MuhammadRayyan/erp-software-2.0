@@ -6,6 +6,8 @@ import { z } from "zod";
 import { requirePermission } from "@/core/permissions/require-module";
 import { supplierInputSchema } from "./supplier-input";
 import { createSupplier, updateSupplier } from "./supplier-service";
+import { setSuppliersActive } from "./supplier-service";
+import type { BatchActionResult } from "@/modules/shared/batch";
 
 export type SupplierActionResult = { error?: string; fieldErrors?: Record<string, string[]> };
 
@@ -96,4 +98,11 @@ export async function updateSupplierAction(
   revalidatePath(`/b/${businessId}/suppliers`);
   revalidatePath(`/b/${businessId}/suppliers/${supplierId}`);
   redirect(`/b/${businessId}/suppliers/${supplierId}?notice=Supplier updated`);
+}
+
+export async function batchSetSuppliersActiveAction(businessId: string, ids: string[], active: boolean): Promise<BatchActionResult> {
+  const { user } = await requirePermission(businessId, "purchases", "edit");
+  const result = setSuppliersActive(businessId, user.id, ids, active);
+  revalidatePath(`/b/${businessId}/suppliers`);
+  return result;
 }

@@ -17,6 +17,8 @@ import { bankTransactionInputSchema, type BankTransactionInput } from "./bank-tr
 import { emirateLabels, emirates } from "@/modules/tax/uae-vat-config";
 import { SelectNative } from "@/components/ui/select-native";
 import { useUnsavedChanges } from "@/hooks/use-unsaved-changes";
+import { FieldError } from "@/components/ui/field-error";
+import { fieldErrorProps, fieldErrorId, applyServerFieldErrors, focusFirstInvalidField } from "@/lib/form-errors";
 
 
 export function BankTransactionForm({ businessId, transactionId, bankAccounts, counterAccounts, taxCodes, projects, initial, currency }: {
@@ -46,15 +48,17 @@ export function BankTransactionForm({ businessId, transactionId, bankAccounts, c
   async function save(values: BankTransactionInput) {
     setServerError("");
     const result = await saveBankTransactionAction(businessId, transactionId ?? null, intent, values);
-    if (result.fieldErrors) for (const [field, messages] of Object.entries(result.fieldErrors)) {
-      if (field !== "lines") setError(field as keyof BankTransactionInput, { message: messages[0] });
+    if (result.fieldErrors) {
+      const { lines: _lines, ...headerErrors } = result.fieldErrors;
+      void _lines;
+      applyServerFieldErrors(setError, headerErrors);
     }
     if (result.error) setServerError(result.error);
   }
   const accountOptions = counterAccounts.filter((account) => !["bank", "cash", "accounts_receivable", "accounts_payable"].includes(account.subtype));
   const defaultTax = taxCodes.find((tax) => tax.vatCategory === "out_of_scope")?.id ?? taxCodes[0]?.id ?? "";
   const availableTaxCodes = taxCodes.filter((tax) => [type === "money_in" ? "sales" : "purchases", "both"].includes(tax.direction) && tax.vatCategory !== "reverse_charge");
-  return <form onSubmit={handleSubmit(save)} className="space-y-7" noValidate>
+  return <form onSubmit={handleSubmit(save, focusFirstInvalidField)} className="space-y-7" noValidate>
     {initial.statementLineId && <div className="rounded-md border border-info/25 bg-info/10 px-3 py-2.5 text-sm">This transaction is linked to an imported statement line. Its direction and total must remain an exact match.</div>}
     {serverError && <FormError message={serverError} />}
     <input type="hidden" {...register("statementLineId")} />
@@ -65,7 +69,7 @@ export function BankTransactionForm({ businessId, transactionId, bankAccounts, c
           control={control}
           name="bankAccountId"
           render={({ field }) => (
-            <Combobox
+            <Combobox ref={field.ref}
               id="bankAccountId"
               options={bankAccounts.map((account) => ({ value: account.id, label: account.name }))}
               value={field.value ?? ""}
@@ -73,18 +77,18 @@ export function BankTransactionForm({ businessId, transactionId, bankAccounts, c
               placeholder="Choose account…"
               searchPlaceholder="Search accounts…"
               emptyText="No accounts found."
-              ariaInvalid={!!errors.bankAccountId}
+              ariaInvalid={!!errors.bankAccountId} ariaDescribedBy={errors.bankAccountId ? fieldErrorId("bankAccountId") : undefined}
             />
           )}
         />
-        {errors.bankAccountId && <p className="field-error">{errors.bankAccountId.message}</p>}
+        <FieldError name="bankAccountId" message={errors.bankAccountId?.message} />
       </div>
       <div className="space-y-1.5"><Label htmlFor="type">Direction</Label><SelectNative id="type"  {...register("type")}><option value="money_out">Money Out</option><option value="money_in">Money In</option></SelectNative></div>
-      <div className="space-y-1.5"><Label htmlFor="date">Date</Label><Input id="date" type="date" {...register("date")} aria-invalid={!!errors.date} />{errors.date && <p className="field-error">{errors.date.message}</p>}</div>
-      <div className="space-y-1.5"><Label htmlFor="taxDate">VAT tax date</Label><Input id="taxDate" type="date" {...register("taxDate")} aria-invalid={!!errors.taxDate} />{errors.taxDate && <p className="field-error">{errors.taxDate.message}</p>}</div>
+      <div className="space-y-1.5"><Label htmlFor="date">Date</Label><Input id="date" type="date" {...register("date")} {...fieldErrorProps("date", errors.date)} /><FieldError name="date" message={errors.date?.message} /></div>
+      <div className="space-y-1.5"><Label htmlFor="taxDate">VAT tax date</Label><Input id="taxDate" type="date" {...register("taxDate")} {...fieldErrorProps("taxDate", errors.taxDate)} /><FieldError name="taxDate" message={errors.taxDate?.message} /></div>
       {type === "money_in" && <div className="space-y-1.5"><Label htmlFor="supplyEmirate">Supply Emirate</Label><SelectNative id="supplyEmirate"  {...register("supplyEmirate")}><option value="">Use business default</option>{emirates.map((emirate) => <option key={emirate} value={emirate}>{emirateLabels[emirate]}</option>)}</SelectNative></div>}
       <div className="space-y-1.5"><Label htmlFor="reference">Reference <span className="font-normal text-muted-foreground">(optional)</span></Label><Input id="reference" {...register("reference")} /></div>
-      <div className="space-y-1.5 md:col-span-2"><Label htmlFor="description">Description</Label><Input id="description" {...register("description")} aria-invalid={!!errors.description} />{errors.description && <p className="field-error">{errors.description.message}</p>}</div>
+      <div className="space-y-1.5 md:col-span-2"><Label htmlFor="description">Description</Label><Input id="description" {...register("description")} {...fieldErrorProps("description", errors.description)} /><FieldError name="description" message={errors.description?.message} /></div>
     </div></section>
     <section><div className="flex items-start justify-between gap-4"><div><h2 className="text-base font-semibold">{type === "money_in" ? "Income allocation" : "Expense allocation"}</h2><p className="mt-1 text-sm text-muted-foreground">Amounts include tax. Project is applied only to the counter-account P&amp;L line.</p></div><Button type="button" variant="secondary" size="sm" onClick={() => append({ accountId: "", taxCodeId: defaultTax, projectId: "", description: "", amount: minorToDecimalString(0, currency) })}><Plus className="size-4" /> Add line</Button></div>
       <div className="mt-4 space-y-3">{fields.map((field, index) => <div key={field.id} className="grid gap-3 rounded-md border border-border bg-surface px-3 py-3 md:grid-cols-[1.3fr_1.3fr_0.9fr_0.9fr_auto]">

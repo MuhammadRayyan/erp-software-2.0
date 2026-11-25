@@ -1,7 +1,7 @@
-import { businessToday } from "@/core/dates";
 import { assertMutationPermission } from "@/core/permissions/mutation-permissions";
 import { getBusinessDb } from "@/core/db/business";
 import { getBusinessProfile } from "@/modules/business-profile/business-profile-service";
+import { getBusinessTodayIso } from "@/core/format";
 
 export interface WpsExportOptions {
   /** YYYY-MM e.g. "2026-11" */
@@ -135,7 +135,7 @@ export function generateWpsSifFile(
   // With no explicit filter, export only the current (Gulf time) month rather
   // than every posted payslip ever.
   const hasExplicitFilter = Boolean(options.payslipIds?.length || options.periodDescription || options.salaryMonth);
-  const filterYm = options.salaryMonth || (hasExplicitFilter ? undefined : businessToday().slice(0, 7));
+  const filterYm = options.salaryMonth || (hasExplicitFilter ? undefined : getBusinessTodayIso().slice(0, 7));
   const filterBounds = filterYm ? monthBounds(filterYm) : undefined;
 
   // Load candidate posted payslips
@@ -198,7 +198,7 @@ export function generateWpsSifFile(
       message: `Selected payslips span several months (${payslipMonths.join(", ")}). Export one salary month per SIF file.`,
     });
   }
-  const targetYm = filterYm || payslipMonths[0] || businessToday().slice(0, 7);
+  const targetYm = filterYm || payslipMonths[0] || getBusinessTodayIso().slice(0, 7);
   const bounds = monthBounds(targetYm);
 
   // One salary record per employee per file; duplicates would pay twice.

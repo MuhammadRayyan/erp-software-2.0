@@ -1,4 +1,3 @@
-import { businessToday } from "@/core/dates";
 import { assertSavePermission, assertMutationPermission } from "@/core/permissions/mutation-permissions";
 import type { BaseStoredLine } from "@/modules/documents/document-types";
 import { randomUUID } from "node:crypto";
@@ -39,6 +38,7 @@ import {
 } from "./inventory-valuation";
 import { convertToBase } from "@/modules/currency/conversion";
 import { getBaseCurrency } from "@/modules/currency/currency";
+import { getBusinessTodayIso } from "@/core/format";
 
 export type { InventoryDocumentIntent, InventoryDocumentStatus } from "./inventory-document";
 
@@ -455,7 +455,7 @@ export function voidGoodsReceipt(businessId: string, userId: string, receiptId: 
       throw new Error("Only a posted Goods Receipt can be voided.");
     }
     assertDateNotLocked(context.sqlite, receipt.date, "Goods receipt void");
-    assertDateNotLocked(context.sqlite, businessToday(), "Goods receipt void");
+    assertDateNotLocked(context.sqlite, getBusinessTodayIso(), "Goods receipt void");
     assertInventorySourceIsLatest(
       context.sqlite,
       "goods_receipt",

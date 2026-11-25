@@ -11,6 +11,7 @@ import { listProjectOptions } from "@/modules/projects/project-service";
 import { listInvoices } from "@/modules/sales-invoices/invoice-service";
 import { getSalesOrder } from "@/modules/sales-orders/sales-order-service";
 import { getFormDefaults } from "@/modules/form-defaults/form-defaults-service";
+import { getBusinessTodayIso } from "@/core/format";
 
 export default async function NewDeliveryNotePage({
   params,
@@ -108,7 +109,7 @@ export default async function NewDeliveryNotePage({
         initial={{
           customerId,
           salesInvoiceId: query.invoiceId ?? "",
-          date: new Date().toISOString().slice(0, 10),
+          date: getBusinessTodayIso(),
           locationId: defaultLocation?.id ?? "",
           reference,
           projectId,

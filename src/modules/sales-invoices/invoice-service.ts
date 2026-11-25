@@ -1,4 +1,3 @@
-import { businessToday } from "@/core/dates";
 import { assertMutationPermission, assertSavePermission } from "@/core/permissions/mutation-permissions";
 import { getBusinessAccess } from "@/core/permissions/permissions";
 import { randomUUID } from "node:crypto";
@@ -57,7 +56,7 @@ function derivePaymentStatus(
   if (documentStatus !== "posted") return null;
   const balanceMinor = Math.max(0, totalMinor - allocatedMinor);
   if (balanceMinor === 0) return "paid";
-  if (dueDate < new Date().toISOString().slice(0, 10)) return "overdue";
+  if (dueDate < getBusinessTodayIso()) return "overdue";
   if (allocatedMinor > 0) return "partially_paid";
   return "unpaid";
 }
@@ -146,7 +145,7 @@ export type PaginatedInvoices = {
 function buildSalesInvoiceWhere(
   customerId: string | undefined,
   filters: InvoiceListFilters | undefined,
-  todayUtc: string,
+  businessToday: string,
 ) {
   const conditions: string[] = [];
   const values: Array<string | number> = [];
@@ -165,7 +164,7 @@ function buildSalesInvoiceWhere(
   const { isVoidFilter } = pushInvoiceStatusConditions(filters?.status, {
     tableAlias: "i",
     allocatedExpr: SALES_ALLOCATED_FOREIGN_EXPR,
-    todayUtc,
+    businessToday,
     conditions,
     values,
   });
@@ -227,8 +226,8 @@ export function listInvoicesPaginated(
   const { sqlite } = getBusinessDb(businessId, userId);
   const page = clampPositiveInt(filters.page, 1, Number.MAX_SAFE_INTEGER);
   const pageSize = clampPositiveInt(filters.pageSize, DEFAULT_LIST_PAGE_SIZE, MAX_LIST_PAGE_SIZE);
-  const todayUtc = new Date().toISOString().slice(0, 10);
-  const { where, values, isVoidFilter } = buildSalesInvoiceWhere(undefined, filters, todayUtc);
+  const businessToday = getBusinessTodayIso();
+  const { where, values, isVoidFilter } = buildSalesInvoiceWhere(undefined, filters, businessToday);
 
   const unfilteredRow = sqlite.prepare("SELECT COUNT(*) AS total FROM sales_invoices").get() as { total: number };
   const summaryRows = sqlite
@@ -251,7 +250,7 @@ export function listInvoicesPaginated(
       GROUP BY i.currency_code, cur.minor_unit
       ORDER BY i.currency_code ASC
     `)
-    .all(isVoidFilter ? 1 : 0, todayUtc, ...values) as Array<{
+    .all(isVoidFilter ? 1 : 0, businessToday, ...values) as Array<{
     currency_code: string;
     currency_minor_unit: number;
     row_count: number;
@@ -290,8 +289,8 @@ function listInvoiceRows(
   filters?: InvoiceListFilters,
 ) {
   const { sqlite } = getBusinessDb(businessId, userId);
-  const todayUtc = new Date().toISOString().slice(0, 10);
-  const { where, values } = buildSalesInvoiceWhere(customerId, filters, todayUtc);
+  const businessToday = getBusinessTodayIso();
+  const { where, values } = buildSalesInvoiceWhere(customerId, filters, businessToday);
   const sortColumns: Record<string, string> = {
     invoiceNumber: "i.invoice_number",
     customerName: "c.name",
@@ -300,7 +299,7 @@ function listInvoiceRows(
     totalMinor: "i.total_minor",
     balanceMinor: `CASE WHEN i.document_status = 'posted' THEN MAX(0, i.total_minor - (${SALES_ALLOCATED_FOREIGN_EXPR})) ELSE 0 END`,
     documentStatus: "i.document_status",
-    paymentStatus: `CASE WHEN i.document_status <> 'posted' THEN 5 WHEN i.total_minor <= (${SALES_ALLOCATED_FOREIGN_EXPR}) THEN 4 WHEN i.due_date < '${todayUtc}' THEN 1 WHEN (${SALES_ALLOCATED_FOREIGN_EXPR}) > 0 THEN 2 ELSE 3 END`,
+    paymentStatus: `CASE WHEN i.document_status <> 'posted' THEN 5 WHEN i.total_minor <= (${SALES_ALLOCATED_FOREIGN_EXPR}) THEN 4 WHEN i.due_date < '${businessToday}' THEN 1 WHEN (${SALES_ALLOCATED_FOREIGN_EXPR}) > 0 THEN 2 ELSE 3 END`,
   };
   const orderByClause = resolveSortSql(
     filters?.sort,
@@ -444,7 +443,7 @@ export function getOverviewInvoiceMetrics(
   filters?: { from?: string; to?: string },
 ): OverviewInvoiceMetrics {
   const { sqlite } = getBusinessDb(businessId, userId);
-  const todayUtc = new Date().toISOString().slice(0, 10);
+  const businessToday = getBusinessTodayIso();
   const dateFrom = validIsoDate(filters?.from) ?? null;
   const dateTo = validIsoDate(filters?.to) ?? null;
 
@@ -478,7 +477,7 @@ export function getOverviewInvoiceMetrics(
         COALESCE(SUM(CASE WHEN foreign_balance_minor > 0 AND due_date < @today THEN 1 ELSE 0 END), 0) AS overdueCount
       FROM posted_balances
     `)
-    .get({ today: todayUtc, from: dateFrom, to: dateTo }) as {
+    .get({ today: businessToday, from: dateFrom, to: dateTo }) as {
     postedSalesBaseMinor: number;
     postedSalesCount: number;
     outstandingBaseMinor: number;
@@ -1238,10 +1237,10 @@ export function duplicateInvoice(businessId: string, userId: string, invoiceId: 
   const baseCurrency = getBaseCurrency(context.sqlite);
   const minorUnit = getCurrency(context.sqlite, record.invoice.currencyCode).minor_unit;
 
-  const today = new Date().toISOString().split("T")[0];
+  const today = getBusinessTodayIso();
   const rawTerms = (record.customer as any)?.paymentTermsDays;
   const dueDays = (rawTerms !== null && rawTerms !== undefined) ? Number(rawTerms) : 30;
-  const dueDate = new Date(Date.now() + dueDays * 86400000).toISOString().split("T")[0];
+  const dueDate = addDaysIso(getBusinessTodayIso(), dueDays);
 
   return createInvoice(
     businessId,
@@ -1292,19 +1291,19 @@ export function voidInvoice(businessId: string, userId: string, invoiceId: strin
   const now = new Date().toISOString();
   context.sqlite.transaction(() => {
     assertDateNotLocked(context.sqlite, invoice.invoiceDate, "Sales invoice void");
-    assertDateNotLocked(context.sqlite, businessToday(), "Sales invoice void");
+    assertDateNotLocked(context.sqlite, getBusinessTodayIso(), "Sales invoice void");
     assertVatSourceUnlocked(context.sqlite, "sales_invoice", invoiceId, invoice.taxDate);
     reverseTransaction(context.sqlite, {
       originalSourceType: "sales_invoice",
       originalSourceId: invoiceId,
       reversalSourceType: "sales_invoice_void",
       reversalSourceId: invoiceId,
-      date: businessToday(),
+      date: getBusinessTodayIso(),
       description: `Void Sales Invoice ${invoice.invoiceNumber}`,
     });
     reverseTaxEntries(context.sqlite, {
       originalSourceType: "sales_invoice", sourceId: invoiceId,
-      reversalSourceType: "sales_invoice_void", taxDate: businessToday(),
+      reversalSourceType: "sales_invoice_void", taxDate: getBusinessTodayIso(),
     });
     context.sqlite
       .prepare("UPDATE sales_invoices SET document_status = 'void', voided_at = ?, updated_at = ? WHERE id = ?")
@@ -1455,13 +1454,10 @@ export function revertSalesInvoiceToDraft(businessId: string, userId: string, in
     .run(new Date().toISOString(), invoiceId);
 }
 
-export type BatchActionResult = {
-  successCount: number;
-  postedCount?: number;
-  pendingApprovalCount?: number;
-  failedCount: number;
-  errors: { id: string; number?: string; error: string }[];
-};
+export type { BatchActionResult } from "@/modules/shared/batch";
+import type { BatchActionResult } from "@/modules/shared/batch";
+import { getBusinessTodayIso } from "@/core/format";
+import { addDaysIso } from "@/modules/tax/uae-vat-config";
 
 export function batchPostInvoices(
   businessId: string,

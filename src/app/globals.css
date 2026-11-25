@@ -10,6 +10,7 @@
   --color-surface-muted: var(--surface-muted);
   --color-border: var(--border);
   --color-border-strong: var(--border-strong);
+  --color-input: var(--input);
   --color-muted: var(--muted);
   --color-muted-foreground: var(--muted-foreground);
   --color-primary: var(--primary);
@@ -42,8 +43,11 @@
   --surface-muted: #edf1f5;
   --border: #dce2e9;
   --border-strong: #cbd4df;
+  /* Form-control border: >=3:1 on surface-raised (WCAG 1.4.11). */
+  --input: #8592a3;
   --muted: #e7ecf2;
-  --muted-foreground: #657184;
+  /* >=4.5:1 on surface-muted table headers and on white. */
+  --muted-foreground: #5c687a;
   --primary: #356fd0;
   --primary-foreground: #ffffff;
   --secondary: #e8eef7;
@@ -72,6 +76,7 @@
   --surface-muted: #29323e;
   --border: #303a47;
   --border-strong: #3b4756;
+  --input: #66768a;
   --muted: #29313d;
   --muted-foreground: #9aa6b5;
   --primary: #6294e6;
@@ -322,6 +327,16 @@ button, a { -webkit-tap-highlight-color: transparent; }
 }
 .erp-dialog-animate[data-state="open"] {
   animation: erp-dialog-in 140ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+.erp-sheet-animate[data-state="open"] {
+  animation: erp-sheet-in 180ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+@keyframes erp-sheet-in {
+  from { transform: translateX(24px); opacity: 0; }
+  to { transform: translateX(0); opacity: 1; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .erp-sheet-animate[data-state="open"] { animation: none; }
 }
 .erp-popover-animate[data-state="open"] {
   animation: erp-popover-in 120ms cubic-bezier(0.16, 1, 0.3, 1);

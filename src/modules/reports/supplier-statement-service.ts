@@ -1,6 +1,7 @@
 import { getBusinessDb } from "@/core/db/business";
 import { resolveBaseCurrencyCode } from "./currency-fallback";
 import type { StatementOptions, AgingBuckets } from "./customer-statement-service";
+import { getBusinessTodayIso } from "@/core/format";
 
 export type { StatementOptions, AgingBuckets };
 
@@ -182,7 +183,7 @@ export function getSupplierAging(
   currencyCode?: string,
 ): AgingBuckets {
   const { sqlite, business } = getBusinessDb(businessId, userId);
-  const targetAsOf = asOfDate || new Date().toISOString().slice(0, 10);
+  const targetAsOf = asOfDate || getBusinessTodayIso();
 
   let targetCurrency = currencyCode?.toUpperCase();
   if (!targetCurrency) {

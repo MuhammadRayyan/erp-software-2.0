@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { requireApiAuth } from "@/core/auth/api-auth";
-import { formatDate, formatMoney } from "@/core/format";
+import { formatDate, formatMoney, getBusinessTodayIso } from "@/core/format";
 import { journalSourceLabel } from "@/modules/accounting/journal-source";
 import { renderStatementPdf } from "@/modules/document-templates/template-registry";
 import { getCustomer } from "@/modules/customers/customer-service";
@@ -30,7 +30,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ busi
     currencyCode: currency,
   });
 
-  const asOfDate = to || new Date().toISOString().slice(0, 10);
+  const asOfDate = to || getBusinessTodayIso();
   const aging = getCustomerAging(businessId, session.user.id, customerId, asOfDate, currency);
   
   // Calculate total outstanding from the last row's running balance, or 0 if none

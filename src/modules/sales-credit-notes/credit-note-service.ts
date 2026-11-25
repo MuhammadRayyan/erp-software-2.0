@@ -1,4 +1,3 @@
-import { businessToday } from "@/core/dates";
 import { assertMutationPermission, assertSavePermission } from "@/core/permissions/mutation-permissions";
 import { randomUUID } from "node:crypto";
 import { asc, eq } from "drizzle-orm";
@@ -60,6 +59,7 @@ export function getRemainingInvoiceBalance(businessId: string, userId: string, i
 
 import { drizzle } from "drizzle-orm/better-sqlite3";
 import * as businessSchema from "@/core/db/business-schema";
+import { getBusinessTodayIso } from "@/core/format";
 
 function insertLines(
   dbOrSqlite: ReturnType<typeof getBusinessDb>["db"] | ReturnType<typeof getBusinessDb>["sqlite"],
@@ -306,7 +306,7 @@ export function duplicateCreditNote(businessId: string, userId: string, noteId: 
   const record = getCreditNote(businessId, userId, noteId);
   if (!record) throw new Error("Credit note not found.");
   const rate = storedRateSnapshot(getBusinessDb(businessId, userId).sqlite, record.note);
-  const today = new Date().toISOString().split("T")[0];
+  const today = getBusinessTodayIso();
   return saveCreditNote(businessId, userId, {
     currencyCode: rate.currencyCode,
     exchangeRateToBase: rate.exchangeRateToBase,
@@ -362,10 +362,10 @@ export function voidCreditNote(businessId: string, userId: string, noteId: strin
   const now = new Date().toISOString();
   context.sqlite.transaction(() => {
     assertDateNotLocked(context.sqlite, note.date, "Sales credit note void");
-    assertDateNotLocked(context.sqlite, businessToday(), "Sales credit note void");
+    assertDateNotLocked(context.sqlite, getBusinessTodayIso(), "Sales credit note void");
     assertVatSourceUnlocked(context.sqlite, "sales_credit_note", noteId, note.taxDate);
-    reverseTransaction(context.sqlite, { originalSourceType: "sales_credit_note", originalSourceId: noteId, reversalSourceType: "sales_credit_note_void", reversalSourceId: noteId, date: businessToday(), description: `Void Sales Credit Note ${note.creditNoteNumber}` });
-    reverseTaxEntries(context.sqlite, { originalSourceType: "sales_credit_note", sourceId: noteId, reversalSourceType: "sales_credit_note_void", taxDate: businessToday() });
+    reverseTransaction(context.sqlite, { originalSourceType: "sales_credit_note", originalSourceId: noteId, reversalSourceType: "sales_credit_note_void", reversalSourceId: noteId, date: getBusinessTodayIso(), description: `Void Sales Credit Note ${note.creditNoteNumber}` });
+    reverseTaxEntries(context.sqlite, { originalSourceType: "sales_credit_note", sourceId: noteId, reversalSourceType: "sales_credit_note_void", taxDate: getBusinessTodayIso() });
     context.sqlite.prepare("UPDATE sales_credit_notes SET document_status = 'void', voided_at = ?, updated_at = ? WHERE id = ?").run(now, now, noteId);
 
     try {

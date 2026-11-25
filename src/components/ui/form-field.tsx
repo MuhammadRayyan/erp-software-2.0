@@ -3,6 +3,7 @@
 import * as React from "react";
 import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/cn";
+import { fieldErrorId } from "@/lib/form-errors";
 
 export interface FormFieldProps {
   label: React.ReactNode;
@@ -25,6 +26,17 @@ export function FormField({
   className,
   children,
 }: FormFieldProps) {
+  const errorId = htmlFor ? fieldErrorId(htmlFor) : undefined;
+  const hintId = htmlFor ? `${htmlFor}-hint` : undefined;
+  const describedBy = error ? errorId : hint ? hintId : undefined;
+  // Link the control to its hint/error so assistive tech announces them.
+  const control =
+    describedBy && React.isValidElement<{ "aria-describedby"?: string; "aria-invalid"?: boolean }>(children)
+      ? React.cloneElement(children, {
+          "aria-describedby": children.props["aria-describedby"] ?? describedBy,
+          "aria-invalid": children.props["aria-invalid"] ?? (error ? true : undefined),
+        })
+      : children;
   return (
     <div className={cn("space-y-1.5", className)}>
       <Label htmlFor={htmlFor}>
@@ -38,12 +50,12 @@ export function FormField({
           <span className="ml-1 font-normal text-muted-foreground">(optional)</span>
         ) : null}
       </Label>
-      {children}
+      {control}
       {hint && !error ? (
-        <p className="text-xs text-muted-foreground">{hint}</p>
+        <p id={hintId} className="text-xs text-muted-foreground">{hint}</p>
       ) : null}
       {error ? (
-        <p className="field-error" role="alert">
+        <p id={errorId} className="field-error" role="alert">
           {error}
         </p>
       ) : null}

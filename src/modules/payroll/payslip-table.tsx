@@ -1,6 +1,10 @@
 "use client";
 
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
+import type { RowSelectionState } from "@tanstack/react-table";
+import { BatchDocumentActions } from "@/components/batch/batch-document-actions";
+import { selectionColumn } from "@/components/batch/selection-column";
+import { batchPostPayslipsAction, batchVoidPayslipsAction } from "@/modules/payroll/actions/payroll-actions";
 import Link from "next/link";
 import { FileEdit } from "lucide-react";
 import { useActionPermission } from "@/components/permissions-provider";
@@ -101,7 +105,19 @@ export function PayslipTable({
     });
   }, [payslips, query, statusFilter, fromDate, toDate]);
 
+  const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
+  const exportColumns = useMemo(() => [
+    { header: "Payslip #", accessorKey: "payslipNumber" as const },
+    { header: "Employee", accessorKey: "employeeName" as const },
+    { header: "Date", accessorKey: "date" as const },
+    { header: "Gross", accessorFn: (r: PayslipRecord) => minorToDecimalString(Number(r.grossAmountMinor || 0), currency) },
+    { header: "Deductions", accessorFn: (r: PayslipRecord) => minorToDecimalString(Number(r.deductionsMinor || 0), currency) },
+    { header: "Net Pay", accessorFn: (r: PayslipRecord) => minorToDecimalString(Number(r.netAmountMinor || 0), currency) },
+    { header: "Status", accessorKey: "documentStatus" as const },
+  ], [currency]);
+
   const columns: any[] = useMemo(() => [
+    selectionColumn<PayslipRecord>((slip) => `payslip ${slip.payslipNumber}`),
     {
       accessorKey: "payslipNumber",
       header: "Payslip #",
@@ -218,10 +234,14 @@ export function PayslipTable({
   const table = useTable({
     data: filteredRows,
     columns,
+    getRowId: (row: PayslipRecord) => row.id,
+    enableRowSelection: true,
+    onRowSelectionChange: setRowSelection,
     state: {
       sorting,
       pagination,
       columnVisibility: colVisibility,
+      rowSelection,
     },
     onSortingChange,
     getCoreRowModel: createCoreRowModel(),
@@ -278,15 +298,7 @@ export function PayslipTable({
             size="sm"
             filename={`payslips-${getBusinessTodayIso()}.csv`}
             data={filteredRows}
-            columns={[
-              { header: "Payslip #", accessorKey: "payslipNumber" },
-              { header: "Employee", accessorKey: "employeeName" },
-              { header: "Date", accessorKey: "date" },
-              { header: "Gross", accessorFn: (r: PayslipRecord) => minorToDecimalString(Number(r.grossAmountMinor || 0), currency) },
-              { header: "Deductions", accessorFn: (r: PayslipRecord) => minorToDecimalString(Number(r.deductionsMinor || 0), currency) },
-              { header: "Net Pay", accessorFn: (r: PayslipRecord) => minorToDecimalString(Number(r.netAmountMinor || 0), currency) },
-              { header: "Status", accessorKey: "documentStatus" },
-            ]}
+            columns={exportColumns}
           />
           <DensityToggle businessId={businessId} />
           {dropdown}
@@ -336,6 +348,20 @@ export function PayslipTable({
           onPageSizeChange={setPageSize}
         />
       </ListTableCard>
+      <BatchDocumentActions
+        selected={filteredRows.filter((row) => rowSelection[row.id])}
+        totalCount={filteredRows.length}
+        noun={{ one: "payslip", many: "payslips" }}
+        statusOf={(row) => row.documentStatus}
+        onClear={() => setRowSelection({})}
+        onSelectAll={() => table.toggleAllRowsSelected(true)}
+        exportConfig={{ filename: "payslips", columns: exportColumns }}
+        post={{ label: "Post drafts", action: (ids) => batchPostPayslipsAction(businessId, ids) }}
+        voidAction={{
+          action: (ids) => batchVoidPayslipsAction(businessId, ids),
+          description: "Each posted payslip's journal is reversed. Payslips already included in a paid WPS run should be corrected with a new payslip instead.",
+        }}
+      />
     </>
   );
 }

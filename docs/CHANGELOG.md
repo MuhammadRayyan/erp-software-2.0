@@ -13,8 +13,16 @@ Full historical task detail is retained in [history/WORKLOG.md](history/WORKLOG.
 - **Opening balances** (`opening-balances-service.ts`): each line is validated (non-negative, one side). Any difference goes to a dedicated **Opening Balance Equity** account instead of whichever equity account sorts first.
 - **Credit notes** (`credit-note-posting-service.ts`): a carrying-value difference posts to realized FX gain/loss instead of the first sales line.
 - **Payroll** (`payroll-service.ts`, `wps-service.ts`): Payroll Payable is never replaced by an arbitrary liability account; the account is created if missing. A WPS SIF takes its salary month from the filter or the payslips, rejects mixed months and duplicate employees, and records creation time in Gulf Standard Time.
-- **Void and reversal dates** (`core/dates.ts` `businessToday()`): GL and VAT reversals use the UAE business day and are both dated on the void date, so they fall in the same period.
+- **Void and reversal dates** (`getBusinessTodayIso()`): GL and VAT reversals use the UAE business day and are both dated on the void date, so they fall in the same period.
 - **Control tests** (`tests/accounting/gl-subledger-tieout.test.ts`): AR GL ↔ subledger tie-out across credit application and PDC clearing, reverse-charge VAT, goods-receipt valuation, opening balances, and business-day dates. All six fail on the previous code.
+
+## 2026-11-25 (Production OOM fix — SQLite statement memory)
+
+- **Root cause**: production `next-server` was killed by the 3 GB cgroup limit 14 times between 2 and 24 November. Drizzle and raw SQL call `better-sqlite3` `prepare()` on every query, and each statement's native memory (~3 KB) is retained until its connection closes, even after GC. The system connection never closes, so memory grew without bound. Reproduced locally: 300k queries grew RSS to 1,976 MB before this fix and stayed flat at 136 MB after.
+- **Statement cache (`src/core/db/statement-cache.ts`)**: per-connection LRU (2,000 entries) keyed by SQL text, installed on the system and every business connection. Cached statements are reset to object mode (`raw/pluck/expand(false)`) on handout, and a statement busy in `iterate()` is never reused.
+- **Churn recycling (`src/core/db/connection-limits.ts`, `system.ts`, `business.ts`)**: a connection that has created more than 20,000 statements (`ERP_SQLITE_RECYCLE_AFTER_STATEMENTS`) is replaced, and the retired handle closes after 60 s so in-flight requests finish. Business connection soft cap lowered from 50 to 12.
+- **Readiness (`src/core/health.ts`)**: the per-tenant schema check runs on the first probe and then every 10 minutes instead of every 15 s probe; the system DB round-trip still runs on every probe.
+- **Container (`docker-compose.yml`)**: `HTML_PDF_CONCURRENCY=2` on the 1-OCPU host.
 
 ## 2026-11-14 (Sprint 4 — Test Organization, Build Isolation, Production CSP & Docs Consolidation)
 

@@ -34,6 +34,8 @@ import { useUnsavedChanges } from "@/hooks/use-unsaved-changes";
 import { useFormDraftRecovery } from "@/hooks/use-form-draft-recovery";
 import { useActionPermission } from "@/components/permissions-provider";
 import type { CustomFieldInputDefinition } from "@/modules/custom-fields/custom-field-inputs";
+import { FieldError } from "@/components/ui/field-error";
+import { fieldErrorProps, fieldErrorId, applyServerFieldErrors, focusFirstInvalidField } from "@/lib/form-errors";
 
 type Option = { id: string; name: string; defaultCurrencyCode: string | null };
 type AccountOption = { id: string; name: string };
@@ -68,7 +70,10 @@ export function SalesQuoteForm({ businessId, quoteId, isPrefilled = false, statu
   const [globalTaxCodeId, setGlobalTaxCodeId] = useState(() => initial.lines[0]?.taxCodeId || taxCodes.find((taxCode) => taxCode.rateBasisPoints === 500)?.id || taxCodes[0]?.id || "");
   const form = useForm<SalesQuoteInput>({
     resolver: zodResolver(salesQuoteInputSchema),
-    mode: "onTouched",
+    // Validate on submit, then live as the user corrects fields. Blur validation
+    // inserted error text that shifted the Save button mid-click.
+    mode: "onSubmit",
+    reValidateMode: "onChange",
     defaultValues: initial,
   });
   const { register, control, handleSubmit, reset, watch, setError, setValue, getValues, formState: { errors, isSubmitting, isDirty, isSubmitSuccessful } } = form;
@@ -158,7 +163,7 @@ export function SalesQuoteForm({ businessId, quoteId, isPrefilled = false, statu
     if (result.fieldErrors || result.error) {
       draftRecovery.preserveDraft(values);
     }
-    if (result.fieldErrors) for (const [field, messages] of Object.entries(result.fieldErrors)) setError(field as keyof SalesQuoteInput, { message: messages[0] });
+    if (result.fieldErrors) applyServerFieldErrors(setError, result.fieldErrors);
     if (result.error) {
       setError("root.serverError", { message: result.error });
       setServerError(result.error);
@@ -197,10 +202,10 @@ export function SalesQuoteForm({ businessId, quoteId, isPrefilled = false, statu
               control={control}
               name="customerId"
               render={({ field }) => (
-                <Combobox
+                <Combobox ref={field.ref}
                   id="customerId"
                   ariaLabel="Customer"
-                  ariaInvalid={!!errors.customerId}
+                  ariaInvalid={!!errors.customerId} ariaDescribedBy={errors.customerId ? fieldErrorId("customerId") : undefined}
                   options={customerOptions}
                   value={field.value ?? ""}
                   onValueChange={(next) => {
@@ -229,13 +234,13 @@ export function SalesQuoteForm({ businessId, quoteId, isPrefilled = false, statu
                 />
               )}
             />
-            {errors.customerId && <p className="field-error">{errors.customerId.message}</p>}
+            <FieldError name="customerId" message={errors.customerId?.message} />
           </div>
 
           <div className="space-y-1.5">
             <Label htmlFor="date">Quote date</Label>
-            <Input id="date" type="date" {...register("date")} aria-invalid={!!errors.date} />
-            {errors.date && <p className="field-error">{errors.date.message}</p>}
+            <Input id="date" type="date" {...register("date")} {...fieldErrorProps("date", errors.date)} />
+            <FieldError name="date" message={errors.date?.message} />
           </div>
 
           <div className="space-y-1.5">
@@ -262,7 +267,7 @@ export function SalesQuoteForm({ businessId, quoteId, isPrefilled = false, statu
               control={control}
               name="projectId"
               render={({ field }) => (
-                <Combobox
+                <Combobox ref={field.ref}
                   id="projectId"
                   ariaLabel="Project"
                   options={projectOptions}
@@ -400,12 +405,12 @@ export function SalesQuoteForm({ businessId, quoteId, isPrefilled = false, statu
           }}
         >
           {status === "sent" ? (
-            <Button permission={["save", "approve"]} type="button" disabled={isSubmitting} onClick={handleSubmit((values) => save(values, "issue"))}>
+            <Button permission={["save", "approve"]} type="button" disabled={isSubmitting} onClick={handleSubmit((values) => save(values, "issue"), focusFirstInvalidField)}>
               {isSubmitting && <LoaderCircle className="size-4 animate-spin" />} Save Changes
             </Button>
           ) : (
             <div className="flex flex-wrap items-center gap-2">
-              <Button permission={"save"} variant={canApprove ? "secondary" : "primary"} type="button" disabled={isSubmitting} onClick={handleSubmit((values) => save(values, "draft"))}>
+              <Button permission={"save"} variant={canApprove ? "secondary" : "primary"} type="button" disabled={isSubmitting} onClick={handleSubmit((values) => save(values, "draft"), focusFirstInvalidField)}>
                 {isSubmitting && <LoaderCircle className="size-4 animate-spin" />} {quoteId ? "Save Draft" : "Save Draft Quote"}
               </Button>
               {canApprove && (
@@ -414,22 +419,22 @@ export function SalesQuoteForm({ businessId, quoteId, isPrefilled = false, statu
                     label="Save & Issue"
                     permission={["save", "approve"]}
                     loading={isSubmitting}
-                    onPrimaryClick={handleSubmit((values) => save(values, "issue", "view"))}
+                    onPrimaryClick={handleSubmit((values) => save(values, "issue", "view"), focusFirstInvalidField)}
                     options={[
                       {
                         label: "Save, Issue & New",
                         description: "Issue this quote and create another right away",
-                        onSelect: handleSubmit((values) => save(values, "issue", "new")),
+                        onSelect: handleSubmit((values) => save(values, "issue", "new"), focusFirstInvalidField),
                       },
                       {
                         label: "Save, Issue & Email",
                         description: "Issue and open the email composer",
-                        onSelect: handleSubmit((values) => save(values, "issue", "email")),
+                        onSelect: handleSubmit((values) => save(values, "issue", "email"), focusFirstInvalidField),
                       },
                     ]}
                   />
                 ) : (
-                  <Button permission={["save", "approve"]} type="button" disabled={isSubmitting} onClick={handleSubmit((values) => save(values, "issue"))}>
+                  <Button permission={["save", "approve"]} type="button" disabled={isSubmitting} onClick={handleSubmit((values) => save(values, "issue"), focusFirstInvalidField)}>
                     {isSubmitting && <LoaderCircle className="size-4 animate-spin" />} Save &amp; Issue
                   </Button>
                 )

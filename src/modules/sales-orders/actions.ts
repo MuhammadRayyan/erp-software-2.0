@@ -64,6 +64,7 @@ export async function deleteSalesOrderAction(businessId: string, orderId: string
 
 import { quantityMicrosToInput } from "@/modules/accounting/calculations/money";
 import { getBusinessTodayIso, getCurrencyMinorUnit, minorToDecimalString } from "@/core/format";
+import { addDaysIso } from "@/modules/tax/uae-vat-config";
 
 export async function convertSalesOrderToInvoiceAction(businessId: string, orderId: string) {
   const { user } = await requirePermission(businessId, "sales", "create");
@@ -89,14 +90,14 @@ export async function convertSalesOrderToInvoiceAction(businessId: string, order
 
     const rawTerms = customer?.payment_terms_days;
     const daysToAdd = (rawTerms !== null && rawTerms !== undefined) ? Number(rawTerms) : 30;
-    const dueDate = new Date(Date.now() + daysToAdd * 86400000).toISOString().split("T")[0];
+    const dueDate = addDaysIso(getBusinessTodayIso(), daysToAdd);
 
     const input = {
       customerId: orderData.order.customerId,
       projectId: orderData.order.projectId || "",
       amountsIncludeTax: orderData.order.amountsIncludeTax,
-      invoiceDate: new Date().toISOString().split("T")[0],
-      taxDate: new Date().toISOString().split("T")[0],
+      invoiceDate: getBusinessTodayIso(),
+      taxDate: getBusinessTodayIso(),
       dueDate,
       supplyEmirate,
       reference: orderData.order.orderNumber,

@@ -16,6 +16,7 @@ import {
   SALES_ALLOCATED_CTE,
   SALES_ALLOCATED_FOREIGN_EXPR,
 } from "@/modules/shared/list-query-helpers";
+import { getBusinessTodayIso } from "@/core/format";
 
 export function listBusinessesForUser(
   userId: string,
@@ -278,7 +279,7 @@ export function getBusinessQuickKpis(businessId: string, userId: string): Busine
     let overdueCount = 0;
     let overdueMinor = 0;
     try {
-      const todayUtc = new Date().toISOString().slice(0, 10);
+      const businessToday = getBusinessTodayIso();
       const arRow = sqlite
         .prepare(`
           WITH ${SALES_ALLOCATED_CTE}
@@ -296,7 +297,7 @@ export function getBusinessQuickKpis(businessId: string, userId: string): Busine
           WHERE i.document_status = 'posted'
             AND (i.base_total_minor - (${SALES_ALLOCATED_BASE_EXPR})) > 0
         `)
-        .get({ today: todayUtc }) as
+        .get({ today: businessToday }) as
         | { outstanding_minor: number; overdue_count: number; overdue_minor: number }
         | undefined;
       outstandingReceivablesMinor = Number(arRow?.outstanding_minor ?? 0);

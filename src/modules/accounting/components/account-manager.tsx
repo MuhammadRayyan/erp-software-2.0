@@ -33,6 +33,7 @@ import { deleteAccountAction, saveAccountAction } from "../actions";
 import { FormError } from "@/components/form-error";
 import { SelectNative } from "@/components/ui/select-native";
 import { useActionPermission } from "@/components/permissions-provider";
+import { fieldErrorProps } from "@/lib/form-errors";
 
 type AccountRow = AccountInput & {
   id: string;
@@ -175,7 +176,7 @@ export function AccountManager({
           <DialogTitle>{editing ? "Edit account" : "New account"}</DialogTitle>
           <DialogDescription>Set the account name, type, and reporting subtype.</DialogDescription>
           <div className="mt-5 grid gap-4 sm:grid-cols-2">
-            <div className="space-y-1.5 sm:col-span-2"><Label htmlFor="account-name">Name</Label><Input id="account-name" value={values.name} onChange={(event) => setValues((current) => ({ ...current, name: event.target.value }))} aria-invalid={!!errors.name} />{errors.name && <p className="field-error">{errors.name[0]}</p>}</div>
+            <div className="space-y-1.5 sm:col-span-2"><Label htmlFor="account-name">Name</Label><Input id="account-name" value={values.name} onChange={(event) => setValues((current) => ({ ...current, name: event.target.value }))} {...fieldErrorProps("name", errors.name)} />{errors.name && <p className="field-error">{errors.name[0]}</p>}</div>
             <div className="space-y-1.5"><Label htmlFor="account-type">Type</Label><SelectNative id="account-type"  value={values.type} disabled={!!editing?.isSystem} onChange={(event) => { const type = event.target.value as AccountInput["type"]; setValues((current) => ({ ...current, type, subtype: accountSubtypesByType[type][0] })); }}>{accountTypes.map((type) => <option key={type} value={type}>{accountTypeLabels[type]}</option>)}</SelectNative></div>
             <div className="space-y-1.5"><Label htmlFor="account-subtype">Subtype</Label><SelectNative id="account-subtype"  value={values.subtype} disabled={!!editing?.isSystem} onChange={(event) => setValues((current) => ({ ...current, subtype: event.target.value as AccountInput["subtype"] }))}>{accountSubtypesByType[values.type].map((subtype) => <option key={subtype} value={subtype}>{accountSubtypeLabels[subtype]}</option>)}</SelectNative></div>
             <label className="flex min-h-9 cursor-pointer items-center gap-2 text-sm sm:col-span-2">

@@ -20,7 +20,7 @@ import { TableTotalsBar } from "@/components/table-totals-bar";
 import { DataTable, ListTableCard } from "@/components/ui/data-table";
 import { useTableDensity } from "@/components/use-table-density";
 import type { ColumnVisibility } from "@/components/use-column-visibility";
-import { formatBytes, formatDateTime } from "@/core/format";
+import { formatBytes, formatDateTime, getBusinessTodayIso } from "@/core/format";
 import { parseMailboxes } from "./mailbox-utils";
 import { getRelatedDocumentPath } from "./email-links";
 
@@ -209,7 +209,7 @@ export function SentEmailTable({
           <ExportCsvButton
             size="sm"
             permissionModule={["sales", "purchases"]}
-            filename={`sent-emails-${new Date().toISOString().slice(0, 10)}.csv`}
+            filename={`sent-emails-${getBusinessTodayIso()}.csv`}
             data={rows}
             columns={[
               { header: "Subject", accessorKey: "subject" },

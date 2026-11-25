@@ -105,7 +105,7 @@ export async function convertPurchaseQuoteToOrderAction(businessId: string, quot
       supplierId: quoteData.quote.supplierId,
       projectId: quoteData.quote.projectId || "",
       amountsIncludeTax: quoteData.quote.amountsIncludeTax,
-      date: new Date().toISOString().split("T")[0],
+      date: getBusinessTodayIso(),
       expectedDate: "",
       reference: quoteData.quote.quoteNumber,
       purchaseQuoteId: quoteId,

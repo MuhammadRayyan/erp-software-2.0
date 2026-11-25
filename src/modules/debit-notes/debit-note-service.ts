@@ -1,4 +1,3 @@
-import { businessToday } from "@/core/dates";
 import { assertMutationPermission, assertSavePermission } from "@/core/permissions/mutation-permissions";
 import { randomUUID } from "crypto";
 import { eq } from "drizzle-orm";
@@ -316,10 +315,10 @@ export function voidDebitNote(businessId: string, userId: string, noteId: string
   const now = new Date().toISOString();
   context.sqlite.transaction(() => { 
     assertDateNotLocked(context.sqlite, note.debitNoteDate, "Debit note void");
-    assertDateNotLocked(context.sqlite, businessToday(), "Debit note void");
+    assertDateNotLocked(context.sqlite, getBusinessTodayIso(), "Debit note void");
     assertVatSourceUnlocked(context.sqlite, "debit_note", noteId, note.taxDate); 
-    reverseTransaction(context.sqlite, { originalSourceType: "debit_note", originalSourceId: noteId, reversalSourceType: "debit_note_void", reversalSourceId: noteId, date: businessToday(), description: `Void Debit Note ${note.debitNoteNumber}` }); 
-    reverseTaxEntries(context.sqlite, { originalSourceType: "debit_note", sourceId: noteId, reversalSourceType: "debit_note_void", taxDate: businessToday() }); 
+    reverseTransaction(context.sqlite, { originalSourceType: "debit_note", originalSourceId: noteId, reversalSourceType: "debit_note_void", reversalSourceId: noteId, date: getBusinessTodayIso(), description: `Void Debit Note ${note.debitNoteNumber}` }); 
+    reverseTaxEntries(context.sqlite, { originalSourceType: "debit_note", sourceId: noteId, reversalSourceType: "debit_note_void", taxDate: getBusinessTodayIso() }); 
     context.sqlite.prepare("UPDATE debit_notes SET document_status = 'void', voided_at = ?, updated_at = ? WHERE id = ?").run(now, now, noteId); 
 
     try {

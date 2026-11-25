@@ -1,4 +1,3 @@
-import { businessToday } from "@/core/dates";
 import { assertSavePermission, assertMutationPermission } from "@/core/permissions/mutation-permissions";
 import { randomUUID } from "node:crypto";
 import { getBusinessDb } from "@/core/db/business";
@@ -6,6 +5,7 @@ import { allocateNumber } from "@/modules/accounting/services/numbering-service"
 import { postTransaction, reverseTransaction } from "@/modules/accounting/services/posting-service";
 import { assertDateNotLocked } from "@/modules/accounting/services/financial-lock-service";
 import { addMinor } from "@/modules/accounting/calculations/money";
+import { getBusinessTodayIso } from "@/core/format";
 
 export interface EmployeeInput {
   id?: string;
@@ -959,7 +959,7 @@ export function voidPayslip(
     }
 
     assertDateNotLocked(context.sqlite, record.payslip.date, "Payslip");
-    assertDateNotLocked(context.sqlite, businessToday(), "Payslip void");
+    assertDateNotLocked(context.sqlite, getBusinessTodayIso(), "Payslip void");
 
     if (record.payslip.documentStatus === "posted") {
       reverseTransaction(context.sqlite, {
@@ -967,7 +967,7 @@ export function voidPayslip(
         originalSourceId: payslipId,
         reversalSourceType: "payslip_void",
         reversalSourceId: payslipId,
-        date: businessToday(),
+        date: getBusinessTodayIso(),
         description: `Reverse Payslip ${record.payslip.payslipNumber} (${record.employee.name})`,
       });
     }

@@ -1,4 +1,3 @@
-import { businessToday } from "@/core/dates";
 import { assertSavePermission, assertMutationPermission } from "@/core/permissions/mutation-permissions";
 import { randomUUID } from "node:crypto";
 import { getBusinessDb } from "@/core/db/business";
@@ -36,6 +35,7 @@ import {
   unitCostMinorToMicros,
   valueAtAverageCostMinor,
 } from "./inventory-valuation";
+import { getBusinessTodayIso } from "@/core/format";
 
 export type { InventoryDocumentIntent, InventoryDocumentStatus } from "./inventory-document";
 
@@ -425,7 +425,7 @@ export function voidStockAdjustment(
       throw new Error("Only a posted Stock Adjustment can be voided.");
     }
     assertDateNotLocked(context.sqlite, adjustment.date, "Stock adjustment");
-    assertDateNotLocked(context.sqlite, businessToday(), "Stock adjustment void");
+    assertDateNotLocked(context.sqlite, getBusinessTodayIso(), "Stock adjustment void");
     assertInventorySourceIsLatest(
       context.sqlite,
       "stock_adjustment",
@@ -471,7 +471,7 @@ export function voidStockAdjustment(
       originalSourceId: adjustmentId,
       reversalSourceType: "stock_adjustment_void",
       reversalSourceId: adjustmentId,
-      date: businessToday(),
+      date: getBusinessTodayIso(),
       description: `Void Stock Adjustment ${adjustment.adjustment_number}`,
     });
     context.sqlite.prepare(`

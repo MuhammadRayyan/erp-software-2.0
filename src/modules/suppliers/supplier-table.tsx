@@ -1,6 +1,11 @@
 "use client";
 
-import { useMemo, useTransition, type ReactNode } from "react";
+import { useMemo, useState, useTransition, type ReactNode } from "react";
+import type { RowSelectionState } from "@tanstack/react-table";
+import { BatchDocumentActions } from "@/components/batch/batch-document-actions";
+import { BatchActiveButtons } from "@/components/batch/batch-active-buttons";
+import { selectionColumn } from "@/components/batch/selection-column";
+import { batchSetSuppliersActiveAction } from "./actions";
 import Link from "next/link";
 import { debounce, useQueryStates } from "nuqs";
 import { MoreHorizontal, FileEdit, FileText, ShoppingCart, BookOpenText } from "lucide-react";
@@ -101,6 +106,18 @@ export function SupplierTable({
   });
 
   const rows = suppliers;
+
+  const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
+  const exportColumns = useMemo(() => [
+              { header: "Name", accessorKey: "name" },
+              { header: "Email", accessorFn: (r: SupplierRow) => r.email ?? "" },
+              {
+                header: "Outstanding",
+                accessorFn: (r: SupplierRow) =>
+                  minorToDecimalString(Math.max(0, r.total_purchased_minor - r.total_paid_minor), currency),
+              },
+              { header: "Status", accessorFn: (r: SupplierRow) => (r.is_active ? "Active" : "Inactive") },
+            ], [currency]);
 
   const columns: any[] = useMemo(
     () => [
@@ -204,13 +221,19 @@ export function SupplierTable({
     [businessId, canCreatePerm, currency, customFields, customValues],
   );
 
+  const tableColumns = useMemo(() => [selectionColumn<SupplierRow>((row) => row.name), ...columns], [columns]);
+
   const table = useTable({
     data: rows,
-    columns,
+    columns: tableColumns,
     manualSorting: true,
+    getRowId: (row: SupplierRow) => row.id,
+    enableRowSelection: true,
+    onRowSelectionChange: setRowSelection,
     state: {
       sorting,
       columnVisibility: colVisibility,
+      rowSelection,
     },
     onSortingChange: (updater) => {
       const next = resolveNextSortFromUpdater(updater, urlState.sort, urlState.dir, "asc");
@@ -251,16 +274,7 @@ export function SupplierTable({
             filename="suppliers"
             data={suppliers}
             totalCount={summary.filteredTotal}
-            columns={[
-              { header: "Name", accessorKey: "name" },
-              { header: "Email", accessorFn: (r: SupplierRow) => r.email ?? "" },
-              {
-                header: "Outstanding",
-                accessorFn: (r: SupplierRow) =>
-                  minorToDecimalString(Math.max(0, r.total_purchased_minor - r.total_paid_minor), currency),
-              },
-              { header: "Status", accessorFn: (r: SupplierRow) => (r.is_active ? "Active" : "Inactive") },
-            ]}
+            columns={exportColumns}
           />
           <DensityToggle businessId={businessId} />
           {dropdown}
@@ -304,6 +318,23 @@ export function SupplierTable({
         )}
         {footer}
       </ListTableCard>
+      <BatchDocumentActions
+        selected={rows.filter((row) => rowSelection[row.id])}
+        totalCount={rows.length}
+        noun={{ one: "supplier", many: "suppliers" }}
+        statusOf={(row) => (Boolean(row.is_active) ? "active" : "inactive")}
+        onClear={() => setRowSelection({})}
+        onSelectAll={() => table.toggleAllRowsSelected(true)}
+        exportConfig={{ filename: "suppliers", columns: exportColumns }}
+      >
+        <BatchActiveButtons
+          selected={rows.filter((row) => rowSelection[row.id])}
+          isActive={(row) => Boolean(row.is_active)}
+          noun={{ one: "supplier", many: "suppliers" }}
+          setActive={(ids, value) => batchSetSuppliersActiveAction(businessId, ids, value)}
+          onDone={() => setRowSelection({})}
+        />
+      </BatchDocumentActions>
     </>
   );
 }

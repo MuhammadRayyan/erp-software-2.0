@@ -1,13 +1,13 @@
-import { businessToday } from "@/core/dates";
 import { assertMutationPermission } from "@/core/permissions/mutation-permissions";
 import { randomUUID } from "node:crypto";
 import { getBusinessDb } from "@/core/db/business";
-import { getCurrencyMinorUnit } from "@/core/format";
+import { getCurrencyMinorUnit, getBusinessTodayIso } from "@/core/format";
 import { parseCurrencyAmountToMinor } from "@/modules/currency/conversion";
 import { allocateNumber } from "@/modules/accounting/services/numbering-service";
 import { postTransaction, reverseTransaction } from "@/modules/accounting/services/posting-service";
 import { assertDateNotLocked } from "@/modules/accounting/services/financial-lock-service";
 import { bankTransferInputSchema, type BankTransferInput } from "./bank-transfer-input";
+import { releaseStatementMatchesForSource } from "./matching-service";
 
 export function createBankTransfer(businessId: string, userId: string, input: BankTransferInput) {
   assertMutationPermission(businessId, userId, "banking", "create", "post");
@@ -87,24 +87,15 @@ export function voidBankTransfer(businessId: string, userId: string, transferId:
     if (!transfer) throw new Error("Bank Transfer not found.");
     if (transfer.document_status !== "posted") throw new Error("Only a posted Bank Transfer can be voided.");
     assertDateNotLocked(context.sqlite, transfer.date, "Bank transfer");
-    assertDateNotLocked(context.sqlite, businessToday(), "Bank transfer void");
-    const reconciled = context.sqlite.prepare(`
-      SELECT 1 FROM bank_statement_lines bsl
-      INNER JOIN bank_reconciliation_items bri ON bri.statement_line_id = bsl.id
-      INNER JOIN bank_reconciliations br ON br.id = bri.reconciliation_id AND br.status = 'completed'
-      WHERE bsl.matched_source_type = 'bank_transfer' AND bsl.matched_source_id = ? LIMIT 1
-    `).get(transferId);
-    if (reconciled) throw new Error("Cannot void a Bank Transfer included in a completed reconciliation.");
+    assertDateNotLocked(context.sqlite, getBusinessTodayIso(), "Bank transfer void");
+    releaseStatementMatchesForSource(context.sqlite, "bank_transfer", transferId,
+      "Cannot void a Bank Transfer included in a completed reconciliation.");
     reverseTransaction(context.sqlite, {
       originalSourceType: "bank_transfer", originalSourceId: transferId,
       reversalSourceType: "bank_transfer_void", reversalSourceId: transferId,
-      date: businessToday(), description: `Reverse Bank Transfer ${transfer.transfer_number}`,
+      date: getBusinessTodayIso(), description: `Reverse Bank Transfer ${transfer.transfer_number}`,
     });
     context.sqlite.prepare("UPDATE bank_transfers SET document_status = 'void', voided_at = ? WHERE id = ?")
       .run(now, transferId);
-    context.sqlite.prepare(`
-      UPDATE bank_statement_lines SET match_status = 'unmatched', matched_source_type = NULL,
-        matched_source_id = NULL WHERE matched_source_type = 'bank_transfer' AND matched_source_id = ?
-    `).run(transferId);
   }).immediate();
 }

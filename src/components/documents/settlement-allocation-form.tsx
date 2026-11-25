@@ -17,7 +17,7 @@ import {
 } from "@/components/documents/quick-create-modals";
 import { FormError } from "@/components/form-error";
 import { useActionPermission, useApprovalPolicy } from "@/components/permissions-provider";
-import { formatDate, formatMoney } from "@/core/format";
+import { formatDate, formatMoney, getBusinessTodayIso } from "@/core/format";
 import { useUnsavedChanges } from "@/hooks/use-unsaved-changes";
 import { minorToCurrencyInput, parseCurrencyAmountToMinor } from "@/modules/currency/conversion";
 import {
@@ -31,6 +31,8 @@ import {
   safeParseMinorAmount,
   type SettlementOpenDocument,
 } from "./settlement-allocation-math";
+import { FieldError } from "@/components/ui/field-error";
+import { fieldErrorProps, fieldErrorId, focusFirstInvalidField } from "@/lib/form-errors";
 
 export type SettlementOption = { id: string; name: string };
 
@@ -255,7 +257,10 @@ export function SettlementAllocationForm({
 
   const form = useForm<SettlementFormValues>({
     resolver: settlementResolver(direction, currencies),
-    mode: "onTouched",
+    // Validate on submit, then live as the user corrects fields. Blur validation
+    // inserted error text that shifted the Save button mid-click.
+    mode: "onSubmit",
+    reValidateMode: "onChange",
     defaultValues: initial,
   });
 
@@ -420,11 +425,11 @@ export function SettlementAllocationForm({
     if (result.error) setServerError(result.error);
   }
 
-  const today = new Date().toISOString().slice(0, 10);
+  const today = getBusinessTodayIso();
 
   return (
     <>
-    <form onSubmit={handleSubmit((v) => submit(v, "view"))} className="space-y-6 pb-8" noValidate>
+    <form onSubmit={handleSubmit((v) => submit(v, "view"), focusFirstInvalidField)} className="space-y-6 pb-8" noValidate>
       {serverError && <FormError message={serverError} />}
 
       <section className="form-section border-b border-border pb-7">
@@ -438,7 +443,7 @@ export function SettlementAllocationForm({
               control={control}
               name="counterpartyId"
               render={({ field }) => (
-                <Combobox
+                <Combobox ref={field.ref}
                   id={copy.counterpartyFieldId}
                   options={counterpartyOptions}
                   value={field.value ?? ""}
@@ -447,7 +452,7 @@ export function SettlementAllocationForm({
                   searchPlaceholder={copy.counterpartySearch}
                   emptyText={copy.counterpartyEmpty}
                   allowClear
-                  ariaInvalid={!!errors.counterpartyId}
+                  ariaInvalid={!!errors.counterpartyId} ariaDescribedBy={errors.counterpartyId ? fieldErrorId("counterpartyId") : undefined}
                   createAction={
                     canCreateCounterparty
                       ? {
@@ -462,7 +467,7 @@ export function SettlementAllocationForm({
                 />
               )}
             />
-            {errors.counterpartyId && <p className="field-error">{errors.counterpartyId.message}</p>}
+            <FieldError name="counterpartyId" message={errors.counterpartyId?.message} />
           </div>
 
           <div className="space-y-1.5">
@@ -471,7 +476,7 @@ export function SettlementAllocationForm({
               control={control}
               name="bankAccountId"
               render={({ field }) => (
-                <Combobox
+                <Combobox ref={field.ref}
                   id="bankAccountId"
                   options={bankOptions}
                   value={field.value ?? ""}
@@ -479,11 +484,11 @@ export function SettlementAllocationForm({
                   placeholder="Choose Bank or Cash…"
                   searchPlaceholder="Search bank accounts…"
                   emptyText="No accounts found."
-                  ariaInvalid={!!errors.bankAccountId}
+                  ariaInvalid={!!errors.bankAccountId} ariaDescribedBy={errors.bankAccountId ? fieldErrorId("bankAccountId") : undefined}
                 />
               )}
             />
-            {errors.bankAccountId && <p className="field-error">{errors.bankAccountId.message}</p>}
+            <FieldError name="bankAccountId" message={errors.bankAccountId?.message} />
           </div>
 
           <DocumentCurrencyFields
@@ -506,8 +511,8 @@ export function SettlementAllocationForm({
 
           <div className="space-y-1.5">
             <Label htmlFor="date">{copy.dateLabel}</Label>
-            <Input id="date" type="date" {...register("date")} aria-invalid={!!errors.date} />
-            {errors.date && <p className="field-error">{errors.date.message}</p>}
+            <Input id="date" type="date" {...register("date")} {...fieldErrorProps("date", errors.date)} />
+            <FieldError name="date" message={errors.date?.message} />
           </div>
 
           <div className="space-y-1.5">
@@ -522,9 +527,9 @@ export function SettlementAllocationForm({
               placeholder={zeroPlaceholder}
               className="money text-right font-medium text-base tabular-nums"
               {...register("amount")}
-              aria-invalid={!!errors.amount}
+              {...fieldErrorProps("amount", errors.amount)}
             />
-            {errors.amount && <p className="field-error">{errors.amount.message}</p>}
+            <FieldError name="amount" message={errors.amount?.message} />
             {unallocatedMinor > 0 && totalAllocatedMinor > 0 && (
               <p className="text-xs font-medium text-success">
                 Includes {formatMoney(unallocatedMinor, currencyCode, minorUnit)} {copy.surplusNotice}
@@ -658,7 +663,7 @@ export function SettlementAllocationForm({
                           control={control}
                           name={`allocations.${doc.id}`}
                           render={({ field }) => (
-                            <Input
+                            <Input ref={field.ref}
                               type="number"
                               step={doc.minorUnit === 0 ? "1" : `0.${"0".repeat(doc.minorUnit - 1)}1`}
                               min="0"
@@ -797,12 +802,12 @@ export function SettlementAllocationForm({
             type="button"
             loading={isSubmitting}
             disabled={isOverAllocated}
-            onPrimaryClick={handleSubmit((v) => submit(v, "view"))}
+            onPrimaryClick={handleSubmit((v) => submit(v, "view"), focusFirstInvalidField)}
             options={[
               {
                 label: "Post & Record Another",
                 description: isReceipt ? "Post this receipt and start another" : "Post this payment and start another",
-                onSelect: handleSubmit((v) => submit(v, "new")),
+                onSelect: handleSubmit((v) => submit(v, "new"), focusFirstInvalidField),
               },
             ]}
           />

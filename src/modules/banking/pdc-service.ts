@@ -1,4 +1,3 @@
-import { businessToday } from "@/core/dates";
 import { randomUUID } from "node:crypto";
 import { assertMutationPermission } from "@/core/permissions/mutation-permissions";
 import { getBusinessDb } from "@/core/db/business";
@@ -7,6 +6,8 @@ import { postTransaction, reverseTransaction } from "@/modules/accounting/servic
 import { parseCurrencyAmountToMinor } from "@/modules/currency/conversion";
 import { recordActivity } from "@/modules/activity-log/activity-log-service";
 import { pdcInputSchema, type PdcDirection, type PdcInput, type PdcStatus } from "./pdc-input";
+import { getBusinessTodayIso } from "@/core/format";
+import { addDaysIso } from "@/modules/tax/uae-vat-config";
 import { createSettlement, getOpenState } from "@/modules/settlement/settlement-service";
 import { receiptConfig } from "@/modules/receipts/receipt-service";
 import { supplierPaymentConfig } from "@/modules/supplier-payments/supplier-payment-service";
@@ -223,8 +224,8 @@ export function getPdcMaturitySummary(
 ): PdcMaturitySummary {
   assertMutationPermission(businessId, userId, "banking", "view");
   const all = listPdcs(businessId, userId);
-  const today = new Date().toISOString().slice(0, 10);
-  const horizonDate = new Date(Date.now() + horizonDays * 86_400_000).toISOString().slice(0, 10);
+  const today = getBusinessTodayIso();
+  const horizonDate = addDaysIso(getBusinessTodayIso(), horizonDays);
 
   let overdueCount = 0;
   let overdueReceivableMinor = 0;
@@ -385,7 +386,7 @@ export function depositPdc(
   }
 
   const now = new Date().toISOString();
-  const effectiveDepositDate = depositDate || businessToday();
+  const effectiveDepositDate = depositDate || getBusinessTodayIso();
 
   sqlite
     .prepare(`
@@ -446,7 +447,7 @@ export function clearPdc(
   }
 
   const now = new Date().toISOString();
-  const clearDate = clearingDate || pdc.maturity_date || businessToday();
+  const clearDate = clearingDate || pdc.maturity_date || getBusinessTodayIso();
 
   sqlite.transaction(() => {
     if (!hasLegacyPdcJournal(sqlite, pdcId)) {
@@ -550,7 +551,7 @@ export function bouncePdc(
   }
 
   const now = new Date().toISOString();
-  const effectiveDate = bounceDate || businessToday();
+  const effectiveDate = bounceDate || getBusinessTodayIso();
 
   sqlite.transaction(() => {
     if (hasLegacyPdcJournal(sqlite, pdcId)) {
@@ -598,7 +599,7 @@ export function cancelPdc(businessId: string, userId: string, pdcId: string): vo
   }
 
   const now = new Date().toISOString();
-  const cancelDate = businessToday() >= pdc.issue_date ? businessToday() : pdc.issue_date;
+  const cancelDate = getBusinessTodayIso() >= pdc.issue_date ? getBusinessTodayIso() : pdc.issue_date;
 
   sqlite.transaction(() => {
     if (hasLegacyPdcJournal(sqlite, pdcId)) {

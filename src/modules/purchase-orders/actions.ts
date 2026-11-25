@@ -84,6 +84,7 @@ import { savePurchaseInvoice } from "@/modules/purchase-invoices/purchase-invoic
 
 import { quantityMicrosToInput } from "@/modules/accounting/calculations/money";
 import { getBusinessTodayIso, getCurrencyMinorUnit, minorToDecimalString } from "@/core/format";
+import { addDaysIso } from "@/modules/tax/uae-vat-config";
 
 export async function convertPurchaseOrderToInvoiceAction(businessId: string, orderId: string) {
   const { user } = await requirePermission(businessId, "purchases", "create");
@@ -97,10 +98,10 @@ export async function convertPurchaseOrderToInvoiceAction(businessId: string, or
       return { error: "This purchase order has already been converted to an invoice." };
     }
 
-    const today = new Date().toISOString().split("T")[0];
+    const today = getBusinessTodayIso();
     const rawTerms = orderData.supplier?.paymentTermsDays;
     const daysToAdd = (rawTerms !== null && rawTerms !== undefined) ? Number(rawTerms) : 30;
-    const dueDate = new Date(Date.now() + daysToAdd * 86400000).toISOString().split("T")[0];
+    const dueDate = addDaysIso(getBusinessTodayIso(), daysToAdd);
 
     const input = {
       supplierId: orderData.order.supplierId,

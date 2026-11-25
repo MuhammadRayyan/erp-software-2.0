@@ -21,6 +21,8 @@ import {
 import { useUnsavedChanges } from "@/hooks/use-unsaved-changes";
 import { createCustomerAction, updateCustomerAction } from "./actions";
 import { customerInputSchema, type CustomerInput } from "./customer-input";
+import { FieldError } from "@/components/ui/field-error";
+import { fieldErrorProps, applyServerFieldErrors, focusFirstInvalidField } from "@/lib/form-errors";
 
 type Values = CustomerInput;
 
@@ -49,7 +51,10 @@ export function CustomerForm({
     formState: { errors, isSubmitting, isDirty, isSubmitSuccessful },
   } = useForm<Values>({
     resolver: zodResolver(customerInputSchema),
-    mode: "onTouched",
+    // Validate on submit, then live as the user corrects fields. Blur validation
+    // inserted error text that shifted the Save button mid-click.
+    mode: "onSubmit",
+    reValidateMode: "onChange",
     defaultValues: initial ?? {
       name: "",
       email: "",
@@ -106,9 +111,7 @@ export function CustomerForm({
       ? await updateCustomerAction(businessId, customerId, values, customValues)
       : await createCustomerAction(businessId, values, customValues);
     if (result.fieldErrors) {
-      for (const [field, messages] of Object.entries(result.fieldErrors)) {
-        setError(field as keyof Values, { message: messages[0] });
-      }
+      applyServerFieldErrors(setError, result.fieldErrors);
     }
     if (result.error) setServerError(result.error);
   }
@@ -116,7 +119,7 @@ export function CustomerForm({
   const cancelHref = customerId ? `/b/${businessId}/customers/${customerId}` : `/b/${businessId}/customers`;
 
   return (
-    <form onSubmit={handleSubmit(submit)} className="space-y-7 max-w-4xl" noValidate>
+    <form onSubmit={handleSubmit(submit, focusFirstInvalidField)} className="space-y-7 max-w-4xl" noValidate>
       {serverError && <FormError message={serverError} />}
 
       {/* Primary Section: Contact & Billing Information */}
@@ -127,20 +130,20 @@ export function CustomerForm({
             <Label htmlFor="name">
               Customer name <span className="text-destructive">*</span>
             </Label>
-            <Input id="name" autoFocus placeholder="e.g. Al Futtaim Trading LLC" {...register("name")} aria-invalid={!!errors.name} />
-            {errors.name && <p className="field-error">{errors.name.message}</p>}
+            <Input id="name" autoFocus placeholder="e.g. Al Futtaim Trading LLC" {...register("name")} {...fieldErrorProps("name", errors.name)} />
+            <FieldError name="name" message={errors.name?.message} />
           </div>
 
           <div className="space-y-1.5">
             <Label htmlFor="email">Email <span className="font-normal text-muted-foreground">(optional)</span></Label>
-            <Input id="email" type="email" placeholder="e.g. accounts@client.ae" {...register("email")} aria-invalid={!!errors.email} />
-            {errors.email && <p className="field-error">{errors.email.message}</p>}
+            <Input id="email" type="email" placeholder="e.g. accounts@client.ae" {...register("email")} {...fieldErrorProps("email", errors.email)} />
+            <FieldError name="email" message={errors.email?.message} />
           </div>
 
           <div className="space-y-1.5">
             <Label htmlFor="phone">Phone <span className="font-normal text-muted-foreground">(optional)</span></Label>
-            <Input id="phone" type="tel" placeholder="e.g. +971 4 123 4567" {...register("phone")} aria-invalid={!!errors.phone} />
-            {errors.phone && <p className="field-error">{errors.phone.message}</p>}
+            <Input id="phone" type="tel" placeholder="e.g. +971 4 123 4567" {...register("phone")} {...fieldErrorProps("phone", errors.phone)} />
+            <FieldError name="phone" message={errors.phone?.message} />
           </div>
 
           <div className="space-y-1.5 sm:col-span-2">
@@ -150,9 +153,9 @@ export function CustomerForm({
               rows={3}
               placeholder="Building, street, area, city, P.O. Box..."
               {...register("billingAddress")}
-              aria-invalid={!!errors.billingAddress}
+              {...fieldErrorProps("billingAddress", errors.billingAddress)}
             />
-            {errors.billingAddress && <p className="field-error">{errors.billingAddress.message}</p>}
+            <FieldError name="billingAddress" message={errors.billingAddress?.message} />
           </div>
 
           <div className="space-y-1.5 sm:col-span-2">
@@ -174,9 +177,9 @@ export function CustomerForm({
                 rows={3}
                 placeholder="Warehouse or delivery destination..."
                 {...register("deliveryAddress")}
-                aria-invalid={!!errors.deliveryAddress}
+                {...fieldErrorProps("deliveryAddress", errors.deliveryAddress)}
               />
-              {errors.deliveryAddress && <p className="field-error">{errors.deliveryAddress.message}</p>}
+              <FieldError name="deliveryAddress" message={errors.deliveryAddress?.message} />
             </div>
           )}
         </div>
@@ -192,9 +195,9 @@ export function CustomerForm({
               id="taxReference"
               placeholder="e.g. 100xxxxxxxxxxxx"
               {...register("taxReference")}
-              aria-invalid={!!errors.taxReference}
+              {...fieldErrorProps("taxReference", errors.taxReference)}
             />
-            {errors.taxReference && <p className="field-error">{errors.taxReference.message}</p>}
+            <FieldError name="taxReference" message={errors.taxReference?.message} />
           </div>
 
           <div className="space-y-1.5">
@@ -220,9 +223,9 @@ export function CustomerForm({
               max="365"
               placeholder="0 (Due on receipt)"
               {...register("paymentTermsDays")}
-              aria-invalid={!!errors.paymentTermsDays}
+              {...fieldErrorProps("paymentTermsDays", errors.paymentTermsDays)}
             />
-            {errors.paymentTermsDays && <p className="field-error">{errors.paymentTermsDays.message}</p>}
+            <FieldError name="paymentTermsDays" message={errors.paymentTermsDays?.message} />
           </div>
 
           <div className="space-y-1.5">
@@ -233,9 +236,9 @@ export function CustomerForm({
               min="0"
               placeholder="No limit"
               {...register("creditLimitMinor")}
-              aria-invalid={!!errors.creditLimitMinor}
+              {...fieldErrorProps("creditLimitMinor", errors.creditLimitMinor)}
             />
-            {errors.creditLimitMinor && <p className="field-error">{errors.creditLimitMinor.message}</p>}
+            <FieldError name="creditLimitMinor" message={errors.creditLimitMinor?.message} />
           </div>
 
           <div className="space-y-1.5 sm:col-span-2 pt-2">

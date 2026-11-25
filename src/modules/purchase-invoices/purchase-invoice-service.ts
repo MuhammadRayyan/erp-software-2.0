@@ -1,4 +1,3 @@
-import { businessToday } from "@/core/dates";
 import { assertMutationPermission, assertSavePermission } from "@/core/permissions/mutation-permissions";
 import { getBusinessAccess } from "@/core/permissions/permissions";
 import { getPurchaseSettlement } from "./purchase-balance";
@@ -44,7 +43,7 @@ function deriveStatus(documentStatus: PurchaseInvoiceStatus, totalMinor: number,
   if (documentStatus !== "posted") return null;
   const balance = Math.max(0, totalMinor - paidMinor);
   if (balance === 0) return "paid";
-  if (dueDate < new Date().toISOString().slice(0, 10)) return "overdue";
+  if (dueDate < getBusinessTodayIso()) return "overdue";
   return paidMinor > 0 ? "partially_paid" : "unpaid";
 }
 
@@ -75,6 +74,8 @@ function assertSupplierInvoiceNumberAvailable(
 
 import { drizzle } from "drizzle-orm/better-sqlite3";
 import * as businessSchema from "@/core/db/business-schema";
+import { getBusinessTodayIso } from "@/core/format";
+import { addDaysIso } from "@/modules/tax/uae-vat-config";
 
 function insertLines(
   dbOrSqlite: ReturnType<typeof getBusinessDb>["db"] | ReturnType<typeof getBusinessDb>["sqlite"],
@@ -160,7 +161,7 @@ export type PaginatedPurchaseInvoices = {
 function buildPurchaseInvoiceWhere(
   supplierId: string | undefined,
   filters: PurchaseInvoiceListFilters | undefined,
-  todayUtc: string,
+  businessToday: string,
 ) {
   const conditions: string[] = [];
   const values: Array<string | number> = [];
@@ -179,7 +180,7 @@ function buildPurchaseInvoiceWhere(
   const { isVoidFilter } = pushInvoiceStatusConditions(filters?.status, {
     tableAlias: "pi",
     allocatedExpr: PURCHASE_PAID_FOREIGN_EXPR,
-    todayUtc,
+    businessToday,
     conditions,
     values,
   });
@@ -241,8 +242,8 @@ export function listPurchaseInvoicesPaginated(
   const { sqlite } = getBusinessDb(businessId, userId);
   const page = clampPositiveInt(filters.page, 1, Number.MAX_SAFE_INTEGER);
   const pageSize = clampPositiveInt(filters.pageSize, DEFAULT_LIST_PAGE_SIZE, MAX_LIST_PAGE_SIZE);
-  const todayUtc = new Date().toISOString().slice(0, 10);
-  const { where, values, isVoidFilter } = buildPurchaseInvoiceWhere(undefined, filters, todayUtc);
+  const businessToday = getBusinessTodayIso();
+  const { where, values, isVoidFilter } = buildPurchaseInvoiceWhere(undefined, filters, businessToday);
 
   const unfilteredRow = sqlite.prepare("SELECT COUNT(*) AS total FROM purchase_invoices").get() as { total: number };
   const summaryRows = sqlite
@@ -265,7 +266,7 @@ export function listPurchaseInvoicesPaginated(
       GROUP BY pi.currency_code, cur.minor_unit
       ORDER BY pi.currency_code ASC
     `)
-    .all(isVoidFilter ? 1 : 0, todayUtc, ...values) as Array<{
+    .all(isVoidFilter ? 1 : 0, businessToday, ...values) as Array<{
     currency_code: string;
     currency_minor_unit: number;
     row_count: number;
@@ -309,8 +310,8 @@ export function listPurchaseInvoices(
   filters?: PurchaseInvoiceListFilters,
 ) {
   const { sqlite } = getBusinessDb(businessId, userId);
-  const todayUtc = new Date().toISOString().slice(0, 10);
-  const { where, values } = buildPurchaseInvoiceWhere(supplierId, filters, todayUtc);
+  const businessToday = getBusinessTodayIso();
+  const { where, values } = buildPurchaseInvoiceWhere(supplierId, filters, businessToday);
   const sortColumns: Record<string, string> = {
     internal_number: "pi.internal_number",
     supplier_name: "s.name",
@@ -320,7 +321,7 @@ export function listPurchaseInvoices(
     total: "pi.total_minor",
     balance: `CASE WHEN pi.document_status = 'posted' THEN MAX(0, pi.total_minor - (${PURCHASE_PAID_FOREIGN_EXPR})) ELSE 0 END`,
     document: "pi.document_status",
-    payment: `CASE WHEN pi.document_status <> 'posted' THEN 5 WHEN pi.total_minor <= (${PURCHASE_PAID_FOREIGN_EXPR}) THEN 4 WHEN pi.due_date < '${todayUtc}' THEN 1 WHEN (${PURCHASE_PAID_FOREIGN_EXPR}) > 0 THEN 2 ELSE 3 END`,
+    payment: `CASE WHEN pi.document_status <> 'posted' THEN 5 WHEN pi.total_minor <= (${PURCHASE_PAID_FOREIGN_EXPR}) THEN 4 WHEN pi.due_date < '${businessToday}' THEN 1 WHEN (${PURCHASE_PAID_FOREIGN_EXPR}) > 0 THEN 2 ELSE 3 END`,
   };
   const orderByClause = resolveSortSql(
     filters?.sort,
@@ -681,10 +682,10 @@ export function duplicatePurchaseInvoice(businessId: string, userId: string, inv
   const context = getBusinessDb(businessId, userId);
   const baseCurrency = getBaseCurrency(context.sqlite);
   const minorUnit = getCurrency(context.sqlite, record.invoice.currencyCode).minor_unit;
-  const today = new Date().toISOString().split("T")[0];
+  const today = getBusinessTodayIso();
   const rawTerms = (record.supplier as any)?.paymentTermsDays;
   const dueDays = (rawTerms !== null && rawTerms !== undefined) ? Number(rawTerms) : 30;
-  const dueDate = new Date(Date.now() + dueDays * 86400000).toISOString().split("T")[0];
+  const dueDate = addDaysIso(getBusinessTodayIso(), dueDays);
 
   return savePurchaseInvoice(businessId, userId, {
     supplierId: record.invoice.supplierId,
@@ -762,10 +763,10 @@ export function voidPurchaseInvoice(businessId: string, userId: string, invoiceI
   const now = new Date().toISOString();
   context.sqlite.transaction(() => {
     assertDateNotLocked(context.sqlite, invoice.invoiceDate, "Purchase invoice void");
-    assertDateNotLocked(context.sqlite, businessToday(), "Purchase invoice void");
+    assertDateNotLocked(context.sqlite, getBusinessTodayIso(), "Purchase invoice void");
     assertVatSourceUnlocked(context.sqlite, "purchase_invoice", invoiceId, invoice.taxDate);
-    reverseTransaction(context.sqlite, { originalSourceType: "purchase_invoice", originalSourceId: invoiceId, reversalSourceType: "purchase_invoice_void", reversalSourceId: invoiceId, date: businessToday(), description: `Void Purchase Invoice ${invoice.internalNumber}` });
-    reverseTaxEntries(context.sqlite, { originalSourceType: "purchase_invoice", sourceId: invoiceId, reversalSourceType: "purchase_invoice_void", taxDate: businessToday() });
+    reverseTransaction(context.sqlite, { originalSourceType: "purchase_invoice", originalSourceId: invoiceId, reversalSourceType: "purchase_invoice_void", reversalSourceId: invoiceId, date: getBusinessTodayIso(), description: `Void Purchase Invoice ${invoice.internalNumber}` });
+    reverseTaxEntries(context.sqlite, { originalSourceType: "purchase_invoice", sourceId: invoiceId, reversalSourceType: "purchase_invoice_void", taxDate: getBusinessTodayIso() });
     context.sqlite.prepare("UPDATE purchase_invoices SET document_status = 'void', voided_at = ?, updated_at = ? WHERE id = ?").run(now, now, invoiceId);
     if (invoice.purchaseOrderId) {
       const remainingCount = context.sqlite.prepare(
@@ -1002,4 +1003,40 @@ export function batchDeletePurchaseInvoices(businessId: string, userId: string, 
     }
   }
   return result;
+}
+
+export type PayablesDueSummary = {
+  dueCount: number;
+  dueBaseMinor: number;
+  overdueCount: number;
+  overdueBaseMinor: number;
+};
+
+/**
+ * Open posted bills due on or before `today + horizonDays` (overdue included),
+ * in base currency. Foreign bills are converted pro rata from their base total.
+ */
+export function getPayablesDueSummary(businessId: string, userId: string, today: string, horizonDays = 7): PayablesDueSummary {
+  const { sqlite } = getBusinessDb(businessId, userId);
+  const horizon = new Date(Date.parse(`${today}T00:00:00Z`) + horizonDays * 86_400_000).toISOString().slice(0, 10);
+  return sqlite.prepare(`
+    WITH ${PURCHASE_SETTLEMENT_CTE},
+    open_bills AS (
+      SELECT pi.due_date,
+        pi.total_minor - (${PURCHASE_PAID_FOREIGN_EXPR}) AS foreign_open,
+        CASE WHEN pi.total_minor > 0
+          THEN CAST(ROUND(pi.base_total_minor * (pi.total_minor - (${PURCHASE_PAID_FOREIGN_EXPR})) * 1.0 / pi.total_minor) AS INTEGER)
+          ELSE 0 END AS base_open
+      FROM purchase_invoices pi
+      LEFT JOIN payment_alloc pa ON pa.invoice_id = pi.id
+      LEFT JOIN debit_alloc da ON da.invoice_id = pi.id
+      WHERE pi.document_status = 'posted'
+    )
+    SELECT
+      COALESCE(SUM(CASE WHEN due_date <= @horizon THEN 1 ELSE 0 END), 0) AS dueCount,
+      COALESCE(SUM(CASE WHEN due_date <= @horizon THEN base_open ELSE 0 END), 0) AS dueBaseMinor,
+      COALESCE(SUM(CASE WHEN due_date < @today THEN 1 ELSE 0 END), 0) AS overdueCount,
+      COALESCE(SUM(CASE WHEN due_date < @today THEN base_open ELSE 0 END), 0) AS overdueBaseMinor
+    FROM open_bills WHERE foreign_open > 0
+  `).get({ today, horizon }) as PayablesDueSummary;
 }

@@ -19,7 +19,7 @@ const { savePurchaseInvoice } = await import("../../src/modules/purchase-invoice
 const { saveGoodsReceipt } = await import("../../src/modules/inventory/goods-receipt-service");
 const { createPdc, clearPdc } = await import("../../src/modules/banking/pdc-service");
 const { saveOpeningBalances, OPENING_BALANCE_EQUITY_ACCOUNT_ID } = await import("../../src/modules/accounting/services/opening-balances-service");
-const { businessToday } = await import("../../src/core/dates");
+const { getBusinessDateIso, getBusinessTodayIso } = await import("../../src/core/format");
 
 const seeded = await seedDemoData();
 const businessId = seeded.business.id;
@@ -91,7 +91,7 @@ test("applying an unallocated foreign receipt books realized FX so AR stays tied
 
 test("a cleared post-dated cheque settles its invoice once, with no double credit", () => {
   const gapBefore = arGap();
-  const today = businessToday();
+  const today = getBusinessTodayIso();
   const invoiceId = createInvoice(businessId, adminId, {
     customerId: aedCustomer.id, invoiceDate: today, taxDate: today, dueDate: today, reference: "TIEOUT-PDC-INV",
     lines: [{ description: "PDC tie-out", quantity: "1", unitPrice: "1000.00", salesAccountId: settings.sales, taxCodeId: "tax-out-of-scope" }],
@@ -174,6 +174,6 @@ test("an unbalanced opening balance lands in a dedicated Opening Balance Equity 
 });
 
 test("ledger dates use the UAE business day, not the UTC day", () => {
-  assert.equal(businessToday(new Date("2026-11-25T21:30:00Z")), "2026-11-26");
-  assert.equal(businessToday(new Date("2026-11-25T19:59:00Z")), "2026-11-25");
+  assert.equal(getBusinessDateIso(new Date("2026-11-25T21:30:00Z")), "2026-11-26");
+  assert.equal(getBusinessDateIso(new Date("2026-11-25T19:59:00Z")), "2026-11-25");
 });
