@@ -13,6 +13,8 @@ services:
       HOSTNAME: 0.0.0.0
       ERP_DATA_DIR: /app/data
       ERP_MIGRATION_MODE: external
+      # 1-OCPU host: each concurrent Chromium render costs ~150-300 MB inside the 3 GB limit.
+      HTML_PDF_CONCURRENCY: 2
     read_only: true
     cap_drop: [ALL]
     security_opt: [no-new-privileges:true]

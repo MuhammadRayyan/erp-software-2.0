@@ -4,6 +4,14 @@ All notable changes since the original `erp-software-2.0-antigravity-edits` uplo
 
 Full historical task detail is retained in [history/WORKLOG.md](history/WORKLOG.md) and the remaining point-in-time archive index in [history/README.md](history/README.md).
 
+## 2026-11-25 (Production OOM fix — SQLite statement memory)
+
+- **Root cause**: production `next-server` was killed by the 3 GB cgroup limit 14 times between 2 and 24 November. Drizzle and raw SQL call `better-sqlite3` `prepare()` on every query, and each statement's native memory (~3 KB) is retained until its connection closes, even after GC. The system connection never closes, so memory grew without bound. Reproduced locally: 300k queries grew RSS to 1,976 MB before this fix and stayed flat at 136 MB after.
+- **Statement cache (`src/core/db/statement-cache.ts`)**: per-connection LRU (2,000 entries) keyed by SQL text, installed on the system and every business connection. Cached statements are reset to object mode (`raw/pluck/expand(false)`) on handout, and a statement busy in `iterate()` is never reused.
+- **Churn recycling (`src/core/db/connection-limits.ts`, `system.ts`, `business.ts`)**: a connection that has created more than 20,000 statements (`ERP_SQLITE_RECYCLE_AFTER_STATEMENTS`) is replaced, and the retired handle closes after 60 s so in-flight requests finish. Business connection soft cap lowered from 50 to 12.
+- **Readiness (`src/core/health.ts`)**: the per-tenant schema check runs on the first probe and then every 10 minutes instead of every 15 s probe; the system DB round-trip still runs on every probe.
+- **Container (`docker-compose.yml`)**: `HTML_PDF_CONCURRENCY=2` on the 1-OCPU host.
+
 ## 2026-11-14 (Sprint 4 — Test Organization, Build Isolation, Production CSP & Docs Consolidation)
 
 - **Domain-Organized Test Architecture & Glob Discovery (`package.json`, `tests/`)**:
