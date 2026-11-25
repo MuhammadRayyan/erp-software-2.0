@@ -220,10 +220,11 @@ test("Pillar 2: PDC lifecycle + Overview widget, VAT TRN checksum + FAF export, 
   await pdcRow.getByRole("button", { name: "Clear", exact: true }).click();
   await expect(pdcRow).toContainText("Cleared");
 
+  // A held cheque is off-ledger; clearing it records a real customer receipt.
   const pdcJournals = query<{ n: number }>(
-    "SELECT COUNT(*) n FROM journal_entries WHERE source_type IN ('pdc_receive', 'pdc_clear') AND status = 'posted'",
+    "SELECT COUNT(*) n FROM journal_entries je INNER JOIN receipts r ON r.id = je.source_id WHERE je.source_type = 'receipt' AND je.status = 'posted' AND r.description LIKE 'Cleared post-dated cheque%'",
   );
-  expect(pdcJournals.n).toBeGreaterThanOrEqual(2);
+  expect(pdcJournals.n).toBeGreaterThanOrEqual(1);
 
   // Register a second PDC and exercise the Bounce flow in Chromium
   await page.getByRole("button", { name: "Register PDC", exact: true }).click();

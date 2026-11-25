@@ -103,6 +103,51 @@ test("Audited Architectural & Functional Fixes Verification Suite", async (suite
     assert.equal(reconResult.invalidPostedPayslips, 0);
     assert.equal(reconResult.invalidPayslipTotals, 0);
     assert.equal(reconResult.missingDocumentJournals, 0);
+
+    // Posted imported documents now carry real ledger entries, so the checks below do
+    // NOT rely on reconcileBusinessDatabase's import-timestamp exclusion.
+    const sqlite = context.sqlite;
+    const v = (sql: string, ...params: unknown[]) =>
+      Number((sqlite.prepare(sql).get(...params) as { v: number | null }).v ?? 0);
+    const posted = "FROM journal_lines jl JOIN journal_entries je ON je.id = jl.journal_entry_id AND je.status = 'posted'";
+    assert.equal(v(`SELECT SUM(jl.debit_minor) AS v ${posted}`), v(`SELECT SUM(jl.credit_minor) AS v ${posted}`),
+      "Imported trial balance must balance");
+    assert.ok(v("SELECT COUNT(*) AS v FROM sales_invoices WHERE document_status = 'posted'") > 0);
+    for (const [table, source] of [
+      ["sales_invoices", "sales_invoice"], ["purchase_invoices", "purchase_invoice"],
+      ["receipts", "receipt"], ["supplier_payments", "supplier_payment"], ["bank_transfers", "bank_transfer"],
+    ]) {
+      assert.equal(v(`SELECT COUNT(*) AS v FROM ${table} d WHERE d.document_status = 'posted' AND NOT EXISTS (
+        SELECT 1 FROM journal_entries je WHERE je.source_type = ? AND je.source_id = d.id AND je.status = 'posted')`, source),
+      0, `Imported posted ${table} must be journaled`);
+    }
+    assert.equal(v(`SELECT COUNT(*) AS v FROM payslips p LEFT JOIN journal_entries je ON je.id = p.journal_entry_id
+      WHERE p.document_status = 'posted' AND je.id IS NULL`), 0, "Imported posted payslips must be journaled");
+
+    const accts = sqlite.prepare(`SELECT accounts_receivable_account_id AS ar, accounts_payable_account_id AS ap
+      FROM business_accounting_settings WHERE id = 'default'`).get() as { ar: string; ap: string };
+    const glAr = v(`SELECT SUM(jl.debit_minor - jl.credit_minor) AS v ${posted} WHERE jl.account_id = ?`, accts.ar);
+    const arSubledger = v(`SELECT SUM(i.total_minor - COALESCE((SELECT SUM(ra.amount_minor) FROM receipt_allocations ra
+        JOIN receipts r ON r.id = ra.receipt_id AND r.document_status = 'posted' WHERE ra.sales_invoice_id = i.id), 0)) AS v
+        FROM sales_invoices i WHERE i.document_status = 'posted'`)
+      - v(`SELECT SUM(r.amount_minor - COALESCE((SELECT SUM(ra.amount_minor) FROM receipt_allocations ra
+        WHERE ra.receipt_id = r.id), 0)) AS v FROM receipts r WHERE r.document_status = 'posted'`);
+    assert.equal(glAr, arSubledger, "GL AR must equal open invoices minus unallocated receipts");
+    const glAp = v(`SELECT SUM(jl.credit_minor - jl.debit_minor) AS v ${posted} WHERE jl.account_id = ?`, accts.ap);
+    const apSubledger = v(`SELECT SUM(b.total_minor - COALESCE((SELECT SUM(pa.amount_minor) FROM supplier_payment_allocations pa
+        JOIN supplier_payments p ON p.id = pa.payment_id AND p.document_status = 'posted' WHERE pa.purchase_invoice_id = b.id), 0)) AS v
+        FROM purchase_invoices b WHERE b.document_status = 'posted'`)
+      - v(`SELECT SUM(p.amount_minor - COALESCE((SELECT SUM(pa.amount_minor) FROM supplier_payment_allocations pa
+        WHERE pa.payment_id = p.id), 0)) AS v FROM supplier_payments p WHERE p.document_status = 'posted'`);
+    assert.equal(glAp, apSubledger, "GL AP must equal open bills minus unallocated payments");
+
+    for (const [table, source] of [["sales_invoices", "sales_invoice"], ["purchase_invoices", "purchase_invoice"]]) {
+      assert.equal(v(`SELECT COUNT(*) AS v FROM ${table} d WHERE d.document_status = 'posted'
+        AND NOT EXISTS (SELECT 1 FROM tax_entries te WHERE te.source_type = ? AND te.source_id = d.id)`, source),
+      0, `Imported posted ${table} must have VAT tax_entries`);
+    }
+    assert.equal(v("SELECT SUM(output_vat_minor) AS v FROM tax_entries WHERE source_type = 'sales_invoice'"),
+      v("SELECT SUM(tax_minor) AS v FROM sales_invoices WHERE document_status = 'posted'"));
   });
 
   await suite.test("3. P0: Standard business reconciliation still catches unjournaled posted documents", () => {

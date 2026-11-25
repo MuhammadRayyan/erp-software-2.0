@@ -4,6 +4,18 @@ All notable changes since the original `erp-software-2.0-antigravity-edits` uplo
 
 Full historical task detail is retained in [history/WORKLOG.md](history/WORKLOG.md) and the remaining point-in-time archive index in [history/README.md](history/README.md).
 
+## 2026-11-25 (Accounting correctness — GL ↔ subledger ↔ VAT tie-out)
+
+- **Reverse-charge VAT on tax-inclusive documents** (`document-line-calculator.ts`, `document-calculations.ts`): the entered price is the net and 5% VAT is self-assessed on it (VAT201 output and recoverable input). Previously it was set to 0 on both the server and the client preview.
+- **Realized FX when applying a credit** (`settlement-service.ts`): applying an unallocated receipt or supplier payment to a foreign-currency document now posts the FX difference between the AR/AP control account and FX gain/loss (`*_credit_allocation` journals, reversed when the payment is voided). A pending receipt or payment recomputes its carrying release when it is posted, so a stale value from creation time is not used.
+- **Post-dated cheques** (`pdc-service.ts`): new cheques stay off-ledger while held. Clearing records a real receipt or payment allocated to the linked invoice, so the invoice is settled exactly once. Bouncing or cancelling a held cheque only changes its status. Cheques registered before this change keep their original journals.
+- **Goods receipts against a Purchase Invoice** (`goods-receipt-service.ts`): stock is valued at the invoice line's base-currency net plus any non-recoverable VAT, the same amount the invoice debits to Inventory. Foreign currency and discounts no longer make COGS drift from the GL.
+- **Opening balances** (`opening-balances-service.ts`): each line is validated (non-negative, one side). Any difference goes to a dedicated **Opening Balance Equity** account instead of whichever equity account sorts first.
+- **Credit notes** (`credit-note-posting-service.ts`): a carrying-value difference posts to realized FX gain/loss instead of the first sales line.
+- **Payroll** (`payroll-service.ts`, `wps-service.ts`): Payroll Payable is never replaced by an arbitrary liability account; the account is created if missing. A WPS SIF takes its salary month from the filter or the payslips, rejects mixed months and duplicate employees, and records creation time in Gulf Standard Time.
+- **Void and reversal dates** (`core/dates.ts` `businessToday()`): GL and VAT reversals use the UAE business day and are both dated on the void date, so they fall in the same period.
+- **Control tests** (`tests/accounting/gl-subledger-tieout.test.ts`): AR GL ↔ subledger tie-out across credit application and PDC clearing, reverse-charge VAT, goods-receipt valuation, opening balances, and business-day dates. All six fail on the previous code.
+
 ## 2026-11-14 (Sprint 4 — Test Organization, Build Isolation, Production CSP & Docs Consolidation)
 
 - **Domain-Organized Test Architecture & Glob Discovery (`package.json`, `tests/`)**:

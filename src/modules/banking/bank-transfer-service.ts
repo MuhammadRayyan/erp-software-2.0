@@ -1,3 +1,4 @@
+import { businessToday } from "@/core/dates";
 import { assertMutationPermission } from "@/core/permissions/mutation-permissions";
 import { randomUUID } from "node:crypto";
 import { getBusinessDb } from "@/core/db/business";
@@ -86,7 +87,7 @@ export function voidBankTransfer(businessId: string, userId: string, transferId:
     if (!transfer) throw new Error("Bank Transfer not found.");
     if (transfer.document_status !== "posted") throw new Error("Only a posted Bank Transfer can be voided.");
     assertDateNotLocked(context.sqlite, transfer.date, "Bank transfer");
-    assertDateNotLocked(context.sqlite, now.slice(0, 10), "Bank transfer void");
+    assertDateNotLocked(context.sqlite, businessToday(), "Bank transfer void");
     const reconciled = context.sqlite.prepare(`
       SELECT 1 FROM bank_statement_lines bsl
       INNER JOIN bank_reconciliation_items bri ON bri.statement_line_id = bsl.id
@@ -97,7 +98,7 @@ export function voidBankTransfer(businessId: string, userId: string, transferId:
     reverseTransaction(context.sqlite, {
       originalSourceType: "bank_transfer", originalSourceId: transferId,
       reversalSourceType: "bank_transfer_void", reversalSourceId: transferId,
-      date: now.slice(0, 10), description: `Reverse Bank Transfer ${transfer.transfer_number}`,
+      date: businessToday(), description: `Reverse Bank Transfer ${transfer.transfer_number}`,
     });
     context.sqlite.prepare("UPDATE bank_transfers SET document_status = 'void', voided_at = ? WHERE id = ?")
       .run(now, transferId);

@@ -1,3 +1,4 @@
+import { businessToday } from "@/core/dates";
 import { assertSavePermission, assertMutationPermission } from "@/core/permissions/mutation-permissions";
 import { randomUUID } from "node:crypto";
 import { getBusinessDb } from "@/core/db/business";
@@ -830,12 +831,14 @@ function resolvePayrollPayableAccountId(sqlite: any): string {
   `).get() as { id: string } | undefined;
   if (byName) return byName.id;
 
-  const anyLiability = sqlite.prepare(`
-    SELECT id FROM accounts WHERE type = 'liability' ORDER BY is_system DESC, created_at ASC LIMIT 1
-  `).get() as { id: string } | undefined;
-  if (anyLiability) return anyLiability.id;
-
-  throw new Error("No liability account found for Payroll Payable in Chart of Accounts.");
+  // Never fall back to an arbitrary liability (it could be VAT Payable or
+  // AP). Create the dedicated Payroll Payable account instead.
+  const now = new Date().toISOString();
+  sqlite.prepare(`
+    INSERT OR IGNORE INTO accounts (id, name, type, subtype, is_system, is_active, created_at, updated_at)
+    VALUES ('acct-payroll-payable-2200', 'Payroll Payable', 'liability', 'current_liability', 1, 1, ?, ?)
+  `).run(now, now);
+  return "acct-payroll-payable-2200";
 }
 
 function postInternalPayslip(
@@ -956,7 +959,7 @@ export function voidPayslip(
     }
 
     assertDateNotLocked(context.sqlite, record.payslip.date, "Payslip");
-    assertDateNotLocked(context.sqlite, now.slice(0, 10), "Payslip void");
+    assertDateNotLocked(context.sqlite, businessToday(), "Payslip void");
 
     if (record.payslip.documentStatus === "posted") {
       reverseTransaction(context.sqlite, {
@@ -964,7 +967,7 @@ export function voidPayslip(
         originalSourceId: payslipId,
         reversalSourceType: "payslip_void",
         reversalSourceId: payslipId,
-        date: now.slice(0, 10),
+        date: businessToday(),
         description: `Reverse Payslip ${record.payslip.payslipNumber} (${record.employee.name})`,
       });
     }

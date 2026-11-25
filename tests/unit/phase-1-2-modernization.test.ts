@@ -253,13 +253,15 @@ test("Phase 1 & 2 Modernization: Mathematical Integrity, Validation & Synchroniz
       }
     );
 
+    // Tax-inclusive reverse charge: the supplier price is the net and 5% VAT
+    // is still self-assessed on it (output + recoverable input).
     assert.equal(clientPreviewInclusive.grossMinor, 10000);
     assert.equal(clientPreviewInclusive.netMinor, 10000);
-    assert.equal(clientPreviewInclusive.taxMinor, 0);
+    assert.equal(clientPreviewInclusive.taxMinor, 500);
 
     assert.equal(serverStoredLinesInclusive[0].grossAmountMinor, 10000);
     assert.equal(serverStoredLinesInclusive[0].netAmountMinor, 10000);
-    assert.equal(serverStoredLinesInclusive[0].taxAmountMinor, 0);
+    assert.equal(serverStoredLinesInclusive[0].taxAmountMinor, 500);
 
     assert.equal(
       clientPreviewInclusive.grossMinor,

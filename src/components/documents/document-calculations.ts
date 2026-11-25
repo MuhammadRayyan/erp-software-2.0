@@ -65,8 +65,9 @@ export function previewDocumentLine(
     if (amountsIncludeTax) {
       grossMinor = discountedTotalMinor;
       if (vatCategory === "reverse_charge") {
+        // Supplier charges no VAT: the price is the net; VAT is self-assessed on it.
         netMinor = grossMinor;
-        taxMinor = 0;
+        taxMinor = calculateTax(netMinor, rate);
       } else {
         const split = splitTaxInclusive(grossMinor, rate);
         netMinor = split.netMinor;

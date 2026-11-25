@@ -1,3 +1,4 @@
+import { businessToday } from "@/core/dates";
 import { assertSavePermission, assertMutationPermission } from "@/core/permissions/mutation-permissions";
 import type { BaseStoredLine } from "@/modules/documents/document-types";
 import { randomUUID } from "node:crypto";
@@ -456,7 +457,7 @@ export function voidDeliveryNote(businessId: string, userId: string, deliveryId:
       throw new Error("Only a posted Delivery Note can be voided.");
     }
     assertDateNotLocked(context.sqlite, delivery.date, "Delivery note void");
-    assertDateNotLocked(context.sqlite, now.slice(0, 10), "Delivery note void");
+    assertDateNotLocked(context.sqlite, businessToday(), "Delivery note void");
     assertInventorySourceIsLatest(
       context.sqlite,
       "delivery_note",
@@ -506,7 +507,7 @@ export function voidDeliveryNote(businessId: string, userId: string, deliveryId:
       originalSourceId: deliveryId,
       reversalSourceType: "delivery_note_void",
       reversalSourceId: deliveryId,
-      date: now.slice(0, 10),
+      date: businessToday(),
       description: `Void Delivery Note ${delivery.delivery_number}`,
     });
     context.sqlite.prepare(`

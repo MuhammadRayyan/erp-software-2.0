@@ -1,3 +1,4 @@
+import { businessToday } from "@/core/dates";
 import { assertSavePermission, assertMutationPermission } from "@/core/permissions/mutation-permissions";
 import { randomUUID } from "node:crypto";
 import { getBusinessDb } from "@/core/db/business";
@@ -244,7 +245,7 @@ export function voidBankTransaction(businessId: string, userId: string, transact
     if (!transaction) throw new Error("Bank Transaction not found.");
     if (transaction.document_status !== "posted") throw new Error("Only a posted Bank Transaction can be voided.");
     assertDateNotLocked(context.sqlite, transaction.date, "Bank transaction");
-    assertDateNotLocked(context.sqlite, now.slice(0, 10), "Bank transaction void");
+    assertDateNotLocked(context.sqlite, businessToday(), "Bank transaction void");
     assertVatSourceUnlocked(context.sqlite, "bank_transaction", transactionId, transaction.tax_date);
     const matchedLines = context.sqlite.prepare(`
       SELECT id FROM bank_statement_lines
@@ -261,9 +262,9 @@ export function voidBankTransaction(businessId: string, userId: string, transact
     reverseTransaction(context.sqlite, {
       originalSourceType: "bank_transaction", originalSourceId: transactionId,
       reversalSourceType: "bank_transaction_void", reversalSourceId: transactionId,
-      date: now.slice(0, 10), description: `Reverse Bank Transaction ${transaction.transaction_number}`,
+      date: businessToday(), description: `Reverse Bank Transaction ${transaction.transaction_number}`,
     });
-    reverseTaxEntries(context.sqlite, { originalSourceType: "bank_transaction", sourceId: transactionId, reversalSourceType: "bank_transaction_void", taxDate: transaction.tax_date });
+    reverseTaxEntries(context.sqlite, { originalSourceType: "bank_transaction", sourceId: transactionId, reversalSourceType: "bank_transaction_void", taxDate: businessToday() });
     context.sqlite.prepare("UPDATE bank_transactions SET document_status = 'void', statement_line_id = NULL, voided_at = ?, updated_at = ? WHERE id = ?")
       .run(now, now, transactionId);
     if (matchedLines.length) context.sqlite.prepare(`

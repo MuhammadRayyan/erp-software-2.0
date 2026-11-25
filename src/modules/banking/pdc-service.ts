@@ -1,3 +1,4 @@
+import { businessToday } from "@/core/dates";
 import { randomUUID } from "node:crypto";
 import { assertMutationPermission } from "@/core/permissions/mutation-permissions";
 import { getBusinessDb } from "@/core/db/business";
@@ -6,6 +7,27 @@ import { postTransaction, reverseTransaction } from "@/modules/accounting/servic
 import { parseCurrencyAmountToMinor } from "@/modules/currency/conversion";
 import { recordActivity } from "@/modules/activity-log/activity-log-service";
 import { pdcInputSchema, type PdcDirection, type PdcInput, type PdcStatus } from "./pdc-input";
+import { createSettlement, getOpenState } from "@/modules/settlement/settlement-service";
+import { receiptConfig } from "@/modules/receipts/receipt-service";
+import { supplierPaymentConfig } from "@/modules/supplier-payments/supplier-payment-service";
+
+/**
+ * Cheques registered before Nov 2026 were booked at receipt (Dr PDC
+ * Receivable / Cr AR) without settling the invoice. They keep that ledger
+ * treatment; newer cheques stay off-ledger until they clear.
+ */
+function hasLegacyPdcJournal(sqlite: ReturnType<typeof getBusinessDb>["sqlite"], pdcId: string) {
+  return Boolean(
+    sqlite.prepare("SELECT 1 FROM journal_entries WHERE source_type = 'pdc_receive' AND source_id = ?").get(pdcId),
+  );
+}
+
+function formatMinorAsDecimal(amountMinor: number, minorUnit: number) {
+  const digits = String(Math.abs(amountMinor)).padStart(minorUnit + 1, "0");
+  const whole = minorUnit > 0 ? digits.slice(0, -minorUnit) : digits;
+  const fraction = minorUnit > 0 ? `.${digits.slice(-minorUnit)}` : "";
+  return `${amountMinor < 0 ? "-" : ""}${whole}${fraction}`;
+}
 
 export interface PdcRecord {
   id: string;
@@ -284,7 +306,6 @@ export function createPdc(businessId: string, userId: string, rawInput: PdcInput
   const now = new Date().toISOString();
 
   sqlite.transaction(() => {
-    const accounts = resolvePdcAccounts(sqlite);
     const pdcNumber = allocateNumber(sqlite, "pdc");
 
     if (input.direction === "receivable" && input.customerId) {
@@ -328,53 +349,9 @@ export function createPdc(businessId: string, userId: string, rawInput: PdcInput
         now,
       );
 
-    if (input.direction === "receivable") {
-      postTransaction(sqlite, {
-        sourceType: "pdc_receive",
-        sourceId: pdcId,
-        date: input.issueDate,
-        description: `PDC Receivable ${pdcNumber} (Cheque #${input.chequeNumber})`,
-        lines: [
-          {
-            accountId: accounts.pdcReceivableId,
-            description: `Post-dated cheque held (${input.chequeNumber})`,
-            debitMinor: amountMinor,
-            customerId: input.customerId || null,
-            reference: input.chequeNumber,
-          },
-          {
-            accountId: accounts.arAccountId,
-            description: `Customer AR cleared to PDC (${pdcNumber})`,
-            creditMinor: amountMinor,
-            customerId: input.customerId || null,
-            reference: input.chequeNumber,
-          },
-        ],
-      });
-    } else {
-      postTransaction(sqlite, {
-        sourceType: "pdc_receive",
-        sourceId: pdcId,
-        date: input.issueDate,
-        description: `PDC Payable ${pdcNumber} (Cheque #${input.chequeNumber})`,
-        lines: [
-          {
-            accountId: accounts.apAccountId,
-            description: `Supplier AP settled to PDC (${pdcNumber})`,
-            debitMinor: amountMinor,
-            supplierId: input.supplierId || null,
-            reference: input.chequeNumber,
-          },
-          {
-            accountId: accounts.pdcPayableId,
-            description: `Post-dated cheque issued (${input.chequeNumber})`,
-            creditMinor: amountMinor,
-            supplierId: input.supplierId || null,
-            reference: input.chequeNumber,
-          },
-        ],
-      });
-    }
+    // A post-dated cheque is not a payment until it clears: keep it off the
+    // ledger (memo only) so the invoice stays open and AR/AP stay consistent
+    // with the subledger. Clearing records a real receipt/payment.
 
     recordActivity(businessId, {
       entityType: "post_dated_cheque",
@@ -408,7 +385,7 @@ export function depositPdc(
   }
 
   const now = new Date().toISOString();
-  const effectiveDepositDate = depositDate || now.slice(0, 10);
+  const effectiveDepositDate = depositDate || businessToday();
 
   sqlite
     .prepare(`
@@ -457,6 +434,9 @@ export function clearPdc(
         amount_minor: number;
         status: PdcStatus;
         ledger_account_id: string;
+        currency_code: string;
+        sales_invoice_id: string | null;
+        purchase_invoice_id: string | null;
       }
     | undefined;
 
@@ -466,9 +446,12 @@ export function clearPdc(
   }
 
   const now = new Date().toISOString();
-  const clearDate = clearingDate || pdc.maturity_date || now.slice(0, 10);
+  const clearDate = clearingDate || pdc.maturity_date || businessToday();
 
   sqlite.transaction(() => {
+    if (!hasLegacyPdcJournal(sqlite, pdcId)) {
+      settleClearedPdc(sqlite, userId, pdc, clearDate);
+    } else {
     const accounts = resolvePdcAccounts(sqlite);
 
     if (pdc.direction === "receivable") {
@@ -518,6 +501,7 @@ export function clearPdc(
         ],
       });
     }
+    }
 
     sqlite
       .prepare(`
@@ -566,17 +550,19 @@ export function bouncePdc(
   }
 
   const now = new Date().toISOString();
-  const effectiveDate = bounceDate || now.slice(0, 10);
+  const effectiveDate = bounceDate || businessToday();
 
   sqlite.transaction(() => {
-    reverseTransaction(sqlite, {
-      originalSourceType: "pdc_receive",
-      originalSourceId: pdcId,
-      reversalSourceType: "pdc_bounce",
-      reversalSourceId: pdcId,
-      date: effectiveDate,
-      description: `Bounced PDC ${pdc.pdc_number} (${pdc.cheque_number}): ${cleanReason}`,
-    });
+    if (hasLegacyPdcJournal(sqlite, pdcId)) {
+      reverseTransaction(sqlite, {
+        originalSourceType: "pdc_receive",
+        originalSourceId: pdcId,
+        reversalSourceType: "pdc_bounce",
+        reversalSourceId: pdcId,
+        date: effectiveDate,
+        description: `Bounced PDC ${pdc.pdc_number} (${pdc.cheque_number}): ${cleanReason}`,
+      });
+    }
 
     sqlite
       .prepare(`
@@ -612,17 +598,19 @@ export function cancelPdc(businessId: string, userId: string, pdcId: string): vo
   }
 
   const now = new Date().toISOString();
-  const cancelDate = now.slice(0, 10) >= pdc.issue_date ? now.slice(0, 10) : pdc.issue_date;
+  const cancelDate = businessToday() >= pdc.issue_date ? businessToday() : pdc.issue_date;
 
   sqlite.transaction(() => {
-    reverseTransaction(sqlite, {
-      originalSourceType: "pdc_receive",
-      originalSourceId: pdcId,
-      reversalSourceType: "pdc_cancel",
-      reversalSourceId: pdcId,
-      date: cancelDate,
-      description: `Cancelled PDC ${pdc.pdc_number}`,
-    });
+    if (hasLegacyPdcJournal(sqlite, pdcId)) {
+      reverseTransaction(sqlite, {
+        originalSourceType: "pdc_receive",
+        originalSourceId: pdcId,
+        reversalSourceType: "pdc_cancel",
+        reversalSourceId: pdcId,
+        date: cancelDate,
+        description: `Cancelled PDC ${pdc.pdc_number}`,
+      });
+    }
 
     sqlite
       .prepare(`
@@ -642,4 +630,54 @@ export function cancelPdc(businessId: string, userId: string, pdcId: string): vo
       sqlite,
     });
   })();
+}
+
+
+function settleClearedPdc(
+  sqlite: ReturnType<typeof getBusinessDb>["sqlite"],
+  userId: string,
+  pdc: {
+    id: string;
+    pdc_number: string;
+    direction: PdcDirection;
+    cheque_number: string;
+    customer_id: string | null;
+    supplier_id: string | null;
+    amount_minor: number;
+    ledger_account_id: string;
+    currency_code: string;
+    sales_invoice_id: string | null;
+    purchase_invoice_id: string | null;
+  },
+  clearDate: string,
+) {
+  const isReceivable = pdc.direction === "receivable";
+  const config = isReceivable ? receiptConfig : supplierPaymentConfig;
+  const partyId = isReceivable ? pdc.customer_id : pdc.supplier_id;
+  if (!partyId) throw new Error(`Select the ${isReceivable ? "customer" : "supplier"} before clearing this cheque.`);
+  const minorUnit = (sqlite.prepare("SELECT minor_unit FROM currencies WHERE code = ?").get(pdc.currency_code) as { minor_unit: number } | undefined)?.minor_unit ?? 2;
+
+  const allocations: { invoiceId: string; amount: string }[] = [];
+  const linkedDocumentId = isReceivable ? pdc.sales_invoice_id : pdc.purchase_invoice_id;
+  if (linkedDocumentId) {
+    const document = sqlite.prepare(`
+      SELECT currency_code, document_status FROM ${config.documentTable} WHERE id = ? AND ${config.partyIdColumn} = ?
+    `).get(linkedDocumentId, partyId) as { currency_code: string; document_status: string } | undefined;
+    if (document?.document_status === "posted" && document.currency_code === pdc.currency_code) {
+      const open = getOpenState(sqlite, config, linkedDocumentId);
+      const allocatable = Math.min(open?.foreign_open_minor ?? 0, pdc.amount_minor);
+      if (allocatable > 0) allocations.push({ invoiceId: linkedDocumentId, amount: formatMinorAsDecimal(allocatable, minorUnit) });
+    }
+  }
+
+  createSettlement(sqlite, config, {
+    ...(isReceivable ? { customerId: partyId } : { supplierId: partyId }),
+    date: clearDate,
+    bankAccountId: pdc.ledger_account_id,
+    amount: formatMinorAsDecimal(pdc.amount_minor, minorUnit),
+    currencyCode: pdc.currency_code,
+    allocations,
+    reference: `${pdc.pdc_number} / Cheque ${pdc.cheque_number}`,
+    description: `Cleared post-dated cheque ${pdc.pdc_number}`,
+  }, userId);
 }
