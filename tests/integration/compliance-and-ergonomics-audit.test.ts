@@ -13,6 +13,8 @@ Object.assign(process.env, {
   NODE_ENV: "test",
 });
 
+const { getBusinessTodayIso } = await import("../../src/core/format");
+const { addDaysIso } = await import("../../src/modules/tax/uae-vat-config");
 const { seedDemoData } = await import("../../src/core/db/seed");
 const { getBusinessDb } = await import("../../src/core/db/business");
 const { createCustomer, updateCustomer } = await import("../../src/modules/customers/customer-service");
@@ -410,11 +412,11 @@ test("Compliance, Legal Entity Snapshotting & Document Lifecycle Reversals", asy
     const copy = getInvoice(businessId, adminId, copyId);
     assert.ok(copy);
 
-    const today = new Date().toISOString().split("T")[0];
+    const today = getBusinessTodayIso();
     assert.equal(copy.invoice.invoiceDate, today, "Duplicated invoice date should be reset to today");
     
     // Due date should be today + 45 days (from customer payment terms)
-    const expectedDue = new Date(Date.now() + 45 * 86400000).toISOString().split("T")[0];
+    const expectedDue = addDaysIso(today, 45);
     assert.equal(copy.invoice.dueDate, expectedDue, "Duplicated due date should use customer terms");
 
     // Discounts, notes, terms, and amountsIncludeTax preserved!
@@ -448,7 +450,7 @@ test("Compliance, Legal Entity Snapshotting & Document Lifecycle Reversals", asy
       isActive: true,
     });
 
-    const today = new Date().toISOString().split("T")[0];
+    const today = getBusinessTodayIso();
     const invoiceId = createInvoice(businessId, adminId, {
       customerId: codCustomer,
       invoiceDate: today,
@@ -530,7 +532,7 @@ test("Compliance, Legal Entity Snapshotting & Document Lifecycle Reversals", asy
     const copyCnId = duplicateCreditNote(businessId, adminId, origCnId);
     const copyCn = getCreditNote(businessId, adminId, copyCnId);
     assert.ok(copyCn);
-    const today = new Date().toISOString().split("T")[0];
+    const today = getBusinessTodayIso();
     assert.equal(copyCn.note.date, today, "Duplicated credit note date must be reset to today");
     assert.equal(copyCn.note.taxDate, today, "Duplicated credit note tax date must be reset to today");
     assert.equal(Boolean(copyCn.note.amountsIncludeTax), true, "Tax-inclusive flag must be preserved");

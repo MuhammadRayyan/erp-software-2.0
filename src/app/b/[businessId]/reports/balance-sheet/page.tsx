@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { formatMoney, minorToDecimalString } from "@/core/format";
+import { formatMoney, minorToDecimalString, getBusinessTodayIso } from "@/core/format";
 import { requireModule } from "@/core/permissions/require-module";
 import {
   computeVariance,
@@ -216,7 +216,7 @@ export default async function BalanceSheetReportPage({
             basePath={`/b/${businessId}/reports/balance-sheet`}
           />
           <ExportCsvButton
-            filename={`balance-sheet-${new Date().toISOString().slice(0, 10)}.csv`}
+            filename={`balance-sheet-${getBusinessTodayIso()}.csv`}
             columns={csvColumns}
             data={csvData}
           />

@@ -21,7 +21,7 @@ import { DataTable, ListTableCard } from "@/components/ui/data-table";
 import { ClientListPagination } from "@/components/list-pagination";
 import { ExportCsvButton } from "@/components/export-csv-button";
 import { useUrlListState } from "@/hooks/use-url-list-state";
-import { formatDate, formatMoney, minorToDecimalString } from "@/core/format";
+import { formatDate, formatMoney, minorToDecimalString, getBusinessTodayIso } from "@/core/format";
 import type { SalesQuoteStatus } from "./quote-service";
 import { DensityToggle } from "@/components/density-toggle";
 import { useTableDensity } from "@/components/use-table-density";
@@ -349,7 +349,7 @@ export function SalesQuoteTable({
         <div className="ml-auto flex items-center gap-1.5 shrink-0">
           <ExportCsvButton
             size="sm"
-            filename={`sales-quotes-${new Date().toISOString().slice(0, 10)}.csv`}
+            filename={`sales-quotes-${getBusinessTodayIso()}.csv`}
             data={rows}
             columns={[
               { header: "Quote Number", accessorKey: "quote_number" },
@@ -423,7 +423,7 @@ export function SalesQuoteTable({
         onExportSelected={() => {
           const selected = table.getSelectedRowModel().rows.map((r: any) => r.original);
           exportCsv(
-            `sales-quotes-selected-${new Date().toISOString().slice(0, 10)}.csv`,
+            `sales-quotes-selected-${getBusinessTodayIso()}.csv`,
             [
               { header: "Quote Number", accessorKey: "quote_number" },
               { header: "Customer", accessorKey: "customer_name" },

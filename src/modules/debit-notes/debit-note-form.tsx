@@ -29,6 +29,8 @@ import {
   QuickCreateProjectDialog,
   QuickCreateSupplierDialog,
 } from "@/components/documents/quick-create-modals";
+import { FieldError } from "@/components/ui/field-error";
+import { fieldErrorProps, fieldErrorId, applyServerFieldErrors, focusFirstInvalidField } from "@/lib/form-errors";
 
 type Option = { id: string; name: string };
 type AccountOption = { id: string; name: string };
@@ -194,9 +196,7 @@ export function DebitNoteForm({
       values,
       intent,
     );
-    if (result.fieldErrors)
-      for (const [field, messages] of Object.entries(result.fieldErrors))
-        setError(field as keyof DebitNoteInput, { message: messages[0] });
+    applyServerFieldErrors(setError, result.fieldErrors);
     if (result.error) setServerError(result.error);
   }
 
@@ -218,10 +218,10 @@ export function DebitNoteForm({
               control={control}
               name="supplierId"
               render={({ field }) => (
-                <Combobox
+                <Combobox ref={field.ref}
                   id="supplierId"
                   ariaLabel="Supplier"
-                  ariaInvalid={!!errors.supplierId}
+                  ariaInvalid={!!errors.supplierId} ariaDescribedBy={errors.supplierId ? fieldErrorId("supplierId") : undefined}
                   options={supplierOptions}
                   value={field.value ?? ""}
                   onValueChange={(next) => {
@@ -259,10 +259,10 @@ export function DebitNoteForm({
               control={control}
               name="purchaseInvoiceId"
               render={({ field }) => (
-                <Combobox
+                <Combobox ref={field.ref}
                   id="purchaseInvoiceId"
                   ariaLabel="Apply to purchase bill"
-                  ariaInvalid={!!errors.purchaseInvoiceId}
+                  ariaInvalid={!!errors.purchaseInvoiceId} ariaDescribedBy={errors.purchaseInvoiceId ? fieldErrorId("purchaseInvoiceId") : undefined}
                   options={invoiceOptions}
                   value={field.value ?? ""}
                   onValueChange={(next) => {
@@ -307,9 +307,9 @@ export function DebitNoteForm({
               id="date"
               type="date"
               {...register("date")}
-              aria-invalid={!!errors.date}
+              {...fieldErrorProps("date", errors.date)}
             />
-            {errors.date && <p className="field-error">{errors.date.message}</p>}
+            <FieldError name="date" message={errors.date?.message} />
           </div>
 
           <div className="space-y-1.5">
@@ -318,9 +318,9 @@ export function DebitNoteForm({
               id="taxDate"
               type="date"
               {...register("taxDate")}
-              aria-invalid={!!errors.taxDate}
+              {...fieldErrorProps("taxDate", errors.taxDate)}
             />
-            {errors.taxDate && <p className="field-error">{errors.taxDate.message}</p>}
+            <FieldError name="taxDate" message={errors.taxDate?.message} />
           </div>
 
           <div className="space-y-1.5">
@@ -331,7 +331,7 @@ export function DebitNoteForm({
               control={control}
               name="projectId"
               render={({ field }) => (
-                <Combobox
+                <Combobox ref={field.ref}
                   id="projectId"
                   ariaLabel="Project"
                   options={projectOptions}
@@ -460,7 +460,7 @@ export function DebitNoteForm({
               permission={["save", "post"]}
               type="button"
               disabled={isSubmitting}
-              onClick={handleSubmit((values) => save(values, "post"))}
+              onClick={handleSubmit((values) => save(values, "post"), focusFirstInvalidField)}
             >
               {isSubmitting && <LoaderCircle className="size-4 animate-spin" />}{" "}
               Update Posted Debit Note
@@ -472,7 +472,7 @@ export function DebitNoteForm({
                 type="button"
                 variant="secondary"
                 disabled={isSubmitting}
-                onClick={handleSubmit((values) => save(values, "draft"))}
+                onClick={handleSubmit((values) => save(values, "draft"), focusFirstInvalidField)}
               >
                 Save Draft
               </Button>
@@ -480,7 +480,7 @@ export function DebitNoteForm({
                 permission={["save", "post"]}
                 type="button"
                 disabled={isSubmitting}
-                onClick={handleSubmit((values) => save(values, "post"))}
+                onClick={handleSubmit((values) => save(values, "post"), focusFirstInvalidField)}
               >
                 {isSubmitting && <LoaderCircle className="size-4 animate-spin" />}{" "}
                 Post Debit Note

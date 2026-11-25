@@ -13,6 +13,7 @@ import { listInventoryItemOptions } from "@/modules/inventory/inventory-item-ser
 import { Breadcrumbs } from "@/components/breadcrumbs";
 import { getFormDefaults } from "@/modules/form-defaults/form-defaults-service";
 import { listCustomFieldDefinitions } from "@/modules/custom-fields/custom-field-service";
+import { getBusinessTodayIso } from "@/core/format";
 
 export default async function NewPurchaseOrderPage({
   params,
@@ -42,7 +43,7 @@ export default async function NewPurchaseOrderPage({
     ({ id, name, fieldType, selectOptions, isRequired }) => ({ id, name, fieldType, selectOptions, isRequired }),
   );
 
-  const today = new Date().toISOString().slice(0, 10);
+  const today = getBusinessTodayIso();
   const defaultTax =
     (formDefaults.defaultTaxCodeId ? taxes.find((tax) => tax.id === formDefaults.defaultTaxCodeId)?.id : undefined) ??
     taxes.find((tax) => tax.rateBasisPoints === 500 && tax.vatCategory === "standard")?.id ??

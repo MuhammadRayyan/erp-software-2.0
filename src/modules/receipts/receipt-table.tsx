@@ -9,6 +9,7 @@ import { CashDocumentTable } from "@/modules/shared/cash-document-table";
 import type { CashDocumentListSummary } from "@/modules/shared/list-query-helpers";
 import type { ReceiptListRow } from "./receipt-service";
 import { ReceiptRowActions } from "./receipt-row-actions";
+import { batchVoidReceiptsAction, batchDeleteDraftReceiptsAction } from "./actions";
 
 const INITIAL_COLUMNS = {
   bank_account_name: true,
@@ -163,6 +164,14 @@ export function ReceiptTable({
         ],
       }}
       footer={footer}
+      batch={{
+        noun: { one: "receipt", many: "receipts" },
+        statusOf: (r) => r.document_status,
+        labelOf: (r) => r.receipt_number,
+        voidAction: (ids) => batchVoidReceiptsAction(businessId, ids),
+        voidDescription: "Each posted receipt is reversed in the ledger and its invoice allocations are released. Receipts in a completed bank reconciliation are skipped.",
+        deleteDrafts: (ids) => batchDeleteDraftReceiptsAction(businessId, ids),
+      }}
     />
   );
 }

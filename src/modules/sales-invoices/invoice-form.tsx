@@ -11,7 +11,7 @@ import { Combobox, type ComboboxOption } from "@/components/ui/combobox";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
-import { formatDate, formatMoney } from "@/core/format";
+import { formatDate, formatMoney, getBusinessTodayIso } from "@/core/format";
 import { minorToCurrencyInput } from "@/modules/currency/conversion";
 import { DocumentCurrencyFields, type DocumentCurrencyOption, type DocumentRateOption } from "@/modules/currency/document-currency-fields";
 import { CustomFieldInputs, type CustomFieldInputDefinition } from "@/modules/custom-fields/custom-field-inputs";
@@ -42,6 +42,8 @@ import {
 import { useUnsavedChanges } from "@/hooks/use-unsaved-changes";
 import { useFormDraftRecovery } from "@/hooks/use-form-draft-recovery";
 import { useActionPermission, useApprovalPolicy } from "@/components/permissions-provider";
+import { FieldError } from "@/components/ui/field-error";
+import { fieldErrorProps, fieldErrorId, applyServerFieldErrors, focusFirstInvalidField } from "@/lib/form-errors";
 
 type CustomerOption = { id: string; name: string; defaultCurrencyCode: string | null; paymentTermsDays: number; creditLimitMinor: number | null };
 type AccountOption = { id: string; name: string };
@@ -130,7 +132,10 @@ export function InvoiceForm({
   );
   const form = useForm<InvoiceInput>({
     resolver: zodResolver(invoiceInputSchema),
-    mode: "onTouched",
+    // Validate on submit, then live as the user corrects fields. Blur validation
+    // inserted error text that shifted the Save button mid-click.
+    mode: "onSubmit",
+    reValidateMode: "onChange",
     defaultValues: initial,
   });
   const { register, control, handleSubmit, reset, watch, setError, setValue, getValues, formState: { errors, isSubmitting, isDirty, isSubmitSuccessful } } = form;
@@ -227,7 +232,7 @@ export function InvoiceForm({
         setValue("exchangeRateSource", code === currency ? "Base" : "");
       }
       if (customer?.paymentTermsDays) {
-        const baseDate = invoiceDate || new Date().toISOString().slice(0, 10);
+        const baseDate = invoiceDate || getBusinessTodayIso();
         const d = new Date(baseDate);
         if (!Number.isNaN(d.valueOf())) {
           d.setDate(d.getDate() + customer.paymentTermsDays);
@@ -271,9 +276,7 @@ export function InvoiceForm({
         draftRecovery.preserveDraft(values);
       }
       if (result?.fieldErrors) {
-        for (const [field, messages] of Object.entries(result.fieldErrors)) {
-          setError(field as any, { message: (messages as string[])[0] });
-        }
+        applyServerFieldErrors(setError, result.fieldErrors);
       }
       if (result?.error) {
         setError("root.serverError", { message: result.error });
@@ -289,9 +292,7 @@ export function InvoiceForm({
       draftRecovery.preserveDraft(values);
     }
     if (result.fieldErrors) {
-      for (const [field, messages] of Object.entries(result.fieldErrors)) {
-        setError(field as any, { message: messages[0] });
-      }
+      applyServerFieldErrors(setError, result.fieldErrors);
     }
     if (result.error) {
       setError("root.serverError", { message: result.error });
@@ -327,10 +328,10 @@ export function InvoiceForm({
               control={control}
               name="customerId"
               render={({ field }) => (
-                <Combobox
+                <Combobox ref={field.ref}
                   id="customerId"
                   ariaLabel="Customer"
-                  ariaInvalid={!!errors.customerId}
+                  ariaInvalid={!!errors.customerId} ariaDescribedBy={errors.customerId ? fieldErrorId("customerId") : undefined}
                   options={customerOptions}
                   value={field.value ?? ""}
                   onValueChange={(next) => {
@@ -353,7 +354,7 @@ export function InvoiceForm({
                 />
               )}
             />
-            {errors.customerId && <p className="field-error">{errors.customerId.message}</p>}
+            <FieldError name="customerId" message={errors.customerId?.message} />
           </div>
 
           <div className="space-y-1.5">
@@ -362,7 +363,7 @@ export function InvoiceForm({
               control={control}
               name="salesOrderId"
               render={({ field }) => (
-                <Combobox
+                <Combobox ref={field.ref}
                   id="salesOrderId"
                   ariaLabel="Sales order"
                   options={orderOptions}
@@ -390,7 +391,7 @@ export function InvoiceForm({
               control={control}
               name="quoteId"
               render={({ field }) => (
-                <Combobox
+                <Combobox ref={field.ref}
                   id="quoteId"
                   ariaLabel="Sales quote"
                   options={quoteOptions}
@@ -465,21 +466,21 @@ export function InvoiceForm({
                   }
                 },
               })}
-              aria-invalid={!!errors.invoiceDate}
+              {...fieldErrorProps("invoiceDate", errors.invoiceDate)}
             />
-            {errors.invoiceDate && <p className="field-error">{errors.invoiceDate.message}</p>}
+            <FieldError name="invoiceDate" message={errors.invoiceDate?.message} />
           </div>
 
           <div className="space-y-1.5">
             <Label htmlFor="taxDate">VAT tax date</Label>
-            <Input id="taxDate" type="date" {...register("taxDate")} aria-invalid={!!errors.taxDate} />
-            {errors.taxDate && <p className="field-error">{errors.taxDate.message}</p>}
+            <Input id="taxDate" type="date" {...register("taxDate")} {...fieldErrorProps("taxDate", errors.taxDate)} />
+            <FieldError name="taxDate" message={errors.taxDate?.message} />
           </div>
 
           <div className="space-y-1.5">
             <Label htmlFor="dueDate">Due date</Label>
-            <Input id="dueDate" type="date" {...register("dueDate")} aria-invalid={!!errors.dueDate} />
-            {errors.dueDate && <p className="field-error">{errors.dueDate.message}</p>}
+            <Input id="dueDate" type="date" {...register("dueDate")} {...fieldErrorProps("dueDate", errors.dueDate)} />
+            <FieldError name="dueDate" message={errors.dueDate?.message} />
           </div>
 
           <DocumentCurrencyFields
@@ -512,10 +513,10 @@ export function InvoiceForm({
               control={control}
               name="projectId"
               render={({ field }) => (
-                <Combobox
+                <Combobox ref={field.ref}
                   id="projectId"
                   ariaLabel="Project"
-                  ariaInvalid={!!errors.projectId}
+                  ariaInvalid={!!errors.projectId} ariaDescribedBy={errors.projectId ? fieldErrorId("projectId") : undefined}
                   options={projectOptions}
                   value={field.value ?? ""}
                   onValueChange={field.onChange}
@@ -537,7 +538,7 @@ export function InvoiceForm({
                 />
               )}
             />
-            {errors.projectId && <p className="field-error">{errors.projectId.message}</p>}
+            <FieldError name="projectId" message={errors.projectId?.message} />
           </div>
 
           <div className="space-y-1.5">
@@ -667,16 +668,16 @@ export function InvoiceForm({
           }}
         >
           {documentStatus === "posted" ? (
-            <Button permission={["save", "post"]} type="button" disabled={isSubmitting} onClick={handleSubmit((values) => save(values, "post"))}>
+            <Button permission={["save", "post"]} type="button" disabled={isSubmitting} onClick={handleSubmit((values) => save(values, "post"), focusFirstInvalidField)}>
               {isSubmitting && <LoaderCircle className="size-4 animate-spin" />} Save Changes
             </Button>
           ) : (
             <div className="flex flex-wrap items-center gap-2">
-              <Button permission={"save"} variant="secondary" type="button" disabled={isSubmitting} onClick={handleSubmit((values) => save(values, "draft"))}>
+              <Button permission={"save"} variant="secondary" type="button" disabled={isSubmitting} onClick={handleSubmit((values) => save(values, "draft"), focusFirstInvalidField)}>
                 {isSubmitting && <LoaderCircle className="size-4 animate-spin" />} {invoiceId ? "Save Draft" : "Save Draft Invoice"}
               </Button>
               {mustSubmitForApproval ? (
-                <Button permission={"save"} type="button" disabled={isSubmitting} onClick={handleSubmit((values) => save(values, "submit_approval"))}>
+                <Button permission={"save"} type="button" disabled={isSubmitting} onClick={handleSubmit((values) => save(values, "submit_approval"), focusFirstInvalidField)}>
                   {isSubmitting && <LoaderCircle className="size-4 animate-spin" />} Submit for Approval
                 </Button>
               ) : !invoiceId && !onDefaultSave ? (
@@ -684,23 +685,23 @@ export function InvoiceForm({
                   label="Create & Post"
                   permission={["save", "post"]}
                   loading={isSubmitting}
-                  onPrimaryClick={handleSubmit((values) => save(values, "post", "view"))}
+                  onPrimaryClick={handleSubmit((values) => save(values, "post", "view"), focusFirstInvalidField)}
                   options={[
                     {
                       label: "Create, Post & New",
                       description: "Post this invoice and start a new one",
-                      onSelect: handleSubmit((values) => save(values, "post", "new")),
+                      onSelect: handleSubmit((values) => save(values, "post", "new"), focusFirstInvalidField),
                     },
                     {
                       label: "Create, Post & Email",
                       description: "Post and open the email composer",
                       permission: "export",
-                      onSelect: handleSubmit((values) => save(values, "post", "email")),
+                      onSelect: handleSubmit((values) => save(values, "post", "email"), focusFirstInvalidField),
                     },
                   ]}
                 />
               ) : (
-                <Button permission={["save", "post"]} type="button" disabled={isSubmitting} onClick={handleSubmit((values) => save(values, "post"))}>
+                <Button permission={["save", "post"]} type="button" disabled={isSubmitting} onClick={handleSubmit((values) => save(values, "post"), focusFirstInvalidField)}>
                   {isSubmitting && <LoaderCircle className="size-4 animate-spin" />} {invoiceId ? "Save & Post" : "Create & Post"}
                 </Button>
               )}

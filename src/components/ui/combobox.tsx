@@ -13,6 +13,7 @@ import {
 } from "@/components/ui/command";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { cn } from "@/lib/cn";
+import { controlDisabled, controlFocusVisible, controlInvalidVisible, controlSurface } from "./control-styles";
 
 export interface ComboboxOption {
   value: string;
@@ -48,6 +49,10 @@ export interface ComboboxProps {
   size?: "sm" | "default";
   ariaLabel?: string;
   ariaInvalid?: boolean;
+  /** Id of the element describing this field (e.g. its error message). */
+  ariaDescribedBy?: string;
+  /** Receives the trigger button (lets react-hook-form focus the field on error). */
+  ref?: React.Ref<HTMLButtonElement>;
   className?: string;
   contentClassName?: string;
   align?: "start" | "center" | "end";
@@ -158,6 +163,8 @@ export function Combobox({
   size = "default",
   ariaLabel,
   ariaInvalid,
+  ariaDescribedBy,
+  ref: externalRef,
   className,
   contentClassName,
   align = "start",
@@ -291,7 +298,11 @@ export function Combobox({
       >
         <PopoverTrigger asChild>
           <button
-            ref={triggerRef}
+            ref={(node) => {
+              triggerRef.current = node;
+              if (typeof externalRef === "function") externalRef(node);
+              else if (externalRef) (externalRef as React.RefObject<HTMLButtonElement | null>).current = node;
+            }}
             id={id}
             type="button"
             role="combobox"
@@ -300,6 +311,7 @@ export function Combobox({
             aria-haspopup="listbox"
             aria-label={ariaLabel}
             aria-invalid={ariaInvalid}
+            aria-describedby={ariaDescribedBy}
             disabled={disabled}
             data-value={value}
             data-grid-row={dataGridRow}
@@ -317,7 +329,11 @@ export function Combobox({
               onKeyDown?.(event);
             }}
             className={cn(
-              "flex w-full min-w-0 items-center justify-between gap-1.5 rounded-[6px] border border-border-strong bg-surface-raised text-left text-foreground shadow-[0_1px_1px_rgb(15_23_42/0.03)] outline-none transition-colors hover:border-primary/50 focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-ring/25 aria-invalid:border-danger aria-invalid:bg-danger/[0.03] aria-invalid:focus-visible:border-danger aria-invalid:focus-visible:ring-danger/25 disabled:cursor-not-allowed disabled:bg-surface-muted disabled:opacity-65",
+              "flex w-full min-w-0 items-center justify-between gap-1.5 text-left hover:border-primary/50",
+              controlSurface,
+              controlFocusVisible,
+              controlInvalidVisible,
+              controlDisabled,
               size === "sm" ? "h-8 px-2 text-xs" : "h-9 px-2.5 text-sm",
               allowClear && value && !disabled ? "pr-11" : "",
               className,

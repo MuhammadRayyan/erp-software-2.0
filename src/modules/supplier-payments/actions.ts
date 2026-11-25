@@ -6,13 +6,20 @@ import { requirePermission } from "@/core/permissions/require-module";
 import { supplierPaymentInputSchema, applySupplierPaymentCreditInputSchema } from "./supplier-payment-input";
 import { createSupplierPayment, voidSupplierPayment, applySupplierPaymentCredit, submitOrPostDraftSupplierPayment, deleteDraftSupplierPayment } from "./supplier-payment-service";
 import { revalidatePath } from "next/cache";
+import { runBatch, type BatchActionResult } from "@/modules/shared/batch";
+import { getBusinessDb } from "@/core/db/business";
 
-export type SupplierPaymentActionResult = { error?: string; fieldErrors?: Record<string, string[]> };
+export type SupplierPaymentActionResult = {
+  error?: string;
+  fieldErrors?: Record<string, string[]>;
+  /** Set when afterSave is "stay" (e.g. the Record Payment side sheet). */
+  saved?: { id: string; number: string; documentStatus: string };
+};
 
 export async function createSupplierPaymentAction(
   businessId: string,
   input: unknown,
-  afterSave: "view" | "new" = "view",
+  afterSave: "view" | "new" | "stay" = "view",
 ): Promise<SupplierPaymentActionResult> {
   const { user } = await requirePermission(businessId, "purchases", "create");
   const parsed = supplierPaymentInputSchema.safeParse(input);
@@ -30,6 +37,10 @@ export async function createSupplierPaymentAction(
   revalidatePath(`/b/${businessId}/approvals`);
   revalidatePath(`/b/${businessId}/overview`);
   const notice = result.documentStatus === "pending_approval" ? "Payment submitted for approval" : "Supplier payment posted";
+  if (afterSave === "stay") {
+    revalidatePath(`/b/${businessId}/purchases/invoices`, "layout");
+    return { saved: { id: result.id, number: result.paymentNumber, documentStatus: result.documentStatus } };
+  }
   if (afterSave === "new") {
     redirect(`/b/${businessId}/purchases/payments/new?notice=${encodeURIComponent(notice)}&fresh=${Date.now()}`);
   }
@@ -110,4 +121,26 @@ export async function deleteDraftSupplierPaymentAction(businessId: string, payme
       error: error instanceof Error ? error.message : "The draft supplier payment could not be deleted.",
     };
   }
+}
+
+function documentNumber(businessId: string, userId: string) {
+  const { sqlite } = getBusinessDb(businessId, userId);
+  const query = sqlite.prepare("SELECT payment_number AS n FROM supplier_payments WHERE id = ?");
+  return (id: string) => (query.get(id) as { n: string } | undefined)?.n;
+}
+
+export async function batchVoidSupplierPaymentsAction(businessId: string, ids: string[]): Promise<BatchActionResult> {
+  const { user } = await requirePermission(businessId, "purchases", "delete");
+  const result = runBatch(ids, (id) => voidSupplierPayment(businessId, user.id, id), documentNumber(businessId, user.id));
+  revalidatePath(`/b/${businessId}/purchases/payments`);
+  revalidatePath(`/b/${businessId}/overview`);
+  return result;
+}
+
+export async function batchDeleteDraftSupplierPaymentsAction(businessId: string, ids: string[]): Promise<BatchActionResult> {
+  const { user } = await requirePermission(businessId, "purchases", "delete");
+  const result = runBatch(ids, (id) => deleteDraftSupplierPayment(businessId, user.id, id), documentNumber(businessId, user.id));
+  revalidatePath(`/b/${businessId}/purchases/payments`);
+  revalidatePath(`/b/${businessId}/approvals`);
+  return result;
 }

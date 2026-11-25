@@ -8,6 +8,7 @@ import { ReceiptForm } from "@/modules/receipts/receipt-form";
 import { getCurrencySettings } from "@/modules/currency/exchange-rate";
 import { minorToCurrencyInput } from "@/modules/currency/conversion";
 import { NoticeToast } from "@/components/notice-toast";
+import { getBusinessTodayIso } from "@/core/format";
 
 export default async function NewReceiptPage({
   params,
@@ -39,7 +40,7 @@ export default async function NewReceiptPage({
   const currencyMinorUnits = new Map(currencySettings.currencies.map((currency) => [currency.code, currency.minor_unit]));
   const customerId = selected?.customerId ?? query.customerId ?? "";
   const invoiceId = selected?.id ?? "";
-  const today = new Date().toISOString().slice(0, 10);
+  const today = getBusinessTodayIso();
 
   return (
     <div className="page-container">

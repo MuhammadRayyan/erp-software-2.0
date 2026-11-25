@@ -6,13 +6,20 @@ import { requirePermission } from "@/core/permissions/require-module";
 import { receiptInputSchema, applyReceiptCreditInputSchema } from "./receipt-input";
 import { createReceipt, voidReceipt, applyReceiptCredit, submitOrPostDraftReceipt, deleteDraftReceipt } from "./receipt-service";
 import { revalidatePath } from "next/cache";
+import { runBatch, type BatchActionResult } from "@/modules/shared/batch";
+import { getBusinessDb } from "@/core/db/business";
 
-export type ReceiptActionResult = { error?: string; fieldErrors?: Record<string, string[]> };
+export type ReceiptActionResult = {
+  error?: string;
+  fieldErrors?: Record<string, string[]>;
+  /** Set when afterSave is "stay" (e.g. the Record Payment side sheet). */
+  saved?: { id: string; number: string; documentStatus: string };
+};
 
 export async function createReceiptAction(
   businessId: string,
   input: unknown,
-  afterSave: "view" | "new" = "view",
+  afterSave: "view" | "new" | "stay" = "view",
 ): Promise<ReceiptActionResult> {
   const { user } = await requirePermission(businessId, "sales", "create");
   const parsed = receiptInputSchema.safeParse(input);
@@ -33,6 +40,10 @@ export async function createReceiptAction(
   revalidatePath(`/b/${businessId}/approvals`);
   revalidatePath(`/b/${businessId}/overview`);
   const notice = result.documentStatus === "pending_approval" ? "Receipt submitted for approval" : "Receipt posted";
+  if (afterSave === "stay") {
+    revalidatePath(`/b/${businessId}/sales/invoices`, "layout");
+    return { saved: { id: result.id, number: result.paymentNumber, documentStatus: result.documentStatus } };
+  }
   if (afterSave === "new") {
     redirect(`/b/${businessId}/sales/receipts/new?notice=${encodeURIComponent(notice)}&fresh=${Date.now()}`);
   }
@@ -107,4 +118,26 @@ export async function deleteDraftReceiptAction(businessId: string, receiptId: st
   } catch (error) {
     return { error: error instanceof Error ? error.message : "The draft receipt could not be deleted." };
   }
+}
+
+function documentNumber(businessId: string, userId: string) {
+  const { sqlite } = getBusinessDb(businessId, userId);
+  const query = sqlite.prepare("SELECT receipt_number AS n FROM receipts WHERE id = ?");
+  return (id: string) => (query.get(id) as { n: string } | undefined)?.n;
+}
+
+export async function batchVoidReceiptsAction(businessId: string, ids: string[]): Promise<BatchActionResult> {
+  const { user } = await requirePermission(businessId, "sales", "delete");
+  const result = runBatch(ids, (id) => voidReceipt(businessId, user.id, id), documentNumber(businessId, user.id));
+  revalidatePath(`/b/${businessId}/sales/receipts`);
+  revalidatePath(`/b/${businessId}/overview`);
+  return result;
+}
+
+export async function batchDeleteDraftReceiptsAction(businessId: string, ids: string[]): Promise<BatchActionResult> {
+  const { user } = await requirePermission(businessId, "sales", "delete");
+  const result = runBatch(ids, (id) => deleteDraftReceipt(businessId, user.id, id), documentNumber(businessId, user.id));
+  revalidatePath(`/b/${businessId}/sales/receipts`);
+  revalidatePath(`/b/${businessId}/approvals`);
+  return result;
 }

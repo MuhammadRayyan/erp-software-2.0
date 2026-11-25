@@ -99,7 +99,7 @@ export async function convertSalesQuoteToOrderAction(businessId: string, quoteId
       customerId: quoteData.quote.customerId,
       projectId: quoteData.quote.projectId || "",
       amountsIncludeTax: quoteData.quote.amountsIncludeTax,
-      date: new Date().toISOString().split("T")[0],
+      date: getBusinessTodayIso(),
       expectedDate: "",
       reference: quoteData.quote.quoteNumber,
       salesQuoteId: quoteId,

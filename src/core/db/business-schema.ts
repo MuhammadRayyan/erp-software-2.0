@@ -1139,6 +1139,23 @@ export const bankStatementLines = sqliteTable(
   ],
 );
 
+/** Book entries matched to a statement line (one or many per line). */
+export const bankStatementMatchItems = sqliteTable(
+  "bank_statement_match_items",
+  {
+    id: text("id").primaryKey(),
+    statementLineId: text("statement_line_id").notNull().references(() => bankStatementLines.id, { onDelete: "cascade" }),
+    bankAccountId: text("bank_account_id").notNull().references(() => bankAccounts.id),
+    sourceType: text("source_type").notNull(),
+    sourceId: text("source_id").notNull(),
+    createdAt: text("created_at").notNull(),
+  },
+  (table) => [
+    uniqueIndex("bank_statement_match_item_unique_idx").on(table.statementLineId, table.sourceType, table.sourceId),
+    uniqueIndex("bank_statement_match_item_source_idx").on(table.bankAccountId, table.sourceType, table.sourceId),
+  ],
+);
+
 export const bankTransactions = sqliteTable(
   "bank_transactions",
   {
@@ -1250,7 +1267,8 @@ export const bankReconciliationItems = sqliteTable(
     createdAt: text("created_at").notNull(),
   },
   (table) => [
-    uniqueIndex("bank_reconciliation_statement_line_idx").on(table.statementLineId),
+    uniqueIndex("bank_reconciliation_line_journal_idx").on(table.statementLineId, table.journalEntryId),
+    index("bank_reconciliation_statement_line_idx2").on(table.statementLineId),
     index("bank_reconciliation_item_reconciliation_idx").on(table.reconciliationId),
     index("bank_reconciliation_item_journal_idx").on(table.journalEntryId),
   ],

@@ -9,6 +9,7 @@ import { CashDocumentTable } from "@/modules/shared/cash-document-table";
 import type { CashDocumentListSummary } from "@/modules/shared/list-query-helpers";
 import type { SupplierPaymentListRow } from "./supplier-payment-service";
 import { SupplierPaymentRowActions } from "./supplier-payment-row-actions";
+import { batchVoidSupplierPaymentsAction, batchDeleteDraftSupplierPaymentsAction } from "./actions";
 
 const INITIAL_COLUMNS = {
   bank_account_name: true,
@@ -163,6 +164,14 @@ export function SupplierPaymentTable({
         ],
       }}
       footer={footer}
+      batch={{
+        noun: { one: "payment", many: "payments" },
+        statusOf: (r) => r.document_status,
+        labelOf: (r) => r.payment_number,
+        voidAction: (ids) => batchVoidSupplierPaymentsAction(businessId, ids),
+        voidDescription: "Each posted payment is reversed in the ledger and its bill allocations are released. Payments in a completed bank reconciliation are skipped.",
+        deleteDrafts: (ids) => batchDeleteDraftSupplierPaymentsAction(businessId, ids),
+      }}
     />
   );
 }

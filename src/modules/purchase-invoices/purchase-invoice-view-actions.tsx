@@ -12,6 +12,7 @@ import type { PurchaseInvoiceStatus } from "./purchase-invoice-service";
 import { DocumentViewActions } from "@/components/document-view-actions";
 import { broadcastLiveRefresh } from "@/components/use-live-refresh";
 import { useActionPermission, useApprovalPolicy } from "@/components/permissions-provider";
+import { RecordPaymentSheet } from "@/components/documents/record-payment-sheet";
 
 export function PurchaseInvoiceViewActions({
   businessId, invoiceId, internalNumber, documentStatus, balanceMinor, totalMinor, journalEntryId, reversalJournalEntryId, inventoryEnabled, hasInventoryLines, hasGoodsReceipts = false
@@ -27,6 +28,7 @@ export function PurchaseInvoiceViewActions({
   const canViewAccounting = useActionPermission("view", "accounting");
   const mustSubmitForApproval = requiresApproval || !canPost;
   const [posting, setPosting] = useState(false);
+  const [paymentOpen, setPaymentOpen] = useState(false);
 
   const canEdit = documentStatus !== "void" && documentStatus !== "pending_approval" && !hasGoodsReceipts && (documentStatus === "draft" || totalMinor === undefined || balanceMinor === totalMinor);
   const canVoid = documentStatus === "posted" && (totalMinor === undefined || balanceMinor === totalMinor);
@@ -61,6 +63,7 @@ export function PurchaseInvoiceViewActions({
   };
 
   return (
+    <>
     <DocumentViewActions
       documentNumber={internalNumber}
       documentType="Bill"
@@ -105,8 +108,8 @@ export function PurchaseInvoiceViewActions({
               </Button>
             )}
             {documentStatus === "posted" && balanceMinor > 0 && (
-              <Button permission="create" asChild variant="secondary">
-                <Link href={`/b/${businessId}/purchases/payments/new?invoiceId=${invoiceId}`}><CircleDollarSign className="size-4" /> Record Payment</Link>
+              <Button permission="create" variant="secondary" onClick={() => setPaymentOpen(true)}>
+                <CircleDollarSign className="size-4" /> Record Payment
               </Button>
             )}
           </>
@@ -136,5 +139,9 @@ export function PurchaseInvoiceViewActions({
         ) : undefined
       }
     />
+    {documentStatus === "posted" && balanceMinor > 0 ? (
+      <RecordPaymentSheet businessId={businessId} kind="payment" documentId={invoiceId} open={paymentOpen} onOpenChange={setPaymentOpen} />
+    ) : null}
+    </>
   );
 }

@@ -20,7 +20,7 @@ import { ClientListPagination } from "@/components/list-pagination";
 import { ExportCsvButton } from "@/components/export-csv-button";
 import { useUrlListState } from "@/hooks/use-url-list-state";
 import { TableTotalsBar, renderMultiCurrencyString } from "@/components/table-totals-bar";
-import { formatDate, formatMoney, minorToDecimalString } from "@/core/format";
+import { formatDate, formatMoney, minorToDecimalString, getBusinessTodayIso } from "@/core/format";
 import type { CreditNoteStatus } from "./credit-note-service";
 import { DensityToggle } from "@/components/density-toggle";
 import { useTableDensity } from "@/components/use-table-density";
@@ -328,7 +328,7 @@ export function CreditNoteTable({
         <div className="ml-auto flex items-center gap-1.5 shrink-0">
           <ExportCsvButton
             size="sm"
-            filename={`credit-notes-${new Date().toISOString().slice(0, 10)}.csv`}
+            filename={`credit-notes-${getBusinessTodayIso()}.csv`}
             data={rows}
             columns={[
               { header: "Credit Note", accessorKey: "credit_note_number" },

@@ -11,6 +11,7 @@ import { bankTransactionInputSchema, type BankTransactionInput, type BankTransac
 import { postBankTransaction } from "./bank-transaction-posting";
 import { replaceTaxEntries, reverseTaxEntries } from "@/modules/tax/tax-entry-service";
 import { assertVatDateUnlocked, assertVatSourceUnlocked } from "@/modules/tax/tax-lock-service";
+import { recordMatchItems, releaseStatementMatchesForSource } from "./matching-service";
 
 type Sqlite = ReturnType<typeof getBusinessDb>["sqlite"];
 type StoredLine = {
@@ -175,11 +176,16 @@ export function saveBankTransaction(
         taxDate, direction: data.type === "money_in" ? "sales" : "purchases",
         supplyEmirate: data.supplyEmirate || null,
       }, lines);
-      if (data.statementLineId) context.sqlite.prepare(`
-        UPDATE bank_statement_lines SET match_status = 'created',
-          matched_source_type = 'bank_transaction', matched_source_id = ?
-        WHERE id = ? AND match_status = 'unmatched'
-      `).run(id, data.statementLineId);
+      if (data.statementLineId) {
+        const linked = context.sqlite.prepare(`
+          UPDATE bank_statement_lines SET match_status = 'created',
+            matched_source_type = 'bank_transaction', matched_source_id = ?
+          WHERE id = ? AND match_status = 'unmatched'
+        `).run(id, data.statementLineId);
+        if (linked.changes === 1) {
+          recordMatchItems(context.sqlite, data.statementLineId, data.bankAccountId, [{ sourceType: "bank_transaction", sourceId: id }]);
+        }
+      }
     }
   }).immediate();
   return id;
@@ -246,18 +252,8 @@ export function voidBankTransaction(businessId: string, userId: string, transact
     assertDateNotLocked(context.sqlite, transaction.date, "Bank transaction");
     assertDateNotLocked(context.sqlite, now.slice(0, 10), "Bank transaction void");
     assertVatSourceUnlocked(context.sqlite, "bank_transaction", transactionId, transaction.tax_date);
-    const matchedLines = context.sqlite.prepare(`
-      SELECT id FROM bank_statement_lines
-      WHERE matched_source_type = 'bank_transaction' AND matched_source_id = ?
-    `).all(transactionId) as { id: string }[];
-    for (const matchedLine of matchedLines) {
-      const reconciled = context.sqlite.prepare(`
-        SELECT 1 FROM bank_reconciliation_items bri
-        INNER JOIN bank_reconciliations br ON br.id = bri.reconciliation_id AND br.status = 'completed'
-        WHERE bri.statement_line_id = ?
-      `).get(matchedLine.id);
-      if (reconciled) throw new Error("Cannot void a Bank Transaction included in a completed reconciliation.");
-    }
+    releaseStatementMatchesForSource(context.sqlite, "bank_transaction", transactionId,
+      "Cannot void a Bank Transaction included in a completed reconciliation.");
     reverseTransaction(context.sqlite, {
       originalSourceType: "bank_transaction", originalSourceId: transactionId,
       reversalSourceType: "bank_transaction_void", reversalSourceId: transactionId,
@@ -266,10 +262,5 @@ export function voidBankTransaction(businessId: string, userId: string, transact
     reverseTaxEntries(context.sqlite, { originalSourceType: "bank_transaction", sourceId: transactionId, reversalSourceType: "bank_transaction_void", taxDate: transaction.tax_date });
     context.sqlite.prepare("UPDATE bank_transactions SET document_status = 'void', statement_line_id = NULL, voided_at = ?, updated_at = ? WHERE id = ?")
       .run(now, now, transactionId);
-    if (matchedLines.length) context.sqlite.prepare(`
-      UPDATE bank_statement_lines SET match_status = 'unmatched', matched_source_type = NULL,
-        matched_source_id = NULL WHERE matched_source_type = 'bank_transaction'
-          AND matched_source_id = ?
-    `).run(transactionId);
   }).immediate();
 }

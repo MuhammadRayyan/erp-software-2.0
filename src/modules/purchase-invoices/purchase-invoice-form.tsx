@@ -11,7 +11,7 @@ import { Combobox, type ComboboxOption } from "@/components/ui/combobox";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
-import { formatDate, formatMoney } from "@/core/format";
+import { formatDate, formatMoney, getBusinessTodayIso } from "@/core/format";
 import { minorToCurrencyInput } from "@/modules/currency/conversion";
 import { savePurchaseInvoiceAction } from "./actions";
 import {
@@ -42,6 +42,8 @@ import { useUnsavedChanges } from "@/hooks/use-unsaved-changes";
 import { useFormDraftRecovery } from "@/hooks/use-form-draft-recovery";
 import { useActionPermission, useApprovalPolicy } from "@/components/permissions-provider";
 import type { CustomFieldInputDefinition } from "@/modules/custom-fields/custom-field-inputs";
+import { FieldError } from "@/components/ui/field-error";
+import { fieldErrorProps, fieldErrorId, applyServerFieldErrors, focusFirstInvalidField } from "@/lib/form-errors";
 
 type AccountOption = { id: string; name: string };
 type TaxOption = {
@@ -137,7 +139,10 @@ export function PurchaseInvoiceForm({
   );
   const form = useForm<PurchaseInvoiceInput>({
     resolver: zodResolver(purchaseInvoiceInputSchema),
-    mode: "onTouched",
+    // Validate on submit, then live as the user corrects fields. Blur validation
+    // inserted error text that shifted the Save button mid-click.
+    mode: "onSubmit",
+    reValidateMode: "onChange",
     defaultValues: initial,
   });
   const {
@@ -258,9 +263,7 @@ export function PurchaseInvoiceForm({
     if (result.fieldErrors || result.error) {
       draftRecovery.preserveDraft(values);
     }
-    if (result.fieldErrors)
-      for (const [field, messages] of Object.entries(result.fieldErrors))
-        setError(field as keyof PurchaseInvoiceInput, { message: messages[0] });
+    applyServerFieldErrors(setError, result.fieldErrors);
     if (result.error) {
       setError("root.serverError", { message: result.error });
       setServerError(result.error);
@@ -300,10 +303,10 @@ export function PurchaseInvoiceForm({
               control={control}
               name="supplierId"
               render={({ field }) => (
-                <Combobox
+                <Combobox ref={field.ref}
                   id="supplierId"
                   ariaLabel="Supplier"
-                  ariaInvalid={!!errors.supplierId}
+                  ariaInvalid={!!errors.supplierId} ariaDescribedBy={errors.supplierId ? fieldErrorId("supplierId") : undefined}
                   options={supplierOptions}
                   value={field.value ?? ""}
                   onValueChange={(next) => {
@@ -319,7 +322,7 @@ export function PurchaseInvoiceForm({
                         setValue("exchangeRateSource", code === currency ? "Base" : "");
                       }
                       if (typeof supplier?.paymentTermsDays === "number") {
-                        const baseDate = invoiceDate || new Date().toISOString().slice(0, 10);
+                        const baseDate = invoiceDate || getBusinessTodayIso();
                         const d = new Date(baseDate);
                         if (!Number.isNaN(d.valueOf())) {
                           d.setDate(d.getDate() + supplier.paymentTermsDays);
@@ -354,7 +357,7 @@ export function PurchaseInvoiceForm({
             <Input
               id="supplierInvoiceNumber"
               {...register("supplierInvoiceNumber")}
-              aria-invalid={!!errors.supplierInvoiceNumber}
+              {...fieldErrorProps("supplierInvoiceNumber", errors.supplierInvoiceNumber)}
             />
             {errors.supplierInvoiceNumber && (
               <p className="field-error">{errors.supplierInvoiceNumber.message}</p>
@@ -369,7 +372,7 @@ export function PurchaseInvoiceForm({
               control={control}
               name="purchaseOrderId"
               render={({ field }) => (
-                <Combobox
+                <Combobox ref={field.ref}
                   id="purchaseOrderId"
                   ariaLabel="Purchase order"
                   options={orderOptions}
@@ -444,9 +447,9 @@ export function PurchaseInvoiceForm({
                   }
                 },
               })}
-              aria-invalid={!!errors.invoiceDate}
+              {...fieldErrorProps("invoiceDate", errors.invoiceDate)}
             />
-            {errors.invoiceDate && <p className="field-error">{errors.invoiceDate.message}</p>}
+            <FieldError name="invoiceDate" message={errors.invoiceDate?.message} />
           </div>
 
           <div className="space-y-1.5">
@@ -455,9 +458,9 @@ export function PurchaseInvoiceForm({
               id="taxDate"
               type="date"
               {...register("taxDate")}
-              aria-invalid={!!errors.taxDate}
+              {...fieldErrorProps("taxDate", errors.taxDate)}
             />
-            {errors.taxDate && <p className="field-error">{errors.taxDate.message}</p>}
+            <FieldError name="taxDate" message={errors.taxDate?.message} />
           </div>
 
           <div className="space-y-1.5">
@@ -466,9 +469,9 @@ export function PurchaseInvoiceForm({
               id="dueDate"
               type="date"
               {...register("dueDate")}
-              aria-invalid={!!errors.dueDate}
+              {...fieldErrorProps("dueDate", errors.dueDate)}
             />
-            {errors.dueDate && <p className="field-error">{errors.dueDate.message}</p>}
+            <FieldError name="dueDate" message={errors.dueDate?.message} />
           </div>
 
           <DocumentCurrencyFields
@@ -492,7 +495,7 @@ export function PurchaseInvoiceForm({
               control={control}
               name="projectId"
               render={({ field }) => (
-                <Combobox
+                <Combobox ref={field.ref}
                   id="projectId"
                   ariaLabel="Project"
                   options={projectOptions}
@@ -643,7 +646,7 @@ export function PurchaseInvoiceForm({
               permission={["save", "post"]}
               type="button"
               disabled={isSubmitting}
-              onClick={handleSubmit((values) => save(values, "post"))}
+              onClick={handleSubmit((values) => save(values, "post"), focusFirstInvalidField)}
             >
               {isSubmitting && <LoaderCircle className="size-4 animate-spin" />} Save Changes
             </Button>
@@ -654,7 +657,7 @@ export function PurchaseInvoiceForm({
                 variant="secondary"
                 type="button"
                 disabled={isSubmitting}
-                onClick={handleSubmit((values) => save(values, "draft"))}
+                onClick={handleSubmit((values) => save(values, "draft"), focusFirstInvalidField)}
               >
                 {isSubmitting && <LoaderCircle className="size-4 animate-spin" />}{" "}
                 {invoiceId ? "Save Draft" : "Save Draft Bill"}
@@ -664,7 +667,7 @@ export function PurchaseInvoiceForm({
                   permission={"save"}
                   type="button"
                   disabled={isSubmitting}
-                  onClick={handleSubmit((values) => save(values, "submit_approval"))}
+                  onClick={handleSubmit((values) => save(values, "submit_approval"), focusFirstInvalidField)}
                 >
                   {isSubmitting && <LoaderCircle className="size-4 animate-spin" />} Submit for Approval
                 </Button>
@@ -673,12 +676,12 @@ export function PurchaseInvoiceForm({
                   label="Create & Post"
                   permission={["save", "post"]}
                   loading={isSubmitting}
-                  onPrimaryClick={handleSubmit((values) => save(values, "post", "view"))}
+                  onPrimaryClick={handleSubmit((values) => save(values, "post", "view"), focusFirstInvalidField)}
                   options={[
                     {
                       label: "Create, Post & New",
                       description: "Post this bill and start a new one right away",
-                      onSelect: handleSubmit((values) => save(values, "post", "new")),
+                      onSelect: handleSubmit((values) => save(values, "post", "new"), focusFirstInvalidField),
                     },
                   ]}
                 />
@@ -687,7 +690,7 @@ export function PurchaseInvoiceForm({
                   permission={["save", "post"]}
                   type="button"
                   disabled={isSubmitting}
-                  onClick={handleSubmit((values) => save(values, "post"))}
+                  onClick={handleSubmit((values) => save(values, "post"), focusFirstInvalidField)}
                 >
                   {isSubmitting && <LoaderCircle className="size-4 animate-spin" />}{" "}
                   Save &amp; Post
@@ -717,7 +720,7 @@ export function PurchaseInvoiceForm({
             setValue("exchangeRateSource", code === currency ? "Base" : "");
           }
           if (typeof created.paymentTermsDays === "number") {
-            const baseDate = invoiceDate || new Date().toISOString().slice(0, 10);
+            const baseDate = invoiceDate || getBusinessTodayIso();
             const d = new Date(baseDate);
             if (!Number.isNaN(d.valueOf())) {
               d.setDate(d.getDate() + created.paymentTermsDays);
