@@ -107,6 +107,45 @@ export function listBusinessUsers(businessId: string, adminUserId: string) {
 }
 
 
+/**
+ * A business administrator may only receive a usable sign-in credential link
+ * (password reset or invitation setup) for an account whose every business is
+ * one the administrator also administers. Accounts that are super-admins, or
+ * that own or belong to any business outside the caller's control, receive
+ * such links by email only; otherwise an admin of one tenant could add an
+ * outside account and take it over.
+ */
+function canIssueDirectCredentialLink(businessId: string, callerUserId: string, targetUserId: string) {
+  const db = getSystemDb();
+  const caller = db.select({ isSuperAdmin: users.isSuperAdmin }).from(users).where(eq(users.id, callerUserId)).get();
+  if (caller?.isSuperAdmin) return true;
+  const target = db.select({ isSuperAdmin: users.isSuperAdmin }).from(users).where(eq(users.id, targetUserId)).get();
+  if (!target || target.isSuperAdmin) return false;
+
+  const targetBusinessIds = new Set([
+    ...db.select({ id: memberships.businessId }).from(memberships).where(eq(memberships.userId, targetUserId)).all().map((r) => r.id),
+    ...db.select({ id: businesses.id }).from(businesses).where(eq(businesses.ownerUserId, targetUserId)).all().map((r) => r.id),
+  ]);
+  targetBusinessIds.delete(businessId);
+  if (targetBusinessIds.size === 0) return true;
+
+  const callerAdminBusinessIds = new Set(
+    db
+      .select({ id: memberships.businessId })
+      .from(memberships)
+      .where(and(eq(memberships.userId, callerUserId), eq(memberships.role, "administrator")))
+      .all()
+      .map((r) => r.id),
+  );
+  for (const id of targetBusinessIds) {
+    if (!callerAdminBusinessIds.has(id)) return false;
+  }
+  return true;
+}
+
+const DIRECT_LINK_DENIED =
+  "This person also has access to other businesses, so their sign-in links can only be sent to their own email address.";
+
 function checkUserQuota(businessId: string, adminUserId: string, targetUserId: string) {
   const db = getSystemDb();
   const currentBusiness = db.select().from(businesses).where(eq(businesses.id, businessId)).get();
@@ -174,6 +213,7 @@ export async function inviteBusinessUser(
   const shouldSendEmail = input.sendEmail !== false;
 
   let user = db.select().from(users).where(eq(users.email, normalized)).get();
+  const userExisted = Boolean(user);
 
   // If user does not exist, check quota with placeholder or create user record
   const targetUserId = user ? user.id : randomUUID();
@@ -274,9 +314,12 @@ export async function inviteBusinessUser(
     }
   } else {
     // New or unverified user: generate setup invitation link
-    inviteUrl = generateInvitationLink(user.id, businessId, user.email);
-    if (shouldSendEmail) {
-      const token = (inviteUrl.match(/token=([a-f0-9]+)/) || [])[1];
+    const generatedUrl = generateInvitationLink(user.id, businessId, user.email);
+    // Only hand the setup link back to the admin for accounts this business manages.
+    inviteUrl =
+      !userExisted || canIssueDirectCredentialLink(businessId, adminUserId, user.id) ? generatedUrl : undefined;
+    if (shouldSendEmail || !inviteUrl) {
+      const token = (generatedUrl.match(/token=([a-f0-9]+)/) || [])[1];
       const emailRes = await sendInvitationEmail({
         to: user.email,
         businessId,
@@ -373,7 +416,7 @@ export async function resendInvitation(businessId: string, adminUserId: string, 
 
   return {
     success: true,
-    inviteUrl: emailRes.actionUrl,
+    inviteUrl: canIssueDirectCredentialLink(businessId, adminUserId, target.id) ? emailRes.actionUrl : undefined,
     emailDelivery: { success: emailRes.success, error: emailRes.error },
   };
 }
@@ -404,6 +447,7 @@ export function createInvitationLinkForUser(businessId: string, adminUserId: str
   if (isRegistered) {
     throw new Error("User has already completed account setup. You can send or copy a password reset link instead.");
   }
+  if (!canIssueDirectCredentialLink(businessId, adminUserId, target.id)) throw new Error(DIRECT_LINK_DENIED);
 
   const inviteUrl = generateInvitationLink(target.id, businessId, target.email);
 
@@ -473,7 +517,7 @@ export async function sendPasswordResetForUser(businessId: string, adminUserId: 
 
   return {
     success: true,
-    resetUrl: emailRes.actionUrl,
+    resetUrl: canIssueDirectCredentialLink(businessId, adminUserId, target.id) ? emailRes.actionUrl : undefined,
     emailDelivery: { success: emailRes.success, error: emailRes.error },
   };
 }
@@ -507,6 +551,7 @@ export function createPasswordResetLinkForUser(businessId: string, adminUserId: 
   if (target.status === "suspended") {
     throw new Error("Cannot create password reset link for a suspended account. Reactivate the user first.");
   }
+  if (!canIssueDirectCredentialLink(businessId, adminUserId, target.id)) throw new Error(DIRECT_LINK_DENIED);
 
   const { link } = generatePasswordResetLink(target.email, businessId);
 
@@ -875,45 +920,4 @@ export async function createAndAddBusinessUser(
   });
 
   return { userId: user.id, name: user.name, email: user.email };
-}
-
-/**
- * Backward compatibility helper for adding an existing user by email.
- */
-export function addExistingUser(businessId: string, adminUserId: string, email: string) {
-  const access = getBusinessAccess(businessId, adminUserId);
-  if (!access || access.membership.role !== "administrator") throw new Error("BUSINESS_ACCESS_DENIED");
-  const normalized = z.email().parse(email.trim().toLowerCase());
-  const db = getSystemDb();
-  const user = db.select().from(users).where(eq(users.email, normalized)).get();
-  if (!user) throw new Error("No local user has that email. Invitation emails are not available.");
-  const existing = db
-    .select()
-    .from(memberships)
-    .where(and(eq(memberships.businessId, businessId), eq(memberships.userId, user.id)))
-    .get();
-  if (existing) throw new Error("That user already has access to this business.");
-
-  checkUserQuota(businessId, adminUserId, user.id);
-
-  db.insert(memberships)
-    .values({
-      id: randomUUID(),
-      businessId,
-      userId: user.id,
-      role: "standard",
-      modulesJson: JSON.stringify(["sales"]),
-      createdAt: new Date().toISOString(),
-    })
-    .run();
-
-  recordActivity(businessId, {
-    userId: adminUserId,
-    action: "created",
-    entityType: "user_access",
-    entityId: user.id,
-    entityNumber: user.name,
-    summary: `Added team member ${user.name} (${user.email}) as standard user`,
-    details: { targetUserId: user.id, targetEmail: user.email, role: "standard" },
-  });
 }

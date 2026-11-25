@@ -115,7 +115,11 @@ test("Manager.io Universal Migration & Contracting Architecture Suite", { skip: 
   // -------------------------------------------------------------
   // PART 1: LEGACY BENCHMARK (MASS AUTO REPARING)
   // -------------------------------------------------------------
-  await t.test("1. Inspect Legacy Manager.io backup metadata (MASS AUTO REPARING)", () => {
+  // Real customer backups are never committed; these suites run only where a
+  // private local copy exists.
+  const hasLegacyFixture = existsSync(legacyFilePath);
+
+  await t.test("1. Inspect Legacy Manager.io backup metadata (MASS AUTO REPARING)", { skip: !hasLegacyFixture && "private Manager.io fixture not present" }, () => {
     const fileBuffer = readFileSync(legacyFilePath);
     const start = Date.now();
     const inspection = inspectManagerBackup(fileBuffer);
@@ -140,7 +144,7 @@ test("Manager.io Universal Migration & Contracting Architecture Suite", { skip: 
     assert.equal(inspection.accountsCount, 61);
   });
 
-  await t.test("2. Migrate Legacy Manager.io backup with Active Ledger Mode", () => {
+  await t.test("2. Migrate Legacy Manager.io backup with Active Ledger Mode", { skip: !hasLegacyFixture && "private Manager.io fixture not present" }, () => {
     const fileBuffer = readFileSync(legacyFilePath);
     const result = importManagerBackupToNewBusiness(fileBuffer, testUserId, {
       overrideBusinessName: "MASS AUTO REPARING (Migrated)",
@@ -321,7 +325,8 @@ test("Manager.io Universal Migration & Contracting Architecture Suite", { skip: 
   // -------------------------------------------------------------
   // PART 4: NATIVE .ERPBACKUP ROUNDTRIP PRESERVATION
   // -------------------------------------------------------------
-  await t.test("6. Native .erpbackup export and restore preserves contracting entities (Employees, Payslips)", async () => {
+  const hasImportedBusiness = hasLegacyFixture || existsSync(contractingFilePath1);
+  await t.test("6. Native .erpbackup export and restore preserves contracting entities (Employees, Payslips)", { skip: !hasImportedBusiness && "private Manager.io fixture not present" }, async () => {
     const targetBusinessId = importedContractingBusinessId || importedLegacyBusinessId;
     assert.ok(targetBusinessId);
 

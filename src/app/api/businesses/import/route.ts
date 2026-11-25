@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { requireApiAuth } from "@/core/auth/api-auth";
 import { importBusinessBackup } from "@/core/businesses/backup-service";
+import { assertBusinessQuota } from "@/core/businesses/business-service";
 import { importManagerBackupToNewBusiness } from "@/modules/migration/manager-importer";
 
 export const runtime = "nodejs";
@@ -11,6 +12,15 @@ export async function POST(request: Request) {
   const { session, error: authError } = await requireApiAuth(request);
   if (authError) return authError;
   const user = session.user;
+
+  try {
+    assertBusinessQuota(user.id);
+  } catch (error) {
+    return NextResponse.json(
+      { error: error instanceof Error ? error.message : "Business limit reached." },
+      { status: 403 },
+    );
+  }
 
   const formData = await request.formData();
   const file = formData.get("backup");

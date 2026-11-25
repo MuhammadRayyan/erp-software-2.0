@@ -3,7 +3,6 @@
 import { revalidatePath } from "next/cache";
 import { requirePermission } from "@/core/permissions/require-module";
 import {
-  addExistingUser,
   createAndAddBusinessUser,
   createInvitationLinkForUser,
   createPasswordResetLinkForUser,
@@ -164,18 +163,6 @@ export async function updateMembershipAction(
     return { success: true };
   } catch (error) {
     return { error: error instanceof Error ? error.message : "Could not update access" };
-  }
-}
-
-export async function addExistingUserAction(businessId: string, email: string) {
-  const { user, access } = await requirePermission(businessId, "settings", "edit");
-  if (access.membership.role !== "administrator") return { error: "Administrator access is required." };
-  try {
-    addExistingUser(businessId, user.id, email);
-    revalidatePath(`/b/${businessId}/settings/users`);
-    return {};
-  } catch (error) {
-    return { error: error instanceof Error ? error.message : "Could not add user" };
   }
 }
 

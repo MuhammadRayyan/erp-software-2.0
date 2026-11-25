@@ -75,7 +75,8 @@ const nextConfig: NextConfig = {
               "style-src 'self' 'unsafe-inline'",
               "font-src 'self' data:",
               "img-src 'self' data: blob:",
-              "connect-src 'self' https://*.ingest.de.sentry.io https://*.sentry.io ws: wss:",
+              // ws:/wss: are only needed for the development HMR socket.
+              `connect-src 'self' https://*.ingest.de.sentry.io https://*.sentry.io${process.env.NODE_ENV !== "production" ? " ws: wss:" : ""}`,
               "object-src 'self' blob:",
               "frame-src 'self' blob: data:",
               "frame-ancestors 'self'",
