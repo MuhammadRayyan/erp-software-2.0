@@ -19,6 +19,8 @@ import {
   type GoodsReceiptInput,
 } from "./goods-receipt-input";
 import type { InventoryDocumentStatus } from "./inventory-document";
+import { FieldError } from "@/components/ui/field-error";
+import { fieldErrorId, applyServerFieldErrors, focusFirstInvalidField } from "@/lib/form-errors";
 
 type ItemOption = {
   id: string;
@@ -86,9 +88,7 @@ export function GoodsReceiptForm({
       intent,
     );
     if (result.fieldErrors) {
-      for (const [field, messages] of Object.entries(result.fieldErrors)) {
-        setError(field as keyof GoodsReceiptInput, { message: messages[0] });
-      }
+      applyServerFieldErrors(setError, result.fieldErrors);
     }
     if (result.error) setServerError(result.error);
   }
@@ -121,7 +121,7 @@ export function GoodsReceiptForm({
               control={control}
               name="supplierId"
               render={({ field }) => (
-                <Combobox
+                <Combobox ref={field.ref}
                   id="supplierId"
                   options={suppliers.map((supplier) => ({ value: supplier.id, label: supplier.name }))}
                   value={field.value ?? ""}
@@ -131,11 +131,11 @@ export function GoodsReceiptForm({
                   placeholder="Choose a supplier…"
                   searchPlaceholder="Search suppliers…"
                   emptyText="No suppliers found."
-                  ariaInvalid={!!errors.supplierId}
+                  ariaInvalid={!!errors.supplierId} ariaDescribedBy={errors.supplierId ? fieldErrorId("supplierId") : undefined}
                 />
               )}
             />
-            {errors.supplierId && <p className="field-error">{errors.supplierId.message}</p>}
+            <FieldError name="supplierId" message={errors.supplierId?.message} />
           </div>
           <div className="space-y-1.5">
             <Label htmlFor="date">Receipt date</Label>
@@ -147,7 +147,7 @@ export function GoodsReceiptForm({
               control={control}
               name="locationId"
               render={({ field }) => (
-                <Combobox
+                <Combobox ref={field.ref}
                   id="locationId"
                   options={locations.map((location) => ({
                     value: location.id,
@@ -170,7 +170,7 @@ export function GoodsReceiptForm({
               control={control}
               name="purchaseOrderId"
               render={({ field }) => (
-                <Combobox
+                <Combobox ref={field.ref}
                   id="purchaseOrderId"
                   options={orders.map((order) => ({ value: order.id, label: order.number }))}
                   value={field.value ?? ""}
@@ -192,7 +192,7 @@ export function GoodsReceiptForm({
               control={control}
               name="purchaseInvoiceId"
               render={({ field }) => (
-                <Combobox
+                <Combobox ref={field.ref}
                   id="purchaseInvoiceId"
                   options={invoices.map((invoice) => ({ value: invoice.id, label: invoice.number }))}
                   value={field.value ?? ""}
@@ -214,7 +214,7 @@ export function GoodsReceiptForm({
               control={control}
               name="projectId"
               render={({ field }) => (
-                <Combobox
+                <Combobox ref={field.ref}
                   id="projectId"
                   options={projects.map((project) => ({
                     value: project.id,
@@ -374,16 +374,16 @@ export function GoodsReceiptForm({
           </Link>
         </Button>
         {status === "posted" ? (
-          <Button permission={["save", "post"]} type="button" disabled={isSubmitting} onClick={handleSubmit((values) => save(values, "post"))}>
+          <Button permission={["save", "post"]} type="button" disabled={isSubmitting} onClick={handleSubmit((values) => save(values, "post"), focusFirstInvalidField)}>
             {isSubmitting && <LoaderCircle className="size-4 animate-spin" />}
             Update Posted Receipt
           </Button>
         ) : (
           <div className="flex gap-2">
-            <Button permission={"save"} type="button" variant="secondary" disabled={isSubmitting} onClick={handleSubmit((values) => save(values, "draft"))}>
+            <Button permission={"save"} type="button" variant="secondary" disabled={isSubmitting} onClick={handleSubmit((values) => save(values, "draft"), focusFirstInvalidField)}>
               Save Draft
             </Button>
-            <Button permission={["save", "post"]} type="button" disabled={isSubmitting} onClick={handleSubmit((values) => save(values, "post"))}>
+            <Button permission={["save", "post"]} type="button" disabled={isSubmitting} onClick={handleSubmit((values) => save(values, "post"), focusFirstInvalidField)}>
               {isSubmitting && <LoaderCircle className="size-4 animate-spin" />}
               Post Receipt
             </Button>

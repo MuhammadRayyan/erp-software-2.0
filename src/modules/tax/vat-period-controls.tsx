@@ -16,6 +16,7 @@ import {
 } from "./actions";
 import { addDaysIso } from "./uae-vat-config";
 import { SelectNative } from "@/components/ui/select-native";
+import { getBusinessTodayIso } from "@/core/format";
 
 
 export function NewVatPeriodForm({ businessId }: { businessId: string }) {
@@ -51,7 +52,7 @@ export function VatWorkflowControls({ businessId, periodId, status, isAdmin }: {
   const router = useRouter();
   const [error, setError] = useState("");
   const [reason, setReason] = useState("");
-  const [filedAt, setFiledAt] = useState(new Date().toISOString().slice(0, 10));
+  const [filedAt, setFiledAt] = useState(getBusinessTodayIso());
   const [reference, setReference] = useState("");
   const [pending, setPending] = useState(false);
 

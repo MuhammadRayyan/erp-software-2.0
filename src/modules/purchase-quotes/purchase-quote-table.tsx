@@ -19,7 +19,7 @@ import { DataTable, ListTableCard } from "@/components/ui/data-table";
 import { ClientListPagination } from "@/components/list-pagination";
 import { ExportCsvButton } from "@/components/export-csv-button";
 import { useUrlListState } from "@/hooks/use-url-list-state";
-import { formatDate, formatMoney, minorToDecimalString } from "@/core/format";
+import { formatDate, formatMoney, minorToDecimalString, getBusinessTodayIso } from "@/core/format";
 import type { PurchaseQuoteStatus } from "./purchase-quote-service";
 import { DensityToggle } from "@/components/density-toggle";
 import { useTableDensity } from "@/components/use-table-density";
@@ -317,7 +317,7 @@ export function PurchaseQuoteTable({
         <div className="ml-auto flex items-center gap-1.5 shrink-0">
           <ExportCsvButton
             size="sm"
-            filename={`purchase-quotes-${new Date().toISOString().slice(0, 10)}.csv`}
+            filename={`purchase-quotes-${getBusinessTodayIso()}.csv`}
             data={rows}
             columns={[
               { header: "Quote Number", accessorKey: "quote_number" },

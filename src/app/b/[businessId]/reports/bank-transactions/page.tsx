@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { formatDate, formatMoney, minorToDecimalString } from "@/core/format";
+import { formatDate, formatMoney, minorToDecimalString, getBusinessTodayIso } from "@/core/format";
 import { requireModule } from "@/core/permissions/require-module";
 import { journalSourceHref, journalSourceLabel } from "@/modules/accounting/journal-source";
 import { listBankAccounts } from "@/modules/banking/bank-account-service";
@@ -81,7 +81,7 @@ export default async function BankTransactionsReportPage({
           </p>
         </div>
         <ExportCsvButton 
-          filename={`bank-transactions-${new Date().toISOString().slice(0, 10)}.csv`} 
+          filename={`bank-transactions-${getBusinessTodayIso()}.csv`} 
           columns={csvColumns} 
           data={csvData} 
         />

@@ -19,7 +19,7 @@ import { TableTotalsBar } from "@/components/table-totals-bar";
 import { DataTable, ListTableCard } from "@/components/ui/data-table";
 import { useTableDensity } from "@/components/use-table-density";
 import type { ColumnVisibility } from "@/components/use-column-visibility";
-import { formatDate, formatMoney, minorToDecimalString } from "@/core/format";
+import { formatDate, formatMoney, minorToDecimalString, getBusinessTodayIso } from "@/core/format";
 import { formatQuantityMicros } from "./inventory-valuation";
 import { DeliveryNoteRowActions } from "./delivery-note-row-actions";
 
@@ -208,7 +208,7 @@ export function DeliveryNoteTable({
         <div className="ml-auto flex items-center gap-1.5 shrink-0">
           <ExportCsvButton
             size="sm"
-            filename={`delivery-notes-${new Date().toISOString().slice(0, 10)}.csv`}
+            filename={`delivery-notes-${getBusinessTodayIso()}.csv`}
             data={rows}
             columns={[
               { header: "Delivery Number", accessorKey: "delivery_number" },

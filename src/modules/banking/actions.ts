@@ -11,8 +11,8 @@ import { saveBankTransaction, voidBankTransaction } from "./bank-transaction-ser
 import { bankTransferInputSchema } from "./bank-transfer-input";
 import { createBankTransfer, voidBankTransfer } from "./bank-transfer-service";
 import { csvMappingSchema } from "./csv-import";
-import { confirmStatementMatch, ignoreStatementLine, resetStatementLine } from "./matching-service";
-import type { MatchSourceType } from "./matching-types";
+import { confirmStatementMatch, confirmStatementMatches, ignoreStatementLine, resetStatementLine } from "./matching-service";
+import type { MatchSourceRef, MatchSourceType } from "./matching-types";
 import { completeReconciliation, startReconciliation } from "./reconciliation-service";
 import { reconciliationInputSchema } from "./reconciliation-input";
 import { importBankStatement } from "./statement-service";
@@ -98,6 +98,25 @@ export async function matchStatementLineAction(
   try {
     confirmStatementMatch(businessId, user.id, lineId, sourceType, sourceId);
     revalidatePath(`/b/${businessId}/banking/accounts/${accountId}`);
+    return {};
+  } catch (error) { return { error: message(error, "The match could not be confirmed.") }; }
+}
+
+const matchSourcesSchema = z.array(z.object({
+  sourceType: z.enum(["receipt", "supplier_payment", "bank_transaction", "bank_transfer"]),
+  sourceId: z.string().min(1),
+})).min(1).max(100);
+
+/** Matches one statement line to one or more book entries (reconciliation workspace). */
+export async function matchStatementLineToManyAction(
+  businessId: string, accountId: string, lineId: string, sources: MatchSourceRef[],
+) {
+  const { user } = await requirePermission(businessId, "banking", "edit");
+  const parsed = matchSourcesSchema.safeParse(sources);
+  if (!parsed.success) return { error: "Select the transactions to match." };
+  try {
+    confirmStatementMatches(businessId, user.id, lineId, parsed.data);
+    revalidatePath(`/b/${businessId}/banking/accounts/${accountId}`, "layout");
     return {};
   } catch (error) { return { error: message(error, "The match could not be confirmed.") }; }
 }

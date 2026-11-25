@@ -86,11 +86,12 @@ export function getReconciliationSnapshot(
   `).get(reconciliation.ledger_account_id, reconciliation.statement_date) as { balance_minor: number };
   const cleared = sqlite.prepare(`
     SELECT bsl.id AS statement_line_id, bsl.transaction_date, bsl.description,
-      bsl.amount_minor, bsl.match_status, bsl.matched_source_type,
-      bsl.matched_source_id, je.entry_number, je.id AS journal_entry_id
+      bsl.amount_minor, bsl.match_status, mi.source_type AS matched_source_type,
+      mi.source_id AS matched_source_id, je.entry_number, je.id AS journal_entry_id
     FROM bank_statement_lines bsl
+    INNER JOIN bank_statement_match_items mi ON mi.statement_line_id = bsl.id
     INNER JOIN journal_entries je
-      ON je.source_type = bsl.matched_source_type AND je.source_id = bsl.matched_source_id
+      ON je.source_type = mi.source_type AND je.source_id = mi.source_id
     WHERE bsl.bank_account_id = ? AND bsl.transaction_date <= ?
       AND bsl.match_status IN ('matched', 'created')
     ORDER BY bsl.transaction_date, bsl.created_at
@@ -102,9 +103,8 @@ export function getReconciliationSnapshot(
     INNER JOIN journal_lines jl ON jl.journal_entry_id = je.id
     WHERE je.status = 'posted' AND je.date <= ? AND jl.account_id = ?
       AND NOT EXISTS (
-        SELECT 1 FROM bank_statement_lines bsl
-        WHERE bsl.bank_account_id = ? AND bsl.match_status IN ('matched', 'created')
-          AND bsl.matched_source_type = je.source_type AND bsl.matched_source_id = je.source_id
+        SELECT 1 FROM bank_statement_match_items mi
+        WHERE mi.bank_account_id = ? AND mi.source_type = je.source_type AND mi.source_id = je.source_id
       )
     GROUP BY je.id
     HAVING amount_minor <> 0

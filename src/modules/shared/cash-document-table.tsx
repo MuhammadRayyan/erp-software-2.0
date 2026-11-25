@@ -1,11 +1,12 @@
 "use client";
 
-import { useMemo, useTransition, type ReactNode } from "react";
+import { useMemo, useState, useTransition, type ReactNode } from "react";
 import { debounce, useQueryStates } from "nuqs";
 import {
   useLegacyTable as useTable,
   getCoreRowModel as createCoreRowModel,
 } from "@tanstack/react-table/legacy";
+import type { RowSelectionState } from "@tanstack/react-table";
 import { useColumns } from "@/components/columns-dropdown";
 import { DensityToggle } from "@/components/density-toggle";
 import { ExportCsvButton } from "@/components/export-csv-button";
@@ -29,6 +30,19 @@ import {
   toSortingState,
 } from "@/lib/list-query-params";
 import type { CashDocumentListSummary } from "@/modules/shared/list-query-helpers";
+import type { BatchActionResult } from "@/modules/shared/batch";
+import { BatchDocumentActions } from "@/components/batch/batch-document-actions";
+import { selectionColumn } from "@/components/batch/selection-column";
+import type { BatchNoun } from "@/components/batch/use-batch-runner";
+
+export type CashDocumentBatchConfig<TRow> = {
+  noun: BatchNoun;
+  statusOf: (row: TRow) => string;
+  labelOf: (row: TRow) => string;
+  voidAction: (ids: string[]) => Promise<BatchActionResult>;
+  voidDescription: string;
+  deleteDrafts: (ids: string[]) => Promise<BatchActionResult>;
+};
 
 const CASH_DOC_STATUS_LABELS: Record<string, string> = {
   posted: "Posted",
@@ -50,7 +64,7 @@ const CASH_DOC_STATUS_OPTIONS = [
  * Binds `nuqs` URL query state (`q`, `status`, `from`, `to`, `sort`, `dir`, `page`)
  * to server-paginated queries and renders consistent toolbars and DB-wide totals.
  */
-export function CashDocumentTable<TRow extends object>({
+export function CashDocumentTable<TRow extends { id: string }>({
   businessId,
   baseCurrency,
   rows,
@@ -72,6 +86,7 @@ export function CashDocumentTable<TRow extends object>({
   getRowHref,
   exportConfig,
   footer,
+  batch,
 }: {
   businessId: string;
   baseCurrency: string;
@@ -97,8 +112,15 @@ export function CashDocumentTable<TRow extends object>({
     columns: CsvColumn<TRow>[];
   };
   footer?: ReactNode;
+  /** Enables row selection with export, void and delete-draft bulk actions. */
+  batch?: CashDocumentBatchConfig<TRow>;
 }) {
   const { density } = useTableDensity(businessId);
+  const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
+  const tableColumns = useMemo(
+    () => (batch ? [selectionColumn<TRow>(batch.labelOf), ...columns] : columns),
+    [batch, columns],
+  );
   const [, startTransition] = useTransition();
   const [urlState, setUrlState] = useQueryStates(cashDocumentListParsers, {
     shallow: false,
@@ -126,11 +148,15 @@ export function CashDocumentTable<TRow extends object>({
 
   const table = useTable({
     data: rows,
-    columns,
+    columns: tableColumns,
     manualSorting: true,
+    getRowId: (row: TRow) => row.id,
+    enableRowSelection: Boolean(batch),
+    onRowSelectionChange: setRowSelection,
     state: {
       sorting,
       columnVisibility: colVisibility,
+      rowSelection,
     },
     onSortingChange: (updater) => {
       const next = resolveNextSortFromUpdater(updater, urlState.sort, urlState.dir, "desc");
@@ -254,6 +280,19 @@ export function CashDocumentTable<TRow extends object>({
         )}
         {footer}
       </ListTableCard>
+      {batch ? (
+        <BatchDocumentActions
+          selected={rows.filter((row) => rowSelection[row.id])}
+          totalCount={rows.length}
+          noun={batch.noun}
+          statusOf={batch.statusOf}
+          onClear={() => setRowSelection({})}
+          onSelectAll={() => table.toggleAllRowsSelected(true)}
+          exportConfig={exportConfig}
+          voidAction={{ action: batch.voidAction, description: batch.voidDescription }}
+          deleteDrafts={batch.deleteDrafts}
+        />
+      ) : null}
     </>
   );
 }

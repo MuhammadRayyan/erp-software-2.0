@@ -72,7 +72,7 @@ export function SettingsHubClient({
             }
           }}
           placeholder="Search settings (e.g. TRN, logo, numbering, date format, VAT, email, bank rules, users)…"
-          className="h-10 w-full rounded-lg border border-border-strong bg-surface-raised pl-9 pr-9 text-sm text-foreground placeholder:text-muted-foreground shadow-xs outline-none transition-colors focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-ring/25"
+          className="h-10 w-full rounded-lg border border-input bg-surface-raised pl-9 pr-9 text-sm text-foreground placeholder:text-muted-foreground shadow-xs outline-none transition-colors focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-ring/50"
         />
         {query && (
           <button

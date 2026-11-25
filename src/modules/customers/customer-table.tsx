@@ -1,6 +1,11 @@
 "use client";
 
-import { useMemo, useTransition, type ReactNode } from "react";
+import { useMemo, useState, useTransition, type ReactNode } from "react";
+import type { RowSelectionState } from "@tanstack/react-table";
+import { BatchDocumentActions } from "@/components/batch/batch-document-actions";
+import { BatchActiveButtons } from "@/components/batch/batch-active-buttons";
+import { selectionColumn } from "@/components/batch/selection-column";
+import { batchSetCustomersActiveAction } from "./actions";
 import Link from "next/link";
 import { debounce, useQueryStates } from "nuqs";
 import { MoreHorizontal, FileEdit, FileText, FilePlus2, BookOpenText } from "lucide-react";
@@ -98,6 +103,14 @@ export function CustomerTable({
     [customers, businessId, customValues],
   );
 
+  const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
+  const exportColumns = useMemo(() => [
+              { header: "Name", accessorKey: "name" },
+              { header: "Email", accessorFn: (r: CustomerRow) => r.email ?? "" },
+              { header: "Phone", accessorFn: (r: CustomerRow) => r.phone ?? "" },
+              { header: "Status", accessorFn: (r: CustomerRow) => (r.isActive ? "Active" : "Inactive") },
+            ], []);
+
   const columns: any[] = useMemo(
     () => {
       const baseCols = [
@@ -193,13 +206,19 @@ export function CustomerTable({
     [canCreatePerm, customFields]
   );
 
+  const tableColumns = useMemo(() => [selectionColumn<CustomerRow>((row) => row.name), ...columns], [columns]);
+
   const table = useTable({
     data: rows,
-    columns,
+    columns: tableColumns,
     manualSorting: true,
+    getRowId: (row: CustomerRow) => row.id,
+    enableRowSelection: true,
+    onRowSelectionChange: setRowSelection,
     state: {
       sorting,
       columnVisibility: colVisibility,
+      rowSelection,
     },
     onSortingChange: (updater) => {
       const next = resolveNextSortFromUpdater(updater, urlState.sort, urlState.dir, "asc");
@@ -240,12 +259,7 @@ export function CustomerTable({
             filename="customers"
             data={customers}
             totalCount={summary.filteredTotal}
-            columns={[
-              { header: "Name", accessorKey: "name" },
-              { header: "Email", accessorFn: (r: CustomerRow) => r.email ?? "" },
-              { header: "Phone", accessorFn: (r: CustomerRow) => r.phone ?? "" },
-              { header: "Status", accessorFn: (r: CustomerRow) => (r.isActive ? "Active" : "Inactive") },
-            ]}
+            columns={exportColumns}
           />
           <DensityToggle businessId={businessId} />
           {dropdown}
@@ -284,6 +298,23 @@ export function CustomerTable({
         )}
         {footer}
       </ListTableCard>
+      <BatchDocumentActions
+        selected={rows.filter((row) => rowSelection[row.id])}
+        totalCount={rows.length}
+        noun={{ one: "customer", many: "customers" }}
+        statusOf={(row) => (row.isActive ? "active" : "inactive")}
+        onClear={() => setRowSelection({})}
+        onSelectAll={() => table.toggleAllRowsSelected(true)}
+        exportConfig={{ filename: "customers", columns: exportColumns }}
+      >
+        <BatchActiveButtons
+          selected={rows.filter((row) => rowSelection[row.id])}
+          isActive={(row) => row.isActive}
+          noun={{ one: "customer", many: "customers" }}
+          setActive={(ids, value) => batchSetCustomersActiveAction(businessId, ids, value)}
+          onDone={() => setRowSelection({})}
+        />
+      </BatchDocumentActions>
     </>
   );
 }

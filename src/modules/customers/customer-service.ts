@@ -14,6 +14,7 @@ import {
   DEFAULT_LIST_PAGE_SIZE,
   MAX_LIST_PAGE_SIZE,
 } from "@/modules/shared/list-query-helpers";
+import { runBatch } from "@/modules/shared/batch";
 
 export function listCustomers(businessId: string, userId: string, includeInactive = false) {
   const db = getBusinessDb(businessId, userId).db;
@@ -260,4 +261,16 @@ export function updateCustomer(
     summary: `Updated customer ${data.name}`,
     details: { email: data.email, phone: data.phone },
   });
+}
+
+/** Activates or deactivates several customers at once (inactive customers are hidden from pickers). */
+export function setCustomersActive(businessId: string, userId: string, ids: readonly string[], active: boolean) {
+  assertMutationPermission(businessId, userId, "sales", "edit");
+  const { sqlite } = getBusinessDb(businessId, userId);
+  const update = sqlite.prepare("UPDATE customers SET is_active = ?, updated_at = ? WHERE id = ?");
+  const name = sqlite.prepare("SELECT name FROM customers WHERE id = ?");
+  const now = new Date().toISOString();
+  return runBatch(ids, (id) => {
+    if (update.run(active ? 1 : 0, now, id).changes !== 1) throw new Error("Customer not found.");
+  }, (id) => (name.get(id) as { name: string } | undefined)?.name);
 }

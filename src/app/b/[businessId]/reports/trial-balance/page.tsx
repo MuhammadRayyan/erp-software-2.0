@@ -3,7 +3,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { requireModule } from "@/core/permissions/require-module";
-import { formatMoney } from "@/core/format";
+import { formatMoney, getBusinessTodayIso } from "@/core/format";
 import { getTrialBalance } from "@/modules/reports/report-service";
 import { listSavedReports } from "@/modules/reports/saved-report-service";
 import { BackLink } from "@/components/back-link";
@@ -20,7 +20,7 @@ export default async function TrialBalancePage({
   const { businessId } = await params;
   const query = await searchParams;
   const { user, access } = await requireModule(businessId, "reports");
-  const throughDate = query.throughDate ?? new Date().toISOString().slice(0, 10);
+  const throughDate = query.throughDate ?? getBusinessTodayIso();
   const report = getTrialBalance(businessId, user.id, throughDate);
   const savedViews = listSavedReports(businessId, user.id, "trial_balance");
   const balanced = report.debitMinor === report.creditMinor;

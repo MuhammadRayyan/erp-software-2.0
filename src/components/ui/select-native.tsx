@@ -1,6 +1,7 @@
 import * as React from "react";
 import { ChevronDown } from "lucide-react";
 import { cn } from "@/lib/cn";
+import { controlDisabled, controlFocus, controlInvalid, controlSurface } from "./control-styles";
 
 const WRAPPER_TOKEN_REGEX =
   /^(?:(?:sm|md|lg|xl|2xl):)?(?:w-|min-w-|max-w-|-?m[tblrxy]?-|flex-|shrink|grow|basis-|col-span-|self-|justify-self-|hidden$|inline-flex$|flex$|grid$)/;
@@ -61,7 +62,11 @@ export const SelectNative = React.forwardRef<HTMLSelectElement, SelectNativeProp
         <select
           ref={ref}
           className={cn(
-            "appearance-none rounded-[6px] border border-border-strong bg-surface-raised text-foreground shadow-[0_1px_1px_rgb(15_23_42/0.03)] outline-none transition-colors hover:border-primary/50 focus:border-primary focus:ring-2 focus:ring-ring/25 aria-invalid:border-danger aria-invalid:bg-danger/[0.03] aria-invalid:focus:border-danger aria-invalid:focus:ring-danger/25 disabled:cursor-not-allowed disabled:bg-surface-muted disabled:opacity-65",
+            "appearance-none hover:border-primary/50",
+            controlSurface,
+            controlFocus,
+            controlInvalid,
+            controlDisabled,
             isAutoWidth ? "w-auto" : "w-full",
             size === "sm" ? "h-8 pl-2.5 text-xs" : "h-9 pl-3 text-sm",
             selectClasses,

@@ -20,6 +20,7 @@ import {
   updateCustomFieldAction,
 } from "./actions";
 import type { CustomFieldEntityType, CustomFieldFieldType } from "./custom-field-input";
+import { fieldErrorProps } from "@/lib/form-errors";
 
 const entityTypeLabels: Record<CustomFieldEntityType, string> = {
   customer: "Customers",
@@ -310,7 +311,7 @@ export function CustomFieldsManager({
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="custom-field-name">Name</Label>
-              <Input id="custom-field-name" value={values.name} onChange={(event) => setValues((current) => ({ ...current, name: event.target.value }))} aria-invalid={!!errors.name} placeholder="e.g. Serial Number / Batch / Delivery Ref" />
+              <Input id="custom-field-name" value={values.name} onChange={(event) => setValues((current) => ({ ...current, name: event.target.value }))} {...fieldErrorProps("name", errors.name)} placeholder="e.g. Serial Number / Batch / Delivery Ref" />
               {errors.name && <p className="field-error">{errors.name[0]}</p>}
             </div>
             {values.fieldType === "select" && (

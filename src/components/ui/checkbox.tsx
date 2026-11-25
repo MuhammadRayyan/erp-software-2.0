@@ -13,7 +13,7 @@ export const Checkbox = React.forwardRef<
     ref={ref}
     checked={checked}
     className={cn(
-      "peer inline-flex size-4 shrink-0 cursor-pointer items-center justify-center rounded-[4px] border border-border-strong bg-surface-raised text-primary-foreground shadow-[0_1px_1px_rgb(15_23_42/0.04)] transition-colors outline-none hover:border-primary/70 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 focus-visible:ring-offset-background data-[state=checked]:border-primary data-[state=checked]:bg-primary data-[state=indeterminate]:border-primary data-[state=indeterminate]:bg-primary disabled:cursor-not-allowed disabled:opacity-50",
+      "peer inline-flex size-4 shrink-0 cursor-pointer items-center justify-center rounded-[4px] border border-input bg-surface-raised text-primary-foreground shadow-[0_1px_1px_rgb(15_23_42/0.04)] transition-colors outline-none hover:border-primary/70 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 focus-visible:ring-offset-background data-[state=checked]:border-primary data-[state=checked]:bg-primary data-[state=indeterminate]:border-primary data-[state=indeterminate]:bg-primary disabled:cursor-not-allowed disabled:opacity-50",
       className,
     )}
     {...props}

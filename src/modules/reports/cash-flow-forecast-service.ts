@@ -1,5 +1,6 @@
 import { getBusinessDb } from "@/core/db/business";
 import { getBaseCurrency } from "@/modules/currency/currency";
+import { getBusinessTodayIso } from "@/core/format";
 
 export type CashFlowHorizon = 30 | 60 | 90;
 
@@ -108,7 +109,7 @@ export function getCashFlowForecast(
   const asOfDate =
     options.asOfDate && /^\d{4}-\d{2}-\d{2}$/.test(options.asOfDate)
       ? options.asOfDate
-      : new Date().toISOString().slice(0, 10);
+      : getBusinessTodayIso();
 
   // 1. Fetch liquid accounts (cash and bank) with balances as of asOfDate
   const rawAccounts = sqlite

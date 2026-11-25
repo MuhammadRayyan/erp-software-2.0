@@ -1,5 +1,7 @@
 export type MatchSourceType = "receipt" | "supplier_payment" | "bank_transaction" | "bank_transfer";
 
+export type MatchSourceRef = { sourceType: MatchSourceType; sourceId: string };
+
 export type MatchCandidate = {
   sourceType: MatchSourceType;
   sourceId: string;

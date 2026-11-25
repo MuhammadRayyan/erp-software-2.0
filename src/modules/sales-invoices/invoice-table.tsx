@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState, useTransition, type ReactNode } from "react";
+import { RecordPaymentSheet } from "@/components/documents/record-payment-sheet";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { debounce, useQueryStates } from "nuqs";
@@ -19,7 +20,7 @@ import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { DataTable, ListTableCard } from "@/components/ui/data-table";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
-import { formatDate, formatMoney, minorToDecimalString } from "@/core/format";
+import { formatDate, formatMoney, minorToDecimalString, getBusinessTodayIso } from "@/core/format";
 import { formatCustomFieldValue, type CustomFieldColumn } from "@/modules/custom-fields/custom-field-display";
 import { DocumentStatusBadge, PaymentStatusBadge } from "./invoice-status";
 import type { DocumentStatus, PaymentStatus } from "./invoice-service";
@@ -40,6 +41,7 @@ import { batchPostInvoicesAction, batchVoidInvoicesAction, batchDeleteInvoicesAc
 import { BatchEmailModal } from "./batch-email-modal";
 import { BatchConfirmModal } from "@/components/documents/batch-confirm-modal";
 import { exportCsv } from "@/lib/export-csv";
+import { useBatchRunner } from "@/components/batch/use-batch-runner";
 
 export type InvoiceRow = {
   id: string;
@@ -102,6 +104,7 @@ export function InvoiceTable({
   const { density } = useTableDensity(businessId);
 
   const [isPending, startTransition] = useTransition();
+  const batchRunner = useBatchRunner();
   const [urlState, setUrlState] = useQueryStates(invoiceListParsers, {
     shallow: false,
     history: "replace",
@@ -121,6 +124,7 @@ export function InvoiceTable({
   );
 
   const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
+  const [paymentTarget, setPaymentTarget] = useState<{ businessId: string; documentId: string } | null>(null);
   const [emailModalOpen, setEmailModalOpen] = useState(false);
   const [confirmModal, setConfirmModal] = useState<{
     type: "void" | "post" | "delete";
@@ -282,10 +286,8 @@ export function InvoiceTable({
                 {canReceive && (
                   <>
                     {hasUpper && hasLower && <DropdownMenuSeparator />}
-                    <DropdownMenuItem permission="create" asChild>
-                      <Link href={`/b/${inv.businessId}/sales/receipts/new?invoiceId=${inv.id}`}>
-                        <CircleDollarSign className="size-4 text-muted-foreground" /> Record Receipt
-                      </Link>
+                    <DropdownMenuItem permission="create" onSelect={() => setPaymentTarget({ businessId: inv.businessId, documentId: inv.id })}>
+                      <CircleDollarSign className="size-4 text-muted-foreground" /> Record Receipt
                     </DropdownMenuItem>
                   </>
                 )}
@@ -297,7 +299,7 @@ export function InvoiceTable({
     });
 
     return cols;
-  }, [canCreatePerm, canEditPerm, canExportPerm, customFields]);
+  }, [canCreatePerm, canEditPerm, canExportPerm, customFields, setPaymentTarget]);
 
   const table = useTable({
     data: rows,
@@ -533,7 +535,7 @@ export function InvoiceTable({
           const url = URL.createObjectURL(blob);
           const a = document.createElement("a");
           a.href = url;
-          a.download = `sales-invoices-batch-${new Date().toISOString().slice(0, 10)}.zip`;
+          a.download = `sales-invoices-batch-${getBusinessTodayIso()}.zip`;
           a.click();
           URL.revokeObjectURL(url);
           toast.success("Download started!");
@@ -542,61 +544,21 @@ export function InvoiceTable({
         }
       };
 
-      const handleBatchVoid = () => {
-        startTransition(async () => {
-          try {
-            const res = await batchVoidInvoicesAction(businessId, selectedInvoices.map((i) => i.id));
-            if (res.successCount > 0) {
-              toast.success(`Successfully voided ${res.successCount} ${res.successCount === 1 ? "invoice" : "invoices"}.`);
-              setRowSelection({});
-              setConfirmModal(null);
-              broadcastLiveRefresh();
-              router.refresh();
-            }
-            if (res.failedCount > 0) {
-              const detail = res.errors
-                .map((e) => (e.number ? `${e.number}: ${e.error}` : e.error))
-                .join(", ");
-              toast.error(
-                detail
-                  ? `Could not void ${res.failedCount} ${res.failedCount === 1 ? "invoice" : "invoices"}: ${detail}`
-                  : `Could not void ${res.failedCount} ${res.failedCount === 1 ? "invoice" : "invoices"}.`,
-              );
-            }
-          } catch (err) {
-            toast.error(err instanceof Error ? err.message : "Batch void failed.");
-          }
+      const handleBatchVoid = () =>
+        batchRunner.run(() => batchVoidInvoicesAction(businessId, selectedInvoices.map((i) => i.id)), {
+          noun: { one: "invoice", many: "invoices" },
+          done: "Voided",
+          verb: "void",
+          onSuccess: () => { setRowSelection({}); setConfirmModal(null); },
         });
-      };
 
-      const handleBatchDelete = () => {
-        startTransition(async () => {
-          try {
-            const draftIds = selectedDrafts.map((i) => i.id);
-            const res = await batchDeleteInvoicesAction(businessId, draftIds);
-            if (res.successCount > 0) {
-              toast.success(`Deleted ${res.successCount} draft ${res.successCount === 1 ? "invoice" : "invoices"}.`);
-              setRowSelection({});
-              setConfirmModal(null);
-              broadcastLiveRefresh();
-              router.refresh();
-            }
-            if (res.failedCount > 0) {
-              const detail = res.errors
-                .map((e) => (e.number ? `${e.number}: ${e.error}` : e.error))
-                .join(", ");
-              toast.error(
-                detail
-                  ? `Failed to delete ${res.failedCount} draft ${res.failedCount === 1 ? "invoice" : "invoices"}: ${detail}`
-                  : `Failed to delete ${res.failedCount} draft ${res.failedCount === 1 ? "invoice" : "invoices"}.`,
-              );
-              setConfirmModal(null);
-            }
-          } catch (err) {
-            toast.error(err instanceof Error ? err.message : "Batch delete failed.");
-          }
+      const handleBatchDelete = () =>
+        batchRunner.run(() => batchDeleteInvoicesAction(businessId, selectedDrafts.map((i) => i.id)), {
+          noun: { one: "draft invoice", many: "draft invoices" },
+          done: "Deleted",
+          verb: "delete",
+          onSuccess: () => { setRowSelection({}); setConfirmModal(null); },
         });
-      };
 
       return (
         <>
@@ -607,7 +569,7 @@ export function InvoiceTable({
             onSelectAll={() => table.toggleAllRowsSelected(true)}
             onExportSelected={() => {
               exportCsv(
-                `sales-invoices-selected-${new Date().toISOString().slice(0, 10)}.csv`,
+                `sales-invoices-selected-${getBusinessTodayIso()}.csv`,
                 [
                   { header: "Invoice Number", accessorKey: "invoiceNumber" },
                   { header: "Customer", accessorKey: "customerName" },
@@ -706,7 +668,7 @@ export function InvoiceTable({
               itemCount={selectedCount}
               itemLabel="invoices"
               onConfirm={handleBatchVoid}
-              isPending={isPending}
+              isPending={isPending || batchRunner.pending}
             />
           )}
 
@@ -721,11 +683,14 @@ export function InvoiceTable({
               itemCount={selectedDrafts.length}
               itemLabel="draft invoices"
               onConfirm={handleBatchDelete}
-              isPending={isPending}
+              isPending={isPending || batchRunner.pending}
             />
           )}
         </>
       );
     })()}
+  {paymentTarget ? (
+      <RecordPaymentSheet businessId={paymentTarget.businessId} kind="receipt" documentId={paymentTarget.documentId} open onOpenChange={(open) => !open && setPaymentTarget(null)} />
+    ) : null}
   </>;
 }

@@ -20,7 +20,7 @@ import { Badge } from "@/components/ui/badge";
 import { DataTable, ListTableCard } from "@/components/ui/data-table";
 import { useTableDensity } from "@/components/use-table-density";
 import type { ColumnVisibility } from "@/components/use-column-visibility";
-import { formatMoney, minorToDecimalString } from "@/core/format";
+import { formatMoney, minorToDecimalString, getBusinessTodayIso } from "@/core/format";
 import { formatQuantityMicros } from "./inventory-valuation";
 import { InventoryLocationRowActions } from "./inventory-location-row-actions";
 
@@ -178,7 +178,7 @@ export function InventoryLocationTable({
         <div className="ml-auto flex items-center gap-1.5 shrink-0">
           <ExportCsvButton
             size="sm"
-            filename={`inventory-locations-${new Date().toISOString().slice(0, 10)}.csv`}
+            filename={`inventory-locations-${getBusinessTodayIso()}.csv`}
             data={rows}
             columns={[
               { header: "Code", accessorKey: "code" },

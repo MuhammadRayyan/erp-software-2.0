@@ -43,7 +43,7 @@ export function PayRunDialog({
   const [fieldErrors, setFieldErrors] = useState<{ periodDate?: string; periodDescription?: string }>({});
 
   const today = getBusinessTodayIso();
-  const currentMonth = new Intl.DateTimeFormat("en-US", { month: "long", year: "numeric", timeZone: "Asia/Dubai" }).format(new Date());
+  const currentMonth = new Intl.DateTimeFormat("en-AE", { month: "long", year: "numeric", timeZone: "Asia/Dubai" }).format(new Date());
 
   const activeEmployees = employees.filter((e) => e.isActive);
   const [selectedIds, setSelectedIds] = useState<string[]>(activeEmployees.map((e) => e.id));

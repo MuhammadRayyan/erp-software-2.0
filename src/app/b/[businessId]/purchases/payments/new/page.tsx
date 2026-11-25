@@ -8,6 +8,7 @@ import { listPurchaseInvoices } from "@/modules/purchase-invoices/purchase-invoi
 import { SupplierPaymentForm } from "@/modules/supplier-payments/supplier-payment-form";
 import { listActiveSuppliers } from "@/modules/suppliers/supplier-service";
 import { NoticeToast } from "@/components/notice-toast";
+import { getBusinessTodayIso } from "@/core/format";
 
 export default async function NewSupplierPaymentPage({
   params,
@@ -39,7 +40,7 @@ export default async function NewSupplierPaymentPage({
   const minorUnits = new Map(settings.currencies.map((currency) => [currency.code, currency.minor_unit]));
   const supplierId = selected?.supplier_id ?? query.supplierId ?? "";
   const invoiceId = selected?.id ?? "";
-  const date = new Date().toISOString().slice(0, 10);
+  const date = getBusinessTodayIso();
 
   return (
     <div className="page-container">
