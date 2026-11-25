@@ -194,7 +194,9 @@ export default async function OverviewPage({
         : `/b/${businessId}/banking/accounts`,
       attention: unreconciled.count > 0,
     }] : []),
-    ...(!isChartView ? [{
+    // Approvals concern sales/purchase documents; users without either module
+    // (e.g. warehouse-only) keep the "Module access required" state.
+    ...(!isChartView && (canViewSales || canViewPurchases) ? [{
       id: "approvals",
       icon: "approvals" as const,
       label: "Approvals",
