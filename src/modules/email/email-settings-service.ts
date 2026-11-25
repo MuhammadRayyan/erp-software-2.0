@@ -1,6 +1,7 @@
 import { assertMutationPermission } from "@/core/permissions/mutation-permissions";
 import { getBusinessDb } from "@/core/db/business";
 import { createNodemailerTransporter, formatMailbox } from "./email-driver";
+import { resolvePublicSmtpHost } from "./smtp-host-guard";
 import type {
   BusinessEmailSettings,
   SaveEmailSettingsInput,
@@ -205,15 +206,18 @@ export async function verifyAndSendTestEmail(
     return { success: false, error: "SMTP Port is required to test email delivery." };
   }
 
-  const transporter = createNodemailerTransporter({
-    smtpHost: host,
-    smtpPort: port,
-    smtpSecure: secure,
-    smtpUser: user,
-    smtpPass: pass,
-  });
-
   try {
+    const target = await resolvePublicSmtpHost(host);
+    const transporter = createNodemailerTransporter(
+      {
+        smtpHost: target.address,
+        smtpPort: port,
+        smtpSecure: secure,
+        smtpUser: user,
+        smtpPass: pass,
+      },
+      { tlsServername: target.servername },
+    );
     // 1. Test transport connectivity and credentials if driver supports verify()
     if (typeof transporter.verify === "function") {
       await transporter.verify();

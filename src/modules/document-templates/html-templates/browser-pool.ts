@@ -94,6 +94,15 @@ async function launchBrowser(): Promise<Browser> {
         "--disable-setuid-sandbox",
         "--disable-dev-shm-usage",
         "--disable-gpu",
+        // Templates are user-authored HTML. Requests are already intercepted,
+        // but resource hints can still trigger DNS lookups outside interception.
+        "--dns-prefetch-disable",
+        "--disable-features=NetworkPrediction,NetworkService.Prefetch",
+        "--disable-background-networking",
+        "--disable-extensions",
+        "--disable-sync",
+        "--no-first-run",
+        "--no-zygote",
       ],
     });
 

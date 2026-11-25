@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import nodemailer from "nodemailer";
 import { getAppDomain } from "@/core/config/app-url";
 import type { EmailDriver, SendEmailInput } from "./email-types";
+import { resolvePublicSmtpHost } from "./smtp-host-guard";
 import { formatMailbox, joinMailboxes, parseMailboxes } from "./mailbox-utils";
 
 export { formatMailbox, joinMailboxes, parseMailboxes };
@@ -24,9 +25,10 @@ export interface SmtpTransportConfig {
   isActive?: boolean | null;
 }
 
-export function createNodemailerTransporter(config: SmtpTransportConfig) {
+export function createNodemailerTransporter(config: SmtpTransportConfig, options: { tlsServername?: string } = {}) {
   return nodemailer.createTransport({
     host: config.smtpHost || undefined,
+    ...(options.tlsServername ? { tls: { servername: options.tlsServername } } : {}),
     port: config.smtpPort ? Number(config.smtpPort) : undefined,
     secure: Boolean(config.smtpSecure),
     auth:
@@ -118,10 +120,21 @@ export function getGlobalEmailConfigStatus(): GlobalEmailConfigStatus {
 export function getEmailDriver(customSettings?: SmtpTransportConfig | null): EmailDriver {
   // 1. Business custom SMTP settings (if active and host/port provided)
   if (customSettings && customSettings.isActive && customSettings.smtpHost && customSettings.smtpPort) {
-    const transporter = createNodemailerTransporter(customSettings);
     return {
       name: "business-smtp",
-      send: (input) => dispatchNodemailerMail(transporter, input, "Business SMTP"),
+      send: async (input) => {
+        let target: { address: string; servername: string };
+        try {
+          target = await resolvePublicSmtpHost(String(customSettings.smtpHost));
+        } catch (error) {
+          return { ok: false, error: error instanceof Error ? error.message : "SMTP host is not allowed." };
+        }
+        const transporter = createNodemailerTransporter(
+          { ...customSettings, smtpHost: target.address },
+          { tlsServername: target.servername },
+        );
+        return dispatchNodemailerMail(transporter, input, "Business SMTP");
+      },
     };
   }
 
