@@ -12,8 +12,10 @@ import { moduleKeys } from "@/core/permissions/module-access";
 import * as schema from "./business-schema";
 import { businessMigrations } from "./business-migrations";
 import { readMigrationState } from "./migrations/runner";
+import { installStatementCache, type StatementCacheStats } from "./statement-cache";
+import { RETIRED_CONNECTION_CLOSE_DELAY_MS, STATEMENT_CHURN_RECYCLE_THRESHOLD } from "./connection-limits";
 
-const MAX_CONNECTIONS = 50;
+const MAX_CONNECTIONS = 12;
 const IDLE_TIMEOUT_MS = 5 * 60 * 1000;  // 5 minutes
 // Never evict a connection that was used this recently: a request may hold
 // the handle across an await boundary, and closing it would crash that
@@ -26,6 +28,7 @@ type Connection = {
   paths: ReturnType<typeof getBusinessPaths>;
   lastUsed: number;
   idleTimer: ReturnType<typeof setTimeout> | null;
+  statementStats: StatementCacheStats;
 };
 
 const connections = new Map<string, Connection>();
@@ -37,6 +40,30 @@ function closeConnection(directoryKey: string) {
   checkpointAndOptimizeSqlite(conn.sqlite);
   conn.sqlite.close();
   connections.delete(directoryKey);
+}
+
+/**
+ * Replaces a connection whose statement churn has retained too much native
+ * memory. The retired handle closes after a grace period so requests still
+ * holding it across an await keep working.
+ */
+function retireIfChurned(directoryKey: string) {
+  const conn = connections.get(directoryKey);
+  if (!conn || conn.statementStats.misses < STATEMENT_CHURN_RECYCLE_THRESHOLD) return;
+  if (conn.sqlite.inTransaction) return;
+  if (conn.idleTimer) clearTimeout(conn.idleTimer);
+  connections.delete(directoryKey);
+  const timer = setTimeout(() => {
+    try {
+      if (conn.sqlite.open) {
+        checkpointAndOptimizeSqlite(conn.sqlite);
+        conn.sqlite.close();
+      }
+    } catch {
+      // Closing a retired handle is best-effort.
+    }
+  }, RETIRED_CONNECTION_CLOSE_DELAY_MS);
+  timer.unref?.();
 }
 
 function scheduleIdleClose(directoryKey: string) {
@@ -70,6 +97,7 @@ function evictIfNeeded() {
 }
 
 export function openBusinessDatabase(directoryKey: string, options: { create?: boolean } = {}) {
+  retireIfChurned(directoryKey);
   let conn = connections.get(directoryKey);
   if (!conn) {
     evictIfNeeded();
@@ -82,8 +110,9 @@ export function openBusinessDatabase(directoryKey: string, options: { create?: b
     if (external) {
       if (!readMigrationState(sqlite, businessMigrations, `business database ${directoryKey}`).current) throw new Error("Business migrations are pending.");
     } else migrateBusinessDatabase(sqlite, `business database ${directoryKey}`);
+    const statementStats = installStatementCache(sqlite);
     const db = drizzle(sqlite, { schema });
-    conn = { sqlite, db, paths, lastUsed: Date.now(), idleTimer: null };
+    conn = { sqlite, db, paths, lastUsed: Date.now(), idleTimer: null, statementStats };
     connections.set(directoryKey, conn);
     } catch (error) {
       sqlite.close();
