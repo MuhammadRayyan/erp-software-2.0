@@ -4,7 +4,7 @@ import * as Dropdown from "@radix-ui/react-dropdown-menu";
 import { Check, ChevronRight } from "lucide-react";
 import { cn } from "@/lib/cn";
 import { useActionPermission } from "@/components/permissions-provider";
-import type { ActionKey } from "@/core/permissions/module-access";
+import type { ActionKey, ModuleKey } from "@/core/permissions/module-access";
 
 export function DropdownMenu({
   modal = false,
@@ -28,7 +28,7 @@ export function DropdownMenuContent({
       <Dropdown.Content
         sideOffset={sideOffset}
         className={cn(
-          "z-50 min-w-44 overflow-hidden rounded-lg border border-border bg-surface-raised p-1 text-foreground shadow-[0_12px_32px_rgb(15_23_42/0.14)] data-[state=open]:animate-in",
+          "erp-popover-animate z-[70] min-w-44 overflow-hidden rounded-lg border border-border bg-surface-raised p-1 text-foreground shadow-[0_12px_32px_rgb(15_23_42/0.14)] dark:shadow-[0_14px_36px_rgb(0_0_0/0.45)]",
           className,
         )}
         {...props}
@@ -37,8 +37,18 @@ export function DropdownMenuContent({
   );
 }
 
-export function DropdownMenuItem({ className, inset, permission, ...props }: React.ComponentProps<typeof Dropdown.Item> & { inset?: boolean; permission?: ActionKey | ActionKey[] }) {
-  const allowed = useActionPermission(permission);
+export function DropdownMenuItem({
+  className,
+  inset,
+  permission,
+  permissionModule,
+  ...props
+}: React.ComponentProps<typeof Dropdown.Item> & {
+  inset?: boolean;
+  permission?: ActionKey | ActionKey[];
+  permissionModule?: ModuleKey | ModuleKey[];
+}) {
+  const allowed = useActionPermission(permission, permissionModule);
   if (!allowed) return null;
   return (
     <Dropdown.Item
@@ -86,5 +96,5 @@ export function DropdownMenuSubTrigger({ className, children, ...props }: React.
 }
 
 export function DropdownMenuSubContent({ className, ...props }: React.ComponentProps<typeof Dropdown.SubContent>) {
-  return <Dropdown.SubContent className={cn("min-w-40 rounded-lg border border-border bg-surface-raised p-1 shadow-lg", className)} {...props} />;
+  return <Dropdown.SubContent className={cn("erp-popover-animate z-[70] min-w-40 rounded-lg border border-border bg-surface-raised p-1 shadow-lg", className)} {...props} />;
 }

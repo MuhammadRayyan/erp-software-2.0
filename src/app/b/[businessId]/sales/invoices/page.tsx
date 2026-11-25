@@ -85,9 +85,6 @@ export default async function InvoiceListPage({
     <div className="page-container">
       <LiveRefresh />
       <PageHeader title="Sales Invoices" description="Draft, post, collect, and inspect customer invoices.">
-        <Button asChild variant="secondary">
-          <Link href={`/b/${businessId}/sales/receipts`}>Receipts</Link>
-        </Button>
         <Button permission="create" asChild>
           <Link href={`/b/${businessId}/sales/invoices/new`}>
             <Plus className="size-4" /> New Invoice

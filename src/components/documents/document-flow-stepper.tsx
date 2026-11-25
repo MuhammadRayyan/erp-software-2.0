@@ -49,7 +49,7 @@ export function DocumentFlowStepper({
                     isCurrent
                       ? "bg-primary text-primary-foreground shadow-2xs"
                       : isCompleted
-                      ? "bg-emerald-600/15 text-emerald-600 dark:text-emerald-400 font-bold"
+                      ? "bg-success/15 text-success font-bold"
                       : isSkipped
                       ? "bg-surface-muted text-muted-foreground/50 line-through"
                       : "border border-dashed border-border text-muted-foreground"
@@ -86,7 +86,7 @@ export function DocumentFlowStepper({
                       <span
                         className={`text-[10px] px-1.5 py-0.5 rounded font-medium capitalize ${
                           isCompleted
-                            ? "bg-emerald-500/10 text-emerald-700 dark:text-emerald-300"
+                            ? "bg-success/12 text-success"
                             : isCurrent
                             ? "bg-primary/15 text-primary"
                             : "bg-surface-muted text-muted-foreground"

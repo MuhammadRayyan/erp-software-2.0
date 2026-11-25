@@ -4,7 +4,7 @@ import { useMemo, type ReactNode } from "react";
 import Link from "next/link";
 import { StatusBadge } from "@/components/status-badge";
 import type { ColumnVisibility } from "@/components/use-column-visibility";
-import { formatDate, formatMoney } from "@/core/format";
+import { formatDate, formatMoney, minorToDecimalString } from "@/core/format";
 import { CashDocumentTable } from "@/modules/shared/cash-document-table";
 import type { CashDocumentListSummary } from "@/modules/shared/list-query-helpers";
 import type { ReceiptListRow } from "./receipt-service";
@@ -141,6 +141,27 @@ export function ReceiptTable({
       noResultsMessage="No receipts match these filters"
       noResultsSubtext="Try a different receipt number, customer, bank account, date range, or status."
       minWidth="min-w-[900px]"
+      getRowHref={(r) => `/b/${businessId}/sales/receipts/${r.id}`}
+      exportConfig={{
+        filename: "receipts",
+        columns: [
+          { header: "Receipt #", accessorKey: "receipt_number" },
+          { header: "Customer", accessorKey: "customer_name" },
+          { header: "Date", accessorKey: "date" },
+          { header: "Bank / Cash", accessorKey: "bank_account_name" },
+          { header: "Reference", accessorFn: (r) => r.reference ?? "" },
+          {
+            header: "Amount",
+            accessorFn: (r) => minorToDecimalString(r.amount_minor, r.currency_code, r.currency_minor_unit),
+          },
+          { header: "Currency", accessorKey: "currency_code" },
+          {
+            header: `Base Bank (${baseCurrency})`,
+            accessorFn: (r) => minorToDecimalString(r.base_amount_minor, baseCurrency),
+          },
+          { header: "Status", accessorKey: "document_status" },
+        ],
+      }}
       footer={footer}
     />
   );

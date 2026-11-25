@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { formatMoney } from "@/core/format";
+import { formatMoney, minorToDecimalString } from "@/core/format";
 import { requireModule } from "@/core/permissions/require-module";
 import {
   computeVariance,
@@ -70,10 +70,10 @@ export default async function BalanceSheetReportPage({
       subtype: r.subtype,
     };
     dates.forEach((_, idx) => {
-      obj[`date_${idx}`] = (r.amountsMinor[idx] / 100).toFixed(2);
+      obj[`date_${idx}`] = minorToDecimalString(r.amountsMinor[idx], access.business.currency);
     });
     if (showVariance) {
-      obj.variance = r.varianceMinor !== null ? (r.varianceMinor / 100).toFixed(2) : "";
+      obj.variance = r.varianceMinor !== null ? minorToDecimalString(r.varianceMinor, access.business.currency) : "";
       obj.variance_pct = r.variancePercent !== null ? `${r.variancePercent}%` : "";
     }
     return obj;

@@ -168,6 +168,64 @@ export function saveApprovalRule(
   return getApprovalRuleRow(sqlite, input.entityType)!;
 }
 
+export function saveApprovalRules(
+  businessId: string,
+  userId: string,
+  rules: Array<{
+    entityType: string;
+    isEnabled: boolean;
+    thresholdMinor: number;
+    requireCheckerSeparation: boolean;
+  }>,
+): ApprovalRuleRecord[] {
+  assertBusinessAdministrator(businessId, userId);
+  const { sqlite } = getBusinessDb(businessId, userId);
+  const now = new Date().toISOString();
+
+  sqlite.transaction(() => {
+    for (const item of rules) {
+      const threshold = Math.max(0, Math.round(item.thresholdMinor));
+      const existing = getApprovalRuleRow(sqlite, item.entityType);
+      if (!existing) {
+        const id = `rule-${item.entityType}`;
+        const cfg = APPROVAL_ENTITY_CONFIG[item.entityType as ApprovalEntityType];
+        const moduleName = cfg?.module ?? "settings";
+        sqlite
+          .prepare(`
+            INSERT INTO approval_rules (
+              id, entity_type, module, is_enabled, threshold_minor, require_checker_separation, updated_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?)
+          `)
+          .run(
+            id,
+            item.entityType,
+            moduleName,
+            item.isEnabled ? 1 : 0,
+            threshold,
+            item.requireCheckerSeparation ? 1 : 0,
+            now,
+          );
+      } else {
+        sqlite
+          .prepare(`
+            UPDATE approval_rules
+            SET is_enabled = ?, threshold_minor = ?, require_checker_separation = ?, updated_at = ?
+            WHERE entity_type = ?
+          `)
+          .run(
+            item.isEnabled ? 1 : 0,
+            threshold,
+            item.requireCheckerSeparation ? 1 : 0,
+            now,
+            item.entityType,
+          );
+      }
+    }
+  }).immediate();
+
+  return listApprovalRules(businessId, userId);
+}
+
 export function recordPendingApprovalInTransaction(
   sqlite: Database.Database,
   params: {

@@ -70,6 +70,7 @@ export function EmployeesClient({ businessId, employees, currency }: EmployeesCl
       <EmployeeDialog
         businessId={businessId}
         employee={selectedEmployee}
+        currency={currency}
         open={dialogOpen}
         onOpenChange={setDialogOpen}
         onSaved={() => router.refresh()}

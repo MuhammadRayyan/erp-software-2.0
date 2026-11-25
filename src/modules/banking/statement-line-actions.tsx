@@ -2,10 +2,18 @@
 
 import Link from "next/link";
 import { useState, useTransition } from "react";
-import { Check, ExternalLink, Plus, RotateCcw, Search, Sparkles, Wand2, X } from "lucide-react";
+import { Check, ExternalLink, MoreHorizontal, Plus, RotateCcw, Search, Sparkles, Wand2, X } from "lucide-react";
 import { useRouter } from "next/navigation";
+import { useActionPermission } from "@/components/permissions-provider";
 import { Button } from "@/components/ui/button";
-import { formatDate, formatMoney } from "@/core/format";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { formatDate, formatMoney, minorToDecimalString } from "@/core/format";
 import {
   applyBankRuleAction,
   ignoreStatementLineAction,
@@ -42,6 +50,7 @@ export function StatementLineActions({
   const [expanded, setExpanded] = useState(false);
   const [error, setError] = useState("");
   const [pending, startTransition] = useTransition();
+  const canEdit = useActionPermission("edit");
   const router = useRouter();
 
   function run(action: () => Promise<{ error?: string }>) {
@@ -57,6 +66,7 @@ export function StatementLineActions({
     return (
       <div>
         <Button
+          permission="edit"
           variant="ghost"
           size="sm"
           disabled={pending || status === "created"}
@@ -71,15 +81,16 @@ export function StatementLineActions({
 
   const isMoneyIn = typeof amountMinor === "number" && amountMinor > 0;
   const isMoneyOut = typeof amountMinor === "number" && amountMinor < 0;
-  const formattedAmount = typeof amountMinor === "number" ? (Math.abs(amountMinor) / 100).toFixed(2) : "";
+  const formattedAmount = typeof amountMinor === "number" ? minorToDecimalString(Math.abs(amountMinor), currency) : "";
   const receiptHref = `/b/${businessId}/sales/receipts/new?bankAccountId=${accountId}&amount=${formattedAmount}&date=${transactionDate ?? ""}&reference=${encodeURIComponent(reference ?? "")}&description=${encodeURIComponent(description ?? "")}`;
   const paymentHref = `/b/${businessId}/purchases/payments/new?bankAccountId=${accountId}&amount=${formattedAmount}&date=${transactionDate ?? ""}&reference=${encodeURIComponent(reference ?? "")}&description=${encodeURIComponent(description ?? "")}`;
 
   return (
-    <div className="min-w-[360px]">
+    <div className="min-w-[220px]">
       <div className="flex flex-wrap items-center gap-1.5">
-        {matchedRule && (
+        {matchedRule ? (
           <Button
+            permission="edit"
             size="sm"
             disabled={pending}
             className="bg-primary hover:bg-primary/90 text-primary-foreground shadow-xs font-medium"
@@ -90,10 +101,9 @@ export function StatementLineActions({
           >
             <Wand2 className="size-3.5 mr-1" /> Apply Rule: {matchedRule.name}
           </Button>
-        )}
-
-        {candidates[0] && (
+        ) : candidates[0] ? (
           <Button
+            permission="edit"
             size="sm"
             disabled={pending}
             onClick={() =>
@@ -110,10 +120,17 @@ export function StatementLineActions({
           >
             <Check className="size-3.5" /> Match {candidates[0].sourceNumber}
           </Button>
-        )}
+        ) : null}
 
         {isMoneyIn && (
-          <Button asChild variant="secondary" size="sm" title="Record customer receipt for this deposit">
+          <Button
+            permission="create"
+            permissionModule="sales"
+            asChild
+            variant={matchedRule || candidates[0] ? "secondary" : "primary"}
+            size="sm"
+            title="Record customer receipt for this deposit"
+          >
             <Link href={receiptHref}>
               <Plus className="size-3.5" /> Record Receipt
             </Link>
@@ -121,45 +138,73 @@ export function StatementLineActions({
         )}
 
         {isMoneyOut && (
-          <Button asChild variant="secondary" size="sm" title="Record supplier payment for this withdrawal">
+          <Button
+            permission="create"
+            permissionModule="purchases"
+            asChild
+            variant={matchedRule || candidates[0] ? "secondary" : "primary"}
+            size="sm"
+            title="Record supplier payment for this withdrawal"
+          >
             <Link href={paymentHref}>
               <Plus className="size-3.5" /> Record Payment
             </Link>
           </Button>
         )}
 
-        <Button
-          variant="secondary"
-          size="sm"
-          onClick={() => setExpanded((value) => !value)}
-        >
-          <Search className="size-3.5" /> Find Other{candidates.length ? ` (${candidates.length})` : ""}
-        </Button>
-
-        <Button permission="create" asChild variant="ghost" size="sm" title="Create non-AR/AP bank transaction">
-          <Link
-            href={`/b/${businessId}/banking/transactions/new?accountId=${accountId}&statementLineId=${lineId}`}
-          >
-            <Plus className="size-3.5" /> Bank Transaction
-          </Link>
-        </Button>
-
-        <Button asChild variant="ghost" size="sm" title="Create a bank rule from this statement line">
-          <Link
-            href={`/b/${businessId}/settings/bank-rules?create=1&matchText=${encodeURIComponent(description || "")}&direction=${isMoneyIn ? "money_in" : "money_out"}&bankAccountId=${accountId}`}
-          >
-            <Sparkles className="size-3.5 mr-1 text-primary" /> Rule
-          </Link>
-        </Button>
-
-        <Button
-          variant="ghost"
-          size="sm"
-          disabled={pending}
-          onClick={() => run(() => ignoreStatementLineAction(businessId, accountId, lineId))}
-        >
-          <X className="size-3.5" /> Ignore
-        </Button>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button variant="secondary" size="sm" aria-label="More statement line actions">
+              <MoreHorizontal className="size-3.5" /> More
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="w-56">
+            {matchedRule && candidates[0] && (
+              <DropdownMenuItem
+                permission="edit"
+                disabled={pending}
+                onSelect={() =>
+                  run(() =>
+                    matchStatementLineAction(
+                      businessId,
+                      accountId,
+                      lineId,
+                      candidates[0].sourceType,
+                      candidates[0].sourceId,
+                    ),
+                  )
+                }
+              >
+                <Check className="size-4" /> Match {candidates[0].sourceNumber}
+              </DropdownMenuItem>
+            )}
+            <DropdownMenuItem onSelect={() => setExpanded((value) => !value)}>
+              <Search className="size-4" /> Find Other{candidates.length ? ` (${candidates.length})` : ""}
+            </DropdownMenuItem>
+            <DropdownMenuItem permission="create" asChild>
+              <Link
+                href={`/b/${businessId}/banking/transactions/new?accountId=${accountId}&statementLineId=${lineId}`}
+              >
+                <Plus className="size-4" /> Bank Transaction
+              </Link>
+            </DropdownMenuItem>
+            <DropdownMenuItem permission="edit" permissionModule="settings" asChild>
+              <Link
+                href={`/b/${businessId}/settings/bank-rules?create=1&matchText=${encodeURIComponent(description || "")}&direction=${isMoneyIn ? "money_in" : "money_out"}&bankAccountId=${accountId}`}
+              >
+                <Sparkles className="size-4 text-primary" /> Create Bank Rule
+              </Link>
+            </DropdownMenuItem>
+            {canEdit && <DropdownMenuSeparator />}
+            <DropdownMenuItem
+              permission="edit"
+              disabled={pending}
+              onSelect={() => run(() => ignoreStatementLineAction(businessId, accountId, lineId))}
+            >
+              <X className="size-4" /> Ignore Line
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
       </div>
 
       {expanded && (
@@ -181,6 +226,7 @@ export function StatementLineActions({
                   </p>
                 </div>
                 <Button
+                  permission="edit"
                   size="sm"
                   variant="secondary"
                   disabled={pending}

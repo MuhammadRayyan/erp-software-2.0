@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo } from "react";
 import Link from "next/link";
 import {
   useLegacyTable as useTable,
@@ -8,10 +8,11 @@ import {
   getPaginationRowModel as createPaginationRowModel,
   getSortedRowModel as createSortedRowModel,
 } from "@tanstack/react-table/legacy";
-import { type SortingState } from "@tanstack/react-table";
 import { useColumns } from "@/components/columns-dropdown";
 import { DensityToggle } from "@/components/density-toggle";
-import { ClientListPagination, useTablePagination } from "@/components/list-pagination";
+import { ClientListPagination } from "@/components/list-pagination";
+import { ExportCsvButton } from "@/components/export-csv-button";
+import { useUrlListState } from "@/hooks/use-url-list-state";
 import { ActiveFiltersRow, FilterChip, ListToolbar, SearchInput, ToolbarSelect } from "@/components/list-toolbar";
 import { StatusBadge } from "@/components/status-badge";
 import { TableTotalsBar } from "@/components/table-totals-bar";
@@ -19,7 +20,7 @@ import { Badge } from "@/components/ui/badge";
 import { DataTable, ListTableCard } from "@/components/ui/data-table";
 import { useTableDensity } from "@/components/use-table-density";
 import type { ColumnVisibility } from "@/components/use-column-visibility";
-import { formatMoney } from "@/core/format";
+import { formatMoney, minorToDecimalString } from "@/core/format";
 import { formatQuantityMicros } from "./inventory-valuation";
 import { InventoryLocationRowActions } from "./inventory-location-row-actions";
 
@@ -51,9 +52,17 @@ export function InventoryLocationTable({
   serverSnapshot?: ColumnVisibility;
 }) {
   const { density } = useTableDensity(businessId);
-  const [query, setQuery] = useState("");
-  const [status, setStatus] = useState("");
-  const [sorting, setSorting] = useState<SortingState>([]);
+  const {
+    query,
+    status,
+    sorting,
+    setFilter,
+    setPage,
+    setPageSize,
+    onSortingChange,
+    resetFilters,
+    buildPagination,
+  } = useUrlListState({ defaultSort: "name", defaultDir: "asc" });
 
   const initialColumns = useMemo(
     () => ({ quantity_micros: true, value_minor: true, is_active: true }),
@@ -135,23 +144,19 @@ export function InventoryLocationTable({
     [businessId, currency],
   );
 
-  const { pagination, onPaginationChange, paginationInfo, setPage, setPageSize } = useTablePagination(rows.length);
+  const { pagination, paginationInfo } = buildPagination(rows.length);
 
   const table = useTable({
     data: rows,
     columns,
     state: { sorting, pagination, columnVisibility: colVisibility },
-    onSortingChange: setSorting,
-    onPaginationChange,
+    onSortingChange,
     getCoreRowModel: createCoreRowModel(),
     getSortedRowModel: createSortedRowModel(),
     getPaginationRowModel: createPaginationRowModel(),
   });
 
-  const clearFilters = () => {
-    setQuery("");
-    setStatus("");
-  };
+  const clearFilters = resetFilters;
   const hasActiveFilter = Boolean(query || status);
 
   const totalValue = useMemo(() => rows.reduce((sum, r) => sum + Number(r.value_minor || 0), 0), [rows]);
@@ -159,10 +164,10 @@ export function InventoryLocationTable({
   return (
     <>
       <ListToolbar>
-        <SearchInput value={query} onChange={setQuery} placeholder="Search locations or code…" ariaLabel="Search inventory locations" />
+        <SearchInput value={query} onChange={(val) => setFilter("q", val)} placeholder="Search locations or code…" ariaLabel="Search inventory locations" />
         <ToolbarSelect
           value={status}
-          onChange={setStatus}
+          onChange={(val) => setFilter("status", val)}
           ariaLabel="Filter by status"
           options={[
             { value: "", label: "All statuses" },
@@ -171,14 +176,26 @@ export function InventoryLocationTable({
           ]}
         />
         <div className="ml-auto flex items-center gap-1.5 shrink-0">
+          <ExportCsvButton
+            size="sm"
+            filename={`inventory-locations-${new Date().toISOString().slice(0, 10)}.csv`}
+            data={rows}
+            columns={[
+              { header: "Code", accessorKey: "code" },
+              { header: "Name", accessorKey: "name" },
+              { header: "Total Quantity", accessorFn: (r: InventoryLocationRow) => formatQuantityMicros(Number(r.quantity_micros)) },
+              { header: "Valuation", accessorFn: (r: InventoryLocationRow) => minorToDecimalString(Number(r.value_minor || 0), currency) },
+              { header: "Status", accessorFn: (r: InventoryLocationRow) => (r.is_active ? "Active" : "Inactive") },
+            ]}
+          />
           <DensityToggle businessId={businessId} />
           {dropdown}
         </div>
       </ListToolbar>
       {hasActiveFilter && (
         <ActiveFiltersRow onClearAll={clearFilters}>
-          {status && <FilterChip onRemove={() => setStatus("")}>Status: {status === "active" ? "Active only" : "Inactive only"}</FilterChip>}
-          {query && <FilterChip onRemove={() => setQuery("")}>Search: {query}</FilterChip>}
+          {status && <FilterChip onRemove={() => setFilter("status", "")}>Status: {status === "active" ? "Active only" : "Inactive only"}</FilterChip>}
+          {query && <FilterChip onRemove={() => setFilter("q", "")}>Search: {query}</FilterChip>}
         </ActiveFiltersRow>
       )}
       <ListTableCard>
@@ -189,6 +206,7 @@ export function InventoryLocationTable({
           minWidth="min-w-[680px]"
           noResultsMessage="No locations match"
           onClearFilters={clearFilters}
+          getRowHref={(row: InventoryLocationRow) => `/b/${businessId}/inventory/locations/${row.id}`}
         />
         {rows.length > 0 && (
           <TableTotalsBar

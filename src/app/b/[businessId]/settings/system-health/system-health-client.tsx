@@ -19,7 +19,7 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { formatBytes } from "@/core/format";
+import { formatBytes, formatDate } from "@/core/format";
 import { copyToClipboard } from "@/lib/clipboard";
 import { triggerDiagnosticTraceAction } from "./actions";
 
@@ -391,12 +391,12 @@ export function SystemHealthClient({ initialData }: { initialData: SystemHealthD
                 <tbody className="divide-y divide-border font-normal">
                   {filteredLogs.map((log) => {
                     const isExpanded = expandedLogId === log.id;
-                    const dateStr = new Date(log.createdAt).toLocaleTimeString([], {
+                    const dateStr = formatDate(log.createdAt, {
                       hour: "2-digit",
                       minute: "2-digit",
                       second: "2-digit",
                     });
-                    const fullDateStr = new Date(log.createdAt).toLocaleDateString([], {
+                    const fullDateStr = formatDate(log.createdAt, {
                       month: "short",
                       day: "numeric",
                     });
@@ -482,13 +482,14 @@ export function SystemHealthClient({ initialData }: { initialData: SystemHealthD
             </Button>
           </div>
           <pre className="mt-3 max-h-60 overflow-auto rounded bg-surface p-3 font-mono text-[11px] text-muted-foreground leading-relaxed">
-            {JSON.stringify(
-              JSON.parse(
-                initialData.recentLogs.find((l) => l.id === expandedLogId)?.metadataJson || "{}"
-              ),
-              null,
-              2
-            )}
+            {(() => {
+              const raw = initialData.recentLogs.find((l) => l.id === expandedLogId)?.metadataJson || "{}";
+              try {
+                return JSON.stringify(JSON.parse(raw), null, 2);
+              } catch {
+                return raw;
+              }
+            })()}
           </pre>
         </div>
       )}

@@ -8,6 +8,7 @@ export interface SearchableItemSelectProps {
   items: DocumentLineItemOption[];
   value?: string;
   onChange: (itemId: string) => void;
+  onRequestCreateItem?: (searchQuery: string) => void;
   onKeyDown?: (e: React.KeyboardEvent) => void;
   placeholder?: string;
   ariaLabel?: string;
@@ -21,6 +22,7 @@ export function SearchableItemSelect({
   items,
   value,
   onChange,
+  onRequestCreateItem,
   onKeyDown,
   placeholder = "Service / free text",
   ariaLabel = "Select item",
@@ -57,6 +59,14 @@ export function SearchableItemSelect({
       dataGridRow={dataGridRow}
       dataGridColId={dataGridColId}
       onKeyDown={onKeyDown ? (event) => onKeyDown(event) : undefined}
+      createAction={
+        onRequestCreateItem
+          ? {
+              label: "New Item",
+              onTrigger: onRequestCreateItem,
+            }
+          : undefined
+      }
     />
   );
 }

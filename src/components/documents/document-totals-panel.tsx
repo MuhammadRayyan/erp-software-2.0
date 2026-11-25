@@ -62,7 +62,7 @@ export function DocumentTotalsPanel({
       </div>
       {effectiveCreditMinor > 0 && (
         <>
-          <div className="flex justify-between gap-4 text-emerald-700 dark:text-emerald-400">
+          <div className="flex justify-between gap-4 text-success">
             <dt>{creditLabel}</dt>
             <dd className="money whitespace-nowrap tabular-nums">
               -{formatMoney(effectiveCreditMinor, currencyCode, minorUnit)}

@@ -19,18 +19,18 @@ export function Breadcrumbs({
   return (
     <nav
       aria-label="Breadcrumb"
-      className={cn("mb-4 flex items-center text-xs text-muted-foreground", className)}
+      className={cn("page-breadcrumbs no-print mb-4 flex items-center text-xs text-muted-foreground", className)}
     >
       <ol className="flex flex-wrap items-center gap-1.5">
         {businessId && (
           <li className="flex items-center gap-1.5">
             <Link
-              href={`/b/${businessId}/overview`}
+              href={`/b/${businessId}`}
               className="flex items-center gap-1 transition-colors hover:text-foreground"
-              title="Overview"
+              title="Home"
             >
               <Home className="size-3.5" />
-              <span className="sr-only">Overview</span>
+              <span className="sr-only">Home</span>
             </Link>
             <ChevronRight className="size-3.5 shrink-0 opacity-40" aria-hidden="true" />
           </li>

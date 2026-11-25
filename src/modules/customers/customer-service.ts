@@ -224,11 +224,12 @@ export function updateCustomer(
   getCurrency(context.sqlite, defaultCurrencyCode, true);
   const current = getCustomer(businessId, userId, customerId);
   if (!current) throw new Error("CUSTOMER_NOT_FOUND");
-  const trnValue = data.taxReference !== undefined && data.taxReference !== ""
-    ? data.taxReference.trim()
-    : data.trn !== undefined && data.trn !== ""
-      ? data.trn.trim()
-      : null;
+  const trnValue =
+    "taxReference" in input && input.taxReference !== undefined
+      ? data.trn && data.trn.trim() !== (current.trn ?? "")
+        ? data.trn.trim()
+        : data.taxReference.trim() || null
+      : data.trn?.trim() || null;
   const updateCustomerRow = () =>
     context.db
       .update(customers)

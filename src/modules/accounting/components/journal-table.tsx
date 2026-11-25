@@ -1,25 +1,24 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo } from "react";
 import Link from "next/link";
-import { ChevronRight } from "lucide-react";
 import {
   useLegacyTable as useTable,
   getCoreRowModel as createCoreRowModel,
   getPaginationRowModel as createPaginationRowModel,
   getSortedRowModel as createSortedRowModel,
 } from "@tanstack/react-table/legacy";
-import { type SortingState } from "@tanstack/react-table";
 import { useColumns } from "@/components/columns-dropdown";
 import { DensityToggle } from "@/components/density-toggle";
-import { ClientListPagination, useTablePagination } from "@/components/list-pagination";
+import { ClientListPagination } from "@/components/list-pagination";
+import { ExportCsvButton } from "@/components/export-csv-button";
+import { useUrlListState } from "@/hooks/use-url-list-state";
 import { ActiveFiltersRow, DateRangeFilter, FilterChip, ListToolbar, SearchInput, ToolbarSelect } from "@/components/list-toolbar";
 import { TableTotalsBar } from "@/components/table-totals-bar";
-import { Button } from "@/components/ui/button";
 import { DataTable, ListTableCard } from "@/components/ui/data-table";
 import { useTableDensity } from "@/components/use-table-density";
 import type { ColumnVisibility } from "@/components/use-column-visibility";
-import { formatDate, formatMoney } from "@/core/format";
+import { formatDate, formatMoney, getBusinessTodayIso, minorToDecimalString } from "@/core/format";
 import { journalSourceLabel } from "../journal-source";
 
 export type JournalEntryRow = {
@@ -52,11 +51,19 @@ export function JournalTable({
   serverSnapshot?: ColumnVisibility;
 }) {
   const { density } = useTableDensity(businessId);
-  const [query, setQuery] = useState("");
-  const [sourceType, setSourceType] = useState("");
-  const [fromDate, setFromDate] = useState("");
-  const [toDate, setToDate] = useState("");
-  const [sorting, setSorting] = useState<SortingState>([]);
+  const {
+    query,
+    type: sourceType,
+    fromDate,
+    toDate,
+    sorting,
+    setFilter,
+    setPage,
+    setPageSize,
+    onSortingChange,
+    resetFilters,
+    buildPagination,
+  } = useUrlListState();
 
   const sourceOptions = useMemo(
     () =>
@@ -131,43 +138,23 @@ export function JournalTable({
           <span className="money">{formatMoney(row.original.credit_minor, currency)}</span>
         ),
       },
-      {
-        id: "actions",
-        header: () => <span className="sr-only">Actions</span>,
-        enableSorting: false,
-        enableHiding: false,
-        meta: { className: "w-12 text-right" },
-        cell: ({ row }: { row: { original: JournalEntryRow } }) => (
-          <Button asChild variant="ghost" size="icon" className="size-7 text-muted-foreground opacity-50 transition-opacity md:opacity-0 md:group-hover:opacity-100">
-            <Link href={`/b/${businessId}/accounting/journal/${row.original.id}`} aria-label={`Open ${row.original.entry_number}`}>
-              <ChevronRight className="size-4" />
-            </Link>
-          </Button>
-        ),
-      },
     ],
     [businessId, currency],
   );
 
-  const { pagination, onPaginationChange, paginationInfo, setPage, setPageSize } = useTablePagination(rows.length);
+  const { pagination, paginationInfo } = buildPagination(rows.length);
 
   const table = useTable({
     data: rows,
     columns,
     state: { sorting, pagination, columnVisibility: colVisibility },
-    onSortingChange: setSorting,
-    onPaginationChange,
+    onSortingChange,
     getCoreRowModel: createCoreRowModel(),
     getSortedRowModel: createSortedRowModel(),
     getPaginationRowModel: createPaginationRowModel(),
   });
 
-  const clearFilters = () => {
-    setQuery("");
-    setSourceType("");
-    setFromDate("");
-    setToDate("");
-  };
+  const clearFilters = resetFilters;
   const hasActiveFilter = Boolean(query || sourceType || fromDate || toDate);
 
   const totalDebit = useMemo(() => rows.reduce((sum, r) => sum + Number(r.debit_minor || 0), 0), [rows]);
@@ -176,10 +163,10 @@ export function JournalTable({
   return (
     <>
       <ListToolbar>
-        <SearchInput value={query} onChange={setQuery} placeholder="Search entry # or description…" ariaLabel="Search journal entries" />
+        <SearchInput value={query} onChange={(val) => setFilter("q", val)} placeholder="Search entry # or description…" ariaLabel="Search journal entries" />
         <ToolbarSelect
           value={sourceType}
-          onChange={setSourceType}
+          onChange={(val) => setFilter("type", val)}
           ariaLabel="Filter by source"
           className="min-w-36 max-w-52"
           options={[{ value: "", label: "All sources" }, ...sourceOptions.map(([value, label]) => ({ value, label }))]}
@@ -187,22 +174,35 @@ export function JournalTable({
         <DateRangeFilter
           fromDate={fromDate}
           toDate={toDate}
-          onFromChange={setFromDate}
-          onToChange={setToDate}
+          onFromChange={(val) => setFilter("from", val)}
+          onToChange={(val) => setFilter("to", val)}
           fromAriaLabel="Journal date from"
           toAriaLabel="Journal date to"
         />
         <div className="ml-auto flex items-center gap-1.5 shrink-0">
+          <ExportCsvButton
+            size="sm"
+            filename={`journal-entries-${getBusinessTodayIso()}.csv`}
+            data={rows}
+            columns={[
+              { header: "Entry", accessorKey: "entry_number" },
+              { header: "Date", accessorKey: "date" },
+              { header: "Source", accessorFn: (r: JournalEntryRow) => journalSourceLabel(r.source_type) },
+              { header: "Description", accessorKey: "description" },
+              { header: "Debit", accessorFn: (r: JournalEntryRow) => minorToDecimalString(Number(r.debit_minor || 0), currency) },
+              { header: "Credit", accessorFn: (r: JournalEntryRow) => minorToDecimalString(Number(r.credit_minor || 0), currency) },
+            ]}
+          />
           <DensityToggle businessId={businessId} />
           {dropdown}
         </div>
       </ListToolbar>
       {hasActiveFilter && (
         <ActiveFiltersRow onClearAll={clearFilters}>
-          {sourceType && <FilterChip onRemove={() => setSourceType("")}>Source: {journalSourceLabel(sourceType)}</FilterChip>}
-          {fromDate && <FilterChip onRemove={() => setFromDate("")}>From: {formatDate(fromDate)}</FilterChip>}
-          {toDate && <FilterChip onRemove={() => setToDate("")}>To: {formatDate(toDate)}</FilterChip>}
-          {query && <FilterChip onRemove={() => setQuery("")}>Search: {query}</FilterChip>}
+          {sourceType && <FilterChip onRemove={() => setFilter("type", "")}>Source: {journalSourceLabel(sourceType)}</FilterChip>}
+          {fromDate && <FilterChip onRemove={() => setFilter("from", "")}>From: {formatDate(fromDate)}</FilterChip>}
+          {toDate && <FilterChip onRemove={() => setFilter("to", "")}>To: {formatDate(toDate)}</FilterChip>}
+          {query && <FilterChip onRemove={() => setFilter("q", "")}>Search: {query}</FilterChip>}
         </ActiveFiltersRow>
       )}
       <ListTableCard>
@@ -213,6 +213,7 @@ export function JournalTable({
           minWidth="min-w-[760px]"
           noResultsMessage="No journal entries match"
           onClearFilters={clearFilters}
+          getRowHref={(row: JournalEntryRow) => `/b/${businessId}/accounting/journal/${row.id}`}
         />
         {rows.length > 0 && (
           <TableTotalsBar

@@ -9,7 +9,11 @@ import { revalidatePath } from "next/cache";
 
 export type SupplierPaymentActionResult = { error?: string; fieldErrors?: Record<string, string[]> };
 
-export async function createSupplierPaymentAction(businessId: string, input: unknown): Promise<SupplierPaymentActionResult> {
+export async function createSupplierPaymentAction(
+  businessId: string,
+  input: unknown,
+  afterSave: "view" | "new" = "view",
+): Promise<SupplierPaymentActionResult> {
   const { user } = await requirePermission(businessId, "purchases", "create");
   const parsed = supplierPaymentInputSchema.safeParse(input);
   if (!parsed.success) {
@@ -26,6 +30,9 @@ export async function createSupplierPaymentAction(businessId: string, input: unk
   revalidatePath(`/b/${businessId}/approvals`);
   revalidatePath(`/b/${businessId}/overview`);
   const notice = result.documentStatus === "pending_approval" ? "Payment submitted for approval" : "Supplier payment posted";
+  if (afterSave === "new") {
+    redirect(`/b/${businessId}/purchases/payments/new?notice=${encodeURIComponent(notice)}&fresh=${Date.now()}`);
+  }
   redirect(`/b/${businessId}/purchases/payments/${result.id}?notice=${encodeURIComponent(notice)}`);
 }
 

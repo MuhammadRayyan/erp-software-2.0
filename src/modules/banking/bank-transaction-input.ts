@@ -3,7 +3,7 @@ import { emirates } from "@/modules/tax/uae-vat-config";
 
 const optionalUuid = z.union([z.literal(""), z.string().uuid()]).optional().default("");
 const positiveMoney = z.string().trim()
-  .regex(/^\d{1,10}(?:\.\d{1,2})?$/, "Enter an amount with up to 2 decimals")
+  .regex(/^\d{1,12}(?:\.\d{1,6})?$/, "Enter a valid positive amount")
   .refine((value) => Number(value) > 0, "Amount must be greater than zero");
 
 export const bankTransactionInputSchema = z.object({

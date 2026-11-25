@@ -1,6 +1,6 @@
 "use client";
 import { useRouter } from "next/navigation";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { LoaderCircle } from "lucide-react";
 import { Controller, useFieldArray, useForm, useWatch } from "react-hook-form";
@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Combobox, type ComboboxOption } from "@/components/ui/combobox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { formatMoney } from "@/core/format";
+import { formatMoney, getCurrencyMinorUnit } from "@/core/format";
 import { saveCreditNoteAction } from "./actions";
 import {
   creditNoteInputSchema,
@@ -26,6 +26,11 @@ import {
   useDocumentColumnVisibility,
 } from "@/components/documents";
 import { useUnsavedChanges } from "@/hooks/use-unsaved-changes";
+import { useActionPermission } from "@/components/permissions-provider";
+import {
+  QuickCreateCustomerDialog,
+  QuickCreateProjectDialog,
+} from "@/components/documents/quick-create-modals";
 
 type Option = { id: string; name: string };
 type AccountOption = { id: string; name: string };
@@ -72,6 +77,20 @@ export function CreditNoteForm({
   initial: CreditNoteInput;
 }) {
   const router = useRouter();
+  const canCreateCustomer = useActionPermission("create", "sales");
+  const canCreateProject = useActionPermission("create", "projects");
+  const [customerList, setCustomerList] = useState(customers);
+  useEffect(() => {
+    setCustomerList(customers);
+  }, [customers]);
+  const [projectList, setProjectList] = useState(projects);
+  useEffect(() => {
+    setProjectList(projects);
+  }, [projects]);
+  const [quickCreateCustomerOpen, setQuickCreateCustomerOpen] = useState(false);
+  const [quickCreateCustomerSeed, setQuickCreateCustomerSeed] = useState("");
+  const [quickCreateProjectOpen, setQuickCreateProjectOpen] = useState(false);
+  const [quickCreateProjectSeed, setQuickCreateProjectSeed] = useState("");
   const [serverError, setServerError] = useState("");
   const [globalTaxCodeId, setGlobalTaxCodeId] = useState(
     () =>
@@ -116,13 +135,13 @@ export function CreditNoteForm({
   );
   const eligibleProjects = useMemo(
     () =>
-      projects.filter((project) => {
+      projectList.filter((project) => {
         if (!customerId) return true;
         const cids = (project as any).customerIds as string[] | undefined;
         if (cids && cids.length > 0) return cids.includes(customerId);
         return !project.customerId || project.customerId === customerId;
       }),
-    [customerId, projects],
+    [customerId, projectList],
   );
   const selected = invoices.find((invoice) => invoice.id === invoiceId);
   const currencyCode =
@@ -133,20 +152,16 @@ export function CreditNoteForm({
     useWatch({ control, name: "exchangeRateToBase" }) ||
     selected?.exchangeRateToBase ||
     "1";
-  const exchangeRateDate =
-    useWatch({ control, name: "exchangeRateDate" }) ||
-    selected?.exchangeRateDate ||
-    "";
   const exchangeRateSource =
     useWatch({ control, name: "exchangeRateSource" }) ||
     selected?.exchangeRateSource ||
     "Base";
-  const minorUnit = selected?.minorUnit ?? 2;
+  const minorUnit = selected?.minorUnit ?? getCurrencyMinorUnit(currencyCode);
   const defaultSales = salesAccounts[0]?.id ?? "";
 
   const customerOptions = useMemo<ComboboxOption[]>(
-    () => customers.map((c) => ({ value: c.id, label: c.name })),
-    [customers],
+    () => customerList.map((c) => ({ value: c.id, label: c.name })),
+    [customerList],
   );
   const invoiceOptions = useMemo<ComboboxOption[]>(
     () =>
@@ -192,6 +207,7 @@ export function CreditNoteForm({
     : `/b/${businessId}/sales/credit-notes`;
 
   return (
+    <>
     <DocumentWorkspaceLayout
       serverError={serverError}
       headerTitle="Credit details"
@@ -213,9 +229,24 @@ export function CreditNoteForm({
                   onValueChange={(next) => {
                     field.onChange(next);
                     setValue("sourceInvoiceId", "");
+                    setValue("currencyCode", currency);
+                    setValue("exchangeRateToBase", "1");
+                    setValue("exchangeRateDate", getValues("date"));
+                    setValue("exchangeRateSource", "Base");
                   }}
                   placeholder="Choose a customer…"
                   searchPlaceholder="Search customer..."
+                  createAction={
+                    canCreateCustomer
+                      ? {
+                          label: "New Customer",
+                          onTrigger: (query) => {
+                            setQuickCreateCustomerSeed(query);
+                            setQuickCreateCustomerOpen(true);
+                          },
+                        }
+                      : undefined
+                  }
                 />
               )}
             />
@@ -239,7 +270,13 @@ export function CreditNoteForm({
                   onValueChange={(next) => {
                     field.onChange(next);
                     const invoice = invoices.find((entry) => entry.id === next);
-                    if (!invoice) return;
+                    if (!invoice) {
+                      setValue("currencyCode", currency);
+                      setValue("exchangeRateToBase", "1");
+                      setValue("exchangeRateDate", getValues("date"));
+                      setValue("exchangeRateSource", "Base");
+                      return;
+                    }
                     setValue("currencyCode", invoice.currencyCode);
                     setValue("exchangeRateToBase", invoice.exchangeRateToBase);
                     setValue("exchangeRateDate", invoice.exchangeRateDate);
@@ -316,20 +353,29 @@ export function CreditNoteForm({
                   clearLabel="No project"
                   placeholder="No project"
                   searchPlaceholder="Search project..."
+                  createAction={
+                    canCreateProject
+                      ? {
+                          label: "New Project",
+                          onTrigger: (query) => {
+                            setQuickCreateProjectSeed(query);
+                            setQuickCreateProjectOpen(true);
+                          },
+                        }
+                      : undefined
+                  }
                 />
               )}
             />
           </div>
 
-          <div className="space-y-1.5">
-            <Label>Currency</Label>
-            <div className="flex h-9 items-center rounded-[6px] border border-border bg-surface-muted/60 px-3 text-sm font-medium text-foreground">
-              {currencyCode}
+          {currencyCode !== currency && (
+            <div className="md:col-span-3">
+              <span className="inline-flex items-center rounded-md border border-border bg-surface-muted/50 px-2.5 py-1 text-xs font-medium text-muted-foreground">
+                Foreign currency: {currencyCode} (1 {currencyCode} = {exchangeRateToBase} {currency} · {exchangeRateSource})
+              </span>
             </div>
-            <input type="hidden" name="exchangeRateToBase" value={exchangeRateToBase} readOnly />
-            <input type="hidden" name="exchangeRateDate" value={exchangeRateDate} readOnly />
-            <input type="hidden" name="exchangeRateSource" value={exchangeRateSource} readOnly />
-          </div>
+          )}
         </div>
       }
       linesTitle="Credited items"
@@ -461,5 +507,44 @@ export function CreditNoteForm({
         </DocumentFormFooter>
       }
     />
+    <QuickCreateCustomerDialog
+      businessId={businessId}
+      open={quickCreateCustomerOpen}
+      onOpenChange={setQuickCreateCustomerOpen}
+      initialName={quickCreateCustomerSeed}
+      defaultCurrencyCode={currencyCode}
+      onCreated={(created) => {
+        setCustomerList((prev) =>
+          prev.some((c) => c.id === created.id) ? prev : [...prev, { id: created.id, name: created.name }],
+        );
+        setValue("customerId", created.id, { shouldValidate: true, shouldDirty: true });
+        setValue("sourceInvoiceId", "");
+      }}
+    />
+    <QuickCreateProjectDialog
+      businessId={businessId}
+      open={quickCreateProjectOpen}
+      onOpenChange={setQuickCreateProjectOpen}
+      initialName={quickCreateProjectSeed}
+      defaultCustomerId={customerId || undefined}
+      customers={customerList}
+      onCreated={(created) => {
+        setProjectList((prev) =>
+          prev.some((p) => p.id === created.id)
+            ? prev
+            : [
+                ...prev,
+                {
+                  id: created.id,
+                  code: created.code,
+                  name: created.name,
+                  customerId: created.customerId,
+                },
+              ],
+        );
+        setValue("projectId", created.id, { shouldValidate: true, shouldDirty: true });
+      }}
+    />
+    </>
   );
 }

@@ -35,7 +35,7 @@ export function StatusFilterSelect({
       value={value}
       onChange={(event) => onChange(event.target.value)}
       aria-label={ariaLabel}
-      className={cn("w-auto px-3", className)}
+      className={cn("w-auto", className)}
     >
       {options.map((option, index) => {
         if ("options" in option) {

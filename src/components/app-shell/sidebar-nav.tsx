@@ -86,6 +86,7 @@ export function SidebarNav({
   collapsed?: boolean;
   onNavigate?: () => void;
 }) {
+  const pathname = usePathname() ?? "";
   const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
@@ -123,11 +124,17 @@ export function SidebarNav({
           if (!items.length) return null;
 
           const groupKey = group.label ?? `group-${index}`;
-          const isGroupCollapsed = !collapsed && Boolean(group.label && collapsedGroups[group.label]);
+          const showGroupHeader = Boolean(group.label && !(items.length === 1 && group.label === items[0].label));
+          const hasActiveItem = items.some((item) => {
+            const href = `/b/${businessId}${item.path}`;
+            return pathname === href || (item.path !== "/overview" && pathname.startsWith(`${href}/`));
+          });
+          const isGroupCollapsed =
+            !collapsed && !hasActiveItem && Boolean(showGroupHeader && group.label && collapsedGroups[group.label]);
 
           return (
             <section key={groupKey}>
-              {group.label &&
+              {showGroupHeader &&
                 (collapsed ? (
                   <div className="my-1.5 border-t border-border/70" aria-hidden="true" />
                 ) : (

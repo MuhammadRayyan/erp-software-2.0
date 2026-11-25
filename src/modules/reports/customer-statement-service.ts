@@ -126,7 +126,7 @@ export function getCustomerStatement(
       const presentCurrencies = Array.from(new Set(filtered.map((r) => r.currency_code)));
       if (presentCurrencies.length === 0) {
         const cust = sqlite.prepare("SELECT default_currency_code FROM customers WHERE id = ?").get(customerId) as { default_currency_code?: string } | undefined;
-        const defaultCur = cust?.default_currency_code || "AED";
+        const defaultCur = cust?.default_currency_code || resolveBaseCurrencyCode(sqlite);
         openingRows.push({
           date: fromDate,
           entry_number: "OPENING",

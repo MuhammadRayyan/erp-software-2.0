@@ -1,10 +1,11 @@
 "use client";
 import { useRouter } from "next/navigation";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { LoaderCircle } from "lucide-react";
 import { Controller, useFieldArray, useForm, useWatch } from "react-hook-form";
 import { Button } from "@/components/ui/button";
+import { SplitActionButton } from "@/components/ui/split-action-button";
 import { Combobox, type ComboboxOption } from "@/components/ui/combobox";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -22,8 +23,15 @@ import {
   IsolatedDocumentTotals,
   useDocumentColumnVisibility,
 } from "@/components/documents";
+import { DraftRecoveryBanner } from "@/components/documents/draft-recovery-banner";
+import {
+  QuickCreateCustomerDialog,
+  QuickCreateItemDialog,
+  QuickCreateProjectDialog,
+} from "@/components/documents/quick-create-modals";
 import { broadcastLiveRefresh } from "@/components/use-live-refresh";
 import { useUnsavedChanges } from "@/hooks/use-unsaved-changes";
+import { useFormDraftRecovery } from "@/hooks/use-form-draft-recovery";
 import { useActionPermission } from "@/components/permissions-provider";
 import type { CustomFieldInputDefinition } from "@/modules/custom-fields/custom-field-inputs";
 
@@ -33,18 +41,46 @@ type TaxOption = { id: string; name: string; rateBasisPoints: number; vatCategor
 type ProjectOption = { id: string; code: string; name: string; customerId?: string | null; customerIds?: string[] };
 type ItemOption = { id: string; sku: string | null; name: string; salesPriceMinor: number | null; salesAccountId: string };
 
-export function SalesQuoteForm({ businessId, quoteId, status = "draft", customers, salesAccounts, taxCodes, projects, items, currency, currencies, rates, initial, lineCustomFields = [] }: { businessId: string; quoteId?: string; status?: SalesQuoteStatus; customers: Option[]; salesAccounts: AccountOption[]; taxCodes: TaxOption[]; projects: ProjectOption[]; items: ItemOption[]; currency: string; currencies: DocumentCurrencyOption[]; rates: DocumentRateOption[]; initial: SalesQuoteInput; lineCustomFields?: CustomFieldInputDefinition[] }) {
+export function SalesQuoteForm({ businessId, quoteId, isPrefilled = false, status = "draft", customers, salesAccounts, taxCodes, projects, items, currency, currencies, rates, initial, lineCustomFields = [] }: { businessId: string; quoteId?: string; isPrefilled?: boolean; status?: SalesQuoteStatus; customers: Option[]; salesAccounts: AccountOption[]; taxCodes: TaxOption[]; projects: ProjectOption[]; items: ItemOption[]; currency: string; currencies: DocumentCurrencyOption[]; rates: DocumentRateOption[]; initial: SalesQuoteInput; lineCustomFields?: CustomFieldInputDefinition[] }) {
   const router = useRouter();
   const canApprove = useActionPermission("approve");
+  const canCreateCustomer = useActionPermission("create", "sales");
+  const canCreateProject = useActionPermission("create", "projects");
+  const canCreateItem = useActionPermission("create", "inventory");
   const [serverError, setServerError] = useState("");
+  const [customerList, setCustomerList] = useState(customers);
+  const [projectList, setProjectList] = useState(projects);
+  const [itemList, setItemList] = useState(items);
+  useEffect(() => { setCustomerList(customers); }, [customers]);
+  useEffect(() => { setProjectList(projects); }, [projects]);
+  useEffect(() => { setItemList(items); }, [items]);
+
+  const [quickCustomerOpen, setQuickCustomerOpen] = useState(false);
+  const [quickCustomerSeed, setQuickCustomerSeed] = useState("");
+  const [quickProjectOpen, setQuickProjectOpen] = useState(false);
+  const [quickProjectSeed, setQuickProjectSeed] = useState("");
+  const [quickItemState, setQuickItemState] = useState<{ open: boolean; rowIndex: number; seed: string }>({
+    open: false,
+    rowIndex: 0,
+    seed: "",
+  });
+
   const [globalTaxCodeId, setGlobalTaxCodeId] = useState(() => initial.lines[0]?.taxCodeId || taxCodes.find((taxCode) => taxCode.rateBasisPoints === 500)?.id || taxCodes[0]?.id || "");
   const form = useForm<SalesQuoteInput>({
     resolver: zodResolver(salesQuoteInputSchema),
     mode: "onTouched",
     defaultValues: initial,
   });
-  const { register, control, handleSubmit, setError, setValue, getValues, formState: { errors, isSubmitting, isDirty, isSubmitSuccessful } } = form;
+  const { register, control, handleSubmit, reset, watch, setError, setValue, getValues, formState: { errors, isSubmitting, isDirty, isSubmitSuccessful } } = form;
   useUnsavedChanges(isDirty && !isSubmitSuccessful);
+  const draftRecovery = useFormDraftRecovery({
+    storageKey: `erp-draft:${businessId}:sales-quote:new`,
+    enabled: !quoteId && !isPrefilled,
+    watch,
+    reset,
+    isDirty,
+    isSubmitSuccessful,
+  });
   const { fields, append, remove, insert, move } = useFieldArray({ control, name: "lines" });
   const colVis = useDocumentColumnVisibility({ lineTaxCodes: false, lines: initial.lines });
 
@@ -70,18 +106,18 @@ export function SalesQuoteForm({ businessId, quoteId, status = "draft", customer
 
   const availableProjects = useMemo(
     () =>
-      projects.filter((project) => {
+      projectList.filter((project) => {
         if (!customerId) return true;
         const cids = (project as any).customerIds as string[] | undefined;
         if (cids && cids.length > 0) return cids.includes(customerId);
         return !project.customerId || project.customerId === customerId;
       }),
-    [projects, customerId],
+    [projectList, customerId],
   );
 
   const customerOptions = useMemo<ComboboxOption[]>(
-    () => customers.map((c) => ({ value: c.id, label: c.name })),
-    [customers],
+    () => customerList.map((c) => ({ value: c.id, label: c.name })),
+    [customerList],
   );
   const projectOptions = useMemo<ComboboxOption[]>(
     () => availableProjects.map((p) => ({ value: p.id, label: `${p.code} — ${p.name}`, keywords: [p.code, p.name] })),
@@ -100,8 +136,8 @@ export function SalesQuoteForm({ businessId, quoteId, status = "draft", customer
   }
 
   const defaultSalesAccount = salesAccounts[0]?.id ?? "";
-  function selectItem(index: number, itemId: string) {
-    const item = items.find((i) => i.id === itemId);
+  function selectItem(index: number, itemId: string, sourceItems = itemList) {
+    const item = sourceItems.find((i) => i.id === itemId);
     if (!item) {
       setValue(`lines.${index}.salesAccountId`, defaultSalesAccount, { shouldDirty: true });
       return;
@@ -115,25 +151,43 @@ export function SalesQuoteForm({ businessId, quoteId, status = "draft", customer
     }
   }
 
-  async function save(values: SalesQuoteInput, intent: "draft" | "issue") {
+  async function save(values: SalesQuoteInput, intent: "draft" | "issue", afterSave: "view" | "new" | "email" = "view") {
     setServerError("");
-    const result = await saveSalesQuoteAction(businessId, quoteId ?? null, values, intent);
+    draftRecovery.clearDraft();
+    const result = await saveSalesQuoteAction(businessId, quoteId ?? null, values, intent, afterSave);
+    if (result.fieldErrors || result.error) {
+      draftRecovery.preserveDraft(values);
+    }
     if (result.fieldErrors) for (const [field, messages] of Object.entries(result.fieldErrors)) setError(field as keyof SalesQuoteInput, { message: messages[0] });
-    if (result.error) setServerError(result.error);
+    if (result.error) {
+      setError("root.serverError", { message: result.error });
+      setServerError(result.error);
+    }
     if (!result.error && !result.fieldErrors) broadcastLiveRefresh();
   }
 
   const cancelHref = quoteId ? `/b/${businessId}/sales/quotes/${quoteId}` : `/b/${businessId}/sales/quotes`;
 
   return (
+    <>
     <DocumentWorkspaceLayout
+      banner={
+        <DraftRecoveryBanner
+          hasDraft={draftRecovery.hasDraft}
+          savedAt={draftRecovery.savedAt}
+          onRestore={draftRecovery.restoreDraft}
+          onDiscard={draftRecovery.discardDraft}
+        />
+      }
       serverError={serverError}
       headerTitle="Quote details"
       headerSubtitle="Sales quotes are operational documents and never post to the ledger."
       headerBadge={
-        <span className="text-xs text-muted-foreground font-medium bg-muted/60 px-2 py-0.5 rounded border border-border/50">
-          Quote # Auto-allocated on save
-        </span>
+        !quoteId ? (
+          <span className="text-xs text-muted-foreground font-medium bg-muted/60 px-2 py-0.5 rounded border border-border/50">
+            Quote # Auto-allocated on save
+          </span>
+        ) : undefined
       }
       header={
         <div className="grid gap-4 md:grid-cols-3">
@@ -152,13 +206,24 @@ export function SalesQuoteForm({ businessId, quoteId, status = "draft", customer
                   onValueChange={(next) => {
                     field.onChange(next);
                     if (status === "draft" && next) {
-                      const code = customers.find((customer) => customer.id === next)?.defaultCurrencyCode ?? currency;
+                      const code = customerList.find((customer) => customer.id === next)?.defaultCurrencyCode ?? currency;
                       setValue("currencyCode", code);
                       setValue("exchangeRateToBase", code === currency ? "1" : "");
                       setValue("exchangeRateDate", code === currency ? quoteDate : "");
                       setValue("exchangeRateSource", code === currency ? "Base" : "");
                     }
                   }}
+                  createAction={
+                    canCreateCustomer
+                      ? {
+                          label: "New Customer",
+                          onTrigger: (q) => {
+                            setQuickCustomerSeed(q);
+                            setQuickCustomerOpen(true);
+                          },
+                        }
+                      : undefined
+                  }
                   placeholder="Choose a customer…"
                   searchPlaceholder="Search customer..."
                 />
@@ -205,6 +270,17 @@ export function SalesQuoteForm({ businessId, quoteId, status = "draft", customer
                   onValueChange={field.onChange}
                   allowClear
                   clearLabel="No project"
+                  createAction={
+                    canCreateProject
+                      ? {
+                          label: "New Project",
+                          onTrigger: (q) => {
+                            setQuickProjectSeed(q);
+                            setQuickProjectOpen(true);
+                          },
+                        }
+                      : undefined
+                  }
                   placeholder="No project"
                   searchPlaceholder="Search project..."
                 />
@@ -262,8 +338,13 @@ export function SalesQuoteForm({ businessId, quoteId, status = "draft", customer
           onDuplicate={duplicateLine}
           onMoveUp={moveLineUp}
           onMoveDown={moveLineDown}
-          items={items}
+          items={itemList}
           onItemSelect={selectItem}
+          onRequestCreateItem={
+            canCreateItem
+              ? (rowIndex, q) => setQuickItemState({ open: true, rowIndex, seed: q })
+              : undefined
+          }
           accounts={salesAccounts}
           accountFieldName="salesAccountId"
           taxCodes={taxCodes}
@@ -328,14 +409,90 @@ export function SalesQuoteForm({ businessId, quoteId, status = "draft", customer
                 {isSubmitting && <LoaderCircle className="size-4 animate-spin" />} {quoteId ? "Save Draft" : "Save Draft Quote"}
               </Button>
               {canApprove && (
-                <Button permission={["save", "approve"]} type="button" disabled={isSubmitting} onClick={handleSubmit((values) => save(values, "issue"))}>
-                  {isSubmitting && <LoaderCircle className="size-4 animate-spin" />} Save &amp; Issue
-                </Button>
+                !quoteId ? (
+                  <SplitActionButton
+                    label="Save & Issue"
+                    permission={["save", "approve"]}
+                    loading={isSubmitting}
+                    onPrimaryClick={handleSubmit((values) => save(values, "issue", "view"))}
+                    options={[
+                      {
+                        label: "Save, Issue & New",
+                        description: "Issue this quote and create another right away",
+                        onSelect: handleSubmit((values) => save(values, "issue", "new")),
+                      },
+                      {
+                        label: "Save, Issue & Email",
+                        description: "Issue and open the email composer",
+                        onSelect: handleSubmit((values) => save(values, "issue", "email")),
+                      },
+                    ]}
+                  />
+                ) : (
+                  <Button permission={["save", "approve"]} type="button" disabled={isSubmitting} onClick={handleSubmit((values) => save(values, "issue"))}>
+                    {isSubmitting && <LoaderCircle className="size-4 animate-spin" />} Save &amp; Issue
+                  </Button>
+                )
               )}
             </div>
           )}
         </DocumentFormFooter>
       }
     />
+    <QuickCreateCustomerDialog
+      businessId={businessId}
+      open={quickCustomerOpen}
+      onOpenChange={setQuickCustomerOpen}
+      initialName={quickCustomerSeed}
+      defaultCurrencyCode={currencyCode}
+      onCreated={(created) => {
+        setCustomerList((prev) => [...prev, created]);
+        setValue("customerId", created.id, { shouldDirty: true, shouldTouch: true });
+        if (status === "draft") {
+          const code = created.defaultCurrencyCode ?? currency;
+          if (code !== getValues("currencyCode")) {
+            setValue("currencyCode", code);
+            setValue("exchangeRateToBase", code === currency ? "1" : "");
+            setValue("exchangeRateDate", code === currency ? quoteDate : "");
+            setValue("exchangeRateSource", code === currency ? "Base" : "");
+          }
+        }
+      }}
+    />
+    <QuickCreateProjectDialog
+      businessId={businessId}
+      open={quickProjectOpen}
+      onOpenChange={setQuickProjectOpen}
+      initialName={quickProjectSeed}
+      defaultCustomerId={customerId ?? ""}
+      customers={customerList}
+      onCreated={(created) => {
+        setProjectList((prev) => [...prev, created]);
+        if (!created.customerId || !customerId || created.customerId === customerId) {
+          setValue("projectId", created.id, { shouldDirty: true, shouldTouch: true });
+        }
+      }}
+    />
+    <QuickCreateItemDialog
+      businessId={businessId}
+      open={quickItemState.open}
+      onOpenChange={(open) => setQuickItemState((prev) => ({ ...prev, open }))}
+      initialName={quickItemState.seed}
+      defaultMode="sales"
+      onCreated={(created) => {
+        const nextItem: ItemOption = {
+          id: created.id,
+          sku: created.sku,
+          name: created.name,
+          salesPriceMinor: created.salesPriceMinor,
+          salesAccountId: created.salesAccountId,
+        };
+        const updatedItems = [...itemList, nextItem];
+        setItemList(updatedItems);
+        setValue(`lines.${quickItemState.rowIndex}.itemId`, created.id, { shouldDirty: true, shouldTouch: true });
+        selectItem(quickItemState.rowIndex, created.id, updatedItems);
+      }}
+    />
+    </>
   );
 }

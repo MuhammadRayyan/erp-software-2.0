@@ -55,22 +55,36 @@ export function FinancialSummary({ businessId, userId, currency }: { businessId:
     );
   }
 
+  const hasGroupActivity = (type: string) =>
+    (groups[type] || []).some((acc) => acc.debitMinor !== acc.creditMinor);
+
+  const hasBalanceSheetActivity =
+    hasGroupActivity("asset") || hasGroupActivity("liability") || hasGroupActivity("equity");
+  const hasProfitLossActivity =
+    hasGroupActivity("income") || hasGroupActivity("expense");
+
   return (
     <div className="grid gap-5 lg:grid-cols-2 mt-6">
       <section className="rounded-xl border border-border bg-surface p-5 shadow-sm">
-        <h2 className="font-semibold text-lg mb-5">Balance Sheet</h2>
+        <div className="mb-5 flex items-baseline justify-between gap-2">
+          <h2 className="font-semibold text-lg">Balance Sheet</h2>
+          <span className="text-xs text-muted-foreground">Cumulative as of today</span>
+        </div>
         {renderGroup("Assets", "asset", true)}
         {renderGroup("Liabilities", "liability", false)}
         {renderGroup("Equity", "equity", false)}
-        {groups["asset"].length === 0 && groups["liability"].length === 0 && groups["equity"].length === 0 && (
+        {!hasBalanceSheetActivity && (
           <p className="text-sm text-muted-foreground text-center py-8">No balance sheet activity yet.</p>
         )}
       </section>
       <section className="rounded-xl border border-border bg-surface p-5 shadow-sm">
-        <h2 className="font-semibold text-lg mb-5">Profit & Loss</h2>
+        <div className="mb-5 flex items-baseline justify-between gap-2">
+          <h2 className="font-semibold text-lg">Profit & Loss</h2>
+          <span className="text-xs text-muted-foreground">All-time cumulative</span>
+        </div>
         {renderGroup("Income", "income", false)}
         {renderGroup("Expenses", "expense", true)}
-        {groups["income"].length === 0 && groups["expense"].length === 0 && (
+        {!hasProfitLossActivity && (
           <p className="text-sm text-muted-foreground text-center py-8">No income or expense activity yet.</p>
         )}
       </section>

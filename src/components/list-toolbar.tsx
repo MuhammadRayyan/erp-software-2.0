@@ -73,7 +73,7 @@ export function ToolbarSelect({
       onChange={(event) => onChange(event.target.value)}
       aria-label={ariaLabel}
       className={cn(
-        "w-auto px-3 text-xs sm:text-sm transition-all",
+        "w-auto text-xs sm:text-sm transition-all",
         isFiltered && "border-primary/50 bg-primary/5 font-medium text-primary",
         className
       )}

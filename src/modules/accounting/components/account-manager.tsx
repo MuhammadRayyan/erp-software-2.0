@@ -32,6 +32,7 @@ import {
 import { deleteAccountAction, saveAccountAction } from "../actions";
 import { FormError } from "@/components/form-error";
 import { SelectNative } from "@/components/ui/select-native";
+import { useActionPermission } from "@/components/permissions-provider";
 
 type AccountRow = AccountInput & {
   id: string;
@@ -59,6 +60,9 @@ export function AccountManager({
 }) {
   const router = useRouter();
   const { density } = useTableDensity(businessId);
+  const canEdit = useActionPermission("edit");
+  const canViewReports = useActionPermission("view", "reports");
+  const canDelete = useActionPermission("delete");
   const [editing, setEditing] = useState<AccountRow | null | undefined>(undefined);
   const [values, setValues] = useState<AccountInput>(emptyAccount);
   const [errors, setErrors] = useState<Record<string, string[]>>({});
@@ -105,7 +109,7 @@ export function AccountManager({
     <>
       <div className="mb-4 flex items-center justify-end gap-2">
         <DensityToggle businessId={businessId} />
-        <Button onClick={() => openEditor()}><Plus className="size-4" /> New Account</Button>
+        <Button permission="create" onClick={() => openEditor()}><Plus className="size-4" /> New Account</Button>
       </div>
       <div className="space-y-5">
         {accountTypes.map((type) => {
@@ -136,19 +140,25 @@ export function AccountManager({
                           </Link>
                         </td>
                         <td>
-                          <DropdownMenu>
-                            <DropdownMenuTrigger asChild><Button variant="ghost" size="icon" aria-label={`Actions for ${account.name}`}><MoreHorizontal className="size-4" /></Button></DropdownMenuTrigger>
-                            <DropdownMenuContent align="end">
-                              <DropdownMenuItem permission="edit" onSelect={() => openEditor(account)}><Pencil className="size-4" /> Edit</DropdownMenuItem>
-                              <DropdownMenuItem asChild>
-                                <Link href={`/b/${businessId}/reports/general-ledger?accountId=${account.id}`}>
-                                  <BookOpenText className="size-4" /> General Ledger
-                                </Link>
-                              </DropdownMenuItem>
-                              <DropdownMenuSeparator />
-                              <DropdownMenuItem permission="delete" disabled={account.isSystem} title={account.isSystem ? "System accounts cannot be deleted" : undefined} className="text-danger focus:text-danger" onSelect={() => { setServerError(""); setDeleting(account); }}><Trash2 className="size-4" /> Delete</DropdownMenuItem>
-                            </DropdownMenuContent>
-                          </DropdownMenu>
+                          {(canEdit || canViewReports || (!account.isSystem && canDelete)) ? (
+                            <DropdownMenu>
+                              <DropdownMenuTrigger asChild><Button variant="ghost" size="icon" aria-label={`Actions for ${account.name}`}><MoreHorizontal className="size-4" /></Button></DropdownMenuTrigger>
+                              <DropdownMenuContent align="end">
+                                <DropdownMenuItem permission="edit" onSelect={() => openEditor(account)}><Pencil className="size-4" /> Edit</DropdownMenuItem>
+                                <DropdownMenuItem permission="view" permissionModule="reports" asChild>
+                                  <Link href={`/b/${businessId}/reports/general-ledger?accountId=${account.id}`}>
+                                    <BookOpenText className="size-4" /> General Ledger
+                                  </Link>
+                                </DropdownMenuItem>
+                                {!account.isSystem && canDelete && (
+                                  <>
+                                    {(canEdit || canViewReports) && <DropdownMenuSeparator />}
+                                    <DropdownMenuItem permission="delete" className="text-danger focus:text-danger" onSelect={() => { setServerError(""); setDeleting(account); }}><Trash2 className="size-4" /> Delete</DropdownMenuItem>
+                                  </>
+                                )}
+                              </DropdownMenuContent>
+                            </DropdownMenu>
+                          ) : null}
                         </td>
                       </tr>
                     ))}
@@ -180,7 +190,7 @@ export function AccountManager({
             </label>
           </div>
           {serverError && <FormError message={serverError} />}
-          <div className="mt-5 flex justify-end gap-2"><Button variant="ghost" onClick={() => setEditing(undefined)}>Cancel</Button><Button permission={"save"} onClick={save} disabled={pending}>{editing ? "Save changes" : "Create account"}</Button></div>
+          <div className="mt-5 flex justify-end gap-2"><Button variant="ghost" onClick={() => setEditing(undefined)}>Cancel</Button><Button permission={editing ? "edit" : "create"} onClick={save} disabled={pending}>{editing ? "Save changes" : "Create account"}</Button></div>
         </DialogContent>
       </DialogRoot>
 

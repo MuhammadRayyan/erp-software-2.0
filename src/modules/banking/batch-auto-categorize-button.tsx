@@ -51,6 +51,7 @@ export function BatchAutoCategorizeButton({
       <div className="flex items-center gap-2">
         {error && <span className="text-xs text-danger">{error}</span>}
         <Button
+          permission="edit"
           size="sm"
           disabled={pending}
           onClick={handleBatchApply}

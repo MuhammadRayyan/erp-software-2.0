@@ -1,6 +1,6 @@
 "use client";
 import { useRouter } from "next/navigation";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { LoaderCircle } from "lucide-react";
 import { Controller, useFieldArray, useForm, useWatch } from "react-hook-form";
@@ -22,7 +22,14 @@ import {
   IsolatedDocumentTotals,
   useDocumentColumnVisibility,
 } from "@/components/documents";
+import { DraftRecoveryBanner } from "@/components/documents/draft-recovery-banner";
+import {
+  QuickCreateItemDialog,
+  QuickCreateProjectDialog,
+  QuickCreateSupplierDialog,
+} from "@/components/documents/quick-create-modals";
 import { useUnsavedChanges } from "@/hooks/use-unsaved-changes";
+import { useFormDraftRecovery } from "@/hooks/use-form-draft-recovery";
 import { useActionPermission, useApprovalPolicy } from "@/components/permissions-provider";
 import type { CustomFieldInputDefinition } from "@/modules/custom-fields/custom-field-inputs";
 
@@ -33,20 +40,48 @@ type ProjectOption = { id: string; code: string; name: string };
 type ItemOption = { id: string; sku: string | null; name: string; purchasePriceMinor: number | null; inventoryAssetAccountId: string };
 type QuoteOption = { id: string; quoteNumber: string; supplierId: string; date?: string };
 
-export function PurchaseOrderForm({ businessId, orderId, status = "draft", suppliers, expenseAccounts, taxCodes, projects, items, quotes, currency, currencies, rates, initial, lineCustomFields = [] }: { businessId: string; orderId?: string; status?: PurchaseOrderStatus; suppliers: Option[]; expenseAccounts: AccountOption[]; taxCodes: TaxOption[]; projects: ProjectOption[]; items: ItemOption[]; quotes?: QuoteOption[]; currency: string; currencies: DocumentCurrencyOption[]; rates: DocumentRateOption[]; initial: PurchaseOrderInput; lineCustomFields?: CustomFieldInputDefinition[] }) {
+export function PurchaseOrderForm({ businessId, orderId, isPrefilled = false, status = "draft", suppliers, expenseAccounts, taxCodes, projects, items, quotes, currency, currencies, rates, initial, lineCustomFields = [] }: { businessId: string; orderId?: string; isPrefilled?: boolean; status?: PurchaseOrderStatus; suppliers: Option[]; expenseAccounts: AccountOption[]; taxCodes: TaxOption[]; projects: ProjectOption[]; items: ItemOption[]; quotes?: QuoteOption[]; currency: string; currencies: DocumentCurrencyOption[]; rates: DocumentRateOption[]; initial: PurchaseOrderInput; lineCustomFields?: CustomFieldInputDefinition[] }) {
   const router = useRouter();
   const { requiresApproval } = useApprovalPolicy();
   const canApprove = useActionPermission("approve");
+  const canCreateSupplier = useActionPermission("create", "purchases");
+  const canCreateProject = useActionPermission("create", "projects");
+  const canCreateItem = useActionPermission("create", "inventory");
   const mustSubmitForApproval = requiresApproval || !canApprove;
   const [serverError, setServerError] = useState("");
+  const [supplierList, setSupplierList] = useState(suppliers);
+  const [projectList, setProjectList] = useState(projects);
+  const [itemList, setItemList] = useState(items);
+  useEffect(() => { setSupplierList(suppliers); }, [suppliers]);
+  useEffect(() => { setProjectList(projects); }, [projects]);
+  useEffect(() => { setItemList(items); }, [items]);
+
+  const [quickSupplierOpen, setQuickSupplierOpen] = useState(false);
+  const [quickSupplierSeed, setQuickSupplierSeed] = useState("");
+  const [quickProjectOpen, setQuickProjectOpen] = useState(false);
+  const [quickProjectSeed, setQuickProjectSeed] = useState("");
+  const [quickItemState, setQuickItemState] = useState<{ open: boolean; rowIndex: number; seed: string }>({
+    open: false,
+    rowIndex: 0,
+    seed: "",
+  });
+
   const [globalTaxCodeId, setGlobalTaxCodeId] = useState(() => initial.lines[0]?.taxCodeId || taxCodes.find((taxCode) => taxCode.rateBasisPoints === 500)?.id || taxCodes[0]?.id || "");
   const form = useForm<PurchaseOrderInput>({
     resolver: zodResolver(purchaseOrderInputSchema),
     mode: "onTouched",
     defaultValues: initial,
   });
-  const { register, control, handleSubmit, setError, setValue, getValues, formState: { errors, isSubmitting, isDirty, isSubmitSuccessful } } = form;
+  const { register, control, handleSubmit, reset, watch, setError, setValue, getValues, formState: { errors, isSubmitting, isDirty, isSubmitSuccessful } } = form;
   useUnsavedChanges(isDirty && !isSubmitSuccessful);
+  const draftRecovery = useFormDraftRecovery({
+    storageKey: `erp-draft:${businessId}:purchase-order:new`,
+    enabled: !orderId && !isPrefilled,
+    watch,
+    reset,
+    isDirty,
+    isSubmitSuccessful,
+  });
   const { fields, append, remove, insert, move } = useFieldArray({ control, name: "lines" });
   const colVis = useDocumentColumnVisibility({ lineTaxCodes: false, lines: initial.lines });
 
@@ -75,16 +110,16 @@ export function PurchaseOrderForm({ businessId, orderId, status = "draft", suppl
     [quotes, supplierId],
   );
   const supplierOptions = useMemo<ComboboxOption[]>(
-    () => suppliers.map((s) => ({ value: s.id, label: s.name })),
-    [suppliers],
+    () => supplierList.map((s) => ({ value: s.id, label: s.name })),
+    [supplierList],
   );
   const quoteOptions = useMemo<ComboboxOption[]>(
     () => availableQuotes.map((q) => ({ value: q.id, label: q.quoteNumber, description: q.date })),
     [availableQuotes],
   );
   const projectOptions = useMemo<ComboboxOption[]>(
-    () => projects.map((p) => ({ value: p.id, label: `${p.code} — ${p.name}`, keywords: [p.code, p.name] })),
-    [projects],
+    () => projectList.map((p) => ({ value: p.id, label: `${p.code} — ${p.name}`, keywords: [p.code, p.name] })),
+    [projectList],
   );
   const taxOptions = useMemo<ComboboxOption[]>(
     () => taxCodes.map((t) => ({ value: t.id, label: t.name })),
@@ -99,8 +134,8 @@ export function PurchaseOrderForm({ businessId, orderId, status = "draft", suppl
   }
 
   const defaultExpense = expenseAccounts[0]?.id ?? "";
-  function selectItem(index: number, itemId: string) {
-    const item = items.find((i) => i.id === itemId);
+  function selectItem(index: number, itemId: string, sourceItems = itemList) {
+    const item = sourceItems.find((i) => i.id === itemId);
     if (!item) {
       setValue(`lines.${index}.expenseAccountId`, defaultExpense, { shouldDirty: true });
       return;
@@ -116,22 +151,40 @@ export function PurchaseOrderForm({ businessId, orderId, status = "draft", suppl
 
   async function save(values: PurchaseOrderInput, intent: PurchaseOrderIntent) {
     setServerError("");
+    draftRecovery.clearDraft();
     const result = await savePurchaseOrderAction(businessId, orderId ?? null, values, intent);
+    if (result.fieldErrors || result.error) {
+      draftRecovery.preserveDraft(values);
+    }
     if (result.fieldErrors) for (const [field, messages] of Object.entries(result.fieldErrors)) setError(field as keyof PurchaseOrderInput, { message: messages[0] });
-    if (result.error) setServerError(result.error);
+    if (result.error) {
+      setError("root.serverError", { message: result.error });
+      setServerError(result.error);
+    }
   }
 
   const cancelHref = orderId ? `/b/${businessId}/purchases/orders/${orderId}` : `/b/${businessId}/purchases/orders`;
 
   return (
+    <>
     <DocumentWorkspaceLayout
+      banner={
+        <DraftRecoveryBanner
+          hasDraft={draftRecovery.hasDraft}
+          savedAt={draftRecovery.savedAt}
+          onRestore={draftRecovery.restoreDraft}
+          onDiscard={draftRecovery.discardDraft}
+        />
+      }
       serverError={serverError}
       headerTitle="Order details"
       headerSubtitle="Purchase orders are operational documents and never post to the ledger."
       headerBadge={
-        <span className="text-xs text-muted-foreground font-medium bg-muted/60 px-2 py-0.5 rounded border border-border/50">
-          Order # Auto-allocated on save
-        </span>
+        !orderId ? (
+          <span className="text-xs text-muted-foreground font-medium bg-muted/60 px-2 py-0.5 rounded border border-border/50">
+            Order # Auto-allocated on save
+          </span>
+        ) : undefined
       }
       header={
         <div className="grid gap-4 md:grid-cols-3">
@@ -150,13 +203,24 @@ export function PurchaseOrderForm({ businessId, orderId, status = "draft", suppl
                   onValueChange={(next) => {
                     field.onChange(next);
                     if (status === "draft" && next) {
-                      const code = suppliers.find((supplier) => supplier.id === next)?.defaultCurrencyCode ?? currency;
+                      const code = supplierList.find((supplier) => supplier.id === next)?.defaultCurrencyCode ?? currency;
                       setValue("currencyCode", code);
                       setValue("exchangeRateToBase", code === currency ? "1" : "");
                       setValue("exchangeRateDate", code === currency ? orderDate : "");
                       setValue("exchangeRateSource", code === currency ? "Base" : "");
                     }
                   }}
+                  createAction={
+                    canCreateSupplier
+                      ? {
+                          label: "New Supplier",
+                          onTrigger: (q) => {
+                            setQuickSupplierSeed(q);
+                            setQuickSupplierOpen(true);
+                          },
+                        }
+                      : undefined
+                  }
                   placeholder="Choose a supplier…"
                   searchPlaceholder="Search supplier..."
                 />
@@ -218,6 +282,17 @@ export function PurchaseOrderForm({ businessId, orderId, status = "draft", suppl
                   onValueChange={field.onChange}
                   allowClear
                   clearLabel="No project"
+                  createAction={
+                    canCreateProject
+                      ? {
+                          label: "New Project",
+                          onTrigger: (q) => {
+                            setQuickProjectSeed(q);
+                            setQuickProjectOpen(true);
+                          },
+                        }
+                      : undefined
+                  }
                   placeholder="No project"
                   searchPlaceholder="Search project..."
                 />
@@ -288,13 +363,18 @@ export function PurchaseOrderForm({ businessId, orderId, status = "draft", suppl
           onDuplicate={duplicateLine}
           onMoveUp={moveLineUp}
           onMoveDown={moveLineDown}
-          items={items}
+          items={itemList}
           onItemSelect={selectItem}
+          onRequestCreateItem={
+            canCreateItem
+              ? (rowIndex, q) => setQuickItemState({ open: true, rowIndex, seed: q })
+              : undefined
+          }
           accounts={expenseAccounts}
           accountFieldName="expenseAccountId"
           accountAriaLabel="expense account"
           taxCodes={taxCodes}
-          projects={projects}
+          projects={projectList}
           lineCustomFields={lineCustomFields}
           currencyCode={currencyCode}
           minorUnit={minorUnit}
@@ -368,5 +448,56 @@ export function PurchaseOrderForm({ businessId, orderId, status = "draft", suppl
         </DocumentFormFooter>
       }
     />
+    <QuickCreateSupplierDialog
+      businessId={businessId}
+      open={quickSupplierOpen}
+      onOpenChange={setQuickSupplierOpen}
+      initialName={quickSupplierSeed}
+      defaultCurrencyCode={currencyCode}
+      onCreated={(created) => {
+        setSupplierList((prev) => [...prev, created]);
+        setValue("supplierId", created.id, { shouldDirty: true, shouldTouch: true });
+        if (status === "draft") {
+          const code = created.defaultCurrencyCode ?? currency;
+          if (code !== getValues("currencyCode")) {
+            setValue("currencyCode", code);
+            setValue("exchangeRateToBase", code === currency ? "1" : "");
+            setValue("exchangeRateDate", code === currency ? orderDate : "");
+            setValue("exchangeRateSource", code === currency ? "Base" : "");
+          }
+        }
+      }}
+    />
+    <QuickCreateProjectDialog
+      businessId={businessId}
+      open={quickProjectOpen}
+      onOpenChange={setQuickProjectOpen}
+      initialName={quickProjectSeed}
+      onCreated={(created) => {
+        setProjectList((prev) => [...prev, created]);
+        setValue("projectId", created.id, { shouldDirty: true, shouldTouch: true });
+      }}
+    />
+    <QuickCreateItemDialog
+      businessId={businessId}
+      open={quickItemState.open}
+      onOpenChange={(open) => setQuickItemState((prev) => ({ ...prev, open }))}
+      initialName={quickItemState.seed}
+      defaultMode="purchase"
+      onCreated={(created) => {
+        const nextItem: ItemOption = {
+          id: created.id,
+          sku: created.sku,
+          name: created.name,
+          purchasePriceMinor: created.purchasePriceMinor,
+          inventoryAssetAccountId: created.inventoryAssetAccountId,
+        };
+        const nextItems = [...itemList, nextItem];
+        setItemList(nextItems);
+        setValue(`lines.${quickItemState.rowIndex}.itemId`, created.id, { shouldDirty: true, shouldTouch: true });
+        selectItem(quickItemState.rowIndex, created.id, nextItems);
+      }}
+    />
+    </>
   );
 }

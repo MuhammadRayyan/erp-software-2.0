@@ -2,14 +2,15 @@
 
 import { useMemo, useState } from "react";
 import Link from "next/link";
-import { ChevronRight, MoreHorizontal, Eye, FileEdit, Download, ShoppingCart, FileText } from "lucide-react";
+import { MoreHorizontal, FileEdit, Download, ShoppingCart, FileText } from "lucide-react";
+import { useActionPermission } from "@/components/permissions-provider";
 import { 
   useLegacyTable as useTable,
   getCoreRowModel as createCoreRowModel,
   getPaginationRowModel as createPaginationRowModel,
   getSortedRowModel as createSortedRowModel
 } from "@tanstack/react-table/legacy";
-import { type SortingState, type RowSelectionState } from "@tanstack/react-table";
+import { type RowSelectionState } from "@tanstack/react-table";
 import { StatusBadge, statusLabel } from "@/components/status-badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import { ListToolbar, SearchInput, ToolbarSelect, DateRangeFilter, ActiveFiltersRow, FilterChip } from "@/components/list-toolbar";
@@ -17,8 +18,10 @@ import { Button } from "@/components/ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { useColumns } from "@/components/columns-dropdown";
 import { DataTable, ListTableCard } from "@/components/ui/data-table";
-import { ClientListPagination, useTablePagination } from "@/components/list-pagination";
-import { formatDate, formatMoney } from "@/core/format";
+import { ClientListPagination } from "@/components/list-pagination";
+import { ExportCsvButton } from "@/components/export-csv-button";
+import { useUrlListState } from "@/hooks/use-url-list-state";
+import { formatDate, formatMoney, minorToDecimalString } from "@/core/format";
 import type { SalesQuoteStatus } from "./quote-service";
 import { DensityToggle } from "@/components/density-toggle";
 import { useTableDensity } from "@/components/use-table-density";
@@ -60,14 +63,25 @@ export function SalesQuoteTable({
   serverSnapshot?: import("@/components/use-column-visibility").ColumnVisibility;
 }) {
   const { density } = useTableDensity(businessId);
+  const canEditPerm = useActionPermission("edit");
+  const canExportPerm = useActionPermission("export");
+  const canCreatePerm = useActionPermission("create");
 
-  const [query, setQuery] = useState("");
-  const [status, setStatus] = useState("");
-  const [customerId, setCustomerId] = useState("");
-  const [projectId, setProjectId] = useState("");
-  const [fromDate, setFromDate] = useState("");
-  const [toDate, setToDate] = useState("");
-  const [sorting, setSorting] = useState<SortingState>([]);
+  const {
+    query,
+    status,
+    customerId,
+    projectId,
+    fromDate,
+    toDate,
+    sorting,
+    setFilter,
+    setPage,
+    setPageSize,
+    onSortingChange,
+    resetFilters,
+    buildPagination,
+  } = useUrlListState();
   const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
 
   const customerOptions = useMemo(
@@ -199,12 +213,15 @@ export function SalesQuoteTable({
       {
         id: "actions",
         header: () => <span className="sr-only">Actions</span>,
-        meta: { className: "w-16 text-right" },
+        meta: { className: "w-12 text-right" },
         enableSorting: false,
         cell: ({ row }: any) => {
           const quote = row.original;
           const canEdit = quote.documentStatus !== "accepted" && quote.documentStatus !== "rejected" && quote.documentStatus !== "cancelled" && quote.documentStatus !== "superseded";
           const canConvert = quote.documentStatus === "sent";
+          const hasUpper = (canEdit && canEditPerm) || canExportPerm;
+          const hasLower = canConvert && canCreatePerm;
+          if (!hasUpper && !hasLower) return null;
           return (
             <div className="flex items-center justify-end gap-1">
               <DropdownMenu>
@@ -214,11 +231,6 @@ export function SalesQuoteTable({
                   </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end" className="w-52">
-                  <DropdownMenuItem asChild>
-                    <Link href={`/b/${quote.businessId}/sales/quotes/${quote.id}`}>
-                      <Eye className="size-4 text-muted-foreground" /> View Quote
-                    </Link>
-                  </DropdownMenuItem>
                   {canEdit && (
                     <DropdownMenuItem permission="edit" asChild>
                       <Link href={`/b/${quote.businessId}/sales/quotes/${quote.id}/edit`}>
@@ -233,7 +245,7 @@ export function SalesQuoteTable({
                   </DropdownMenuItem>
                   {canConvert && (
                     <>
-                      <DropdownMenuSeparator />
+                      {hasUpper && hasLower && <DropdownMenuSeparator />}
                       <DropdownMenuItem permission="create" asChild>
                         <Link href={`/b/${quote.businessId}/sales/orders/new?quoteId=${quote.id}`}>
                           <ShoppingCart className="size-4 text-muted-foreground" /> Convert to Order
@@ -248,20 +260,15 @@ export function SalesQuoteTable({
                   )}
                 </DropdownMenuContent>
               </DropdownMenu>
-              <Button asChild variant="ghost" size="icon" className="size-7 text-muted-foreground opacity-50 transition-opacity md:opacity-0 md:group-hover:opacity-100">
-                <Link href={`/b/${quote.businessId}/sales/quotes/${quote.id}`} aria-label={`Open ${quote.quote_number}`}>
-                  <ChevronRight className="size-4" />
-                </Link>
-              </Button>
             </div>
           );
         },
       },
     ],
-    [],
+    [canCreatePerm, canEditPerm, canExportPerm],
   );
 
-  const { pagination, onPaginationChange, paginationInfo, setPage, setPageSize } = useTablePagination(rows.length);
+  const { pagination, paginationInfo } = buildPagination(rows.length);
 
   const table = useTable({
     data: rows,
@@ -274,21 +281,13 @@ export function SalesQuoteTable({
     },
     enableRowSelection: true,
     onRowSelectionChange: setRowSelection,
-    onSortingChange: setSorting,
-    onPaginationChange,
+    onSortingChange,
     getCoreRowModel: createCoreRowModel(),
     getSortedRowModel: createSortedRowModel(),
     getPaginationRowModel: createPaginationRowModel(),
   });
 
-  const clearFilters = () => {
-    setQuery("");
-    setStatus("");
-    setCustomerId("");
-    setProjectId("");
-    setFromDate("");
-    setToDate("");
-  };
+  const clearFilters = resetFilters;
   const hasActiveFilter = Boolean(customerId || projectId || fromDate || toDate || status || query);
 
   const totalQuoteValueStr = useMemo(() => {
@@ -311,17 +310,17 @@ export function SalesQuoteTable({
   return (
     <>
       <ListToolbar>
-        <SearchInput value={query} onChange={setQuery} placeholder="Search sales quotes…" ariaLabel="Search sales quotes" />
+        <SearchInput value={query} onChange={(val) => setFilter("q", val)} placeholder="Search sales quotes…" ariaLabel="Search sales quotes" />
         <ToolbarSelect
           value={customerId}
-          onChange={setCustomerId}
+          onChange={(val) => setFilter("customerId", val)}
           ariaLabel="Filter by customer"
           className="min-w-36 max-w-52"
           options={[{ value: "", label: "All customers" }, ...customerOptions.map(([id, name]) => ({ value: id, label: name }))]}
         />
         <ToolbarSelect
           value={projectId}
-          onChange={setProjectId}
+          onChange={(val) => setFilter("projectId", val)}
           ariaLabel="Filter by project"
           className="min-w-36 max-w-52"
           options={[{ value: "", label: "All projects" }, ...projectOptions.map(([id, name]) => ({ value: id, label: name }))]}
@@ -329,14 +328,14 @@ export function SalesQuoteTable({
         <DateRangeFilter
           fromDate={fromDate}
           toDate={toDate}
-          onFromChange={setFromDate}
-          onToChange={setToDate}
+          onFromChange={(val) => setFilter("from", val)}
+          onToChange={(val) => setFilter("to", val)}
           fromAriaLabel="Quote date from"
           toAriaLabel="Quote date to"
         />
         <ToolbarSelect
           value={status}
-          onChange={setStatus}
+          onChange={(val) => setFilter("status", val)}
           ariaLabel="Filter by status"
           options={[
             { value: "", label: "All statuses" },
@@ -348,6 +347,20 @@ export function SalesQuoteTable({
           ]}
         />
         <div className="ml-auto flex items-center gap-1.5 shrink-0">
+          <ExportCsvButton
+            size="sm"
+            filename={`sales-quotes-${new Date().toISOString().slice(0, 10)}.csv`}
+            data={rows}
+            columns={[
+              { header: "Quote Number", accessorKey: "quote_number" },
+              { header: "Customer", accessorKey: "customer_name" },
+              { header: "Date", accessorKey: "date" },
+              { header: "Expected Date", accessorKey: "expected_date" },
+              { header: "Currency", accessorKey: "currency_code" },
+              { header: "Total", accessorFn: (r: any) => minorToDecimalString(r.total_minor, r.currency_code, r.currency_minor_unit) },
+              { header: "Status", accessorKey: "documentStatus" },
+            ]}
+          />
           <DensityToggle businessId={businessId} />
           {dropdown}
         </div>
@@ -355,19 +368,19 @@ export function SalesQuoteTable({
       {hasActiveFilter && (
         <ActiveFiltersRow onClearAll={clearFilters}>
           {customerId && (
-            <FilterChip onRemove={() => setCustomerId("")}>
+            <FilterChip onRemove={() => setFilter("customerId", "")}>
               Customer: {customerOptions.find(([id]) => id === customerId)?.[1]}
             </FilterChip>
           )}
           {projectId && (
-            <FilterChip onRemove={() => setProjectId("")}>
+            <FilterChip onRemove={() => setFilter("projectId", "")}>
               Project: {projectOptions.find(([id]) => id === projectId)?.[1]}
             </FilterChip>
           )}
-          {fromDate && <FilterChip onRemove={() => setFromDate("")}>From: {formatDate(fromDate)}</FilterChip>}
-          {toDate && <FilterChip onRemove={() => setToDate("")}>To: {formatDate(toDate)}</FilterChip>}
-          {status && <FilterChip onRemove={() => setStatus("")}>Status: {statusLabel(status)}</FilterChip>}
-          {query && <FilterChip onRemove={() => setQuery("")}>Search: {query}</FilterChip>}
+          {fromDate && <FilterChip onRemove={() => setFilter("from", "")}>From: {formatDate(fromDate)}</FilterChip>}
+          {toDate && <FilterChip onRemove={() => setFilter("to", "")}>To: {formatDate(toDate)}</FilterChip>}
+          {status && <FilterChip onRemove={() => setFilter("status", "")}>Status: {statusLabel(status)}</FilterChip>}
+          {query && <FilterChip onRemove={() => setFilter("q", "")}>Search: {query}</FilterChip>}
         </ActiveFiltersRow>
       )}
       
@@ -379,6 +392,7 @@ export function SalesQuoteTable({
           minWidth="min-w-[780px]" 
           noResultsMessage="No sales quotes match" 
           onClearFilters={clearFilters}
+          getRowHref={(row: Row) => `/b/${row.businessId}/sales/quotes/${row.id}`}
         />
 
         {rows.length > 0 && (
@@ -416,7 +430,7 @@ export function SalesQuoteTable({
               { header: "Date", accessorKey: "date" },
               { header: "Expected Date", accessorKey: "expected_date" },
               { header: "Currency", accessorKey: "currency_code" },
-              { header: "Total", accessorFn: (r: any) => (r.total_minor / 100).toFixed(2) },
+              { header: "Total", accessorFn: (r: any) => minorToDecimalString(r.total_minor, r.currency_code, r.currency_minor_unit) },
               { header: "Status", accessorKey: "documentStatus" },
             ],
             selected

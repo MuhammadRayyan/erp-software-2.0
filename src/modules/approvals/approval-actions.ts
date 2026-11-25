@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { requireUser } from "@/core/auth/session";
-import { saveApprovalRule } from "./approval-policy";
+import { saveApprovalRule, saveApprovalRules } from "./approval-policy";
 
 function getErrorMessage(error: unknown, fallback: string) {
   return error instanceof Error ? error.message : fallback;
@@ -81,5 +81,25 @@ export async function saveApprovalRuleAction(
     return { rule };
   } catch (error) {
     return { error: getErrorMessage(error, "Failed to update approval rule.") };
+  }
+}
+
+export async function saveApprovalRulesAction(
+  businessId: string,
+  rules: Array<{
+    entityType: string;
+    isEnabled: boolean;
+    thresholdMinor: number;
+    requireCheckerSeparation: boolean;
+  }>,
+) {
+  try {
+    const user = await requireUser();
+    const updated = saveApprovalRules(businessId, user.id, rules);
+    revalidatePath(`/b/${businessId}/settings/approvals`);
+    revalidatePath(`/b/${businessId}/approvals`);
+    return { rules: updated };
+  } catch (error) {
+    return { error: getErrorMessage(error, "Failed to save approval settings.") };
   }
 }

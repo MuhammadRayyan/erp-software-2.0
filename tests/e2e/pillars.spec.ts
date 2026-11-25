@@ -237,7 +237,8 @@ test("Pillar 2: PDC lifecycle + Overview widget, VAT TRN checksum + FAF export, 
 
   const bounceRow = page.locator("table.data-table tbody tr", { hasText: "CHQ-BOUNCE-202" });
   await expect(bounceRow).toBeVisible();
-  await bounceRow.getByRole("button", { name: "Bounce", exact: true }).click();
+  await bounceRow.getByRole("button", { name: /Actions for/i }).click();
+  await page.getByRole("menuitem", { name: "Bounce Cheque", exact: true }).click();
   const bounceModal = page.getByRole("dialog");
   await bounceModal.getByLabel("Bank Return / Bounce Reason").fill("Insufficient funds E2E");
   await bounceModal.getByRole("button", { name: "Confirm Bounce", exact: true }).click();
@@ -265,6 +266,10 @@ test("Pillar 2: PDC lifecycle + Overview widget, VAT TRN checksum + FAF export, 
 
   // 3. Payroll WPS (.SIF) export dialog
   await page.goto(`/b/${f.businessId}/settings/business-profile`);
+  const wpsSummary = page.locator("summary", { hasText: /Payroll & WPS/i });
+  if ((await wpsSummary.count()) > 0) {
+    await wpsSummary.click();
+  }
   await page.getByLabel(/MOL \/ MOHRE Establishment ID/i).fill("9988776655443");
   await page.getByLabel(/WPS Bank Routing Code/i).fill("303100001");
   await page.getByRole("button", { name: "Save Business Profile", exact: true }).click();
@@ -314,9 +319,8 @@ test("Pillar 3: selectable per-user approval policy, Maker submission, Approver 
   await login(page, "admin");
   await page.goto(`/b/${f.businessId}/settings/approvals`);
   await expect(page.getByRole("heading", { name: "Approval Rules & Spend Thresholds", exact: true })).toBeVisible();
-  const salesRuleCard = page.locator("div.p-4", { hasText: "Sales Invoice" }).first();
-  await salesRuleCard.getByRole("button", { name: "Save", exact: true }).click();
-  await expect(page.getByText("Approval rule saved.")).toBeVisible();
+  await page.getByRole("button", { name: "Save Approval Settings", exact: true }).click();
+  await expect(page.getByText("Approval settings saved.")).toBeVisible();
 
   await page.goto(`/b/${f.businessId}/settings/users`);
   const stdCard = page.locator("article", { hasText: "standard@demo.local" });
@@ -324,6 +328,10 @@ test("Pillar 3: selectable per-user approval policy, Maker submission, Approver 
   const approvalSelect = stdCard.getByLabel(/Approval policy for/i);
   await expect(approvalSelect).toHaveValue("direct");
   await approvalSelect.selectOption("requires_approval");
+  const configurePermissionsBtn = stdCard.getByRole("button", { name: /Configure permissions/i });
+  if ((await configurePermissionsBtn.count()) > 0) {
+    await configurePermissionsBtn.click();
+  }
   await stdCard.getByLabel(/Purchases/i).check();
   await stdCard.getByRole("button", { name: "Save Access", exact: true }).click();
   await expect(page.getByText(/Access updated for/i)).toBeVisible();

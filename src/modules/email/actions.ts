@@ -149,8 +149,8 @@ export async function saveEmailTemplateAction(
   const { revalidatePath } = await import("next/cache");
   const { saveEmailTemplate } = await import("./email-template-service");
 
-  const { user } = await requirePermission(businessId, "settings", "edit");
   try {
+    const { user } = await requirePermission(businessId, "settings", "edit");
     const template = saveEmailTemplate(businessId, user.id, templateType, { subject, body });
     revalidatePath(`/b/${businessId}/settings/email-templates`);
     return { data: template };
@@ -164,8 +164,8 @@ export async function resetEmailTemplateAction(businessId: string, templateType:
   const { revalidatePath } = await import("next/cache");
   const { resetEmailTemplate } = await import("./email-template-service");
 
-  const { user } = await requirePermission(businessId, "settings", "edit");
   try {
+    const { user } = await requirePermission(businessId, "settings", "edit");
     const template = resetEmailTemplate(businessId, user.id, templateType);
     revalidatePath(`/b/${businessId}/settings/email-templates`);
     return { data: template };

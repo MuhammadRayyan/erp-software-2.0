@@ -44,6 +44,7 @@ export function KpiCards({ cards, businessId, serverSnapshot }: { cards: KpiCard
   const { visibility, toggle } = useColumnVisibility("overview-cards", initialVisibility, businessId ? { businessId, serverSnapshot } : undefined);
   const visibleCards = cards.filter((card) => visibility[card.id] !== false);
   const hiddenCount = cards.length - visibleCards.length;
+  if (cards.length === 0) return null;
   return (
     <section aria-label="Business summary" className="mt-4">
       <div className="mb-3 flex items-center justify-end gap-3">

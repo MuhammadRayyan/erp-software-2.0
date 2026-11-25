@@ -5,11 +5,13 @@ import { useState } from "react";
 import { LoaderCircle } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
+import { useActionPermission } from "@/components/permissions-provider";
 import { Input } from "@/components/ui/input";
 import { updateInvoiceNumberingAction } from "../actions";
 import type { InvoiceNumberingInput } from "../numbering-input";
 
 export function NumberingForm({ businessId, initial }: { businessId: string; initial: InvoiceNumberingInput }) {
+  const canEdit = useActionPermission("edit");
   const [values, setValues] = useState(initial);
   const [errors, setErrors] = useState<Record<string, string[]>>({});
   const [serverError, setServerError] = useState("");
@@ -111,6 +113,7 @@ export function NumberingForm({ businessId, initial }: { businessId: string; ini
                           id={sequence.prefixKey}
                           aria-label={`${sequence.label} Prefix`}
                           value={prefix}
+                          disabled={!canEdit}
                           onChange={(e) => setValues((c) => ({ ...c, [sequence.prefixKey]: e.target.value }))}
                           aria-invalid={!!errors[sequence.prefixKey]}
                           className="h-8 font-mono text-xs"
@@ -124,6 +127,7 @@ export function NumberingForm({ businessId, initial }: { businessId: string; ini
                           type="number"
                           min="1"
                           value={next}
+                          disabled={!canEdit}
                           onChange={(e) => setValues((c) => ({ ...c, [sequence.nextKey]: Number(e.target.value) }))}
                           aria-invalid={!!errors[sequence.nextKey]}
                           className="h-8 font-mono text-xs"
@@ -138,6 +142,7 @@ export function NumberingForm({ businessId, initial }: { businessId: string; ini
                           min="1"
                           max="10"
                           value={padValue}
+                          disabled={!canEdit}
                           onChange={(e) => setValues((c) => ({ ...c, [pKey]: Number(e.target.value) }))}
                           aria-invalid={!!errors[pKey]}
                           className="h-8 font-mono text-xs"
@@ -162,7 +167,7 @@ export function NumberingForm({ businessId, initial }: { businessId: string; ini
 
       <div className="sticky bottom-4 z-10 flex items-center justify-between rounded-lg border border-border bg-surface/95 p-3 shadow-md backdrop-blur-sm">
         <p className="text-xs text-muted-foreground">Make sure prefixes end with a separator like &ldquo;-&rdquo; if desired.</p>
-        <Button permission={"save"} onClick={save} disabled={pending}>
+        <Button permission="edit" onClick={save} disabled={pending}>
           {pending && <LoaderCircle className="size-4 animate-spin mr-1.5" />}
           Save all numbering sequences
         </Button>

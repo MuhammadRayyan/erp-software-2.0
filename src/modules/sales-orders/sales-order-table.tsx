@@ -1,23 +1,25 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo } from "react";
 import Link from "next/link";
-import { ChevronRight, MoreHorizontal, Eye, FileEdit, Download, FileText, PackageCheck } from "lucide-react";
+import { MoreHorizontal, FileEdit, Download, FileText, PackageCheck } from "lucide-react";
+import { useActionPermission } from "@/components/permissions-provider";
 import { 
   useLegacyTable as useTable,
   getCoreRowModel as createCoreRowModel,
   getPaginationRowModel as createPaginationRowModel,
   getSortedRowModel as createSortedRowModel
 } from "@tanstack/react-table/legacy";
-import { type SortingState } from "@tanstack/react-table";
 import { StatusBadge, statusLabel } from "@/components/status-badge";
 import { ListToolbar, SearchInput, ToolbarSelect, DateRangeFilter, ActiveFiltersRow, FilterChip } from "@/components/list-toolbar";
 import { Button } from "@/components/ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { useColumns } from "@/components/columns-dropdown";
 import { DataTable, ListTableCard } from "@/components/ui/data-table";
-import { ClientListPagination, useTablePagination } from "@/components/list-pagination";
-import { formatDate, formatMoney } from "@/core/format";
+import { ClientListPagination } from "@/components/list-pagination";
+import { ExportCsvButton } from "@/components/export-csv-button";
+import { useUrlListState } from "@/hooks/use-url-list-state";
+import { formatDate, formatMoney, minorToDecimalString } from "@/core/format";
 import type { SalesOrderStatus } from "./sales-order-service";
 import { DensityToggle } from "@/components/density-toggle";
 import { useTableDensity } from "@/components/use-table-density";
@@ -55,14 +57,26 @@ export function SalesOrderTable({
   serverSnapshot?: import("@/components/use-column-visibility").ColumnVisibility;
 }) {
   const { density } = useTableDensity(businessId);
+  const canEditPerm = useActionPermission("edit");
+  const canExportPerm = useActionPermission("export");
+  const canCreatePerm = useActionPermission("create");
+  const canCreateInventoryPerm = useActionPermission("create", "inventory");
 
-  const [query, setQuery] = useState("");
-  const [status, setStatus] = useState("");
-  const [customerId, setCustomerId] = useState("");
-  const [projectId, setProjectId] = useState("");
-  const [fromDate, setFromDate] = useState("");
-  const [toDate, setToDate] = useState("");
-  const [sorting, setSorting] = useState<SortingState>([]);
+  const {
+    query,
+    status,
+    customerId,
+    projectId,
+    fromDate,
+    toDate,
+    sorting,
+    setFilter,
+    setPage,
+    setPageSize,
+    onSortingChange,
+    resetFilters,
+    buildPagination,
+  } = useUrlListState();
 
   const customerOptions = useMemo(
     () =>
@@ -159,12 +173,15 @@ export function SalesOrderTable({
       {
         id: "actions",
         header: () => <span className="sr-only">Actions</span>,
-        meta: { className: "w-16 text-right" },
+        meta: { className: "w-12 text-right" },
         enableSorting: false,
         cell: ({ row }: any) => {
           const order = row.original;
           const canEdit = order.documentStatus !== "completed" && order.documentStatus !== "cancelled" && order.documentStatus !== "superseded";
           const canInvoice = order.documentStatus === "active";
+          const hasUpper = (canEdit && canEditPerm) || canExportPerm;
+          const hasLower = canInvoice && (canCreatePerm || canCreateInventoryPerm);
+          if (!hasUpper && !hasLower) return null;
           return (
             <div className="flex items-center justify-end gap-1">
               <DropdownMenu>
@@ -174,11 +191,6 @@ export function SalesOrderTable({
                   </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end" className="w-52">
-                  <DropdownMenuItem asChild>
-                    <Link href={`/b/${order.businessId}/sales/orders/${order.id}`}>
-                      <Eye className="size-4 text-muted-foreground" /> View Order
-                    </Link>
-                  </DropdownMenuItem>
                   {canEdit && (
                     <DropdownMenuItem permission="edit" asChild>
                       <Link href={`/b/${order.businessId}/sales/orders/${order.id}/edit`}>
@@ -193,13 +205,13 @@ export function SalesOrderTable({
                   </DropdownMenuItem>
                   {canInvoice && (
                     <>
-                      <DropdownMenuSeparator />
+                      {hasUpper && hasLower && <DropdownMenuSeparator />}
                       <DropdownMenuItem permission="create" asChild>
                         <Link href={`/b/${order.businessId}/sales/invoices/new?orderId=${order.id}`}>
                           <FileText className="size-4 text-muted-foreground" /> Create Invoice
                         </Link>
                       </DropdownMenuItem>
-                      <DropdownMenuItem permission="create" asChild>
+                      <DropdownMenuItem permission="create" permissionModule="inventory" asChild>
                         <Link href={`/b/${order.businessId}/sales/delivery-notes/new?orderId=${order.id}`}>
                           <PackageCheck className="size-4 text-muted-foreground" /> Create Delivery Note
                         </Link>
@@ -208,20 +220,15 @@ export function SalesOrderTable({
                   )}
                 </DropdownMenuContent>
               </DropdownMenu>
-              <Button asChild variant="ghost" size="icon" className="size-7 text-muted-foreground opacity-50 transition-opacity md:opacity-0 md:group-hover:opacity-100">
-                <Link href={`/b/${order.businessId}/sales/orders/${order.id}`} aria-label={`Open ${order.order_number}`}>
-                  <ChevronRight className="size-4" />
-                </Link>
-              </Button>
             </div>
           );
         },
       },
     ],
-    [],
+    [canCreatePerm, canCreateInventoryPerm, canEditPerm, canExportPerm],
   );
 
-  const { pagination, onPaginationChange, paginationInfo, setPage, setPageSize } = useTablePagination(rows.length);
+  const { pagination, paginationInfo } = buildPagination(rows.length);
 
   const table = useTable({
     data: rows,
@@ -231,21 +238,13 @@ export function SalesOrderTable({
       pagination,
       columnVisibility: colVisibility,
     },
-    onSortingChange: setSorting,
-    onPaginationChange,
+    onSortingChange,
     getCoreRowModel: createCoreRowModel(),
     getSortedRowModel: createSortedRowModel(),
     getPaginationRowModel: createPaginationRowModel(),
   });
 
-  const clearFilters = () => {
-    setQuery("");
-    setStatus("");
-    setCustomerId("");
-    setProjectId("");
-    setFromDate("");
-    setToDate("");
-  };
+  const clearFilters = resetFilters;
   const hasActiveFilter = Boolean(customerId || projectId || fromDate || toDate || status || query);
 
   const totalOrderValueStr = useMemo(() => {
@@ -266,17 +265,17 @@ export function SalesOrderTable({
   return (
     <>
       <ListToolbar>
-        <SearchInput value={query} onChange={setQuery} placeholder="Search sales orders…" ariaLabel="Search sales orders" />
+        <SearchInput value={query} onChange={(val) => setFilter("q", val)} placeholder="Search sales orders…" ariaLabel="Search sales orders" />
         <ToolbarSelect
           value={customerId}
-          onChange={setCustomerId}
+          onChange={(val) => setFilter("customerId", val)}
           ariaLabel="Filter by customer"
           className="min-w-36 max-w-52"
           options={[{ value: "", label: "All customers" }, ...customerOptions.map(([id, name]) => ({ value: id, label: name }))]}
         />
         <ToolbarSelect
           value={projectId}
-          onChange={setProjectId}
+          onChange={(val) => setFilter("projectId", val)}
           ariaLabel="Filter by project"
           className="min-w-36 max-w-52"
           options={[{ value: "", label: "All projects" }, ...projectOptions.map(([id, name]) => ({ value: id, label: name }))]}
@@ -284,14 +283,14 @@ export function SalesOrderTable({
         <DateRangeFilter
           fromDate={fromDate}
           toDate={toDate}
-          onFromChange={setFromDate}
-          onToChange={setToDate}
+          onFromChange={(val) => setFilter("from", val)}
+          onToChange={(val) => setFilter("to", val)}
           fromAriaLabel="Order date from"
           toAriaLabel="Order date to"
         />
         <ToolbarSelect
           value={status}
-          onChange={setStatus}
+          onChange={(val) => setFilter("status", val)}
           ariaLabel="Filter by status"
           options={[
             { value: "", label: "All statuses" },
@@ -302,6 +301,20 @@ export function SalesOrderTable({
           ]}
         />
         <div className="ml-auto flex items-center gap-1.5 shrink-0">
+          <ExportCsvButton
+            size="sm"
+            filename={`sales-orders-${new Date().toISOString().slice(0, 10)}.csv`}
+            data={rows}
+            columns={[
+              { header: "Order Number", accessorKey: "order_number" },
+              { header: "Customer", accessorKey: "customer_name" },
+              { header: "Date", accessorKey: "date" },
+              { header: "Expected Date", accessorKey: "expected_date" },
+              { header: "Currency", accessorKey: "currency_code" },
+              { header: "Total", accessorFn: (r: any) => minorToDecimalString(r.total_minor, r.currency_code, r.currency_minor_unit) },
+              { header: "Status", accessorKey: "documentStatus" },
+            ]}
+          />
           <DensityToggle businessId={businessId} />
           {dropdown}
         </div>
@@ -309,19 +322,19 @@ export function SalesOrderTable({
       {hasActiveFilter && (
         <ActiveFiltersRow onClearAll={clearFilters}>
           {customerId && (
-            <FilterChip onRemove={() => setCustomerId("")}>
+            <FilterChip onRemove={() => setFilter("customerId", "")}>
               Customer: {customerOptions.find(([id]) => id === customerId)?.[1]}
             </FilterChip>
           )}
           {projectId && (
-            <FilterChip onRemove={() => setProjectId("")}>
+            <FilterChip onRemove={() => setFilter("projectId", "")}>
               Project: {projectOptions.find(([id]) => id === projectId)?.[1]}
             </FilterChip>
           )}
-          {fromDate && <FilterChip onRemove={() => setFromDate("")}>From: {formatDate(fromDate)}</FilterChip>}
-          {toDate && <FilterChip onRemove={() => setToDate("")}>To: {formatDate(toDate)}</FilterChip>}
-          {status && <FilterChip onRemove={() => setStatus("")}>Status: {statusLabel(status)}</FilterChip>}
-          {query && <FilterChip onRemove={() => setQuery("")}>Search: {query}</FilterChip>}
+          {fromDate && <FilterChip onRemove={() => setFilter("from", "")}>From: {formatDate(fromDate)}</FilterChip>}
+          {toDate && <FilterChip onRemove={() => setFilter("to", "")}>To: {formatDate(toDate)}</FilterChip>}
+          {status && <FilterChip onRemove={() => setFilter("status", "")}>Status: {statusLabel(status)}</FilterChip>}
+          {query && <FilterChip onRemove={() => setFilter("q", "")}>Search: {query}</FilterChip>}
         </ActiveFiltersRow>
       )}
       
@@ -333,6 +346,7 @@ export function SalesOrderTable({
           minWidth="min-w-[780px]" 
           noResultsMessage="No sales orders match" 
           onClearFilters={clearFilters}
+          getRowHref={(row: Row) => `/b/${row.businessId}/sales/orders/${row.id}`}
         />
 
         {rows.length > 0 && (

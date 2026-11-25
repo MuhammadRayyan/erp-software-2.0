@@ -7,7 +7,7 @@ import { debounce, useQueryStates } from "nuqs";
 import { toast } from "sonner";
 import { broadcastLiveRefresh } from "@/components/use-live-refresh";
 import { useActionPermission, useApprovalPolicy } from "@/components/permissions-provider";
-import { ChevronRight, MoreHorizontal, Eye, FileEdit, Download, CircleDollarSign, BookOpenText, CheckCircle2, FileArchive, Ban } from "lucide-react";
+import { MoreHorizontal, FileEdit, Download, CircleDollarSign, BookOpenText, CheckCircle2, FileArchive, Ban } from "lucide-react";
 import {
   useLegacyTable as useTable,
   getCoreRowModel as createCoreRowModel,
@@ -20,7 +20,7 @@ import { Button } from "@/components/ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { useColumns } from "@/components/columns-dropdown";
 import { DataTable, ListTableCard } from "@/components/ui/data-table";
-import { formatDate, formatMoney } from "@/core/format";
+import { formatDate, formatMoney, minorToDecimalString } from "@/core/format";
 import type { PurchaseInvoiceStatus, PurchasePaymentStatus } from "./purchase-invoice-service";
 import type { InvoiceListSummary } from "@/modules/shared/list-query-helpers";
 import {
@@ -30,6 +30,7 @@ import {
   toSortingState,
 } from "@/lib/list-query-params";
 import { DensityToggle } from "@/components/density-toggle";
+import { ExportCsvButton } from "@/components/export-csv-button";
 import { useTableDensity } from "@/components/use-table-density";
 import { TableTotalsBar, renderMultiCurrencyString } from "@/components/table-totals-bar";
 import { BatchActionBar } from "@/components/batch-action-bar";
@@ -92,6 +93,9 @@ export function PurchaseInvoiceTable({
   const router = useRouter();
   const { requiresApproval } = useApprovalPolicy();
   const canPost = useActionPermission("post");
+  const canEditPerm = useActionPermission("edit");
+  const canExportPerm = useActionPermission("export");
+  const canCreatePerm = useActionPermission("create");
   const mustSubmitForApproval = requiresApproval || !canPost;
   const { density } = useTableDensity(businessId);
 
@@ -234,12 +238,15 @@ export function PurchaseInvoiceTable({
       {
         id: "actions",
         header: () => <span className="sr-only">Actions</span>,
-        meta: { className: "w-16 text-right" },
+        meta: { className: "w-12 text-right" },
         enableSorting: false,
         cell: ({ row }: any) => {
           const bill = row.original;
-          const canEdit = bill.document_status !== "void" && bill.document_status !== "pending_approval";
+          const canEdit = bill.document_status !== "void" && bill.document_status !== "pending_approval" && (bill.document_status === "draft" || bill.balanceMinor === bill.total_minor);
           const canPay = bill.document_status === "posted" && bill.balanceMinor > 0;
+          const hasUpper = (canEdit && canEditPerm) || canExportPerm;
+          const hasLower = bill.document_status === "posted" && canCreatePerm;
+          if (!hasUpper && !hasLower) return null;
           return (
             <div className="flex items-center justify-end gap-1">
               <DropdownMenu>
@@ -249,11 +256,6 @@ export function PurchaseInvoiceTable({
                   </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end" className="w-48">
-                  <DropdownMenuItem asChild>
-                    <Link href={`/b/${bill.businessId}/purchases/invoices/${bill.id}`}>
-                      <Eye className="size-4 text-muted-foreground" /> View Bill
-                    </Link>
-                  </DropdownMenuItem>
                   {canEdit && (
                     <DropdownMenuItem permission="edit" asChild>
                       <Link href={`/b/${bill.businessId}/purchases/invoices/${bill.id}/edit`}>
@@ -266,15 +268,13 @@ export function PurchaseInvoiceTable({
                       <Download className="size-4 text-muted-foreground" /> Download PDF
                     </a>
                   </DropdownMenuItem>
+                  {hasUpper && hasLower && <DropdownMenuSeparator />}
                   {canPay && (
-                    <>
-                      <DropdownMenuSeparator />
-                      <DropdownMenuItem permission="create" asChild>
-                        <Link href={`/b/${bill.businessId}/purchases/payments/new?invoiceId=${bill.id}`}>
-                          <CircleDollarSign className="size-4 text-muted-foreground" /> Record Payment
-                        </Link>
-                      </DropdownMenuItem>
-                    </>
+                    <DropdownMenuItem permission="create" asChild>
+                      <Link href={`/b/${bill.businessId}/purchases/payments/new?invoiceId=${bill.id}`}>
+                        <CircleDollarSign className="size-4 text-muted-foreground" /> Record Payment
+                      </Link>
+                    </DropdownMenuItem>
                   )}
                   {bill.document_status === "posted" && (
                     <DropdownMenuItem permission="create" asChild>
@@ -285,17 +285,12 @@ export function PurchaseInvoiceTable({
                   )}
                 </DropdownMenuContent>
               </DropdownMenu>
-              <Button asChild variant="ghost" size="icon" className="size-7 text-muted-foreground opacity-50 transition-opacity md:opacity-0 md:group-hover:opacity-100">
-                <Link href={`/b/${bill.businessId}/purchases/invoices/${bill.id}`} aria-label={`Open ${bill.internal_number}`}>
-                  <ChevronRight className="size-4" />
-                </Link>
-              </Button>
             </div>
           );
         },
       },
     ],
-    [],
+    [canCreatePerm, canEditPerm, canExportPerm],
   );
 
   const table = useTable({
@@ -405,6 +400,24 @@ export function PurchaseInvoiceTable({
           ]}
         />
         <div className="ml-auto flex items-center gap-1.5 shrink-0">
+          <ExportCsvButton
+            size="sm"
+            filename="purchase-invoices"
+            data={rows}
+            totalCount={summary.filteredTotal}
+            columns={[
+              { header: "Bill Number", accessorKey: "internal_number" },
+              { header: "Supplier", accessorKey: "supplier_name" },
+              { header: "Supplier Invoice", accessorKey: "supplier_invoice_number" },
+              { header: "Date", accessorKey: "invoice_date" },
+              { header: "Due Date", accessorKey: "due_date" },
+              { header: "Currency", accessorKey: "currency_code" },
+              { header: "Total", accessorFn: (r: Row) => minorToDecimalString(r.total_minor, r.currency_code, r.currency_minor_unit) },
+              { header: "Balance", accessorFn: (r: Row) => minorToDecimalString(r.balanceMinor, r.currency_code, r.currency_minor_unit) },
+              { header: "Document Status", accessorKey: "document_status" },
+              { header: "Payment Status", accessorFn: (r: Row) => r.paymentStatus ?? "" },
+            ]}
+          />
           <DensityToggle businessId={businessId} />
           {dropdown}
         </div>
@@ -428,12 +441,13 @@ export function PurchaseInvoiceTable({
         </ActiveFiltersRow>
       )}
       <ListTableCard>
-        <DataTable 
+        <DataTable
           table={table}
           density={density}
           framed={false}
-          minWidth="min-w-[640px]" 
-          noResultsMessage="No purchase invoices match" 
+          minWidth="min-w-[640px]"
+          getRowHref={(bill: Row) => `/b/${businessId}/purchases/invoices/${bill.id}`}
+          noResultsMessage="No purchase invoices match"
           onClearFilters={clearFilters}
         />
 
@@ -603,8 +617,8 @@ export function PurchaseInvoiceTable({
                     { header: "Date", accessorKey: "invoice_date" },
                     { header: "Due Date", accessorKey: "due_date" },
                     { header: "Currency", accessorKey: "currency_code" },
-                    { header: "Total", accessorFn: (r: any) => (r.total_minor / 100).toFixed(2) },
-                    { header: "Balance", accessorFn: (r: any) => (r.balanceMinor / 100).toFixed(2) },
+                    { header: "Total", accessorFn: (r: any) => minorToDecimalString(r.total_minor, r.currency_code, r.currency_minor_unit) },
+                    { header: "Balance", accessorFn: (r: any) => minorToDecimalString(r.balanceMinor, r.currency_code, r.currency_minor_unit) },
                     { header: "Document Status", accessorKey: "document_status" },
                     { header: "Payment Status", accessorKey: "paymentStatus" },
                   ],
@@ -634,6 +648,7 @@ export function PurchaseInvoiceTable({
               )}
 
               <Button
+                permission="export"
                 type="button"
                 variant="secondary"
                 size="sm"

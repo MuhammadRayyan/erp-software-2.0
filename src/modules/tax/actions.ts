@@ -38,6 +38,8 @@ export async function saveTaxSettingsAction(businessId: string, input: unknown):
     const parsed = taxSettingsInputSchema.safeParse(input);
     if (!parsed.success) return { error: "Check the VAT registration settings.", fieldErrors: z.flattenError(parsed.error).fieldErrors };
     updateTaxSettings(businessId, user.id, parsed.data);
+    revalidatePath(`/b/${businessId}/settings`);
+    revalidatePath(`/b/${businessId}/settings/business-profile`);
     revalidatePath(`/b/${businessId}/settings/tax`);
     revalidatePath(`/b/${businessId}/tax/vat`);
     return {};
@@ -45,10 +47,10 @@ export async function saveTaxSettingsAction(businessId: string, input: unknown):
 }
 
 export async function createVatPeriodAction(businessId: string, input: unknown): Promise<TaxActionResult> {
-  const { user } = await requireTaxAdmin(businessId);
-  const parsed = vatPeriodInputSchema.safeParse(input);
-  if (!parsed.success) return { error: "Check the explicit VAT period dates.", fieldErrors: z.flattenError(parsed.error).fieldErrors };
   try {
+    const { user } = await requireTaxAdmin(businessId);
+    const parsed = vatPeriodInputSchema.safeParse(input);
+    if (!parsed.success) return { error: "Check the explicit VAT period dates.", fieldErrors: z.flattenError(parsed.error).fieldErrors };
     const id = createVatPeriod(businessId, user.id, parsed.data);
     revalidatePath(`/b/${businessId}/tax/vat`);
     return { id };
@@ -56,8 +58,12 @@ export async function createVatPeriodAction(businessId: string, input: unknown):
 }
 
 export async function prepareVatPeriodAction(businessId: string, periodId: string): Promise<TaxActionResult> {
-  const { user } = await requireTaxAdmin(businessId);
-  try { markVatPeriodPrepared(businessId, user.id, periodId); revalidatePath(`/b/${businessId}/tax/vat/periods/${periodId}`); return {}; }
+  try {
+    const { user } = await requireTaxAdmin(businessId);
+    markVatPeriodPrepared(businessId, user.id, periodId);
+    revalidatePath(`/b/${businessId}/tax/vat/periods/${periodId}`);
+    return {};
+  }
   catch (error) { return { error: message(error, "The VAT period could not be prepared.") }; }
 }
 

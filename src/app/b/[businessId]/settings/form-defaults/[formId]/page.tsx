@@ -1,8 +1,6 @@
-import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ChevronRight } from "lucide-react";
-import { requireUser } from "@/core/auth/session";
-import { getBusinessForUser } from "@/core/businesses/business-service";
+import { requireModule } from "@/core/permissions/require-module";
+import { SettingsShell } from "@/components/settings-shell";
 import { getFormDefaults, isFormType } from "@/modules/form-defaults/form-defaults-service";
 import { FormDefaultsEditor } from "@/modules/form-defaults/form-defaults-editor";
 
@@ -26,30 +24,22 @@ export default async function FormDefaultsDetailPage({
   params: Promise<{ businessId: string; formId: string }>;
 }) {
   const { businessId, formId } = await params;
-  const user = await requireUser();
-  const access = getBusinessForUser(businessId, user.id);
-  if (!access) notFound();
+  const { user } = await requireModule(businessId, "settings");
   if (!isFormType(formId)) notFound();
 
   const initial = getFormDefaults(businessId, user.id, formId);
   const label = FORM_LABELS[formId] ?? formId;
 
   return (
-    <div className="page-container max-w-4xl space-y-6">
-      <div className="mb-5 flex items-center gap-1.5 text-sm font-medium text-muted-foreground">
-        <Link href={`/b/${businessId}/settings`} className="hover:text-foreground transition-colors">Settings</Link>
-        <ChevronRight className="size-4" />
-        <Link href={`/b/${businessId}/settings/form-defaults`} className="hover:text-foreground transition-colors">Form Defaults</Link>
-        <ChevronRight className="size-4" />
-        <span className="text-foreground font-semibold">{label}</span>
-      </div>
-      <div className="page-header mb-6">
-        <div>
-          <h1 className="page-title text-2xl sm:text-3xl font-bold tracking-tight text-foreground">{label} Defaults</h1>
-          <p className="page-description mt-1 text-sm text-muted-foreground leading-relaxed">Configure the default fields and layout that appear when creating a new {label.toLowerCase()}.</p>
-        </div>
-      </div>
+    <SettingsShell
+      businessId={businessId}
+      title={`${label} Defaults`}
+      description={`Configure the default fields and layout that appear when creating a new ${label.toLowerCase()}.`}
+      maxWidth="max-w-4xl"
+      backHref={`/b/${businessId}/settings/form-defaults`}
+      backLabel="Form Defaults"
+    >
       <FormDefaultsEditor businessId={businessId} formType={formId} initial={initial} />
-    </div>
+    </SettingsShell>
   );
 }

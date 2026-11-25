@@ -18,8 +18,8 @@ export async function createPaymentTermAction(
     is_default?: boolean;
   }
 ) {
-  const { user } = await requirePermission(businessId, "settings", "edit");
   try {
+    const { user } = await requirePermission(businessId, "settings", "edit");
     const term = createPaymentTerm(businessId, user.id, input);
     revalidatePath(`/b/${businessId}/settings/payment-terms`);
     return { data: term };
@@ -38,8 +38,8 @@ export async function updatePaymentTermAction(
     is_default?: boolean;
   }
 ) {
-  const { user } = await requirePermission(businessId, "settings", "edit");
   try {
+    const { user } = await requirePermission(businessId, "settings", "edit");
     const term = updatePaymentTerm(businessId, user.id, id, input);
     revalidatePath(`/b/${businessId}/settings/payment-terms`);
     return { data: term };
@@ -49,8 +49,8 @@ export async function updatePaymentTermAction(
 }
 
 export async function deletePaymentTermAction(businessId: string, id: string) {
-  const { user } = await requirePermission(businessId, "settings", "edit");
   try {
+    const { user } = await requirePermission(businessId, "settings", "edit");
     deletePaymentTerm(businessId, user.id, id);
     revalidatePath(`/b/${businessId}/settings/payment-terms`);
     return {};
@@ -60,8 +60,8 @@ export async function deletePaymentTermAction(businessId: string, id: string) {
 }
 
 export async function setDefaultPaymentTermAction(businessId: string, id: string) {
-  const { user } = await requirePermission(businessId, "settings", "edit");
   try {
+    const { user } = await requirePermission(businessId, "settings", "edit");
     setDefaultPaymentTerm(businessId, user.id, id);
     revalidatePath(`/b/${businessId}/settings/payment-terms`);
     return {};

@@ -8,7 +8,8 @@ import type { InventoryDocumentStatus } from "@/modules/inventory/inventory-docu
 import { getGoodsReceipt } from "@/modules/inventory/goods-receipt-service";
 import { GoodsReceiptViewActions } from "@/modules/inventory/goods-receipt-view-actions";
 import { formatQuantityMicros } from "@/modules/inventory/inventory-valuation";
-import { BackLink } from "@/components/back-link";
+import { Breadcrumbs } from "@/components/breadcrumbs";
+import { DocumentFlowStepper, type FlowStep } from "@/components/documents/document-flow-stepper";
 import { getDocumentViewData } from "@/modules/document-templates/document-data-extractor";
 import { DocumentViewLayout } from "@/modules/document-templates/components/document-view-layout";
 
@@ -28,6 +29,34 @@ export default async function GoodsReceiptViewPage({
   const status = String(r.document_status) as InventoryDocumentStatus;
   const total = record.lines.reduce((sum, line) => sum + Number(line.value_minor), 0);
 
+  const flowSteps: FlowStep[] = [
+    ...(r.purchase_order_id
+      ? [{
+          key: "order",
+          label: "Purchase Order",
+          documentNumber: String(r.order_number),
+          href: `/b/${businessId}/purchases/orders/${String(r.purchase_order_id)}`,
+          state: "completed" as const,
+        }]
+      : []),
+    {
+      key: "goods-receipt",
+      label: "Goods Receipt",
+      documentNumber: String(r.receipt_number),
+      statusLabel: status,
+      state: "current",
+    },
+    ...(r.purchase_invoice_id
+      ? [{
+          key: "invoice",
+          label: "Purchase Invoice",
+          documentNumber: String(r.internal_number),
+          href: `/b/${businessId}/purchases/invoices/${String(r.purchase_invoice_id)}`,
+          state: "completed" as const,
+        }]
+      : []),
+  ];
+
   const viewBundle = getDocumentViewData(
     businessId,
     user.id,
@@ -40,7 +69,13 @@ export default async function GoodsReceiptViewPage({
   return (
     <div className="page-container">
       <NoticeToast message={notice} />
-      <BackLink href={`/b/${businessId}/purchases/goods-receipts`}>Goods Receipts</BackLink>
+      <Breadcrumbs
+        businessId={businessId}
+        items={[
+          { label: "Goods Receipts", href: `/b/${businessId}/purchases/goods-receipts` },
+          { label: String(r.receipt_number) },
+        ]}
+      />
       <div className="mb-6 flex flex-col justify-between gap-4 lg:flex-row lg:items-start">
         <div>
           <div className="flex items-center gap-2">
@@ -70,6 +105,9 @@ export default async function GoodsReceiptViewPage({
           status={status}
         />
       </div>
+      {Boolean(r.purchase_order_id || r.purchase_invoice_id) && (
+        <DocumentFlowStepper steps={flowSteps} className="no-print" />
+      )}
 
       <DocumentViewLayout
         data={viewBundle.data}

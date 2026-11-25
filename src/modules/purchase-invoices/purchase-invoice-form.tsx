@@ -1,10 +1,11 @@
 "use client";
 import { useRouter } from "next/navigation";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Coins, LoaderCircle } from "lucide-react";
 import { Controller, useFieldArray, useForm, useWatch } from "react-hook-form";
 import { Button } from "@/components/ui/button";
+import { SplitActionButton } from "@/components/ui/split-action-button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Combobox, type ComboboxOption } from "@/components/ui/combobox";
 import { Input } from "@/components/ui/input";
@@ -31,7 +32,14 @@ import {
   IsolatedDocumentTotals,
   useDocumentColumnVisibility,
 } from "@/components/documents";
+import { DraftRecoveryBanner } from "@/components/documents/draft-recovery-banner";
+import {
+  QuickCreateItemDialog,
+  QuickCreateProjectDialog,
+  QuickCreateSupplierDialog,
+} from "@/components/documents/quick-create-modals";
 import { useUnsavedChanges } from "@/hooks/use-unsaved-changes";
+import { useFormDraftRecovery } from "@/hooks/use-form-draft-recovery";
 import { useActionPermission, useApprovalPolicy } from "@/components/permissions-provider";
 import type { CustomFieldInputDefinition } from "@/modules/custom-fields/custom-field-inputs";
 
@@ -42,7 +50,7 @@ type TaxOption = {
   name: string;
   vatCategory: string;
 };
-type Option = { id: string; name: string; defaultCurrencyCode?: string | null };
+type Option = { id: string; name: string; defaultCurrencyCode?: string | null; paymentTermsDays?: number };
 type OrderOption = { id: string; orderNumber: string; supplierId: string };
 type ProjectOption = { id: string; code: string; name: string };
 type ItemOption = {
@@ -63,6 +71,7 @@ export type SupplierPrepaymentOption = {
 export function PurchaseInvoiceForm({
   businessId,
   invoiceId,
+  isPrefilled = false,
   documentStatus = "draft",
   suppliers,
   expenseAccounts,
@@ -79,6 +88,7 @@ export function PurchaseInvoiceForm({
 }: {
   businessId: string;
   invoiceId?: string;
+  isPrefilled?: boolean;
   documentStatus?: PurchaseInvoiceStatus;
   suppliers: Option[];
   expenseAccounts: AccountOption[];
@@ -96,8 +106,28 @@ export function PurchaseInvoiceForm({
   const router = useRouter();
   const { requiresApproval } = useApprovalPolicy();
   const canPost = useActionPermission("post");
+  const canCreateSupplier = useActionPermission("create", "purchases");
+  const canCreateProject = useActionPermission("create", "projects");
+  const canCreateItem = useActionPermission("create", "inventory");
   const mustSubmitForApproval = requiresApproval || !canPost;
   const [serverError, setServerError] = useState("");
+  const [supplierList, setSupplierList] = useState(suppliers);
+  const [projectList, setProjectList] = useState(projects);
+  const [itemList, setItemList] = useState(items);
+  useEffect(() => { setSupplierList(suppliers); }, [suppliers]);
+  useEffect(() => { setProjectList(projects); }, [projects]);
+  useEffect(() => { setItemList(items); }, [items]);
+
+  const [quickSupplierOpen, setQuickSupplierOpen] = useState(false);
+  const [quickSupplierSeed, setQuickSupplierSeed] = useState("");
+  const [quickProjectOpen, setQuickProjectOpen] = useState(false);
+  const [quickProjectSeed, setQuickProjectSeed] = useState("");
+  const [quickItemState, setQuickItemState] = useState<{ open: boolean; rowIndex: number; seed: string }>({
+    open: false,
+    rowIndex: 0,
+    seed: "",
+  });
+
   const [globalTaxCodeId, setGlobalTaxCodeId] = useState(
     () =>
       initial.lines[0]?.taxCodeId ||
@@ -114,12 +144,22 @@ export function PurchaseInvoiceForm({
     register,
     control,
     handleSubmit,
+    reset,
+    watch,
     setError,
     setValue,
     getValues,
     formState: { errors, isSubmitting, isDirty, isSubmitSuccessful },
   } = form;
   useUnsavedChanges(isDirty && !isSubmitSuccessful);
+  const draftRecovery = useFormDraftRecovery({
+    storageKey: `erp-draft:${businessId}:purchase-invoice:new`,
+    enabled: !invoiceId && !isPrefilled,
+    watch,
+    reset,
+    isDirty,
+    isSubmitSuccessful,
+  });
   const { fields, append, remove, insert, move } = useFieldArray({ control, name: "lines" });
   const colVis = useDocumentColumnVisibility({ lineTaxCodes: false, lines: initial.lines });
 
@@ -158,8 +198,8 @@ export function PurchaseInvoiceForm({
       : 0;
 
   const supplierOptions = useMemo<ComboboxOption[]>(
-    () => suppliers.map((s) => ({ value: s.id, label: s.name })),
-    [suppliers],
+    () => supplierList.map((s) => ({ value: s.id, label: s.name })),
+    [supplierList],
   );
   const availableOrders = useMemo(
     () => orders.filter((order) => !supplierId || order.supplierId === supplierId),
@@ -170,8 +210,8 @@ export function PurchaseInvoiceForm({
     [availableOrders],
   );
   const projectOptions = useMemo<ComboboxOption[]>(
-    () => projects.map((p) => ({ value: p.id, label: `${p.code} — ${p.name}`, keywords: [p.code, p.name] })),
-    [projects],
+    () => projectList.map((p) => ({ value: p.id, label: `${p.code} — ${p.name}`, keywords: [p.code, p.name] })),
+    [projectList],
   );
   const taxOptions = useMemo<ComboboxOption[]>(
     () => taxCodes.map((t) => ({ value: t.id, label: t.name })),
@@ -186,8 +226,8 @@ export function PurchaseInvoiceForm({
   }
 
   const defaultExpense = expenseAccounts[0]?.id ?? "";
-  function selectItem(index: number, itemId: string) {
-    const item = items.find((entry) => entry.id === itemId);
+  function selectItem(index: number, itemId: string, sourceItems = itemList) {
+    const item = sourceItems.find((entry) => entry.id === itemId);
     if (!item) {
       setValue(`lines.${index}.expenseAccountId`, defaultExpense, { shouldDirty: true });
       return;
@@ -205,18 +245,26 @@ export function PurchaseInvoiceForm({
     );
   }
 
-  async function save(values: PurchaseInvoiceInput, intent: PurchaseInvoiceIntent) {
+  async function save(values: PurchaseInvoiceInput, intent: PurchaseInvoiceIntent, afterSave: "view" | "new" = "view") {
     setServerError("");
+    draftRecovery.clearDraft();
     const result = await savePurchaseInvoiceAction(
       businessId,
       invoiceId ?? null,
       values,
       intent,
+      afterSave,
     );
+    if (result.fieldErrors || result.error) {
+      draftRecovery.preserveDraft(values);
+    }
     if (result.fieldErrors)
       for (const [field, messages] of Object.entries(result.fieldErrors))
         setError(field as keyof PurchaseInvoiceInput, { message: messages[0] });
-    if (result.error) setServerError(result.error);
+    if (result.error) {
+      setError("root.serverError", { message: result.error });
+      setServerError(result.error);
+    }
   }
 
   const cancelHref = invoiceId
@@ -224,14 +272,25 @@ export function PurchaseInvoiceForm({
     : `/b/${businessId}/purchases/invoices`;
 
   return (
+    <>
     <DocumentWorkspaceLayout
+      banner={
+        <DraftRecoveryBanner
+          hasDraft={draftRecovery.hasDraft}
+          savedAt={draftRecovery.savedAt}
+          onRestore={draftRecovery.restoreDraft}
+          onDiscard={draftRecovery.discardDraft}
+        />
+      }
       serverError={serverError}
       headerTitle="Bill details"
       headerSubtitle="Posting creates the Accounts Payable, expense, and Input VAT journal atomically."
       headerBadge={
-        <span className="text-xs text-muted-foreground font-medium bg-muted/60 px-2 py-0.5 rounded border border-border/50">
-          Internal Bill # Auto-allocated on save
-        </span>
+        !invoiceId ? (
+          <span className="text-xs text-muted-foreground font-medium bg-muted/60 px-2 py-0.5 rounded border border-border/50">
+            Internal Bill # Auto-allocated on save
+          </span>
+        ) : undefined
       }
       header={
         <div className="grid gap-4 md:grid-cols-3">
@@ -251,15 +310,35 @@ export function PurchaseInvoiceForm({
                     field.onChange(next);
                     setValue("purchaseOrderId", "");
                     if (documentStatus === "draft" && next) {
-                      const code =
-                        suppliers.find((supplier) => supplier.id === next)
-                          ?.defaultCurrencyCode ?? currency;
-                      setValue("currencyCode", code);
-                      setValue("exchangeRateToBase", code === currency ? "1" : "");
-                      setValue("exchangeRateDate", code === currency ? taxDate || invoiceDate : "");
-                      setValue("exchangeRateSource", code === currency ? "Base" : "");
+                      const supplier = supplierList.find((s) => s.id === next);
+                      const code = supplier?.defaultCurrencyCode ?? currency;
+                      if (code !== getValues("currencyCode")) {
+                        setValue("currencyCode", code);
+                        setValue("exchangeRateToBase", code === currency ? "1" : "");
+                        setValue("exchangeRateDate", code === currency ? taxDate || invoiceDate : "");
+                        setValue("exchangeRateSource", code === currency ? "Base" : "");
+                      }
+                      if (typeof supplier?.paymentTermsDays === "number") {
+                        const baseDate = invoiceDate || new Date().toISOString().slice(0, 10);
+                        const d = new Date(baseDate);
+                        if (!Number.isNaN(d.valueOf())) {
+                          d.setDate(d.getDate() + supplier.paymentTermsDays);
+                          setValue("dueDate", d.toISOString().slice(0, 10));
+                        }
+                      }
                     }
                   }}
+                  createAction={
+                    canCreateSupplier
+                      ? {
+                          label: "New Supplier",
+                          onTrigger: (q) => {
+                            setQuickSupplierSeed(q);
+                            setQuickSupplierOpen(true);
+                          },
+                        }
+                      : undefined
+                  }
                   placeholder="Choose a supplier…"
                   searchPlaceholder="Search supplier..."
                 />
@@ -351,7 +430,20 @@ export function PurchaseInvoiceForm({
             <Input
               id="invoiceDate"
               type="date"
-              {...register("invoiceDate")}
+              {...register("invoiceDate", {
+                onChange: (event) => {
+                  if (documentStatus === "draft") {
+                    const supplier = supplierList.find((s) => s.id === supplierId);
+                    if (typeof supplier?.paymentTermsDays === "number" && event.target.value) {
+                      const d = new Date(event.target.value);
+                      if (!Number.isNaN(d.valueOf())) {
+                        d.setDate(d.getDate() + supplier.paymentTermsDays);
+                        setValue("dueDate", d.toISOString().slice(0, 10));
+                      }
+                    }
+                  }
+                },
+              })}
               aria-invalid={!!errors.invoiceDate}
             />
             {errors.invoiceDate && <p className="field-error">{errors.invoiceDate.message}</p>}
@@ -408,6 +500,17 @@ export function PurchaseInvoiceForm({
                   onValueChange={field.onChange}
                   allowClear
                   clearLabel="No project"
+                  createAction={
+                    canCreateProject
+                      ? {
+                          label: "New Project",
+                          onTrigger: (q) => {
+                            setQuickProjectSeed(q);
+                            setQuickProjectOpen(true);
+                          },
+                        }
+                      : undefined
+                  }
                   placeholder="No project"
                   searchPlaceholder="Search project..."
                 />
@@ -466,13 +569,18 @@ export function PurchaseInvoiceForm({
           onDuplicate={duplicateLine}
           onMoveUp={moveLineUp}
           onMoveDown={moveLineDown}
-          items={items}
+          items={itemList}
           onItemSelect={selectItem}
+          onRequestCreateItem={
+            canCreateItem
+              ? (rowIndex, q) => setQuickItemState({ open: true, rowIndex, seed: q })
+              : undefined
+          }
           accounts={expenseAccounts}
           accountFieldName="expenseAccountId"
           accountAriaLabel="expense account"
           taxCodes={taxCodes}
-          projects={projects}
+          projects={projectList}
           currencyCode={currencyCode}
           minorUnit={minorUnit}
           lineCustomFields={lineCustomFields}
@@ -560,6 +668,20 @@ export function PurchaseInvoiceForm({
                 >
                   {isSubmitting && <LoaderCircle className="size-4 animate-spin" />} Submit for Approval
                 </Button>
+              ) : !invoiceId ? (
+                <SplitActionButton
+                  label="Create & Post"
+                  permission={["save", "post"]}
+                  loading={isSubmitting}
+                  onPrimaryClick={handleSubmit((values) => save(values, "post", "view"))}
+                  options={[
+                    {
+                      label: "Create, Post & New",
+                      description: "Post this bill and start a new one right away",
+                      onSelect: handleSubmit((values) => save(values, "post", "new")),
+                    },
+                  ]}
+                />
               ) : (
                 <Button
                   permission={["save", "post"]}
@@ -568,7 +690,7 @@ export function PurchaseInvoiceForm({
                   onClick={handleSubmit((values) => save(values, "post"))}
                 >
                   {isSubmitting && <LoaderCircle className="size-4 animate-spin" />}{" "}
-                  {invoiceId ? "Save & Post" : "Create & Post"}
+                  Save &amp; Post
                 </Button>
               )}
             </div>
@@ -576,5 +698,65 @@ export function PurchaseInvoiceForm({
         </DocumentFormFooter>
       }
     />
+    <QuickCreateSupplierDialog
+      businessId={businessId}
+      open={quickSupplierOpen}
+      onOpenChange={setQuickSupplierOpen}
+      initialName={quickSupplierSeed}
+      defaultCurrencyCode={currencyCode}
+      onCreated={(created) => {
+        setSupplierList((prev) => [...prev, created]);
+        setValue("supplierId", created.id, { shouldDirty: true, shouldTouch: true });
+        setValue("purchaseOrderId", "");
+        if (documentStatus === "draft") {
+          const code = created.defaultCurrencyCode ?? currency;
+          if (code !== getValues("currencyCode")) {
+            setValue("currencyCode", code);
+            setValue("exchangeRateToBase", code === currency ? "1" : "");
+            setValue("exchangeRateDate", code === currency ? taxDate || invoiceDate : "");
+            setValue("exchangeRateSource", code === currency ? "Base" : "");
+          }
+          if (typeof created.paymentTermsDays === "number") {
+            const baseDate = invoiceDate || new Date().toISOString().slice(0, 10);
+            const d = new Date(baseDate);
+            if (!Number.isNaN(d.valueOf())) {
+              d.setDate(d.getDate() + created.paymentTermsDays);
+              setValue("dueDate", d.toISOString().slice(0, 10));
+            }
+          }
+        }
+      }}
+    />
+    <QuickCreateProjectDialog
+      businessId={businessId}
+      open={quickProjectOpen}
+      onOpenChange={setQuickProjectOpen}
+      initialName={quickProjectSeed}
+      onCreated={(created) => {
+        setProjectList((prev) => [...prev, created]);
+        setValue("projectId", created.id, { shouldDirty: true, shouldTouch: true });
+      }}
+    />
+    <QuickCreateItemDialog
+      businessId={businessId}
+      open={quickItemState.open}
+      onOpenChange={(open) => setQuickItemState((prev) => ({ ...prev, open }))}
+      initialName={quickItemState.seed}
+      defaultMode="purchase"
+      onCreated={(created) => {
+        const nextItem: ItemOption = {
+          id: created.id,
+          sku: created.sku,
+          name: created.name,
+          purchasePriceMinor: created.purchasePriceMinor,
+          inventoryAssetAccountId: created.inventoryAssetAccountId,
+        };
+        const nextItems = [...itemList, nextItem];
+        setItemList(nextItems);
+        setValue(`lines.${quickItemState.rowIndex}.itemId`, created.id, { shouldDirty: true, shouldTouch: true });
+        selectItem(quickItemState.rowIndex, created.id, nextItems);
+      }}
+    />
+    </>
   );
 }

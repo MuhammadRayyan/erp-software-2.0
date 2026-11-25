@@ -1,9 +1,11 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
+import { useActionPermission } from "@/components/permissions-provider";
 import { Label } from "@/components/ui/label";
 import { saveFormDefaultsAction } from "@/modules/form-defaults/actions";
 import type { FormDefaultValues } from "@/modules/form-defaults/form-defaults-service";
@@ -13,12 +15,14 @@ function Toggle({
   label,
   description,
   checked,
+  disabled,
   onChange,
 }: {
   id: string;
   label: string;
   description: string;
   checked: boolean;
+  disabled?: boolean;
   onChange: (value: boolean) => void;
 }) {
   return (
@@ -32,8 +36,9 @@ function Toggle({
         id={id}
         role="switch"
         aria-checked={checked}
-        onClick={() => onChange(!checked)}
-        className={`relative inline-flex h-5 w-9 shrink-0 items-center rounded-full border border-transparent transition-colors ${checked ? "bg-primary" : "bg-muted"}`}
+        disabled={disabled}
+        onClick={() => !disabled && onChange(!checked)}
+        className={`relative inline-flex h-5 w-9 shrink-0 items-center rounded-full border border-transparent transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${checked ? "bg-primary" : "bg-muted"}`}
       >
         <span className={`inline-block size-4 transform rounded-full bg-white shadow transition-transform ${checked ? "translate-x-4" : "translate-x-0.5"}`} />
       </button>
@@ -51,6 +56,7 @@ export function FormDefaultsEditor({
   initial: FormDefaultValues;
 }) {
   const router = useRouter();
+  const canEdit = useActionPermission("edit");
   const [amountsIncludeTax, setAmountsIncludeTax] = useState(initial.amountsIncludeTax ?? false);
   const [showDiscounts, setShowDiscounts] = useState(initial.showDiscounts ?? false);
   const [showLineNumber, setShowLineNumber] = useState(initial.showLineNumber ?? false);
@@ -64,7 +70,7 @@ export function FormDefaultsEditor({
   const onSave = async () => {
     setSaving(true);
     try {
-      await saveFormDefaultsAction(businessId, formType, {
+      const res = await saveFormDefaultsAction(businessId, formType, {
         amountsIncludeTax,
         showDiscounts,
         showLineNumber,
@@ -74,6 +80,10 @@ export function FormDefaultsEditor({
         defaultNotes,
         defaultTerms,
       });
+      if (res?.error) {
+        toast.error(res.error);
+        return;
+      }
       toast.success("Form defaults saved.");
       router.refresh();
     } catch (error) {
@@ -97,6 +107,7 @@ export function FormDefaultsEditor({
             label="Amounts include tax"
             description="Line prices are entered VAT-inclusive (tax is backed out)."
             checked={amountsIncludeTax}
+            disabled={!canEdit}
             onChange={setAmountsIncludeTax}
           />
           <Toggle
@@ -104,6 +115,7 @@ export function FormDefaultsEditor({
             label="Show discount column"
             description="Display a per-line discount input on the form."
             checked={showDiscounts}
+            disabled={!canEdit}
             onChange={setShowDiscounts}
           />
           <Toggle
@@ -111,6 +123,7 @@ export function FormDefaultsEditor({
             label="Show line numbers"
             description="Display a sequential line-number column."
             checked={showLineNumber}
+            disabled={!canEdit}
             onChange={setShowLineNumber}
           />
           <Toggle
@@ -118,6 +131,7 @@ export function FormDefaultsEditor({
             label="Show description column"
             description="Display a per-line description input."
             checked={showDescription}
+            disabled={!canEdit}
             onChange={setShowDescription}
           />
           <Toggle
@@ -125,29 +139,33 @@ export function FormDefaultsEditor({
             label="Show tax code column"
             description="Display a per-line tax code selector on the document form."
             checked={showTaxCode}
+            disabled={!canEdit}
             onChange={setShowTaxCode}
           />
         </div>
       </div>
 
-      <div className="rounded-lg border border-border bg-surface p-5">
-        <h2 className="text-sm font-semibold">Terms & Timing</h2>
-        <div className="mt-4 space-y-4">
-          <div>
-            <Label htmlFor="defaultPaymentTermsDays" className="text-sm font-medium">Default payment terms (days)</Label>
-            <p className="text-xs text-muted-foreground">Default due date offset for new documents (e.g. 30 for Net 30, 0 for due immediately).</p>
-            <input
-              id="defaultPaymentTermsDays"
-              type="number"
-              min="0"
-              max="365"
-              value={defaultPaymentTermsDays}
-              onChange={(e) => setDefaultPaymentTermsDays(Number(e.target.value))}
-              className="mt-1.5 h-9 w-32 rounded-md border border-border bg-surface px-3 py-1 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-            />
+      {!["stock-adjustment", "delivery-note", "goods-receipt"].includes(formType) && (
+        <div className="rounded-lg border border-border bg-surface p-5">
+          <h2 className="text-sm font-semibold">Terms & Timing</h2>
+          <div className="mt-4 space-y-4">
+            <div>
+              <Label htmlFor="defaultPaymentTermsDays" className="text-sm font-medium">Default payment terms (days)</Label>
+              <p className="text-xs text-muted-foreground">Default due date offset for new documents (e.g. 30 for Net 30, 0 for due immediately).</p>
+              <input
+                id="defaultPaymentTermsDays"
+                type="number"
+                min="0"
+                max="365"
+                value={defaultPaymentTermsDays}
+                disabled={!canEdit}
+                onChange={(e) => setDefaultPaymentTermsDays(Number(e.target.value))}
+                className="mt-1.5 h-9 w-32 rounded-md border border-border bg-surface px-3 py-1 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50"
+              />
+            </div>
           </div>
         </div>
-      </div>
+      )}
 
       <div className="rounded-lg border border-border bg-surface p-5">
         <h2 className="text-sm font-semibold">Document text</h2>
@@ -158,9 +176,10 @@ export function FormDefaultsEditor({
             <textarea
               id="defaultNotes"
               value={defaultNotes}
+              disabled={!canEdit}
               onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setDefaultNotes(e.target.value)}
               rows={3}
-              className="mt-1.5 w-full rounded-md border border-border bg-surface px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              className="mt-1.5 w-full rounded-md border border-border bg-surface px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50"
               placeholder="e.g. Thank you for your business."
             />
           </div>
@@ -170,9 +189,10 @@ export function FormDefaultsEditor({
             <textarea
               id="defaultTerms"
               value={defaultTerms}
+              disabled={!canEdit}
               onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setDefaultTerms(e.target.value)}
               rows={3}
-              className="mt-1.5 w-full rounded-md border border-border bg-surface px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              className="mt-1.5 w-full rounded-md border border-border bg-surface px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50"
               placeholder="e.g. Payment due within 30 days."
             />
           </div>
@@ -180,8 +200,10 @@ export function FormDefaultsEditor({
       </div>
 
       <div className="flex justify-end gap-2">
-        <Button variant="ghost" onClick={() => router.back()}>Cancel</Button>
-        <Button permission={"save"} onClick={onSave} disabled={saving}>
+        <Button asChild variant="ghost">
+          <Link href={`/b/${businessId}/settings/form-defaults`}>Cancel</Link>
+        </Button>
+        <Button permission="edit" onClick={onSave} disabled={saving}>
           {saving ? "Saving…" : "Save defaults"}
         </Button>
       </div>

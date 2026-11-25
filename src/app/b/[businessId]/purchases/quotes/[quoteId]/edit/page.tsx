@@ -10,7 +10,7 @@ import { listInventoryItemOptions } from "@/modules/inventory/inventory-item-ser
 import { getCurrencySettings } from "@/modules/currency/exchange-rate";
 import { quantityMicrosToInput } from "@/modules/accounting/calculations/money";
 import { minorToCurrencyInput } from "@/modules/currency/conversion";
-import { BackLink } from "@/components/back-link";
+import { Breadcrumbs } from "@/components/breadcrumbs";
 import { listCustomFieldDefinitions } from "@/modules/custom-fields/custom-field-service";
 
 export default async function EditPurchaseQuotePage({
@@ -40,7 +40,14 @@ export default async function EditPurchaseQuotePage({
 
   return (
     <div className="page-container">
-      <BackLink href={`/b/${businessId}/purchases/quotes/${quoteId}`}>{record.quote.quoteNumber}</BackLink>
+      <Breadcrumbs
+        businessId={businessId}
+        items={[
+          { label: "Purchase Quotes", href: `/b/${businessId}/purchases/quotes` },
+          { label: record.quote.quoteNumber, href: `/b/${businessId}/purchases/quotes/${quoteId}` },
+          { label: "Edit" },
+        ]}
+      />
       <div className="mb-7">
         <h1 className="page-title">Edit Purchase Quote</h1>
         <p className="page-description">Updates remain operational and do not affect the ledger.</p>

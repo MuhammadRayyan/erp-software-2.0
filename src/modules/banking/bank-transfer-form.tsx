@@ -12,11 +12,13 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { createBankTransferAction } from "./actions";
 import { bankTransferInputSchema, type BankTransferInput } from "./bank-transfer-input";
+import { useUnsavedChanges } from "@/hooks/use-unsaved-changes";
 
 export function BankTransferForm({ businessId, accounts, initial }: { businessId: string; accounts: { id: string; name: string; currency_code: string }[]; initial: BankTransferInput }) {
   const [serverError, setServerError] = useState("");
   const form = useForm<BankTransferInput>({ resolver: zodResolver(bankTransferInputSchema), defaultValues: initial });
-  const { register, control, handleSubmit, setError, formState: { errors, isSubmitting } } = form;
+  const { register, control, handleSubmit, setError, formState: { errors, isSubmitting, isDirty, isSubmitSuccessful } } = form;
+  useUnsavedChanges(isDirty && !isSubmitSuccessful);
   const accountOptions = accounts.map((a) => ({ value: a.id, label: `${a.name} · ${a.currency_code}` }));
   async function save(values: BankTransferInput) {
     setServerError(""); const result = await createBankTransferAction(businessId, values);
@@ -49,6 +51,6 @@ export function BankTransferForm({ businessId, accounts, initial }: { businessId
         {errors.description && <p className="field-error">{errors.description.message}</p>}
       </div>
     </div></section>
-    <div className="sticky bottom-0 z-20 -mx-4 flex justify-between border-t border-border bg-surface/95 px-4 py-3 backdrop-blur-sm sm:mx-0 sm:rounded-t-lg sm:border-x"><Button asChild variant="ghost"><Link href={`/b/${businessId}/banking/accounts`}>Cancel</Link></Button><Button type="submit" disabled={isSubmitting}>{isSubmitting && <LoaderCircle className="size-4 animate-spin" />} Post Transfer</Button></div>
+    <div className="sticky bottom-0 z-20 -mx-4 flex justify-between border-t border-border bg-surface/95 px-4 py-3 backdrop-blur-sm sm:mx-0 sm:rounded-t-lg sm:border-x"><Button asChild variant="ghost"><Link href={`/b/${businessId}/banking/accounts`}>Cancel</Link></Button><Button permission="create" type="submit" disabled={isSubmitting}>{isSubmitting && <LoaderCircle className="size-4 animate-spin" />} Post Transfer</Button></div>
   </form>;
 }

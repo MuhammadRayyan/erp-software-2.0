@@ -34,7 +34,7 @@ import {
   type InvoiceListSummary,
 } from "@/modules/shared/list-query-helpers";
 import { convertDocumentLinesToBase, minorToCurrencyInput, parseCurrencyAmountToMinor } from "@/modules/currency/conversion";
-import { getCurrency } from "@/modules/currency/currency";
+import { getBaseCurrency, getCurrency } from "@/modules/currency/currency";
 import { resolveRateSnapshot } from "@/modules/currency/validation";
 import { calculateLines, totalsForLines, type StoredLine } from "@/modules/accounting/services/document-line-calculator";
 import { getCustomerUnallocatedCredit, receiptConfig } from "@/modules/receipts/receipt-service";
@@ -1234,6 +1234,7 @@ export function duplicateInvoice(businessId: string, userId: string, invoiceId: 
   const record = getInvoice(businessId, userId, invoiceId);
   if (!record) throw new Error("Invoice not found.");
   const context = getBusinessDb(businessId, userId);
+  const baseCurrency = getBaseCurrency(context.sqlite);
   const minorUnit = getCurrency(context.sqlite, record.invoice.currencyCode).minor_unit;
 
   const today = new Date().toISOString().split("T")[0];
@@ -1248,7 +1249,7 @@ export function duplicateInvoice(businessId: string, userId: string, invoiceId: 
       customerId: record.invoice.customerId,
       currencyCode: record.invoice.currencyCode,
       exchangeRateToBase: record.invoice.exchangeRateToBase,
-      exchangeRateDate: today,
+      exchangeRateDate: record.invoice.currencyCode === baseCurrency.code ? today : record.invoice.exchangeRateDate,
       exchangeRateSource: record.invoice.exchangeRateSource as "Base" | "Manual" | "CBUAE",
       projectId: record.invoice.projectId ?? "",
       invoiceDate: today,

@@ -1,7 +1,7 @@
 import { expect, test } from "@playwright/test";
 import { readFileSync } from "node:fs";
 import { login } from "./helpers/session";
-import { selectComboboxByIndex } from "./helpers/combobox";
+import { selectComboboxByIndex, selectComboboxOption } from "./helpers/combobox";
 
 type Fixture = {
   businessId: string;
@@ -400,6 +400,126 @@ test.describe("Sprint 3 UI & Workflow Modernization", () => {
       }
     }
     expect(populatedTablesVerified).toBeGreaterThanOrEqual(10);
+
+    expect(errors).toEqual([]);
+  });
+});
+
+test.describe("Phase 3 UX Unification", () => {
+  test("Overview decluttered (no QuickActionsBar) and Settings Hub + QuickSwitcher keep single-column layout", async ({ page }) => {
+    const errors: string[] = [];
+    page.on("pageerror", (err) => errors.push(err.message));
+
+    const f = fixture();
+    await login(page);
+    await page.setViewportSize({ width: 1280, height: 800 });
+
+    // 1. Overview decluttered — Quick daily actions bar removed
+    await page.goto(`/b/${f.businessId}/overview`);
+    const quickBar = page.getByRole("navigation", { name: "Quick daily actions", exact: true });
+    await expect(quickBar).toHaveCount(0);
+
+    // 2. Settings Hub subtitles + single-column layout + SettingsQuickSwitcher
+    await page.goto(`/b/${f.businessId}/settings`);
+    await expect(page.getByLabel("Settings navigation")).toHaveCount(0);
+    await expect(page.getByText("Company legal name, address, tax ID, and logo")).toBeVisible();
+
+    await page.goto(`/b/${f.businessId}/settings/business-profile`);
+    await expect(page.getByLabel("Settings navigation")).toHaveCount(0);
+    const switcher = page.getByLabel("Jump to setting", { exact: true });
+    await expect(switcher).toBeVisible();
+    await selectComboboxOption(page, switcher, "Appearance & Theme");
+    await expect(page).toHaveURL(new RegExp(`/b/${f.businessId}/settings/appearance$`));
+
+    expect(errors).toEqual([]);
+  });
+
+  test("Inline Combobox Quick-Create Customer and SplitActionButton Create, Post & New on Sales Invoice", async ({ page }) => {
+    const errors: string[] = [];
+    page.on("pageerror", (err) => errors.push(err.message));
+
+    const f = fixture();
+    await login(page);
+    await page.setViewportSize({ width: 1280, height: 800 });
+    await page.goto(`/b/${f.businessId}/sales/invoices/new`);
+
+    const customerTrigger = page.getByLabel("Customer", { exact: true });
+    const uniqueName = `Phase3 Quick Cust ${Date.now()}`;
+
+    await customerTrigger.click();
+    const popover = page.locator("[cmdk-root]:visible").last();
+    await expect(popover).toBeVisible();
+    await popover.locator("[cmdk-input]").fill(uniqueName);
+    await page.getByRole("button", { name: new RegExp(`New Customer.*${uniqueName}`, "i") }).click();
+
+    const quickNameInput = page.locator("#quick-customer-name");
+    await expect(quickNameInput).toBeVisible();
+    await expect(quickNameInput).toHaveValue(uniqueName);
+    await page.getByRole("button", { name: "Create Customer", exact: true }).click();
+
+    await expect(quickNameInput).toHaveCount(0);
+    await expect(customerTrigger).toContainText(uniqueName);
+
+    await page.locator("#invoiceDate").fill("2026-02-01");
+    await page.locator("#dueDate").fill("2026-02-15");
+    await page.getByLabel("Line 1 description", { exact: true }).fill("Phase 3 Split Action Line");
+    await page.getByLabel("Line 1 quantity", { exact: true }).fill("1");
+    await page.getByLabel("Line 1 rate", { exact: true }).fill("150.00");
+    await selectComboboxByIndex(page, page.getByLabel("Line 1 sales account", { exact: true }), 1);
+    await selectComboboxByIndex(page, page.getByLabel("Default Tax:", { exact: true }), 1);
+
+    await page.getByRole("button", { name: "More save options", exact: true }).click();
+    await page.getByRole("menuitem", { name: /Create, Post & New/i }).click();
+
+    await expect(page).toHaveURL(new RegExp(`/b/${f.businessId}/sales/invoices/new\\?notice=`));
+    expect(errors).toEqual([]);
+  });
+
+  test("DataTable keyboard sort, URL filter persistence across Back navigation, and clickable row navigation", async ({ page }) => {
+    const errors: string[] = [];
+    page.on("pageerror", (err) => errors.push(err.message));
+
+    const f = fixture();
+    await login(page);
+    await page.setViewportSize({ width: 1280, height: 800 });
+
+    await page.goto(`/b/${f.businessId}/sales/quotes`);
+    await expect(page.locator("h1.page-title")).toBeVisible();
+
+    // Ensure at least one quote exists; grab its quote number from first row link
+    const firstRow = page.locator("tbody tr").first();
+    await expect(firstRow).toBeVisible();
+    const firstQuoteNumber = (await firstRow.locator("a").first().innerText()).trim();
+    expect(firstQuoteNumber.length).toBeGreaterThan(0);
+
+    // 1. Keyboard sort on Date column header
+    const dateTh = page.locator('thead th[scope="col"]', { hasText: "Date" }).first();
+    await expect(dateTh).toHaveAttribute("aria-sort", "none");
+    const sortBtn = dateTh.getByRole("button").first();
+    await sortBtn.focus();
+    await page.keyboard.press("Enter");
+    await expect(dateTh).toHaveAttribute("aria-sort", /ascending|descending/);
+
+    // 2. Filter via Search input -> URL updates -> click non-link row cell -> goBack keeps filter
+    const searchInput = page.getByLabel("Search sales quotes", { exact: true });
+    await searchInput.fill(firstQuoteNumber);
+    await expect(async () => {
+      expect(new URL(page.url()).searchParams.get("q")).toBe(firstQuoteNumber);
+    }).toPass({ timeout: 5000 });
+
+    const filteredRow = page.locator("tbody tr").first();
+    await expect(filteredRow).toContainText(firstQuoteNumber);
+    await filteredRow.locator("td:not(:has(a)):not(:has(button))").first().click();
+
+    await expect(page).toHaveURL(new RegExp(`/b/${f.businessId}/sales/quotes/[a-f0-9-]{36}(?:\\?.*)?$`));
+    await expect(page.locator("h1").first()).toBeVisible();
+
+    await page.goBack();
+    await expect(page).toHaveURL(new RegExp(`/b/${f.businessId}/sales/quotes`));
+    await expect(async () => {
+      expect(new URL(page.url()).searchParams.get("q")).toBe(firstQuoteNumber);
+    }).toPass({ timeout: 5000 });
+    await expect(page.getByLabel("Search sales quotes", { exact: true })).toHaveValue(firstQuoteNumber);
 
     expect(errors).toEqual([]);
   });

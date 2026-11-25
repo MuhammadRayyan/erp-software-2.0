@@ -431,8 +431,24 @@ export async function sendPasswordResetForUser(businessId: string, adminUserId: 
   if (!access || access.membership.role !== "administrator") throw new Error("BUSINESS_ACCESS_DENIED");
 
   const db = getSystemDb();
+  const membership = db
+    .select()
+    .from(memberships)
+    .where(and(eq(memberships.businessId, businessId), eq(memberships.userId, targetUserId)))
+    .get();
+  if (!membership) throw new Error("User is not a member of this business.");
+
+  const caller = db.select({ isSuperAdmin: users.isSuperAdmin }).from(users).where(eq(users.id, adminUserId)).get();
+  const currentBusiness = db.select({ ownerUserId: businesses.ownerUserId }).from(businesses).where(eq(businesses.id, businessId)).get();
+  if (targetUserId === currentBusiness?.ownerUserId && !caller?.isSuperAdmin) {
+    throw new Error("Password reset emails cannot be triggered for the workspace owner.");
+  }
+
   const target = db.select().from(users).where(eq(users.id, targetUserId)).get();
   if (!target) throw new Error("User account was not found.");
+  if (target.isSuperAdmin && !caller?.isSuperAdmin) {
+    throw new Error("Cannot issue password reset for a Super-Administrator account.");
+  }
   if (target.status === "suspended") {
     throw new Error("Cannot send password reset to a suspended account. Reactivate the user first.");
   }
@@ -470,8 +486,24 @@ export function createPasswordResetLinkForUser(businessId: string, adminUserId: 
   if (!access || access.membership.role !== "administrator") throw new Error("BUSINESS_ACCESS_DENIED");
 
   const db = getSystemDb();
+  const membership = db
+    .select()
+    .from(memberships)
+    .where(and(eq(memberships.businessId, businessId), eq(memberships.userId, targetUserId)))
+    .get();
+  if (!membership) throw new Error("User is not a member of this business.");
+
+  const caller = db.select({ isSuperAdmin: users.isSuperAdmin }).from(users).where(eq(users.id, adminUserId)).get();
+  const currentBusiness = db.select({ ownerUserId: businesses.ownerUserId }).from(businesses).where(eq(businesses.id, businessId)).get();
+  if (targetUserId === currentBusiness?.ownerUserId && !caller?.isSuperAdmin) {
+    throw new Error("Password reset links cannot be generated for the workspace owner.");
+  }
+
   const target = db.select().from(users).where(eq(users.id, targetUserId)).get();
   if (!target) throw new Error("User account was not found.");
+  if (target.isSuperAdmin && !caller?.isSuperAdmin) {
+    throw new Error("Cannot generate password reset link for a Super-Administrator account.");
+  }
   if (target.status === "suspended") {
     throw new Error("Cannot create password reset link for a suspended account. Reactivate the user first.");
   }
@@ -512,13 +544,44 @@ export function toggleUserSuspension(
   }
 
   const db = getSystemDb();
+  const membership = db
+    .select()
+    .from(memberships)
+    .where(and(eq(memberships.businessId, businessId), eq(memberships.userId, targetUserId)))
+    .get();
+  if (!membership) throw new Error("User is not a member of this business.");
+
+  const caller = db.select({ isSuperAdmin: users.isSuperAdmin }).from(users).where(eq(users.id, adminUserId)).get();
   const currentBusiness = db.select().from(businesses).where(eq(businesses.id, businessId)).get();
-  if (targetUserId === currentBusiness?.ownerUserId) {
+  if (targetUserId === currentBusiness?.ownerUserId && !caller?.isSuperAdmin) {
     throw new Error("The business workspace owner cannot be suspended.");
   }
 
   const target = db.select().from(users).where(eq(users.id, targetUserId)).get();
   if (!target) throw new Error("User was not found.");
+  if (target.isSuperAdmin && !caller?.isSuperAdmin) {
+    throw new Error("Super-Administrator accounts cannot be suspended from a business workspace.");
+  }
+
+  const otherMemberships = db
+    .select({ businessId: memberships.businessId })
+    .from(memberships)
+    .where(and(eq(memberships.userId, targetUserId), ne(memberships.businessId, businessId)))
+    .all();
+  if (otherMemberships.length > 0 && !caller?.isSuperAdmin) {
+    const callerAdminBizIds = new Set(
+      db
+        .select({ businessId: memberships.businessId })
+        .from(memberships)
+        .where(and(eq(memberships.userId, adminUserId), eq(memberships.role, "administrator")))
+        .all()
+        .map((m) => m.businessId)
+    );
+    const hasUnadministeredBusiness = otherMemberships.some((m) => !callerAdminBizIds.has(m.businessId));
+    if (hasUnadministeredBusiness) {
+      throw new Error("Cannot globally suspend a user who belongs to other businesses. Remove them from this workspace instead.");
+    }
+  }
 
   getSystemSqlite().transaction(() => {
     db.update(users)

@@ -70,8 +70,15 @@ export default async function BusinessLayout({ children, params }: { children: R
       business={{ id: access.business.id, name: access.business.name }}
       initialSidebarCollapsed={initialSidebarCollapsed}
       modules={access.modules}
+      capabilities={access.capabilities}
       hiddenNavPaths={hiddenNavPaths}
-      user={{ name: user.name, email: user.email, isSuperAdmin: isSuper }}
+      user={{
+        name: user.name,
+        email: user.email,
+        isSuperAdmin: isSuper,
+        isAdministrator: access.membership.role === "administrator",
+        requiresApproval: access.requiresApproval,
+      }}
       unreadNotificationsCount={unreadNotificationsCount}
       pendingApprovalsCount={pendingApprovalsCount}
     >
@@ -94,6 +101,7 @@ export default async function BusinessLayout({ children, params }: { children: R
       <PermissionsProvider
         capabilities={access.capabilities}
         isAdministrator={access.membership.role === "administrator"}
+        isSuperAdmin={isSuper}
         requiresApproval={access.requiresApproval}
       >
         {canOpenForm ? children : <PermissionDenied module={requirement?.module} action={routeAction ?? undefined} returnHref={`/b/${businessId}/overview`} returnLabel="Return to overview" />}

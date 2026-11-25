@@ -1,8 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Printer, Download, FileText, Layers } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { FileText, Layers } from "lucide-react";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { DocumentPaperSheet } from "./document-paper-sheet";
 import type { DocumentTemplateData, DocumentTemplateVariant } from "../types";
@@ -12,8 +11,8 @@ export interface DocumentViewLayoutProps {
   data: DocumentTemplateData;
   settings: TemplateSettings;
   variant: DocumentTemplateVariant;
-  pdfUrl: string;
-  documentNumber: string;
+  pdfUrl?: string;
+  documentNumber?: string;
   children?: React.ReactNode;
   defaultView?: "document" | "operations";
 }
@@ -22,18 +21,11 @@ export function DocumentViewLayout({
   data,
   settings,
   variant,
-  pdfUrl,
-  documentNumber,
   children,
   defaultView = "document",
 }: DocumentViewLayoutProps) {
   const [activeTab, setActiveTab] = useState<"document" | "operations">(defaultView);
   const [zoom, setZoom] = useState<"fit" | "75" | "100">("100");
-
-  const handlePrint = () => {
-    // If not on document tab, temporarily ensure printable sheet is visible or simply call window.print()
-    window.print();
-  };
 
   return (
     <div className="w-full space-y-4">
@@ -90,32 +82,6 @@ export function DocumentViewLayout({
                 100%
               </button>
             </div>
-
-            {/* Quick Print Button */}
-            <Button
-              type="button"
-              variant="secondary"
-              size="sm"
-              onClick={handlePrint}
-              className="gap-1.5 text-xs font-semibold"
-            >
-              <Printer className="size-3.5 text-primary" />
-              <span>Print</span>
-            </Button>
-
-            {/* Download PDF Button */}
-            <Button permission={"export"}
-              type="button"
-              variant="secondary"
-              size="sm"
-              asChild
-              className="gap-1.5 text-xs font-semibold"
-            >
-              <a href={pdfUrl} target="_blank" rel="noreferrer">
-                <Download className="size-3.5 text-primary" />
-                <span>Download PDF</span>
-              </a>
-            </Button>
           </div>
         )}
       </div>
@@ -137,24 +103,6 @@ export function DocumentViewLayout({
               <DocumentPaperSheet data={data} settings={settings} variant={variant} />
             </div>
           </div>
-
-          {/* Quick Info & Operational Link Banner */}
-          {children && (
-            <div className="no-print flex items-center justify-between rounded-lg border border-border bg-surface-raised p-4 text-xs text-muted-foreground shadow-sm">
-              <div className="flex items-center gap-2">
-                <span className="font-semibold text-foreground">Operational status:</span>
-                <span>Document {documentNumber} is active in ledger.</span>
-              </div>
-              <button
-                type="button"
-                onClick={() => setActiveTab("operations")}
-                className="font-medium text-primary hover:underline flex items-center gap-1"
-              >
-                <span>View Relational Flow & Accounting Details</span>
-                <span>→</span>
-              </button>
-            </div>
-          )}
         </div>
       ) : (
         /* Operational Details View */

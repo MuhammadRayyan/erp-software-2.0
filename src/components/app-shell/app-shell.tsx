@@ -2,23 +2,22 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import {
   Activity,
+  ArrowRightLeft,
   Banknote,
-  BookOpenText,
-  Building2,
   CircleHelp,
   ContactRound,
   FileInput,
+  FileMinus2,
+  FilePlus2,
   FileText,
   FolderKanban,
-  Globe,
   HandCoins,
-  Hash,
-  History,
   Menu,
-  Palette,
+  Package,
+  PackageCheck,
   PanelLeftClose,
   PanelLeftOpen,
   Receipt,
@@ -28,17 +27,18 @@ import {
   ShoppingCart,
   SlidersHorizontal,
   Truck,
-  UserRound,
-  Users,
 } from "lucide-react";
 import { BrandMark } from "@/components/brand-mark";
 import { CommandPalette, type CommandItem } from "@/components/command-palette";
 import { Button } from "@/components/ui/button";
 import { DialogContent, DialogDescription, DialogRoot, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import type { ModuleKey } from "@/core/permissions/permissions";
+import type { ModuleCapabilities, ModuleKey } from "@/core/permissions/permissions";
+import { hasPermission } from "@/core/permissions/module-access";
+import { requestGuardedNavigation } from "@/hooks/use-unsaved-changes";
 import { AccountMenu } from "@/components/account-menu";
-import { customizeNav, primaryNav, settingsNav, systemHealthNav } from "./nav-items";
+import { getFlatSettingsItems } from "@/modules/settings/settings-registry";
+import { primaryNav, settingsNav } from "./nav-items";
 import { isNavPathVisible, resolveDefaultLandingPath } from "./nav-customization";
 import { SidebarNav } from "./sidebar-nav";
 import { NotificationBell } from "./notification-bell";
@@ -54,8 +54,15 @@ type ShellProps = {
   business: BusinessOption;
   initialSidebarCollapsed?: boolean;
   modules: ModuleKey[];
+  capabilities?: ModuleCapabilities;
   hiddenNavPaths?: readonly string[];
-  user: { name: string; email: string; isSuperAdmin?: boolean };
+  user: {
+    name: string;
+    email: string;
+    isSuperAdmin?: boolean;
+    isAdministrator?: boolean;
+    requiresApproval?: boolean;
+  };
   unreadNotificationsCount?: number;
   pendingApprovalsCount?: number;
 };
@@ -63,8 +70,11 @@ type ShellProps = {
 function buildCommands(
   business: BusinessOption,
   modules: ModuleKey[],
+  capabilities: ModuleCapabilities | undefined,
   hiddenNavPaths: readonly string[],
   isSuperAdmin: boolean,
+  isAdministrator: boolean,
+  requiresApproval: boolean,
   push: (path: string) => void,
 ): CommandItem[] {
   const go = (path: string) => () => push(`/b/${business.id}${path}`);
@@ -74,51 +84,72 @@ function buildCommands(
       if (!isNavPathVisible(item.path, hiddenNavPaths)) continue;
       if (item.modules && !item.modules.some((m) => modules.includes(m))) continue;
       if (item.module && !modules.includes(item.module)) continue;
+      const extraKeywords =
+        item.path === "/tax/vat"
+          ? "vat tax fta form 201 accounting reports return"
+          : item.path === "/inventory/adjustments"
+            ? "stock adjustment count writeoff opening balance"
+            : "";
       navigation.push({
         group: "Navigation",
         label: item.label,
         hint: group.label ?? "Overview",
         icon: item.icon,
-        keywords: [group.label, item.label, item.path].filter(Boolean).join(" "),
+        keywords: [group.label, item.label, item.path, extraKeywords].filter(Boolean).join(" "),
         onSelect: go(item.path),
       });
     }
   }
 
+  const hasSettingsModule = modules.includes("settings");
   const settings: CommandItem[] = [];
-  if (modules.includes("settings")) {
-    settings.push(
-      { group: "Settings", label: customizeNav.label, hint: "Modules", icon: customizeNav.icon, keywords: "customize hide show modules tabs sidebar", onSelect: go(customizeNav.path) },
-      { group: "Settings", label: settingsNav.label, hint: "Hub", icon: settingsNav.icon, keywords: "settings preferences configuration", onSelect: go(settingsNav.path) },
-      { group: "Settings", label: "Business Profile", hint: "Business", icon: Building2, keywords: "business profile trn address logo legal name", onSelect: go("/settings/business-profile") },
-      { group: "Settings", label: "Appearance & Theme", hint: "Personal", icon: Palette, keywords: "theme dark light mode font size density", onSelect: go("/settings/appearance") },
-      { group: "Settings", label: "Display Preferences", hint: "This business", icon: SlidersHorizontal, keywords: "columns kpi preferences reset", onSelect: go("/settings/preferences") },
-      { group: "Settings", label: "Tax & VAT", hint: "Settings", icon: BookOpenText, keywords: "vat tax registration trn", onSelect: go("/settings/tax") },
-      { group: "Settings", label: "Tax Codes", hint: "Settings", icon: BookOpenText, keywords: "tax codes vat rate zero exempt", onSelect: go("/settings/tax-codes") },
-      { group: "Settings", label: "Currencies & FX", hint: "Settings", icon: Globe, keywords: "currency exchange rate aed usd cbuae", onSelect: go("/settings/currencies") },
-      { group: "Settings", label: "Document Numbering", hint: "Settings", icon: Hash, keywords: "numbering sequence prefix", onSelect: go("/settings/numbering") },
-      { group: "Settings", label: "Form Defaults", hint: "Settings", icon: FileText, keywords: "form defaults terms notes columns", onSelect: go("/settings/form-defaults") },
-      { group: "Settings", label: "Document Templates", hint: "Settings", icon: FileText, keywords: "templates pdf print branding", onSelect: go("/settings/document-templates") },
-      { group: "Settings", label: "Users & Access Control", hint: "Admin", icon: Users, keywords: "users roles permissions invite", onSelect: go("/settings/users") },
-    );
-    if (isSuperAdmin) {
-      settings.push(
-        { group: "Settings", label: systemHealthNav.label, hint: "Diagnostics", icon: systemHealthNav.icon, keywords: "system health diagnostics logs traces metrics wal", onSelect: go(systemHealthNav.path) },
-        { group: "Settings", label: "Platform Admin Console", hint: "Super Admin", icon: Activity, keywords: "admin tenants engine health", onSelect: () => push("/admin") },
-      );
-    }
+  if (hasSettingsModule) {
+    settings.push({
+      group: "Settings",
+      label: settingsNav.label,
+      hint: "Hub",
+      icon: settingsNav.icon,
+      keywords: "settings preferences configuration hub",
+      onSelect: go(settingsNav.path),
+    });
   }
-  settings.push(
-    { group: "Settings", label: "My Profile & Security", hint: "Personal", icon: UserRound, keywords: "profile user account password security name", onSelect: go("/settings/profile") },
-    { group: "Settings", label: "Activity & Audit Log", hint: "Audit", icon: History, keywords: "activity audit log history user trail", onSelect: go("/settings/activity-log") },
-  );
+  for (const item of getFlatSettingsItems({
+    businessId: business.id,
+    isAdmin: isAdministrator,
+    isSuperAdmin,
+    hasSettingsModule,
+  })) {
+    settings.push({
+      group: "Settings",
+      label: item.title,
+      hint: item.hint ?? item.groupShortLabel,
+      icon: item.icon,
+      keywords: `${item.subtitle} ${item.keywords}`,
+      onSelect: () => push(item.href),
+    });
+  }
+  if (isSuperAdmin) {
+    settings.push({
+      group: "Settings",
+      label: "Platform Admin Console",
+      hint: "Super Admin",
+      icon: Activity,
+      keywords: "admin tenants engine health",
+      onSelect: () => push("/admin"),
+    });
+  }
+
+  const canCreate = (mod: ModuleKey) =>
+    modules.includes(mod) && (capabilities ? hasPermission(capabilities, mod, "create") : true);
+  const canPost = (mod: ModuleKey) =>
+    modules.includes(mod) && (capabilities ? hasPermission(capabilities, mod, "post") : true);
 
   const actions: CommandItem[] = [];
-  if (modules.includes("sales")) {
+  if (canCreate("sales")) {
     if (isNavPathVisible("/sales/invoices", hiddenNavPaths)) {
       actions.push({ group: "Create", label: "New Invoice", hint: "Create", icon: ReceiptText, keywords: "new create add sales invoice", onSelect: go("/sales/invoices/new") });
     }
-    if (isNavPathVisible("/sales/receipts", hiddenNavPaths)) {
+    if (isNavPathVisible("/sales/receipts", hiddenNavPaths) && (requiresApproval || canPost("sales"))) {
       actions.push({ group: "Create", label: "Record Receipt", hint: "Create", icon: Receipt, keywords: "new create add record customer receipt payment collection", onSelect: go("/sales/receipts/new") });
     }
     if (isNavPathVisible("/sales/quotes", hiddenNavPaths)) {
@@ -127,15 +158,18 @@ function buildCommands(
     if (isNavPathVisible("/sales/orders", hiddenNavPaths)) {
       actions.push({ group: "Create", label: "New Sales Order", hint: "Create", icon: ShoppingCart, keywords: "new create add sales order", onSelect: go("/sales/orders/new") });
     }
+    if (isNavPathVisible("/sales/credit-notes", hiddenNavPaths)) {
+      actions.push({ group: "Create", label: "New Credit Note", hint: "Create", icon: FileMinus2, keywords: "new create add sales credit note refund", onSelect: go("/sales/credit-notes/new") });
+    }
     if (isNavPathVisible("/customers", hiddenNavPaths)) {
       actions.push({ group: "Create", label: "New Customer", hint: "Create", icon: ContactRound, keywords: "new create add customer sales", onSelect: go("/customers/new") });
     }
   }
-  if (modules.includes("purchases")) {
+  if (canCreate("purchases")) {
     if (isNavPathVisible("/purchases/invoices", hiddenNavPaths)) {
       actions.push({ group: "Create", label: "New Purchase Invoice", hint: "Create", icon: FileInput, keywords: "new create add purchase invoice bill purchases", onSelect: go("/purchases/invoices/new") });
     }
-    if (isNavPathVisible("/purchases/payments", hiddenNavPaths)) {
+    if (isNavPathVisible("/purchases/payments", hiddenNavPaths) && (requiresApproval || canPost("purchases"))) {
       actions.push({ group: "Create", label: "Record Supplier Payment", hint: "Create", icon: HandCoins, keywords: "new create add record supplier vendor payment disbursement", onSelect: go("/purchases/payments/new") });
     }
     if (isNavPathVisible("/purchases/quotes", hiddenNavPaths)) {
@@ -144,18 +178,41 @@ function buildCommands(
     if (isNavPathVisible("/purchases/orders", hiddenNavPaths)) {
       actions.push({ group: "Create", label: "New Purchase Order", hint: "Create", icon: ShoppingCart, keywords: "new create add purchase order", onSelect: go("/purchases/orders/new") });
     }
+    if (isNavPathVisible("/purchases/debit-notes", hiddenNavPaths)) {
+      actions.push({ group: "Create", label: "New Debit Note", hint: "Create", icon: FilePlus2, keywords: "new create add purchase debit note supplier refund", onSelect: go("/purchases/debit-notes/new") });
+    }
     if (isNavPathVisible("/suppliers", hiddenNavPaths)) {
       actions.push({ group: "Create", label: "New Supplier", hint: "Create", icon: Truck, keywords: "new create add supplier vendor purchases", onSelect: go("/suppliers/new") });
     }
   }
-  if (modules.includes("banking") && isNavPathVisible("/banking/accounts", hiddenNavPaths)) {
-    actions.push({ group: "Create", label: "New Bank Account", hint: "Create", icon: Banknote, keywords: "new create add bank account cash", onSelect: go("/banking/accounts/new") });
+  if (canCreate("inventory")) {
+    if (isNavPathVisible("/sales/delivery-notes", hiddenNavPaths)) {
+      actions.push({ group: "Create", label: "New Delivery Note", hint: "Create", icon: Truck, keywords: "new create add delivery note dispatch fulfillment", onSelect: go("/sales/delivery-notes/new") });
+    }
+    if (isNavPathVisible("/purchases/goods-receipts", hiddenNavPaths)) {
+      actions.push({ group: "Create", label: "New Goods Receipt", hint: "Create", icon: PackageCheck, keywords: "new create add goods receipt grn receiving", onSelect: go("/purchases/goods-receipts/new") });
+    }
+    if (isNavPathVisible("/inventory/items", hiddenNavPaths)) {
+      actions.push({ group: "Create", label: "New Inventory Item", hint: "Create", icon: Package, keywords: "new create add item product sku inventory", onSelect: go("/inventory/items/new") });
+    }
+    if (isNavPathVisible("/inventory/adjustments", hiddenNavPaths)) {
+      actions.push({ group: "Create", label: "New Stock Adjustment", hint: "Create", icon: SlidersHorizontal, keywords: "new create add stock adjustment inventory writeoff", onSelect: go("/inventory/adjustments/new") });
+    }
   }
-  if (modules.includes("projects") && isNavPathVisible("/projects", hiddenNavPaths)) {
+  if (canCreate("banking") && isNavPathVisible("/banking/accounts", hiddenNavPaths)) {
+    actions.push(
+      { group: "Create", label: "New Bank Account", hint: "Create", icon: Banknote, keywords: "new create add bank account cash", onSelect: go("/banking/accounts/new") },
+      { group: "Create", label: "New Bank Transaction", hint: "Create", icon: Banknote, keywords: "new create add bank transaction money in out", onSelect: go("/banking/transactions/new") },
+    );
+    if (canPost("banking")) {
+      actions.push({ group: "Create", label: "New Bank Transfer", hint: "Create", icon: ArrowRightLeft, keywords: "new create add bank transfer inter account", onSelect: go("/banking/transfers/new") });
+    }
+  }
+  if (canCreate("projects") && isNavPathVisible("/projects", hiddenNavPaths)) {
     actions.push({ group: "Create", label: "New Project", hint: "Create", icon: FolderKanban, keywords: "new create add project", onSelect: go("/projects/new") });
   }
-  if (modules.includes("accounting") && isNavPathVisible("/accounting/journal", hiddenNavPaths)) {
-    actions.push({ group: "Create", label: "New Journal Entry", hint: "Create", icon: BookOpenText, keywords: "new journal entry manual ledger", onSelect: go("/accounting/journal/new") });
+  if (canCreate("payroll") && isNavPathVisible("/payroll/payslips", hiddenNavPaths)) {
+    actions.push({ group: "Create", label: "New Payslip", hint: "Create", icon: ReceiptText, keywords: "new create add payroll payslip salary", onSelect: go("/payroll/payslips/new") });
   }
 
   return [...actions, ...navigation, ...settings];
@@ -201,25 +258,44 @@ export function AppShell({
   business,
   initialSidebarCollapsed = false,
   modules,
+  capabilities,
   hiddenNavPaths = [],
   user,
   unreadNotificationsCount = 0,
   pendingApprovalsCount = 0,
 }: ShellProps) {
   const router = useRouter();
+  const pathname = usePathname();
   const [mobileOpen, setMobileOpen] = useState(false);
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [helpOpen, setHelpOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(initialSidebarCollapsed);
+  const [shortcutLabel, setShortcutLabel] = useState("Ctrl K");
   const isSuperAdmin = Boolean(user.isSuperAdmin);
+  const isAdministrator = user.isAdministrator ?? false;
+  const requiresApproval = Boolean(user.requiresApproval);
   const defaultLandingPath = useMemo(
     () => resolveDefaultLandingPath(hiddenNavPaths, new Set(modules)),
     [hiddenNavPaths, modules],
   );
 
+  useEffect(() => {
+    setMobileOpen(false);
+  }, [pathname]);
+
   const commands = useMemo(
-    () => buildCommands(business, modules, hiddenNavPaths, isSuperAdmin, (path) => router.push(path)),
-    [business, modules, hiddenNavPaths, isSuperAdmin, router],
+    () =>
+      buildCommands(
+        business,
+        modules,
+        capabilities,
+        hiddenNavPaths,
+        isSuperAdmin,
+        isAdministrator,
+        requiresApproval,
+        (path) => requestGuardedNavigation(path, () => router.push(path)),
+      ),
+    [business, modules, capabilities, hiddenNavPaths, isSuperAdmin, isAdministrator, requiresApproval, router],
   );
 
   useEffect(() => {
@@ -232,6 +308,9 @@ export function AppShell({
       }
     } catch {
       // Ignore storage access failure.
+    }
+    if (typeof navigator !== "undefined" && /Mac|iPhone|iPad|iPod/i.test(navigator.platform || navigator.userAgent)) {
+      setShortcutLabel("⌘K");
     }
   }, []);
 
@@ -302,10 +381,9 @@ export function AppShell({
               aria-keyshortcuts="Control+K"
               className="mx-auto hidden h-8 w-full max-w-sm items-center gap-2 rounded-md border border-border bg-surface-raised px-3 text-left text-[13px] text-muted-foreground transition-colors hover:border-border-strong hover:bg-surface-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring lg:flex"
             >
-              <Search className="size-3.5" /> Search or jump to… <kbd className="ml-auto text-[11px]">Ctrl K</kbd>
+              <Search className="size-3.5" /> Search or jump to… <kbd className="ml-auto text-[11px]">{shortcutLabel}</kbd>
             </button>
 
-            {/* Unified mobile search trigger inside top header (no bottom-right floating FAB) */}
             <Button
               variant="ghost"
               size="icon"
@@ -317,8 +395,12 @@ export function AppShell({
             </Button>
 
             {pendingApprovalsCount > 0 && (
-              <Button asChild variant="ghost" size="sm" className="hidden gap-1.5 text-xs sm:inline-flex">
-                <Link href={`/b/${business.id}/approvals`} title="Pending Maker-Checker approvals">
+              <Button asChild variant="ghost" size="sm" className="inline-flex h-8 gap-1 px-2 text-xs">
+                <Link
+                  href={`/b/${business.id}/approvals`}
+                  title="Pending Maker-Checker approvals"
+                  aria-label={`${pendingApprovalsCount} pending approvals`}
+                >
                   <ShieldCheck className="size-4 text-warning" />
                   <span className="font-semibold tabular-nums">{pendingApprovalsCount}</span>
                 </Link>
@@ -407,13 +489,13 @@ export function AppShell({
                 <ul className="mt-1.5 space-y-1 text-[13px] leading-5 text-muted-foreground">
                   <li className="flex items-center justify-between gap-4">
                     <span>Open the command palette</span>
-                    <kbd className="rounded border border-border bg-surface-muted px-1.5 py-0.5 font-mono text-[11px] text-foreground">Ctrl K</kbd>
+                    <kbd className="rounded border border-border bg-surface-muted px-1.5 py-0.5 font-mono text-[11px] text-foreground">{shortcutLabel}</kbd>
                   </li>
                   <li>In the palette: move with ↑ ↓, run with Enter, dismiss with Esc.</li>
+                  <li>In document grids: use Tab, Enter, or paste spreadsheet TSV rows directly.</li>
                   <li>On mobile: tap the Search icon in the top header bar to open the palette.</li>
                 </ul>
               </section>
-              <p className="text-xs text-muted-foreground">Demo account: admin@demo.local</p>
             </div>
             <div className="mt-5 flex justify-end gap-2">
               <Button variant="secondary" onClick={() => setHelpOpen(false)}>Close</Button>

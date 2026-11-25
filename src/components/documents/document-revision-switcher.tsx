@@ -36,6 +36,10 @@ export function DocumentRevisionSwitcher({
   const current = revisions.find((r) => r.id === currentId);
   const currentRevNum = current?.revisionNumber ?? 0;
 
+  if (revisions.length <= 1 && currentRevNum === 0) {
+    return null;
+  }
+
   if (revisions.length <= 1) {
     return (
       <span className="inline-flex items-center gap-1 rounded-full border border-border bg-surface-muted/60 px-2 py-0.5 text-xs font-medium text-muted-foreground">

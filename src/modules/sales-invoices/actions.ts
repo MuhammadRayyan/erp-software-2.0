@@ -35,6 +35,7 @@ export async function createInvoiceAction(
   input: unknown,
   intent: InvoiceSaveIntent,
   customFieldValues?: unknown,
+  afterSave: "view" | "new" | "email" = "view",
 ): Promise<InvoiceActionResult> {
   const { user } = await requireSavePermission(businessId, "sales", undefined, intent);
   const parsed = invoiceInputSchema.safeParse(input);
@@ -63,6 +64,12 @@ export async function createInvoiceAction(
   revalidatePath(`/b/${businessId}/sales/invoices/${invoiceId}`);
   revalidatePath(`/b/${businessId}/approvals`);
   revalidatePath(`/b/${businessId}/overview`);
+  if (afterSave === "new") {
+    redirect(`/b/${businessId}/sales/invoices/new?notice=${encodeURIComponent(notice)}&fresh=${Date.now()}`);
+  }
+  if (afterSave === "email" && status === "posted") {
+    redirect(`/b/${businessId}/sales/invoices/${invoiceId}?composeEmail=1&notice=${encodeURIComponent(notice)}`);
+  }
   redirect(`/b/${businessId}/sales/invoices/${invoiceId}?notice=${encodeURIComponent(notice)}`);
 }
 

@@ -8,8 +8,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { SelectNative } from "@/components/ui/select-native";
 import { Badge } from "@/components/ui/badge";
-import { formatMoney, minorToDecimalString } from "@/core/format";
-import { DensityToggle } from "@/components/density-toggle";
+import { formatMoney, getBusinessTodayIso, getCurrencyMinorUnit, minorToDecimalString } from "@/core/format";
+import { parseCurrencyAmountToMinor } from "@/modules/currency/conversion";
 import { useTableDensity } from "@/components/use-table-density";
 import { type EmployeeRecord } from "@/modules/payroll/services/payroll-service";
 import { calculateUaeEosb, type EosbCalculationResult } from "@/modules/payroll/services/eosb-calculator";
@@ -17,11 +17,13 @@ import { calculateUaeEosb, type EosbCalculationResult } from "@/modules/payroll/
 interface EosbClientProps {
   businessId: string;
   employees: EmployeeRecord[];
+  currency?: string;
 }
 
-export function EosbClient({ businessId, employees }: EosbClientProps) {
+export function EosbClient({ businessId, employees, currency = "AED" }: EosbClientProps) {
   const { density } = useTableDensity(businessId);
-  const today = new Date().toISOString().slice(0, 10);
+  const today = getBusinessTodayIso();
+  const minorUnit = getCurrencyMinorUnit(currency);
 
   const [selectedEmpId, setSelectedEmpId] = useState<string>("");
   const [joiningDate, setJoiningDate] = useState<string>("");
@@ -35,13 +37,17 @@ export function EosbClient({ businessId, employees }: EosbClientProps) {
 
   const handleEmployeeSelect = (empId: string) => {
     setSelectedEmpId(empId);
-    if (!empId) return;
+    setCalculation(null);
+    setCalcError(null);
+    if (!empId) {
+      setJoiningDate("");
+      setBasicSalaryAED("");
+      return;
+    }
 
     const emp = employees.find((e) => e.id === empId);
-    if (emp) {
-      if (emp.joiningDate) setJoiningDate(emp.joiningDate);
-      if (emp.basicSalaryMinor) setBasicSalaryAED(minorToDecimalString(emp.basicSalaryMinor, "AED"));
-    }
+    setJoiningDate(emp?.joiningDate || "");
+    setBasicSalaryAED(emp?.basicSalaryMinor ? minorToDecimalString(emp.basicSalaryMinor, currency) : "");
   };
 
   const handleCalculate = (e: React.FormEvent) => {
@@ -53,7 +59,16 @@ export function EosbClient({ businessId, employees }: EosbClientProps) {
       return;
     }
 
-    const basicMinor = Math.round((parseFloat(basicSalaryAED) || 0) * 100);
+    let basicMinor = 0;
+    try {
+      basicMinor = basicSalaryAED.trim()
+        ? parseCurrencyAmountToMinor(basicSalaryAED, minorUnit, "Basic salary")
+        : 0;
+    } catch (err) {
+      setCalcError(err instanceof Error ? err.message : "Enter a valid basic salary amount.");
+      setCalculation(null);
+      return;
+    }
     if (basicMinor <= 0) {
       setCalcError("Please enter a valid basic salary amount greater than zero.");
       return;
@@ -79,9 +94,9 @@ export function EosbClient({ businessId, employees }: EosbClientProps) {
     if (!calculation) return "#";
     const params = new URLSearchParams();
     if (selectedEmpId) params.set("employeeId", selectedEmpId);
-    params.set("gratuityAED", minorToDecimalString(calculation.gratuityMinor, "AED"));
+    params.set("gratuityAED", minorToDecimalString(calculation.gratuityMinor, currency));
     if (calculation.leaveEncashmentMinor > 0) {
-      params.set("leaveEncashmentAED", minorToDecimalString(calculation.leaveEncashmentMinor, "AED"));
+      params.set("leaveEncashmentAED", minorToDecimalString(calculation.leaveEncashmentMinor, currency));
     }
     params.set("periodDescription", `Final Settlement (${calculation.durationSummary.years} yrs service)`);
     return `/b/${businessId}/payroll/payslips/new?${params.toString()}`;
@@ -151,11 +166,11 @@ export function EosbClient({ businessId, employees }: EosbClientProps) {
           </div>
 
           <div className="space-y-1.5">
-            <Label htmlFor="basicSalary" className="text-xs">Last Monthly Basic Salary (AED) *</Label>
+            <Label htmlFor="basicSalary" className="text-xs">Last Monthly Basic Salary ({currency}) *</Label>
             <Input
               id="basicSalary"
               type="number"
-              step="0.01"
+              step={minorUnit === 0 ? "1" : (1 / 10 ** minorUnit).toFixed(minorUnit)}
               min="0"
               value={basicSalaryAED}
               onChange={(e) => setBasicSalaryAED(e.target.value)}
@@ -218,7 +233,6 @@ export function EosbClient({ businessId, employees }: EosbClientProps) {
                 </h3>
               </div>
               <div className="flex items-center gap-2">
-                <DensityToggle businessId={businessId} />
                 <Badge tone={calculation.eligibleForGratuity ? "success" : "neutral"} className="text-xs">
                   {calculation.eligibleForGratuity ? "Eligible (1+ Year)" : "Ineligible (<1 Year)"}
                 </Badge>
@@ -242,7 +256,7 @@ export function EosbClient({ businessId, employees }: EosbClientProps) {
               <div>
                 <span className="text-muted-foreground block">Daily Basic Wage</span>
                 <span className="font-semibold text-foreground text-sm">
-                  {formatMoney(calculation.dailyWageMinor, "AED")}
+                  {formatMoney(calculation.dailyWageMinor, currency)}
                 </span>
               </div>
             </div>
@@ -273,7 +287,7 @@ export function EosbClient({ businessId, employees }: EosbClientProps) {
                         21 days / year
                       </td>
                       <td className="money text-right font-medium text-foreground">
-                        {formatMoney(calculation.gratuityTier1Minor, "AED")}
+                        {formatMoney(calculation.gratuityTier1Minor, currency)}
                       </td>
                     </tr>
 
@@ -289,7 +303,7 @@ export function EosbClient({ businessId, employees }: EosbClientProps) {
                           30 days / year
                         </td>
                         <td className="money text-right font-medium text-foreground">
-                          {formatMoney(calculation.gratuityTier2Minor, "AED")}
+                          {formatMoney(calculation.gratuityTier2Minor, currency)}
                         </td>
                       </tr>
                     )}
@@ -303,10 +317,10 @@ export function EosbClient({ businessId, employees }: EosbClientProps) {
                           </div>
                         </td>
                         <td className="text-xs text-muted-foreground">
-                          {calculation.unusedLeaveDays} days × {formatMoney(calculation.dailyWageMinor, "AED")}
+                          {calculation.unusedLeaveDays} days × {formatMoney(calculation.dailyWageMinor, currency)}
                         </td>
                         <td className="money text-right font-medium text-foreground">
-                          {formatMoney(calculation.leaveEncashmentMinor, "AED")}
+                          {formatMoney(calculation.leaveEncashmentMinor, currency)}
                         </td>
                       </tr>
                     )}
@@ -317,12 +331,12 @@ export function EosbClient({ businessId, employees }: EosbClientProps) {
                         Total Statutory Gratuity
                         {calculation.isCapped && (
                           <span className="text-xs text-danger ml-2 font-normal">
-                            (Capped at 24 months basic salary: {formatMoney(calculation.maxCapMinor, "AED")})
+                            (Capped at 24 months basic salary: {formatMoney(calculation.maxCapMinor, currency)})
                           </span>
                         )}
                       </td>
                       <td className="money text-right font-bold text-foreground">
-                        {formatMoney(calculation.gratuityMinor, "AED")}
+                        {formatMoney(calculation.gratuityMinor, currency)}
                       </td>
                     </tr>
                   </tfoot>
@@ -341,13 +355,13 @@ export function EosbClient({ businessId, employees }: EosbClientProps) {
                 </div>
               </div>
               <div className="text-2xl font-black text-primary">
-                {formatMoney(calculation.totalSettlementMinor, "AED")}
+                {formatMoney(calculation.totalSettlementMinor, currency)}
               </div>
             </div>
 
             {/* One-click Action to Create Final Payslip */}
             <div className="pt-2 flex justify-end">
-              <Button asChild className="h-10">
+              <Button permission="create" asChild className="h-10">
                 <Link href={getFinalPayslipUrl()}>
                   <span>Create Final Payslip with Gratuity</span>
                   <ArrowRight className="size-4 ml-2" />

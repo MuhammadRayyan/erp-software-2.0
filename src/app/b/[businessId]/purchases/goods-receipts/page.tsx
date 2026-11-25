@@ -1,10 +1,9 @@
 import Link from "next/link";
-import { ArrowLeft, Plus } from "lucide-react";
+import { Plus } from "lucide-react";
 import { EmptyState } from "@/components/empty-state";
 import { PageHeader } from "@/components/page-header";
 import { Button } from "@/components/ui/button";
 import { requireModule } from "@/core/permissions/require-module";
-import { DATE_PATTERN } from "@/lib/params";
 import { listGoodsReceipts } from "@/modules/inventory/goods-receipt-service";
 import { GoodsReceiptTable, type GoodsReceiptRow } from "@/modules/inventory/goods-receipt-table";
 import { listPreferences } from "@/modules/preferences/preference-service";
@@ -14,28 +13,17 @@ export const metadata = { title: "Goods Receipts" };
 
 export default async function GoodsReceiptsPage({
   params,
-  searchParams,
 }: {
   params: Promise<{ businessId: string }>;
-  searchParams: Promise<{ from?: string; to?: string }>;
 }) {
   const { businessId } = await params;
   const { user, access } = await requireModule(businessId, "inventory");
-  const sp = await searchParams;
-  const from = DATE_PATTERN.test(sp.from ?? "") ? sp.from : undefined;
-  const to = DATE_PATTERN.test(sp.to ?? "") ? sp.to : undefined;
 
-  const rows = listGoodsReceipts(businessId, user.id, { from, to }) as unknown as GoodsReceiptRow[];
+  const rows = listGoodsReceipts(businessId, user.id) as unknown as GoodsReceiptRow[];
   const columnSnapshots = decodeColumnSnapshots(listPreferences(businessId, user.id));
 
   return (
     <div className="page-container">
-      <Link
-        href={`/b/${businessId}/inventory/items`}
-        className="mb-5 inline-flex items-center gap-1.5 text-[13px] text-muted-foreground hover:text-foreground"
-      >
-        <ArrowLeft className="size-4" /> Inventory
-      </Link>
       <PageHeader
         title="Goods Receipts"
         description="Supplier receipts update physical stock valuation."
@@ -52,8 +40,6 @@ export default async function GoodsReceiptsPage({
           businessId={businessId}
           currency={access.business.currency}
           rows={rows}
-          initialFrom={from}
-          initialTo={to}
           serverSnapshot={columnSnapshots["goods-receipts"]}
         />
       ) : (

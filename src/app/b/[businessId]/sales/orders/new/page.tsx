@@ -99,6 +99,7 @@ export default async function NewOrderPage({
       </div>
       <SalesOrderForm
         businessId={businessId}
+        isPrefilled={Boolean(query.quoteId || query.customerId || query.projectId)}
         customers={customers.map(({ id, name, defaultCurrencyCode }) => ({ id, name, defaultCurrencyCode }))}
         salesAccounts={accounts.map(({ id, name }) => ({ id, name }))}
         taxCodes={taxes.map(({ id, name, rateBasisPoints, vatCategory }) => ({ id, name, rateBasisPoints, vatCategory }))}

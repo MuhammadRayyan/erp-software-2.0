@@ -13,7 +13,7 @@ export default async function EosbCalculatorPage({
   params: Promise<{ businessId: string }>;
 }) {
   const { businessId } = await params;
-  const { user } = await requireModule(businessId, "payroll");
+  const { user, access } = await requireModule(businessId, "payroll");
 
   const employees = listEmployees(businessId, user.id);
 
@@ -23,7 +23,11 @@ export default async function EosbCalculatorPage({
         title="UAE End of Service (EOSB) Calculator"
         description="On-demand severance calculator compliant with UAE Federal Decree-Law No. 33 of 2021 (Article 51 Gratuity & Article 29 Leave Encashment)."
       />
-      <EosbClient businessId={businessId} employees={employees} />
+      <EosbClient
+        businessId={businessId}
+        employees={employees}
+        currency={access.business.currency}
+      />
     </div>
   );
 }

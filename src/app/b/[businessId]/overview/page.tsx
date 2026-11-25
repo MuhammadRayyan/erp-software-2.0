@@ -27,6 +27,8 @@ import { OverviewControls, type ServerDateRange } from "./overview-controls";
 import { getCashFlowForecast, type CashFlowForecastData } from "@/modules/reports/cash-flow-forecast-service";
 import type { OverviewChartsPayload } from "./overview-charts-panel";
 import { OverviewTabsLayout } from "./overview-tabs-layout";
+import { getHiddenNavPaths } from "@/modules/preferences/nav-customization-service";
+import { isNavPathVisible } from "@/components/app-shell/nav-customization";
 
 const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -67,6 +69,9 @@ export default async function OverviewPage({
   const canViewBanking = hasActionPermission(businessId, user.id, "banking", "view");
   const canViewSales = hasActionPermission(businessId, user.id, "sales", "view");
   const canViewReports = hasActionPermission(businessId, user.id, "reports", "view");
+  const hiddenNavPaths = getHiddenNavPaths(businessId, user.id);
+  const showEmailsWidget = canViewSales && isNavPathVisible("/emails", hiddenNavPaths);
+  const showPdcsNav = canViewBanking && isNavPathVisible("/banking/pdcs", hiddenNavPaths);
   const isChartView = initialView === "charts";
 
   const periodLabel = from || to
@@ -80,7 +85,7 @@ export default async function OverviewPage({
     : null;
   const recentInvoices = invoiceMetrics?.recentInvoices ?? [];
   const bankBalance = !isChartView && canViewBanking ? getBankBalance(businessId, user.id) : null;
-  const recentEmails = !isChartView && canViewSales ? listSentEmails(businessId, user.id).slice(0, 4) : [];
+  const recentEmails = !isChartView && showEmailsWidget ? listSentEmails(businessId, user.id).slice(0, 4) : [];
   const preferences = !isChartView ? listPreferences(businessId, user.id) : {};
   const serverRange = !isChartView ? decodeServerRange(preferences) : undefined;
 
@@ -146,7 +151,15 @@ export default async function OverviewPage({
   const initialChartData: OverviewChartsPayload | null = isChartView
     ? { canViewReports, currency, trend, aging, forecast: initialForecast }
     : null;
-  const pdcSummary = !isChartView && canViewBanking ? getPdcMaturitySummary(businessId, user.id, 30) : null;
+  const pdcSummary = !isChartView && showPdcsNav ? getPdcMaturitySummary(businessId, user.id, 30) : null;
+  const hasActivePdcs = Boolean(
+    pdcSummary &&
+      (pdcSummary.heldReceivableMinor > 0 ||
+        pdcSummary.heldPayableMinor > 0 ||
+        pdcSummary.dueSoonCount > 0 ||
+        pdcSummary.overdueCount > 0 ||
+        pdcSummary.upcomingCheques.length > 0),
+  );
   const pendingApprovals = !isChartView ? listApprovalRequests(businessId, user.id, { status: "pending" }) : [];
   const actionableApprovals = pendingApprovals.filter((r) => r.canApprove);
 
@@ -196,7 +209,7 @@ export default async function OverviewPage({
             {canViewReports && <FinancialSummary businessId={businessId} userId={user.id} currency={currency} />}
             {!cards.length && !canViewReports && <PermissionDenied module="financial overview" returnHref={`/b/${businessId}/settings/profile`} returnLabel="Open your profile" />}
             <div className="grid gap-5 lg:grid-cols-3">
-              {canViewSales && <section className="data-panel lg:col-span-2">
+              {canViewSales && <section className={`data-panel ${showEmailsWidget ? "lg:col-span-2" : "lg:col-span-3"}`}>
                 <div className="flex h-12 items-center justify-between border-b border-border px-4">
                   <h2 className="font-semibold">Recent Invoices</h2>
                   <Link href={`/b/${businessId}/sales/invoices`} className="flex items-center gap-1 text-xs font-medium text-primary hover:underline">
@@ -246,7 +259,7 @@ export default async function OverviewPage({
                   </div>
                 )}
               </section>}
-              {canViewSales && (
+              {showEmailsWidget && (
                 <section className="data-panel">
                   <div className="flex h-12 items-center justify-between border-b border-border px-4">
                     <h2 className="flex items-center gap-2 font-semibold">
@@ -284,7 +297,7 @@ export default async function OverviewPage({
                   )}
                 </section>
               )}
-              {canViewBanking && pdcSummary && (
+              {showPdcsNav && pdcSummary && hasActivePdcs && (
                 <section className="data-panel lg:col-span-3">
                   <div className="flex h-12 items-center justify-between border-b border-border px-4">
                     <h2 className="flex items-center gap-2 font-semibold">

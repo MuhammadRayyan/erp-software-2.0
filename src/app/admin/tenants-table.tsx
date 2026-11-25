@@ -1,12 +1,11 @@
 "use client";
 
-import { useMemo, useState, useTransition } from "react";
+import { useEffect, useMemo, useState, useTransition } from "react";
 import Link from "next/link";
 import {
   AlertTriangle,
   CheckCircle,
   Database,
-  Eye,
   PauseCircle,
   PlayCircle,
   Search,
@@ -17,12 +16,16 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
+import { formatDate } from "@/core/format";
 import { toggleTenantSuspensionAction } from "./actions";
-import { ConfirmDialog } from "./confirm-dialog";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import type { TenantSummaryRow } from "@/core/admin/tenant-service";
 
 export function TenantsTable({ initialTenants }: { initialTenants: TenantSummaryRow[] }) {
   const [tenants, setTenants] = useState(initialTenants);
+  useEffect(() => {
+    setTenants(initialTenants);
+  }, [initialTenants]);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<"all" | "active" | "suspended">("all");
   const [confirmTarget, setConfirmTarget] = useState<TenantSummaryRow | null>(null);
@@ -215,7 +218,12 @@ export function TenantsTable({ initialTenants }: { initialTenants: TenantSummary
                       {/* Name & Email */}
                       <td className="px-4 py-3.5">
                         <div className="flex items-center gap-2">
-                          <span className="font-semibold text-foreground">{t.name}</span>
+                          <Link
+                            href={`/admin/tenants/${t.id}`}
+                            className="font-semibold text-foreground hover:text-primary hover:underline transition-colors"
+                          >
+                            {t.name}
+                          </Link>
                           {t.isSuperAdmin && (
                             <span className="inline-flex items-center gap-1 rounded-full border border-amber-500/30 bg-amber-500/10 px-2 py-0.5 text-xs font-semibold text-amber-700 dark:border-amber-500/40 dark:bg-amber-500/20 dark:text-amber-300">
                               <ShieldCheck className="size-3.5" /> Platform Root
@@ -225,7 +233,7 @@ export function TenantsTable({ initialTenants }: { initialTenants: TenantSummary
                         <div className="mt-0.5 flex items-center gap-2 text-xs text-muted-foreground font-mono">
                           <span>{t.email}</span>
                           <span>•</span>
-                          <span>Joined {new Date(t.createdAt).toLocaleDateString()}</span>
+                          <span>Joined {formatDate(new Date(t.createdAt).toISOString())}</span>
                         </div>
                       </td>
 
@@ -284,15 +292,8 @@ export function TenantsTable({ initialTenants }: { initialTenants: TenantSummary
                       {/* Actions */}
                       <td className="px-4 py-3.5 text-right">
                         <div className="flex items-center justify-end gap-2">
-                          {/* View Details drilldown */}
-                          <Button asChild size="sm" variant="ghost" className="h-8 gap-1.5 text-xs font-medium">
-                            <Link href={`/admin/tenants/${t.id}`}>
-                              <Eye className="size-3.5" /> View Details
-                            </Link>
-                          </Button>
-
                           {/* Safe Suspend / Reactivate */}
-                          {!t.isSuperAdmin && (
+                          {!t.isSuperAdmin ? (
                             <>
                               {isSuspended ? (
                                 <Button
@@ -316,6 +317,8 @@ export function TenantsTable({ initialTenants }: { initialTenants: TenantSummary
                                 </Button>
                               )}
                             </>
+                          ) : (
+                            <span className="text-xs text-muted-foreground">—</span>
                           )}
                         </div>
                       </td>
@@ -336,8 +339,8 @@ export function TenantsTable({ initialTenants }: { initialTenants: TenantSummary
           title="Confirm Account Holder Suspension"
           description={`Suspending '${confirmTarget.name}' (${confirmTarget.email}) will immediately revoke all active sessions, prevent future sign-ins, and restrict access across their ${confirmTarget.businessCount} workspace(s). Are you sure you want to proceed?`}
           confirmLabel="Suspend Account"
-          variant="danger"
-          isLoading={actionPending}
+          tone="danger"
+          pending={actionPending}
           onConfirm={handleConfirmSuspension}
         />
       )}

@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { FormError } from "@/components/form-error";
+import { useUnsavedChanges } from "@/hooks/use-unsaved-changes";
 import { updateBusinessProfileAction } from "./actions";
 import type { BusinessProfileInput } from "./business-profile-input";
 import type { ResolvedBusinessProfile } from "./business-profile-service";
@@ -30,7 +31,7 @@ export function BusinessProfileForm({
   initial: ResolvedBusinessProfile;
   isAdmin: boolean;
 }) {
-  const [values, setValues] = useState<BusinessProfileInput>({
+  const initialSnapshot: BusinessProfileInput = {
     legalName: initial.legalName ?? "",
     tradingName: initial.tradingName ?? "",
     companyRegistrationNumber: initial.companyRegistrationNumber ?? "",
@@ -48,7 +49,14 @@ export function BusinessProfileForm({
     logoUrl: initial.logoUrl ?? "",
     molEstablishmentId: initial.molEstablishmentId ?? "",
     wpsBankRoutingCode: initial.wpsBankRoutingCode ?? "",
-  });
+  };
+  const [savedValues, setSavedValues] = useState<BusinessProfileInput>(initialSnapshot);
+  const [values, setValues] = useState<BusinessProfileInput>(initialSnapshot);
+
+  const isDirty = (Object.keys(savedValues) as (keyof BusinessProfileInput)[]).some(
+    (key) => values[key] !== savedValues[key],
+  );
+  useUnsavedChanges(isAdmin && isDirty);
 
   const [serverError, setServerError] = useState("");
   const [pending, setPending] = useState(false);
@@ -67,6 +75,7 @@ export function BusinessProfileForm({
       setServerError(res.error);
       toast.error(res.error);
     } else {
+      setSavedValues(values);
       toast.success("Business profile and organization branding updated.");
     }
   }
@@ -75,6 +84,11 @@ export function BusinessProfileForm({
 
   return (
     <form onSubmit={handleSubmit} className="space-y-8 max-w-4xl">
+      {!isAdmin && (
+        <div role="status" className="rounded-lg border border-border bg-surface-muted/40 px-4 py-3 text-xs text-muted-foreground">
+          Read-only view — only business administrators can modify company profile and branding settings.
+        </div>
+      )}
       {/* Live Letterhead Preview Card */}
       <details className="group rounded-lg border border-border bg-surface-raised shadow-xs transition-all">
         <summary className="flex cursor-pointer items-center justify-between px-5 py-3 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground hover:text-foreground select-none list-none [&::-webkit-details-marker]:hidden">
@@ -189,27 +203,34 @@ export function BusinessProfileForm({
             />
           </div>
 
-          <div className="space-y-1.5">
-            <Label htmlFor="molEstablishmentId">MOL / MOHRE Establishment ID (13 digits)</Label>
-            <Input
-              id="molEstablishmentId"
-              placeholder="e.g. 1234567890123"
-              value={values.molEstablishmentId}
-              onChange={(e) => setValues({ ...values, molEstablishmentId: e.target.value })}
-              disabled={!isAdmin}
-            />
-          </div>
+          <details className="sm:col-span-2 group rounded-md border border-border/70 bg-surface px-4 py-3">
+            <summary className="cursor-pointer text-xs font-semibold text-muted-foreground hover:text-foreground select-none">
+              UAE Payroll &amp; WPS Identifiers <span className="font-normal">(optional — used for MOHRE Wage Protection SIF files)</span>
+            </summary>
+            <div className="mt-3 grid gap-4 sm:grid-cols-2">
+              <div className="space-y-1.5">
+                <Label htmlFor="molEstablishmentId">MOL / MOHRE Establishment ID (13 digits)</Label>
+                <Input
+                  id="molEstablishmentId"
+                  placeholder="e.g. 1234567890123"
+                  value={values.molEstablishmentId}
+                  onChange={(e) => setValues({ ...values, molEstablishmentId: e.target.value })}
+                  disabled={!isAdmin}
+                />
+              </div>
 
-          <div className="space-y-1.5">
-            <Label htmlFor="wpsBankRoutingCode">WPS Bank Routing Code (9 digits)</Label>
-            <Input
-              id="wpsBankRoutingCode"
-              placeholder="e.g. 303100001"
-              value={values.wpsBankRoutingCode}
-              onChange={(e) => setValues({ ...values, wpsBankRoutingCode: e.target.value })}
-              disabled={!isAdmin}
-            />
-          </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="wpsBankRoutingCode">WPS Bank Routing Code (9 digits)</Label>
+                <Input
+                  id="wpsBankRoutingCode"
+                  placeholder="e.g. 303100001"
+                  value={values.wpsBankRoutingCode}
+                  onChange={(e) => setValues({ ...values, wpsBankRoutingCode: e.target.value })}
+                  disabled={!isAdmin}
+                />
+              </div>
+            </div>
+          </details>
         </div>
       </section>
 

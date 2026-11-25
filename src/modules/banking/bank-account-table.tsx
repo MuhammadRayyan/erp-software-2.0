@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo } from "react";
 import Link from "next/link";
 import {
   useLegacyTable as useTable,
@@ -8,17 +8,18 @@ import {
   getPaginationRowModel as createPaginationRowModel,
   getSortedRowModel as createSortedRowModel,
 } from "@tanstack/react-table/legacy";
-import { type SortingState } from "@tanstack/react-table";
 import { useColumns } from "@/components/columns-dropdown";
 import { DensityToggle } from "@/components/density-toggle";
-import { ClientListPagination, useTablePagination } from "@/components/list-pagination";
+import { ClientListPagination } from "@/components/list-pagination";
+import { ExportCsvButton } from "@/components/export-csv-button";
+import { useUrlListState } from "@/hooks/use-url-list-state";
 import { ActiveFiltersRow, FilterChip, ListToolbar, SearchInput, ToolbarSelect } from "@/components/list-toolbar";
 import { StatusBadge } from "@/components/status-badge";
 import { TableTotalsBar } from "@/components/table-totals-bar";
 import { DataTable, ListTableCard } from "@/components/ui/data-table";
 import { useTableDensity } from "@/components/use-table-density";
 import type { ColumnVisibility } from "@/components/use-column-visibility";
-import { formatMoney } from "@/core/format";
+import { formatMoney, getBusinessTodayIso, minorToDecimalString } from "@/core/format";
 import { BankAccountRowActions } from "./bank-account-row-actions";
 
 export type BankAccountRow = {
@@ -56,10 +57,18 @@ export function BankAccountTable({
   serverSnapshot?: ColumnVisibility;
 }) {
   const { density } = useTableDensity(businessId);
-  const [query, setQuery] = useState("");
-  const [kindFilter, setKindFilter] = useState("");
-  const [statusFilter, setStatusFilter] = useState("");
-  const [sorting, setSorting] = useState<SortingState>([]);
+  const {
+    query,
+    type: kindFilter,
+    status: statusFilter,
+    sorting,
+    setFilter,
+    setPage,
+    setPageSize,
+    onSortingChange,
+    resetFilters,
+    buildPagination,
+  } = useUrlListState({ defaultSort: "name", defaultDir: "asc" });
 
   const initialColumns = useMemo(
     () => ({
@@ -172,24 +181,19 @@ export function BankAccountTable({
     [businessId, baseCurrency],
   );
 
-  const { pagination, onPaginationChange, paginationInfo, setPage, setPageSize } = useTablePagination(rows.length);
+  const { pagination, paginationInfo } = buildPagination(rows.length);
 
   const table = useTable({
     data: rows,
     columns,
     state: { sorting, pagination, columnVisibility: colVisibility },
-    onSortingChange: setSorting,
-    onPaginationChange,
+    onSortingChange,
     getCoreRowModel: createCoreRowModel(),
     getSortedRowModel: createSortedRowModel(),
     getPaginationRowModel: createPaginationRowModel(),
   });
 
-  const clearFilters = () => {
-    setQuery("");
-    setKindFilter("");
-    setStatusFilter("");
-  };
+  const clearFilters = resetFilters;
   const hasActiveFilter = Boolean(query || kindFilter || statusFilter);
 
   const totalBookBalance = useMemo(() => rows.reduce((sum, r) => sum + Number(r.book_balance_minor || 0), 0), [rows]);
@@ -197,10 +201,10 @@ export function BankAccountTable({
   return (
     <>
       <ListToolbar>
-        <SearchInput value={query} onChange={setQuery} placeholder="Search bank or cash accounts…" ariaLabel="Search bank accounts" />
+        <SearchInput value={query} onChange={(val) => setFilter("q", val)} placeholder="Search bank or cash accounts…" ariaLabel="Search bank accounts" />
         <ToolbarSelect
           value={kindFilter}
-          onChange={setKindFilter}
+          onChange={(val) => setFilter("type", val)}
           ariaLabel="Filter by account type"
           options={[
             { value: "", label: "All types" },
@@ -210,7 +214,7 @@ export function BankAccountTable({
         />
         <ToolbarSelect
           value={statusFilter}
-          onChange={setStatusFilter}
+          onChange={(val) => setFilter("status", val)}
           ariaLabel="Filter by status"
           options={[
             { value: "", label: "All statuses" },
@@ -219,15 +223,29 @@ export function BankAccountTable({
           ]}
         />
         <div className="ml-auto flex items-center gap-1.5 shrink-0">
+          <ExportCsvButton
+            size="sm"
+            filename={`bank-accounts-${getBusinessTodayIso()}.csv`}
+            data={rows}
+            columns={[
+              { header: "Account", accessorKey: "name" },
+              { header: "Type", accessorFn: (r: BankAccountRow) => (r.is_cash_account ? "Cash" : "Bank") },
+              { header: "Institution", accessorKey: "bank_name" },
+              { header: "Mapped GL", accessorKey: "ledger_name" },
+              { header: "Currency", accessorKey: "currency_code" },
+              { header: "Book Balance", accessorFn: (r: BankAccountRow) => minorToDecimalString(Number(r.book_balance_minor || 0), r.currency_code || baseCurrency) },
+              { header: "Status", accessorFn: (r: BankAccountRow) => (r.is_active ? "Active" : "Inactive") },
+            ]}
+          />
           <DensityToggle businessId={businessId} />
           {dropdown}
         </div>
       </ListToolbar>
       {hasActiveFilter && (
         <ActiveFiltersRow onClearAll={clearFilters}>
-          {kindFilter && <FilterChip onRemove={() => setKindFilter("")}>Type: {kindFilter === "cash" ? "Cash" : "Bank"}</FilterChip>}
-          {statusFilter && <FilterChip onRemove={() => setStatusFilter("")}>Status: {statusFilter === "active" ? "Active only" : "Inactive only"}</FilterChip>}
-          {query && <FilterChip onRemove={() => setQuery("")}>Search: {query}</FilterChip>}
+          {kindFilter && <FilterChip onRemove={() => setFilter("type", "")}>Type: {kindFilter === "cash" ? "Cash" : "Bank"}</FilterChip>}
+          {statusFilter && <FilterChip onRemove={() => setFilter("status", "")}>Status: {statusFilter === "active" ? "Active only" : "Inactive only"}</FilterChip>}
+          {query && <FilterChip onRemove={() => setFilter("q", "")}>Search: {query}</FilterChip>}
         </ActiveFiltersRow>
       )}
       <ListTableCard>
@@ -238,6 +256,7 @@ export function BankAccountTable({
           minWidth="min-w-[900px]"
           noResultsMessage="No accounts match"
           onClearFilters={clearFilters}
+          getRowHref={(row: BankAccountRow) => `/b/${businessId}/banking/accounts/${row.id}`}
         />
         {rows.length > 0 && (
           <TableTotalsBar

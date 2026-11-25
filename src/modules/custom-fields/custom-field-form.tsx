@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { ArrowDown, ArrowUp, ContactRound, EyeOff, FileText, ListTree, Pencil, Plus, Printer, ReceiptText, Trash2, Truck, X } from "lucide-react";
+import { ArrowDown, ArrowUp, EyeOff, Pencil, Plus, Printer, Trash2, X } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -11,7 +11,6 @@ import { DialogContent, DialogDescription, DialogRoot, DialogTitle } from "@/com
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { SelectNative } from "@/components/ui/select-native";
-import { EmptyState } from "@/components/empty-state";
 import { FormError } from "@/components/form-error";
 import type { CustomFieldDefinitionRow } from "./custom-field-service";
 import {
@@ -76,14 +75,6 @@ const lineGroups: CustomFieldEntityType[] = [
   "purchase_quote_line",
   "purchase_order_line",
 ];
-
-function getEntityIcon(entityType: CustomFieldEntityType) {
-  if (entityType === "customer") return ContactRound;
-  if (entityType === "supplier") return Truck;
-  if (entityType.endsWith("_line")) return ListTree;
-  if (entityType.includes("invoice")) return ReceiptText;
-  return FileText;
-}
 
 export function CustomFieldsManager({
   businessId,
@@ -193,7 +184,7 @@ export function CustomFieldsManager({
             Line Item Fields ({lineCount})
           </button>
         </div>
-        <Button onClick={() => open()}>
+        <Button permission="edit" onClick={() => open()}>
           <Plus className="size-4" /> New Custom Field
         </Button>
       </div>
@@ -201,7 +192,6 @@ export function CustomFieldsManager({
       <div className="space-y-8">
         {groups.map((entityType) => {
           const group = definitions.filter((definition) => definition.entityType === entityType);
-          const Icon = getEntityIcon(entityType);
           return (
             <section key={entityType}>
               <div className="mb-3 flex items-center justify-between">
@@ -209,26 +199,18 @@ export function CustomFieldsManager({
                   {entityTypeLabels[entityType]} <span className="font-normal">({group.length})</span>
                 </h2>
                 {group.length > 0 && (
-                  <Button variant="ghost" size="sm" onClick={() => open(undefined, entityType)}>
+                  <Button permission="edit" variant="ghost" size="sm" onClick={() => open(undefined, entityType)}>
                     <Plus className="size-3.5" /> Add
                   </Button>
                 )}
               </div>
               {group.length === 0 ? (
-                <EmptyState
-                  icon={<Icon className="mx-auto mb-3 size-7 text-muted-foreground" />}
-                  title={`No custom fields for ${entityTypeLabels[entityType].toLowerCase()}`}
-                  description={
-                    entityType.endsWith("_line")
-                      ? "Add line-level custom columns (e.g. Serial #, Batch, HS Code) to the document grid."
-                      : "Create one to capture extra information on every record."
-                  }
-                  action={
-                    <Button variant="secondary" size="sm" onClick={() => open(undefined, entityType)}>
-                      <Plus className="size-4" /> New Custom Field
-                    </Button>
-                  }
-                />
+                <div className="flex items-center justify-between rounded-lg border border-dashed border-border bg-surface px-4 py-3 text-xs text-muted-foreground">
+                  <span>No custom fields configured for {entityTypeLabels[entityType].toLowerCase()}.</span>
+                  <Button permission="edit" variant="ghost" size="sm" className="h-7 text-xs" onClick={() => open(undefined, entityType)}>
+                    <Plus className="size-3.5" /> Add field
+                  </Button>
+                </div>
               ) : (
                 <div className="data-panel overflow-x-auto">
                   <table className="data-table min-w-[760px]">
@@ -275,10 +257,10 @@ export function CustomFieldsManager({
                           </td>
                           <td>
                             <div className="flex items-center gap-1">
-                              <Button variant="ghost" size="icon" aria-label={`Move ${definition.name} up`} disabled={index === 0 || movingId === definition.id} onClick={() => move(definition, "up")}><ArrowUp className="size-3.5" /></Button>
-                              <Button variant="ghost" size="icon" aria-label={`Move ${definition.name} down`} disabled={index === group.length - 1 || movingId === definition.id} onClick={() => move(definition, "down")}><ArrowDown className="size-3.5" /></Button>
+                              <Button permission="edit" variant="ghost" size="icon" aria-label={`Move ${definition.name} up`} disabled={index === 0 || movingId === definition.id} onClick={() => move(definition, "up")}><ArrowUp className="size-3.5" /></Button>
+                              <Button permission="edit" variant="ghost" size="icon" aria-label={`Move ${definition.name} down`} disabled={index === group.length - 1 || movingId === definition.id} onClick={() => move(definition, "down")}><ArrowDown className="size-3.5" /></Button>
                               <Button permission={"edit"} variant="ghost" size="sm" onClick={() => open(definition)}><Pencil className="size-3.5" /> Edit</Button>
-                              <Button variant="ghost" size="icon" aria-label={`Delete ${definition.name}`} onClick={() => setDeleting(definition)}><Trash2 className="size-3.5 text-danger" /></Button>
+                              <Button permission="delete" variant="ghost" size="icon" aria-label={`Delete ${definition.name}`} onClick={() => setDeleting(definition)}><Trash2 className="size-3.5 text-danger" /></Button>
                             </div>
                           </td>
                         </tr>

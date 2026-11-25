@@ -12,7 +12,7 @@ import { getDebitNote } from "@/modules/debit-notes/debit-note-service";
 import { quantityMicrosToInput } from "@/modules/accounting/calculations/money";
 import { minorToCurrencyInput } from "@/modules/currency/conversion";
 import { getCurrencySettings } from "@/modules/currency/exchange-rate";
-import { BackLink } from "@/components/back-link";
+import { Breadcrumbs } from "@/components/breadcrumbs";
 
 export default async function EditDebitNotePage({
   params,
@@ -49,7 +49,14 @@ export default async function EditDebitNotePage({
 
   return (
     <div className="page-container">
-      <BackLink href={`/b/${businessId}/purchases/debit-notes/${debitNoteId}`}>{record.note.debitNoteNumber}</BackLink>
+      <Breadcrumbs
+        businessId={businessId}
+        items={[
+          { label: "Debit Notes", href: `/b/${businessId}/purchases/debit-notes` },
+          { label: record.note.debitNoteNumber, href: `/b/${businessId}/purchases/debit-notes/${debitNoteId}` },
+          { label: "Edit" },
+        ]}
+      />
       <div className="mb-7">
         <h1 className="page-title">Edit Debit Note</h1>
         <p className="page-description">

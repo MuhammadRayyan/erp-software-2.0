@@ -8,6 +8,7 @@ import { formatMoney } from "@/core/format";
 import { cn } from "@/lib/cn";
 import { DocumentWorkflowPermissions } from "@/components/permissions-provider";
 import { useDocumentTotals, type DocumentLineTaxOption } from "@/components/documents/document-calculations";
+import { requestGuardedNavigation } from "@/hooks/use-unsaved-changes";
 
 export type DocumentTotalsSummary = {
   subtotalMinor?: number;
@@ -47,7 +48,7 @@ function FooterTotalsPill({
   return (
     <div className="flex items-center gap-3 text-xs sm:text-sm">
       {credit > 0 && (
-        <div className="hidden lg:flex items-center gap-1 text-emerald-600 dark:text-emerald-400">
+        <div className="hidden lg:flex items-center gap-1 text-success">
           <span>Credit:</span>
           <span className="font-medium tabular">
             -{formatMoney(credit, currencyCode, minorUnit)}
@@ -126,7 +127,11 @@ export function DocumentFormFooter<
       )}
     >
       <div className="flex items-center gap-3">
-        <Button variant="ghost" onClick={onCancel} type="button">
+        <Button
+          variant="ghost"
+          onClick={() => requestGuardedNavigation("#cancel", onCancel)}
+          type="button"
+        >
           {cancelLabel}
         </Button>
         {status && (

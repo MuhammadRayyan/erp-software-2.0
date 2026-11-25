@@ -6,6 +6,8 @@ import { requireSavePermission, requirePermission } from "@/core/permissions/req
 import { purchaseOrderInputSchema } from "./purchase-order-input";
 import { cancelPurchaseOrder, closePurchaseOrder, deletePurchaseOrder, getPurchaseOrder, issuePurchaseOrder, savePurchaseOrder, type PurchaseOrderIntent } from "./purchase-order-service";
 
+import { getBusinessDb } from "@/core/db/business";
+import { getCurrency } from "@/modules/currency/currency";
 import { formatZodFieldErrors } from "@/lib/zod-errors";
 
 export type PurchaseOrderActionResult = { error?: string; fieldErrors?: Record<string, string[]> };
@@ -81,7 +83,7 @@ export async function deletePurchaseOrderAction(businessId: string, orderId: str
 import { savePurchaseInvoice } from "@/modules/purchase-invoices/purchase-invoice-service";
 
 import { quantityMicrosToInput } from "@/modules/accounting/calculations/money";
-import { minorToDecimalString } from "@/core/format";
+import { getBusinessTodayIso, getCurrencyMinorUnit, minorToDecimalString } from "@/core/format";
 
 export async function convertPurchaseOrderToInvoiceAction(businessId: string, orderId: string) {
   const { user } = await requirePermission(businessId, "purchases", "create");
@@ -164,4 +166,54 @@ export async function createPurchaseOrderRevisionAction(businessId: string, orde
   } catch (error) {
     return { error: error instanceof Error ? error.message : "Failed to create order revision." };
   }
+}
+
+export async function duplicatePurchaseOrderAction(businessId: string, orderId: string) {
+  const { user } = await requirePermission(businessId, "purchases", "create");
+  let newOrderId: string;
+  try {
+    const orderData = getPurchaseOrder(businessId, user.id, orderId);
+    if (!orderData) return { error: "Purchase order not found." };
+    const { sqlite } = getBusinessDb(businessId, user.id);
+    let minorUnit = getCurrencyMinorUnit(orderData.order.currencyCode);
+    try {
+      minorUnit = getCurrency(sqlite, orderData.order.currencyCode, false).minor_unit;
+    } catch {
+      // fallback to knownMinorUnits
+    }
+    const today = getBusinessTodayIso();
+    const input = {
+      supplierId: orderData.order.supplierId,
+      projectId: orderData.order.projectId || "",
+      amountsIncludeTax: Boolean(orderData.order.amountsIncludeTax),
+      date: today,
+      expectedDate: "",
+      reference: orderData.order.purchaseQuoteId ? "" : (orderData.order.reference || ""),
+      purchaseQuoteId: "",
+      notes: orderData.order.notes || "",
+      terms: orderData.order.terms || "",
+      currencyCode: orderData.order.currencyCode,
+      exchangeRateToBase: String(orderData.order.exchangeRateToBase),
+      exchangeRateDate: orderData.order.exchangeRateDate || "",
+      exchangeRateSource: (orderData.order.exchangeRateSource as "Manual" | "CBUAE" | "Base") || "Base",
+      lines: orderData.lines.map((l: any) => ({
+        itemId: l.itemId || "",
+        description: l.description,
+        quantity: quantityMicrosToInput(l.quantityMicros),
+        discountType: l.discountType || "none",
+        discountValue: l.discountValue || "0",
+        unitPrice: minorToDecimalString(l.unitPriceMinor, orderData.order.currencyCode, minorUnit),
+        expenseAccountId: l.expenseAccountId || "",
+        taxCodeId: l.taxCodeId || "",
+        projectId: l.projectId || "",
+        customFields: l.customFields ?? {},
+      })),
+    };
+    newOrderId = savePurchaseOrder(businessId, user.id, input, "draft");
+  } catch (error) {
+    return { error: error instanceof Error ? error.message : "The purchase order could not be duplicated." };
+  }
+  revalidatePath(`/b/${businessId}/purchases/orders`);
+  revalidatePath(`/b/${businessId}/purchases/orders/${newOrderId}`);
+  redirect(`/b/${businessId}/purchases/orders/${newOrderId}?notice=Purchase order duplicated as draft`);
 }

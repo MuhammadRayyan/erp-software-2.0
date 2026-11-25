@@ -3,7 +3,8 @@
 import { useMemo, useTransition, type ReactNode } from "react";
 import Link from "next/link";
 import { debounce, useQueryStates } from "nuqs";
-import { ChevronRight, MoreHorizontal, Eye, FileEdit, FileText, ShoppingCart, BookOpenText } from "lucide-react";
+import { MoreHorizontal, FileEdit, FileText, ShoppingCart, BookOpenText } from "lucide-react";
+import { useActionPermission } from "@/components/permissions-provider";
 import {
   useLegacyTable as useTable,
   getCoreRowModel as createCoreRowModel,
@@ -16,8 +17,9 @@ import { Button } from "@/components/ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { DataTable, ListTableCard } from "@/components/ui/data-table";
 import { formatCustomFieldValue, type CustomFieldColumn } from "@/modules/custom-fields/custom-field-display";
-import { formatMoney } from "@/core/format";
+import { formatMoney, minorToDecimalString } from "@/core/format";
 import { DensityToggle } from "@/components/density-toggle";
+import { ExportCsvButton } from "@/components/export-csv-button";
 import { useTableDensity } from "@/components/use-table-density";
 import { TableTotalsBar } from "@/components/table-totals-bar";
 import type { SupplierListSummary } from "./supplier-service";
@@ -54,6 +56,7 @@ export function SupplierTable({
   footer?: ReactNode;
 }) {
   const { density } = useTableDensity(businessId);
+  const canCreatePerm = useActionPermission("create");
 
   const [, startTransition] = useTransition();
   const [urlState, setUrlState] = useQueryStates(directoryListParsers, {
@@ -156,7 +159,7 @@ export function SupplierTable({
       {
         id: "actions",
         header: () => <span className="sr-only">Actions</span>,
-        meta: { className: "w-16 text-right" },
+        meta: { className: "w-12 text-right" },
         enableSorting: false,
         enableHiding: false,
         cell: ({ row }: any) => {
@@ -170,11 +173,6 @@ export function SupplierTable({
                   </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end" className="w-48">
-                  <DropdownMenuItem asChild>
-                    <Link href={`/b/${businessId}/suppliers/${sup.id}`}>
-                      <Eye className="size-4 text-muted-foreground" /> View Profile
-                    </Link>
-                  </DropdownMenuItem>
                   <DropdownMenuItem permission="edit" asChild>
                     <Link href={`/b/${businessId}/suppliers/${sup.id}/edit`}>
                       <FileEdit className="size-4 text-muted-foreground" /> Edit Supplier
@@ -185,7 +183,7 @@ export function SupplierTable({
                       <BookOpenText className="size-4 text-muted-foreground" /> Statement
                     </Link>
                   </DropdownMenuItem>
-                  <DropdownMenuSeparator />
+                  {canCreatePerm && <DropdownMenuSeparator />}
                   <DropdownMenuItem permission="create" asChild>
                     <Link href={`/b/${businessId}/purchases/invoices/new?supplierId=${sup.id}`}>
                       <FileText className="size-4 text-muted-foreground" /> New Bill
@@ -198,17 +196,12 @@ export function SupplierTable({
                   </DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>
-              <Button asChild variant="ghost" size="icon" className="size-7 text-muted-foreground opacity-50 transition-opacity md:opacity-0 md:group-hover:opacity-100">
-                <Link href={`/b/${businessId}/suppliers/${sup.id}`} aria-label={`Open ${sup.name}`}>
-                  <ChevronRight className="size-4" />
-                </Link>
-              </Button>
             </div>
           );
         },
       },
     ],
-    [businessId, currency, customFields, customValues],
+    [businessId, canCreatePerm, currency, customFields, customValues],
   );
 
   const table = useTable({
@@ -253,6 +246,22 @@ export function SupplierTable({
           ]}
         />
         <div className="ml-auto flex items-center gap-1.5 shrink-0">
+          <ExportCsvButton
+            size="sm"
+            filename="suppliers"
+            data={suppliers}
+            totalCount={summary.filteredTotal}
+            columns={[
+              { header: "Name", accessorKey: "name" },
+              { header: "Email", accessorFn: (r: SupplierRow) => r.email ?? "" },
+              {
+                header: "Outstanding",
+                accessorFn: (r: SupplierRow) =>
+                  minorToDecimalString(Math.max(0, r.total_purchased_minor - r.total_paid_minor), currency),
+              },
+              { header: "Status", accessorFn: (r: SupplierRow) => (r.is_active ? "Active" : "Inactive") },
+            ]}
+          />
           <DensityToggle businessId={businessId} />
           {dropdown}
         </div>
@@ -273,6 +282,7 @@ export function SupplierTable({
           density={density}
           framed={false}
           minWidth="min-w-[720px]"
+          getRowHref={(s: SupplierRow) => `/b/${businessId}/suppliers/${s.id}`}
           noResultsMessage="No suppliers match these filters"
           noResultsSubtext="Clear the search or active-status filter."
           onClearFilters={clearFilters}

@@ -138,14 +138,6 @@ export function OverviewTabsLayout({
             <span>Chart Views</span>
           </TabsTrigger>
         </TabsList>
-
-        <div className="text-xs text-muted-foreground">
-          {activeTab === "financial" ? (
-            <span>Showing KPI metric cards, balance sheet, profit &amp; loss, and recent transactions</span>
-          ) : (
-            <span>Showing visual revenue vs expenses trend, receivables aging, and 30-day runway projection</span>
-          )}
-        </div>
       </div>
 
       {/* Tab Panels */}

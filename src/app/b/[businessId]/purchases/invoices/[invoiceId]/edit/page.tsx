@@ -76,7 +76,7 @@ export default async function EditPurchaseInvoicePage({ params }: { params: Prom
         invoiceId={invoiceId}
         documentStatus={record.invoice.documentStatus}
         lineCustomFields={lineCustomFields}
-        suppliers={suppliers.map(({ id, name, defaultCurrencyCode }) => ({ id, name, defaultCurrencyCode }))}
+        suppliers={suppliers.map(({ id, name, defaultCurrencyCode, paymentTermsDays }) => ({ id, name, defaultCurrencyCode, paymentTermsDays }))}
         expenseAccounts={accounts.map(({ id, name }) => ({ id, name }))}
         taxCodes={taxes.map(({ id, name, rateBasisPoints, vatCategory }) => ({ id, name, rateBasisPoints, vatCategory: vatCategory! }))}
         orders={orders.map((order) => ({ id: order.id, orderNumber: order.order_number, supplierId: order.supplier_id }))}

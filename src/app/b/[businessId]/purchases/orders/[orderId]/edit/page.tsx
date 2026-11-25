@@ -13,7 +13,7 @@ import { minorToCurrencyInput } from "@/modules/currency/conversion";
 import { getCurrencySettings } from "@/modules/currency/exchange-rate";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
-import { BackLink } from "@/components/back-link";
+import { Breadcrumbs } from "@/components/breadcrumbs";
 import { listCustomFieldDefinitions } from "@/modules/custom-fields/custom-field-service";
 
 export default async function EditPurchaseOrderPage({ params }: { params: Promise<{ businessId: string; orderId: string }> }) {
@@ -58,7 +58,14 @@ export default async function EditPurchaseOrderPage({ params }: { params: Promis
   const minorUnit = currencySettings.currencies.find((currency) => currency.code === record.order.currencyCode)?.minor_unit ?? 2;
   return (
     <div className="page-container">
-      <BackLink href={`/b/${businessId}/purchases/orders/${orderId}`}>{record.order.orderNumber}</BackLink>
+      <Breadcrumbs
+        businessId={businessId}
+        items={[
+          { label: "Purchase Orders", href: `/b/${businessId}/purchases/orders` },
+          { label: record.order.orderNumber, href: `/b/${businessId}/purchases/orders/${orderId}` },
+          { label: "Edit" },
+        ]}
+      />
       <div className="mb-7">
         <h1 className="page-title">Edit Purchase Order</h1>
         <p className="page-description">Updates remain operational and do not create journal entries.</p>

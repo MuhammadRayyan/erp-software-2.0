@@ -1,10 +1,12 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { CheckCircle2 } from "lucide-react";
+import { BookOpenText, CheckCircle2 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
+import { DropdownMenuItem } from "@/components/ui/dropdown-menu";
 import { DocumentViewActions } from "@/components/document-view-actions";
 import { useActionPermission, useApprovalPolicy } from "@/components/permissions-provider";
 import { broadcastLiveRefresh } from "@/components/use-live-refresh";
@@ -19,16 +21,21 @@ export function ReceiptViewActions({
   receiptId,
   receiptNumber,
   status,
+  journalEntryId,
 }: {
   businessId: string;
   receiptId: string;
   receiptNumber: string;
   status: "draft" | "pending_approval" | "posted" | "void";
+  journalEntryId?: string | null;
 }) {
   const router = useRouter();
   const { requiresApproval } = useApprovalPolicy();
   const canPost = useActionPermission("post");
+  const canEdit = useActionPermission("edit");
+  const canViewAccounting = useActionPermission("view", "accounting");
   const mustSubmitForApproval = requiresApproval || !canPost;
+  const hasExtraPrimary = status === "draft" && (mustSubmitForApproval ? canEdit : canPost);
   const [submitting, setSubmitting] = useState(false);
 
   const handleSubmitOrPost = async () => {
@@ -60,7 +67,7 @@ export function ReceiptViewActions({
       documentType="Receipt"
       pdfHref={`/api/businesses/${businessId}/documents/sales-receipt/${receiptId}/pdf`}
       extraPrimaryActions={
-        status === "draft" ? (
+        hasExtraPrimary ? (
           <Button
             permission={mustSubmitForApproval ? "edit" : "post"}
             disabled={submitting}
@@ -92,6 +99,15 @@ export function ReceiptViewActions({
               },
             }
           : undefined
+      }
+      extraActions={
+        journalEntryId && canViewAccounting ? (
+          <DropdownMenuItem permission="view" permissionModule="accounting" asChild>
+            <Link href={`/b/${businessId}/accounting/journal/${journalEntryId}`}>
+              <BookOpenText className="size-4" /> View Journal Entry
+            </Link>
+          </DropdownMenuItem>
+        ) : undefined
       }
       onVoid={
         status === "posted"

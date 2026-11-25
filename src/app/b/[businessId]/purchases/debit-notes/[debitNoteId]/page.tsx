@@ -2,13 +2,14 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { NoticeToast } from "@/components/notice-toast";
 import { requireModule } from "@/core/permissions/require-module";
-import { formatDate, formatMoney } from "@/core/format";
+import { formatDate, formatMoney, getCurrencyMinorUnit } from "@/core/format";
 import { quantityMicrosToInput, rateBasisPointsToPercent } from "@/modules/accounting/calculations/money";
 import { getDebitNote } from "@/modules/debit-notes/debit-note-service";
 import { StatusBadge } from "@/components/status-badge";
 import { DebitNoteViewActions } from "@/modules/debit-notes/debit-note-view-actions";
 import { buildDocumentEmailContext, buildDocumentEmailDefaults } from "@/modules/email/email-defaults";
-import { BackLink } from "@/components/back-link";
+import { Breadcrumbs } from "@/components/breadcrumbs";
+import { DocumentFlowStepper, type FlowStep } from "@/components/documents/document-flow-stepper";
 import { getDocumentViewData } from "@/modules/document-templates/document-data-extractor";
 import { DocumentViewLayout } from "@/modules/document-templates/components/document-view-layout";
 
@@ -24,8 +25,38 @@ export default async function DebitNoteViewPage({
   const { user, access } = await requireModule(businessId, "purchases");
   const record = getDebitNote(businessId, user.id, debitNoteId);
   if (!record) notFound();
-  const { note, lines } = record;
+  const { note, lines, journal } = record;
   const currency = note.currencyCode;
+  const currencyMinorUnit = getCurrencyMinorUnit(currency);
+
+  const flowSteps: FlowStep[] = [
+    ...(note.purchaseInvoiceId
+      ? [{
+          key: "invoice",
+          label: "Purchase Invoice",
+          href: `/b/${businessId}/purchases/invoices/${note.purchaseInvoiceId}`,
+          state: "completed" as const,
+        }]
+      : []),
+    {
+      key: "debit-note",
+      label: "Debit Note",
+      documentNumber: note.debitNoteNumber,
+      statusLabel: note.documentStatus,
+      state: "current" as const,
+    },
+    ...(journal
+      ? [{
+          key: "journal",
+          label: "Journal",
+          documentNumber: journal.entryNumber,
+          href: `/b/${businessId}/accounting/journal/${journal.id}`,
+          state: "completed" as const,
+        }]
+      : note.documentStatus !== "void"
+        ? [{ key: "journal", label: "Journal", state: "pending" as const }]
+        : []),
+  ];
 
   const viewBundle = getDocumentViewData(
     businessId,
@@ -47,14 +78,20 @@ export default async function DebitNoteViewPage({
       partyName: note.supplierName,
       totalMinor: note.totalMinor,
     },
-    (note as any).supplierEmail ?? ""
+    note.supplierEmail ?? ""
   );
-  const emailDefaults = buildDocumentEmailDefaults(emailContext, (note as any).supplierEmail ?? "");
+  const emailDefaults = buildDocumentEmailDefaults(emailContext, note.supplierEmail ?? "");
 
   return (
     <div className="page-container">
       <NoticeToast message={notice} />
-      <BackLink href={`/b/${businessId}/purchases/debit-notes`}>Debit Notes</BackLink>
+      <Breadcrumbs
+        businessId={businessId}
+        items={[
+          { label: "Debit Notes", href: `/b/${businessId}/purchases/debit-notes` },
+          { label: note.debitNoteNumber },
+        ]}
+      />
       <div className="mb-5 flex flex-col justify-between gap-4 lg:flex-row lg:items-start">
         <div>
           <div className="flex flex-wrap items-center gap-2">
@@ -70,7 +107,7 @@ export default async function DebitNoteViewPage({
             Debit Note date: {formatDate(note.debitNoteDate)}
           </p>
           <div className="mt-3 flex flex-wrap items-baseline gap-x-5 gap-y-1">
-            <span className="money text-xl font-semibold">{formatMoney(note.totalMinor, currency)}</span>
+            <span className="money text-xl font-semibold">{formatMoney(note.totalMinor, currency, currencyMinorUnit)}</span>
             {note.documentStatus !== "posted" && (
               <span className="text-sm text-muted-foreground">No ledger impact</span>
             )}
@@ -81,10 +118,13 @@ export default async function DebitNoteViewPage({
           noteId={note.id}
           debitNoteNumber={note.debitNoteNumber}
           documentStatus={note.documentStatus}
-          journalEntryId={null}
+          journalEntryId={note.journalEntryId ?? null}
           emailDefaults={emailDefaults}
         />
       </div>
+      {(Boolean(note.purchaseInvoiceId) || Boolean(journal)) && (
+        <DocumentFlowStepper steps={flowSteps} className="no-print" />
+      )}
 
       <DocumentViewLayout
         data={viewBundle.data}
@@ -110,7 +150,7 @@ export default async function DebitNoteViewPage({
               </div>
               <div>
                 <dt className="text-xs text-muted-foreground">Base equivalent</dt>
-                <dd className="money mt-1 font-semibold">{formatMoney(note.totalMinor, access.business.currency)}</dd>
+                <dd className="money mt-1 font-semibold">{formatMoney(note.baseTotalMinor, access.business.currency)}</dd>
               </div>
             </dl>
           </section>
@@ -152,13 +192,13 @@ export default async function DebitNoteViewPage({
                     <td>
                       <span className="font-medium">{line.description}</span>
                       <span className="mt-0.5 block text-xs text-muted-foreground">
-                        {line.expenseAccountCode} {line.expenseAccountName}
+                        {line.expenseAccountName}
                       </span>
                     </td>
                     <td className="money text-right">{quantityMicrosToInput(line.quantityMicros)}</td>
-                    <td className="money text-right">{formatMoney(line.unitPriceMinor, currency)}</td>
+                    <td className="money text-right">{formatMoney(line.unitPriceMinor, currency, currencyMinorUnit)}</td>
                     <td>{line.taxCodeName ? `${line.taxCodeName} (${rateBasisPointsToPercent(line.taxCodeRate)}%)` : "-"}</td>
-                    <td className="money text-right">{formatMoney(line.grossAmountMinor, currency)}</td>
+                    <td className="money text-right">{formatMoney(line.grossAmountMinor, currency, currencyMinorUnit)}</td>
                   </tr>
                 ))}
               </tbody>
@@ -167,15 +207,15 @@ export default async function DebitNoteViewPage({
           <dl className="mt-6 ml-auto w-full max-w-xs space-y-2 text-sm">
             <div className="flex justify-between">
               <dt className="text-muted-foreground">Subtotal</dt>
-              <dd className="money">{formatMoney(note.subtotalMinor, currency)}</dd>
+              <dd className="money">{formatMoney(note.subtotalMinor, currency, currencyMinorUnit)}</dd>
             </div>
             <div className="flex justify-between">
               <dt className="text-muted-foreground">VAT</dt>
-              <dd className="money">{formatMoney(note.taxMinor, currency)}</dd>
+              <dd className="money">{formatMoney(note.taxMinor, currency, currencyMinorUnit)}</dd>
             </div>
             <div className="flex justify-between border-t border-border pt-2 text-base font-semibold">
               <dt>Total</dt>
-              <dd className="money">{formatMoney(note.totalMinor, currency)}</dd>
+              <dd className="money">{formatMoney(note.totalMinor, currency, currencyMinorUnit)}</dd>
             </div>
           </dl>
         </article>

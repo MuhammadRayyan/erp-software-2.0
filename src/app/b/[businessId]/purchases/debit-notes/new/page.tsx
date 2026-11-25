@@ -12,7 +12,7 @@ import { listActiveSuppliers } from "@/modules/suppliers/supplier-service";
 import { listProjectOptions } from "@/modules/projects/project-service";
 import { DebitNoteForm } from "@/modules/debit-notes/debit-note-form";
 import { getCurrencySettings } from "@/modules/currency/exchange-rate";
-import { BackLink } from "@/components/back-link";
+import { Breadcrumbs } from "@/components/breadcrumbs";
 import { getFormDefaults } from "@/modules/form-defaults/form-defaults-service";
 
 export default async function NewDebitNotePage({
@@ -93,7 +93,13 @@ export default async function NewDebitNotePage({
 
   return (
     <div className="page-container">
-      <BackLink href={`/b/${businessId}/purchases/debit-notes`}>Debit Notes</BackLink>
+      <Breadcrumbs
+        businessId={businessId}
+        items={[
+          { label: "Debit Notes", href: `/b/${businessId}/purchases/debit-notes` },
+          { label: "New Debit Note" },
+        ]}
+      />
       <div className="mb-7">
         <h1 className="page-title">New Debit Note</h1>
         <p className="page-description">

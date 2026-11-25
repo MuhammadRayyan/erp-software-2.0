@@ -1,10 +1,11 @@
 "use client";
 import { useRouter } from "next/navigation";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Coins, LoaderCircle } from "lucide-react";
 import { Controller, useFieldArray, useForm, useWatch } from "react-hook-form";
 import { Button } from "@/components/ui/button";
+import { SplitActionButton } from "@/components/ui/split-action-button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Combobox, type ComboboxOption } from "@/components/ui/combobox";
 import { Input } from "@/components/ui/input";
@@ -32,7 +33,14 @@ import {
   IsolatedDocumentTotals,
   useDocumentColumnVisibility,
 } from "@/components/documents";
+import { DraftRecoveryBanner } from "@/components/documents/draft-recovery-banner";
+import {
+  QuickCreateCustomerDialog,
+  QuickCreateItemDialog,
+  QuickCreateProjectDialog,
+} from "@/components/documents/quick-create-modals";
 import { useUnsavedChanges } from "@/hooks/use-unsaved-changes";
+import { useFormDraftRecovery } from "@/hooks/use-form-draft-recovery";
 import { useActionPermission, useApprovalPolicy } from "@/components/permissions-provider";
 
 type CustomerOption = { id: string; name: string; defaultCurrencyCode: string | null; paymentTermsDays: number; creditLimitMinor: number | null };
@@ -48,6 +56,7 @@ export function InvoiceForm({
   onDefaultSave,
   businessId,
   invoiceId,
+  isPrefilled = false,
   documentStatus = "draft",
   customers,
   salesAccounts,
@@ -68,6 +77,7 @@ export function InvoiceForm({
   onDefaultSave?: (values: any, customValues: Record<string, string>) => Promise<{ error?: string; fieldErrors?: any } | undefined>;
   businessId: string;
   invoiceId?: string;
+  isPrefilled?: boolean;
   documentStatus?: DocumentStatus;
   customers: CustomerOption[];
   salesAccounts: AccountOption[];
@@ -88,8 +98,28 @@ export function InvoiceForm({
   const router = useRouter();
   const { requiresApproval } = useApprovalPolicy();
   const canPost = useActionPermission("post");
+  const canCreateCustomer = useActionPermission("create", "sales");
+  const canCreateProject = useActionPermission("create", "projects");
+  const canCreateItem = useActionPermission("create", "inventory");
   const mustSubmitForApproval = requiresApproval || !canPost;
   const [serverError, setServerError] = useState("");
+  const [customerList, setCustomerList] = useState(customers);
+  const [projectList, setProjectList] = useState(projects);
+  const [itemList, setItemList] = useState(items);
+  useEffect(() => { setCustomerList(customers); }, [customers]);
+  useEffect(() => { setProjectList(projects); }, [projects]);
+  useEffect(() => { setItemList(items); }, [items]);
+
+  const [quickCustomerOpen, setQuickCustomerOpen] = useState(false);
+  const [quickCustomerSeed, setQuickCustomerSeed] = useState("");
+  const [quickProjectOpen, setQuickProjectOpen] = useState(false);
+  const [quickProjectSeed, setQuickProjectSeed] = useState("");
+  const [quickItemState, setQuickItemState] = useState<{ open: boolean; rowIndex: number; seed: string }>({
+    open: false,
+    rowIndex: 0,
+    seed: "",
+  });
+
   const initialCustomValues = useMemo(
     () => buildInitialCustomFieldValues(customFields, customFieldValues),
     [customFields, customFieldValues],
@@ -103,9 +133,17 @@ export function InvoiceForm({
     mode: "onTouched",
     defaultValues: initial,
   });
-  const { register, control, handleSubmit, setError, setValue, getValues, formState: { errors, isSubmitting, isDirty, isSubmitSuccessful } } = form;
+  const { register, control, handleSubmit, reset, watch, setError, setValue, getValues, formState: { errors, isSubmitting, isDirty, isSubmitSuccessful } } = form;
   const customDirty = haveCustomFieldValuesChanged(initialCustomValues, customValues);
   useUnsavedChanges((isDirty || customDirty) && !isSubmitSuccessful);
+  const draftRecovery = useFormDraftRecovery({
+    storageKey: `erp-draft:${businessId}:sales-invoice:new`,
+    enabled: !invoiceId && !onDefaultSave && !isPrefilled,
+    watch,
+    reset,
+    isDirty,
+    isSubmitSuccessful,
+  });
   const { fields, append, remove, insert, move } = useFieldArray({ control, name: "lines" });
   const colVis = useDocumentColumnVisibility({ lines: initial.lines });
 
@@ -133,13 +171,13 @@ export function InvoiceForm({
 
   const availableProjects = useMemo(
     () =>
-      projects.filter((project) => {
+      projectList.filter((project) => {
         if (!customerId) return true;
         const cids = (project as any).customerIds as string[] | undefined;
         if (cids && cids.length > 0) return cids.includes(customerId);
         return !project.customerId || project.customerId === customerId;
       }),
-    [projects, customerId],
+    [projectList, customerId],
   );
   const availableOrders = useMemo(
     () => (orders ?? []).filter((o) => !customerId || o.customerId === customerId),
@@ -155,8 +193,8 @@ export function InvoiceForm({
   const availableCreditForTotals = !invoiceId && applyAvailableCredit && totalAvailableCreditMinor > 0 ? totalAvailableCreditMinor : 0;
 
   const customerOptions = useMemo<ComboboxOption[]>(
-    () => customers.map((c) => ({ value: c.id, label: c.name })),
-    [customers],
+    () => customerList.map((c) => ({ value: c.id, label: c.name })),
+    [customerList],
   );
   const orderOptions = useMemo<ComboboxOption[]>(
     () => availableOrders.map((o) => ({ value: o.id, label: o.orderNumber, description: o.date ? formatDate(o.date) : undefined })),
@@ -178,14 +216,16 @@ export function InvoiceForm({
   const cancelHref = invoiceId ? `/b/${businessId}/sales/invoices/${invoiceId}` : `/b/${businessId}/sales/invoices`;
   const defaultSalesAccountId = salesAccounts[0]?.id ?? "";
 
-  function handleCustomerChange(newCustomerId: string) {
+  function handleCustomerChange(newCustomerId: string, sourceCustomers = customerList) {
     if (documentStatus === "draft" && newCustomerId) {
-      const customer = customers.find((c) => c.id === newCustomerId);
+      const customer = sourceCustomers.find((c) => c.id === newCustomerId);
       const code = customer?.defaultCurrencyCode ?? currency;
-      setValue("currencyCode", code);
-      setValue("exchangeRateToBase", code === currency ? "1" : "");
-      setValue("exchangeRateDate", code === currency ? (taxDate || invoiceDate) : "");
-      setValue("exchangeRateSource", code === currency ? "Base" : "");
+      if (code !== getValues("currencyCode")) {
+        setValue("currencyCode", code);
+        setValue("exchangeRateToBase", code === currency ? "1" : "");
+        setValue("exchangeRateDate", code === currency ? (taxDate || invoiceDate) : "");
+        setValue("exchangeRateSource", code === currency ? "Base" : "");
+      }
       if (customer?.paymentTermsDays) {
         const baseDate = invoiceDate || new Date().toISOString().slice(0, 10);
         const d = new Date(baseDate);
@@ -204,8 +244,8 @@ export function InvoiceForm({
     currentLines.forEach((_, i) => setValue(`lines.${i}.taxCodeId`, newTaxId, { shouldDirty: true, shouldTouch: true }));
   }
 
-  function selectItem(index: number, itemId: string) {
-    const item = items.find((entry) => entry.id === itemId);
+  function selectItem(index: number, itemId: string, sourceItems = itemList) {
+    const item = sourceItems.find((entry) => entry.id === itemId);
     if (!item) {
       setValue(`lines.${index}.salesAccountId`, defaultSalesAccountId, { shouldDirty: true });
       return;
@@ -215,7 +255,7 @@ export function InvoiceForm({
     setValue(`lines.${index}.salesAccountId`, item.salesAccountId, { shouldDirty: true });
   }
 
-  async function save(values: InvoiceInput, intent: InvoiceSaveIntent) {
+  async function save(values: InvoiceInput, intent: InvoiceSaveIntent, afterSave: "view" | "new" | "email" = "view") {
     setServerError("");
     const missingCustomField = firstMissingRequiredCustomField(customFields, customValues);
     if (missingCustomField) {
@@ -223,36 +263,61 @@ export function InvoiceForm({
       return;
     }
 
+    draftRecovery.clearDraft();
+
     if (onDefaultSave) {
       const result = await onDefaultSave(values, customValues);
+      if (result?.fieldErrors || result?.error) {
+        draftRecovery.preserveDraft(values);
+      }
       if (result?.fieldErrors) {
         for (const [field, messages] of Object.entries(result.fieldErrors)) {
           setError(field as any, { message: (messages as string[])[0] });
         }
       }
-      if (result?.error) setServerError(result.error);
+      if (result?.error) {
+        setError("root.serverError", { message: result.error });
+        setServerError(result.error);
+      }
       return;
     }
 
     const result = invoiceId
       ? await updateInvoiceAction(businessId, invoiceId, values, intent, customValues)
-      : await createInvoiceAction(businessId, values, intent, customValues);
+      : await createInvoiceAction(businessId, values, intent, customValues, afterSave);
+    if (result.fieldErrors || result.error) {
+      draftRecovery.preserveDraft(values);
+    }
     if (result.fieldErrors) {
       for (const [field, messages] of Object.entries(result.fieldErrors)) {
         setError(field as any, { message: messages[0] });
       }
     }
-    if (result.error) setServerError(result.error);
+    if (result.error) {
+      setError("root.serverError", { message: result.error });
+      setServerError(result.error);
+    }
   }
 
   return (
+    <>
     <DocumentWorkspaceLayout
+      banner={
+        <DraftRecoveryBanner
+          hasDraft={draftRecovery.hasDraft}
+          savedAt={draftRecovery.savedAt}
+          onRestore={draftRecovery.restoreDraft}
+          onDiscard={draftRecovery.discardDraft}
+        />
+      }
       serverError={serverError}
       headerTitle="Invoice details"
       headerBadge={
-        <span className="text-xs text-muted-foreground font-medium bg-muted/60 px-2 py-0.5 rounded border border-border/50">
-          Invoice # Auto-allocated on save
-        </span>
+        !invoiceId ? (
+          <span className="text-xs text-muted-foreground font-medium bg-muted/60 px-2 py-0.5 rounded border border-border/50">
+            Invoice # Auto-allocated on save
+          </span>
+        ) : undefined
       }
       header={
         <div className="grid gap-4 md:grid-cols-3">
@@ -272,6 +337,17 @@ export function InvoiceForm({
                     field.onChange(next);
                     handleCustomerChange(next);
                   }}
+                  createAction={
+                    canCreateCustomer
+                      ? {
+                          label: "New Customer",
+                          onTrigger: (q) => {
+                            setQuickCustomerSeed(q);
+                            setQuickCustomerOpen(true);
+                          },
+                        }
+                      : undefined
+                  }
                   placeholder="Choose a customer…"
                   searchPlaceholder="Search customer..."
                 />
@@ -378,7 +454,7 @@ export function InvoiceForm({
               {...register("invoiceDate", {
                 onChange: (event) => {
                   if (documentStatus === "draft") {
-                    const customer = customers.find((c) => c.id === customerId);
+                    const customer = customerList.find((c) => c.id === customerId);
                     if (customer?.paymentTermsDays && event.target.value) {
                       const d = new Date(event.target.value);
                       if (!Number.isNaN(d.valueOf())) {
@@ -445,6 +521,17 @@ export function InvoiceForm({
                   onValueChange={field.onChange}
                   allowClear
                   clearLabel="No project"
+                  createAction={
+                    canCreateProject
+                      ? {
+                          label: "New Project",
+                          onTrigger: (q) => {
+                            setQuickProjectSeed(q);
+                            setQuickProjectOpen(true);
+                          },
+                        }
+                      : undefined
+                  }
                   placeholder="No project"
                   searchPlaceholder="Search project..."
                 />
@@ -502,8 +589,13 @@ export function InvoiceForm({
           onDuplicate={duplicateLine}
           onMoveUp={moveLineUp}
           onMoveDown={moveLineDown}
-          items={items}
+          items={itemList}
           onItemSelect={selectItem}
+          onRequestCreateItem={
+            canCreateItem
+              ? (rowIndex, q) => setQuickItemState({ open: true, rowIndex, seed: q })
+              : undefined
+          }
           accounts={salesAccounts}
           accountFieldName="salesAccountId"
           taxCodes={taxCodes}
@@ -587,6 +679,26 @@ export function InvoiceForm({
                 <Button permission={"save"} type="button" disabled={isSubmitting} onClick={handleSubmit((values) => save(values, "submit_approval"))}>
                   {isSubmitting && <LoaderCircle className="size-4 animate-spin" />} Submit for Approval
                 </Button>
+              ) : !invoiceId && !onDefaultSave ? (
+                <SplitActionButton
+                  label="Create & Post"
+                  permission={["save", "post"]}
+                  loading={isSubmitting}
+                  onPrimaryClick={handleSubmit((values) => save(values, "post", "view"))}
+                  options={[
+                    {
+                      label: "Create, Post & New",
+                      description: "Post this invoice and start a new one",
+                      onSelect: handleSubmit((values) => save(values, "post", "new")),
+                    },
+                    {
+                      label: "Create, Post & Email",
+                      description: "Post and open the email composer",
+                      permission: "export",
+                      onSelect: handleSubmit((values) => save(values, "post", "email")),
+                    },
+                  ]}
+                />
               ) : (
                 <Button permission={["save", "post"]} type="button" disabled={isSubmitting} onClick={handleSubmit((values) => save(values, "post"))}>
                   {isSubmitting && <LoaderCircle className="size-4 animate-spin" />} {invoiceId ? "Save & Post" : "Create & Post"}
@@ -597,5 +709,54 @@ export function InvoiceForm({
         </DocumentFormFooter>
       }
     />
+    <QuickCreateCustomerDialog
+      businessId={businessId}
+      open={quickCustomerOpen}
+      onOpenChange={setQuickCustomerOpen}
+      initialName={quickCustomerSeed}
+      defaultCurrencyCode={currencyCode}
+      onCreated={(created) => {
+        const nextCustomer: CustomerOption = { ...created, creditLimitMinor: null };
+        const nextList = [...customerList, nextCustomer];
+        setCustomerList(nextList);
+        setValue("customerId", created.id, { shouldDirty: true, shouldTouch: true });
+        handleCustomerChange(created.id, nextList);
+      }}
+    />
+    <QuickCreateProjectDialog
+      businessId={businessId}
+      open={quickProjectOpen}
+      onOpenChange={setQuickProjectOpen}
+      initialName={quickProjectSeed}
+      defaultCustomerId={customerId ?? ""}
+      customers={customerList}
+      onCreated={(created) => {
+        setProjectList((prev) => [...prev, created]);
+        if (!created.customerId || !customerId || created.customerId === customerId) {
+          setValue("projectId", created.id, { shouldDirty: true, shouldTouch: true });
+        }
+      }}
+    />
+    <QuickCreateItemDialog
+      businessId={businessId}
+      open={quickItemState.open}
+      onOpenChange={(open) => setQuickItemState((prev) => ({ ...prev, open }))}
+      initialName={quickItemState.seed}
+      defaultMode="sales"
+      onCreated={(created) => {
+        const nextItem: ItemOption = {
+          id: created.id,
+          sku: created.sku,
+          name: created.name,
+          salesPriceMinor: created.salesPriceMinor,
+          salesAccountId: created.salesAccountId,
+        };
+        const nextItems = [...itemList, nextItem];
+        setItemList(nextItems);
+        setValue(`lines.${quickItemState.rowIndex}.itemId`, created.id, { shouldDirty: true, shouldTouch: true });
+        selectItem(quickItemState.rowIndex, created.id, nextItems);
+      }}
+    />
+    </>
   );
 }

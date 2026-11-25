@@ -1,13 +1,14 @@
 "use client";
 import { FormError } from "@/components/form-error";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { useUnsavedChanges } from "@/hooks/use-unsaved-changes";
 import { saveTaxSettingsAction } from "./actions";
 import type { TaxSettingsInput } from "./tax-settings-input";
 import { emirateLabels, emirates, type Emirate } from "./uae-vat-config";
@@ -21,6 +22,19 @@ export function TaxSettingsForm({ businessId, initial, isAdmin }: { businessId: 
   const [values, setValues] = useState(initial);
   const [error, setError] = useState("");
   const [pending, setPending] = useState(false);
+
+  useEffect(() => {
+    setValues(initial);
+  }, [initial]);
+
+  const isDirty =
+    Boolean(values.vatRegistered) !== Boolean(initial.vatRegistered) ||
+    (values.trn ?? "") !== (initial.trn ?? "") ||
+    (values.defaultSupplyEmirate ?? "") !== (initial.defaultSupplyEmirate ?? "") ||
+    (values.vatRegistrationEffectiveDate ?? "") !== (initial.vatRegistrationEffectiveDate ?? "") ||
+    (values.vatDeregistrationDate ?? "") !== (initial.vatDeregistrationDate ?? "");
+  useUnsavedChanges(isDirty && isAdmin);
+
   const trnCheck = validateUaeTrn(values.trn);
   async function save() {
     setPending(true); setError("");
@@ -61,7 +75,7 @@ export function TaxSettingsForm({ businessId, initial, isAdmin }: { businessId: 
       <div className="space-y-1.5"><Label htmlFor="deregistration-date">Deregistration date <span className="font-normal text-muted-foreground">(optional)</span></Label><Input id="deregistration-date" type="date" disabled={!isAdmin} value={values.vatDeregistrationDate ?? ""} onChange={(event) => setValues((current) => ({ ...current, vatDeregistrationDate: event.target.value }))} /></div>
     </div>
     {error && <FormError message={error} />}
-    {isAdmin && <div className="flex justify-end"><Button permission={"save"} onClick={save} disabled={pending}>{pending ? "Saving…" : "Save VAT settings"}</Button></div>}
+    {isAdmin && <div className="flex justify-end"><Button permission="edit" onClick={save} disabled={pending}>{pending ? "Saving…" : "Save VAT settings"}</Button></div>}
   </div>;
 }
 

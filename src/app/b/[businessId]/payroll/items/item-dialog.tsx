@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import {
   DialogRoot,
@@ -12,6 +12,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { SelectNative } from "@/components/ui/select-native";
+import { FormError } from "@/components/form-error";
 import { type PayslipItemRecord } from "@/modules/payroll/services/payroll-service";
 import { savePayslipItemAction } from "@/modules/payroll/actions/payroll-actions";
 
@@ -34,25 +35,51 @@ export function ItemDialog({
 }: ItemDialogProps) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const isEdit = Boolean(item?.id);
+
+  useEffect(() => {
+    if (open) {
+      setError(null);
+      setFieldErrors({});
+    }
+  }, [open, item?.id]);
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setError(null);
-    setLoading(true);
+    setFieldErrors({});
 
     const formData = new FormData(e.currentTarget);
+    const trimmedName = formData.get("name")?.toString().trim() || "";
+    const accountId = formData.get("accountId")?.toString().trim() || "";
+    const nextFieldErrors: Record<string, string> = {};
+    if (!trimmedName) nextFieldErrors.name = "Item name is required.";
+    if (!accountId) nextFieldErrors.accountId = "Chart of accounts mapping is required.";
+    if (Object.keys(nextFieldErrors).length > 0) {
+      setFieldErrors(nextFieldErrors);
+      return;
+    }
+
+    setLoading(true);
     const payload = {
       id: item?.id,
-      name: formData.get("name")?.toString().trim() || "",
+      name: trimmedName,
       type: formData.get("type")?.toString() as "earnings" | "deduction",
-      accountId: formData.get("accountId")?.toString().trim() || "",
+      accountId,
       description: formData.get("description")?.toString().trim() || null,
       isActive: formData.get("isActive") === "on",
     };
 
     try {
       const res = await savePayslipItemAction(businessId, payload);
+      if (res.fieldErrors) {
+        const mapped: Record<string, string> = {};
+        for (const [k, msgs] of Object.entries(res.fieldErrors)) {
+          if (msgs?.[0]) mapped[k] = msgs[0];
+        }
+        setFieldErrors(mapped);
+      }
       if (res.error) {
         setError(res.error);
         toast.error(res.error);
@@ -78,12 +105,12 @@ export function ItemDialog({
         </DialogDescription>
 
         {error && (
-          <div className="mt-3 p-3 text-sm rounded bg-danger/10 border border-danger/30 text-danger">
-            {error}
+          <div className="mt-3">
+            <FormError message={error} />
           </div>
         )}
 
-        <form onSubmit={handleSubmit} className="mt-4 space-y-4">
+        <form key={`${item?.id ?? "new"}-${open}`} onSubmit={handleSubmit} className="mt-4 space-y-4" noValidate>
           <div className="space-y-1.5">
             <Label htmlFor="name">Item Name *</Label>
             <Input
@@ -92,7 +119,10 @@ export function ItemDialog({
               defaultValue={item?.name || ""}
               placeholder="e.g. Health Insurance Allowance"
               required
+              aria-invalid={!!fieldErrors.name}
+              onChange={() => fieldErrors.name && setFieldErrors((p) => { const n = { ...p }; delete n.name; return n; })}
             />
+            {fieldErrors.name && <p className="field-error">{fieldErrors.name}</p>}
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -116,6 +146,7 @@ export function ItemDialog({
                 name="accountId"
                 defaultValue={item?.accountId || "acct-salaries-expense-6100"}
                 required
+                aria-invalid={!!fieldErrors.accountId}
               >
                 {accounts.map((acct) => (
                   <option key={acct.id} value={acct.id}>
@@ -123,6 +154,7 @@ export function ItemDialog({
                   </option>
                 ))}
               </SelectNative>
+              {fieldErrors.accountId && <p className="field-error">{fieldErrors.accountId}</p>}
             </div>
           </div>
 
@@ -158,7 +190,7 @@ export function ItemDialog({
             >
               Cancel
             </Button>
-            <Button permission={"save"} type="submit" disabled={loading}>
+            <Button permission={isEdit ? "edit" : "create"} type="submit" disabled={loading}>
               {loading ? "Saving..." : isEdit ? "Update Item" : "Create Item"}
             </Button>
           </div>

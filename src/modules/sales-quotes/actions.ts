@@ -7,21 +7,36 @@ import { salesQuoteInputSchema } from "./quote-input";
 import { cancelSalesQuote, closeSalesQuote, deleteSalesQuote, getSalesQuote, issueSalesQuote, saveSalesQuote, type SalesQuoteIntent } from "./quote-service";
 import { saveSalesOrder } from "@/modules/sales-orders/sales-order-service";
 
+import { getBusinessDb } from "@/core/db/business";
+import { getCurrency } from "@/modules/currency/currency";
 import { formatZodFieldErrors } from "@/lib/zod-errors";
 
 export type SalesQuoteActionResult = { error?: string; fieldErrors?: Record<string, string[]> };
 
-export async function saveSalesQuoteAction(businessId: string, quoteId: string | null, input: unknown, intent: SalesQuoteIntent): Promise<SalesQuoteActionResult> {
+export async function saveSalesQuoteAction(
+  businessId: string,
+  quoteId: string | null,
+  input: unknown,
+  intent: SalesQuoteIntent,
+  afterSave: "view" | "new" | "email" = "view",
+): Promise<SalesQuoteActionResult> {
   const { user } = await requireSavePermission(businessId, "sales", quoteId, intent);
   const parsed = salesQuoteInputSchema.safeParse(input);
   if (!parsed.success) return { error: "Check the sales quote fields and lines.", fieldErrors: formatZodFieldErrors(parsed.error) };
   let id: string;
   try { id = saveSalesQuote(businessId, user.id, parsed.data, intent, quoteId ?? undefined); }
   catch (error) { return { error: error instanceof Error ? error.message : "The sales quote could not be saved." }; }
+  const notice = intent === "issue" ? "Sales quote issued" : "Draft saved";
   revalidatePath(`/b/${businessId}/sales/quotes`);
   if (quoteId) revalidatePath(`/b/${businessId}/sales/quotes/${quoteId}`);
   revalidatePath(`/b/${businessId}/sales/quotes/${id}`);
-  redirect(`/b/${businessId}/sales/quotes/${id}?notice=${intent === "issue" ? "Sales quote issued" : "Draft saved"}`);
+  if (!quoteId && afterSave === "new") {
+    redirect(`/b/${businessId}/sales/quotes/new?notice=${encodeURIComponent(notice)}&fresh=${Date.now()}`);
+  }
+  if (afterSave === "email") {
+    redirect(`/b/${businessId}/sales/quotes/${id}?composeEmail=1&notice=${encodeURIComponent(notice)}`);
+  }
+  redirect(`/b/${businessId}/sales/quotes/${id}?notice=${encodeURIComponent(notice)}`);
 }
 
 async function runStatusAction(businessId: string, quoteId: string, action: "close" | "cancel" | "delete") {
@@ -66,7 +81,7 @@ export async function deleteSalesQuoteAction(businessId: string, quoteId: string
 }
 
 import { quantityMicrosToInput } from "@/modules/accounting/calculations/money";
-import { minorToDecimalString } from "@/core/format";
+import { getBusinessTodayIso, getCurrencyMinorUnit, minorToDecimalString } from "@/core/format";
 
 export async function convertSalesQuoteToOrderAction(businessId: string, quoteId: string) {
   const { user } = await requirePermission(businessId, "sales", "create");
@@ -144,4 +159,53 @@ export async function createSalesQuoteRevisionAction(businessId: string, quoteId
   } catch (error) {
     return { error: error instanceof Error ? error.message : "Failed to create quote revision." };
   }
+}
+
+export async function duplicateSalesQuoteAction(businessId: string, quoteId: string) {
+  const { user } = await requirePermission(businessId, "sales", "create");
+  let newQuoteId: string;
+  try {
+    const quoteData = getSalesQuote(businessId, user.id, quoteId);
+    if (!quoteData) return { error: "Sales quote not found." };
+    const { sqlite } = getBusinessDb(businessId, user.id);
+    let minorUnit = getCurrencyMinorUnit(quoteData.quote.currencyCode);
+    try {
+      minorUnit = getCurrency(sqlite, quoteData.quote.currencyCode, false).minor_unit;
+    } catch {
+      // fallback to knownMinorUnits
+    }
+    const today = getBusinessTodayIso();
+    const input = {
+      customerId: quoteData.quote.customerId,
+      projectId: quoteData.quote.projectId || "",
+      amountsIncludeTax: Boolean(quoteData.quote.amountsIncludeTax),
+      date: today,
+      expectedDate: "",
+      reference: quoteData.quote.reference || "",
+      notes: quoteData.quote.notes || "",
+      terms: quoteData.quote.terms || "",
+      currencyCode: quoteData.quote.currencyCode,
+      exchangeRateToBase: String(quoteData.quote.exchangeRateToBase),
+      exchangeRateDate: quoteData.quote.exchangeRateDate || "",
+      exchangeRateSource: (quoteData.quote.exchangeRateSource as "Manual" | "CBUAE" | "Base") || "Base",
+      lines: quoteData.lines.map((l: any) => ({
+        itemId: l.itemId || "",
+        description: l.description,
+        quantity: quantityMicrosToInput(l.quantityMicros),
+        discountType: l.discountType || "none",
+        discountValue: l.discountValue || "0",
+        unitPrice: minorToDecimalString(l.unitPriceMinor, quoteData.quote.currencyCode, minorUnit),
+        salesAccountId: l.salesAccountId || "",
+        taxCodeId: l.taxCodeId || "",
+        projectId: l.projectId || "",
+        customFields: l.customFields ?? {},
+      })),
+    };
+    newQuoteId = saveSalesQuote(businessId, user.id, input, "draft");
+  } catch (error) {
+    return { error: error instanceof Error ? error.message : "The sales quote could not be duplicated." };
+  }
+  revalidatePath(`/b/${businessId}/sales/quotes`);
+  revalidatePath(`/b/${businessId}/sales/quotes/${newQuoteId}`);
+  redirect(`/b/${businessId}/sales/quotes/${newQuoteId}?notice=Sales quote duplicated as draft`);
 }

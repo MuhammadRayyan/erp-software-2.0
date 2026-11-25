@@ -10,11 +10,13 @@ import { Button } from "@/components/ui/button";
 import { Combobox } from "@/components/ui/combobox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { formatMoney } from "@/core/format";
+import { formatMoney, getCurrencyMinorUnit, minorToDecimalString } from "@/core/format";
+import { parseCurrencyAmountToMinor } from "@/modules/currency/conversion";
 import { saveBankTransactionAction } from "./actions";
 import { bankTransactionInputSchema, type BankTransactionInput } from "./bank-transaction-input";
 import { emirateLabels, emirates } from "@/modules/tax/uae-vat-config";
 import { SelectNative } from "@/components/ui/select-native";
+import { useUnsavedChanges } from "@/hooks/use-unsaved-changes";
 
 
 export function BankTransactionForm({ businessId, transactionId, bankAccounts, counterAccounts, taxCodes, projects, initial, currency }: {
@@ -28,11 +30,19 @@ export function BankTransactionForm({ businessId, transactionId, bankAccounts, c
   const [serverError, setServerError] = useState("");
   const [intent, setIntent] = useState<"draft" | "post">("post");
   const form = useForm<BankTransactionInput>({ resolver: zodResolver(bankTransactionInputSchema), defaultValues: initial });
-  const { register, control, handleSubmit, setError, formState: { errors, isSubmitting } } = form;
+  const { register, control, handleSubmit, setError, formState: { errors, isSubmitting, isDirty, isSubmitSuccessful } } = form;
+  useUnsavedChanges(isDirty && !isSubmitSuccessful);
   const { fields, append, remove } = useFieldArray({ control, name: "lines" });
   const type = useWatch({ control, name: "type" });
   const watchedLines = useWatch({ control, name: "lines" });
-  const total = watchedLines.reduce((sum, line) => sum + (Number(line?.amount) || 0), 0);
+  const minorUnit = getCurrencyMinorUnit(currency);
+  const totalMinor = watchedLines.reduce((sum, line) => {
+    try {
+      return sum + parseCurrencyAmountToMinor(line?.amount ?? "0", minorUnit);
+    } catch {
+      return sum;
+    }
+  }, 0);
   async function save(values: BankTransactionInput) {
     setServerError("");
     const result = await saveBankTransactionAction(businessId, transactionId ?? null, intent, values);
@@ -76,9 +86,9 @@ export function BankTransactionForm({ businessId, transactionId, bankAccounts, c
       <div className="space-y-1.5"><Label htmlFor="reference">Reference <span className="font-normal text-muted-foreground">(optional)</span></Label><Input id="reference" {...register("reference")} /></div>
       <div className="space-y-1.5 md:col-span-2"><Label htmlFor="description">Description</Label><Input id="description" {...register("description")} aria-invalid={!!errors.description} />{errors.description && <p className="field-error">{errors.description.message}</p>}</div>
     </div></section>
-    <section><div className="flex items-start justify-between gap-4"><div><h2 className="text-base font-semibold">{type === "money_in" ? "Income allocation" : "Expense allocation"}</h2><p className="mt-1 text-sm text-muted-foreground">Amounts include tax. Project is applied only to the counter-account P&amp;L line.</p></div><Button type="button" variant="secondary" size="sm" onClick={() => append({ accountId: "", taxCodeId: defaultTax, projectId: "", description: "", amount: "0.00" })}><Plus className="size-4" /> Add line</Button></div>
+    <section><div className="flex items-start justify-between gap-4"><div><h2 className="text-base font-semibold">{type === "money_in" ? "Income allocation" : "Expense allocation"}</h2><p className="mt-1 text-sm text-muted-foreground">Amounts include tax. Project is applied only to the counter-account P&amp;L line.</p></div><Button type="button" variant="secondary" size="sm" onClick={() => append({ accountId: "", taxCodeId: defaultTax, projectId: "", description: "", amount: minorToDecimalString(0, currency) })}><Plus className="size-4" /> Add line</Button></div>
       <div className="mt-4 space-y-3">{fields.map((field, index) => <div key={field.id} className="grid gap-3 rounded-md border border-border bg-surface px-3 py-3 md:grid-cols-[1.3fr_1.3fr_0.9fr_0.9fr_auto]">
-        <div className="space-y-1"><Label className="text-xs">Description</Label><Input {...register(`lines.${index}.description`)} /></div>
+        <div className="space-y-1"><Label className="text-xs">Description</Label><Input {...register(`lines.${index}.description`)} aria-invalid={!!errors.lines?.[index]?.description} />{errors.lines?.[index]?.description && <p className="field-error">{errors.lines[index].description?.message}</p>}</div>
         <div className="space-y-1">
           <Label className="text-xs">Counter account</Label>
           <Controller
@@ -94,9 +104,11 @@ export function BankTransactionForm({ businessId, transactionId, bankAccounts, c
                 placeholder="Choose account…"
                 searchPlaceholder="Search accounts…"
                 emptyText="No accounts found."
+                ariaInvalid={!!errors.lines?.[index]?.accountId}
               />
             )}
           />
+          {errors.lines?.[index]?.accountId && <p className="field-error">{errors.lines[index].accountId?.message}</p>}
         </div>
         <div className="space-y-1">
           <Label className="text-xs">Tax</Label>
@@ -138,11 +150,11 @@ export function BankTransactionForm({ businessId, transactionId, bankAccounts, c
             )}
           />
         </div>
-        <div className="flex items-end gap-1"><div className="space-y-1"><Label className="text-xs">Amount incl. tax</Label><Input className="w-32 text-right tabular" inputMode="decimal" {...register(`lines.${index}.amount`)} /></div><Button type="button" variant="ghost" size="icon" aria-label={`Remove line ${index + 1}`} disabled={fields.length === 1} onClick={() => remove(index)}><Trash2 className="size-4" /></Button></div>
+        <div className="flex items-end gap-1"><div className="space-y-1"><Label className="text-xs">Amount incl. tax</Label><Input className="w-32 text-right tabular" inputMode="decimal" {...register(`lines.${index}.amount`)} aria-invalid={!!errors.lines?.[index]?.amount} />{errors.lines?.[index]?.amount && <p className="field-error">{errors.lines[index].amount?.message}</p>}</div><Button type="button" variant="ghost" size="icon" aria-label={`Remove line ${index + 1}`} disabled={fields.length === 1} onClick={() => remove(index)}><Trash2 className="size-4" /></Button></div>
       </div>)}</div>
       {errors.lines?.root?.message && <p className="field-error">{errors.lines.root.message}</p>}
-      <div className="mt-4 flex justify-end"><div className="min-w-64 border-t border-border pt-3 text-sm"><div className="flex justify-between gap-6"><span className="text-muted-foreground">Transaction total</span><span className="money font-semibold">{formatMoney(Math.round(total * 100), currency)}</span></div></div></div>
+      <div className="mt-4 flex justify-end"><div className="min-w-64 border-t border-border pt-3 text-sm"><div className="flex justify-between gap-6"><span className="text-muted-foreground">Transaction total</span><span className="money font-semibold">{formatMoney(totalMinor, currency)}</span></div></div></div>
     </section>
-    <div className="sticky bottom-0 z-20 -mx-4 flex justify-between border-t border-border bg-surface/95 px-4 py-3 backdrop-blur-sm sm:mx-0 sm:rounded-t-lg sm:border-x"><Button asChild variant="ghost"><Link href={transactionId ? `/b/${businessId}/banking/transactions/${transactionId}` : `/b/${businessId}/banking/accounts/${initial.bankAccountId}`}>Cancel</Link></Button><div className="flex gap-2"><Button permission={"save"} type="submit" variant="secondary" disabled={isSubmitting || !!initial.statementLineId} onClick={() => setIntent("draft")}>Save Draft</Button><Button type="submit" disabled={isSubmitting} onClick={() => setIntent("post")}>{isSubmitting && <LoaderCircle className="size-4 animate-spin" />} Post Transaction</Button></div></div>
+    <div className="sticky bottom-0 z-20 -mx-4 flex justify-between border-t border-border bg-surface/95 px-4 py-3 backdrop-blur-sm sm:mx-0 sm:rounded-t-lg sm:border-x"><Button asChild variant="ghost"><Link href={transactionId ? `/b/${businessId}/banking/transactions/${transactionId}` : `/b/${businessId}/banking/accounts/${initial.bankAccountId}`}>Cancel</Link></Button><div className="flex gap-2"><Button permission={"save"} type="submit" variant="secondary" disabled={isSubmitting || !!initial.statementLineId} onClick={() => setIntent("draft")}>Save Draft</Button><Button permission={["save", "post"]} type="submit" disabled={isSubmitting} onClick={() => setIntent("post")}>{isSubmitting && <LoaderCircle className="size-4 animate-spin" />} Post Transaction</Button></div></div>
   </form>;
 }

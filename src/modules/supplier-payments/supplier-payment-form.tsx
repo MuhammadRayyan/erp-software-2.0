@@ -95,7 +95,7 @@ export function SupplierPaymentForm({
         exchangeRateSource: initial.exchangeRateSource ?? "",
         allocations: initialAllocations,
       }}
-      onSubmitAction={async (payload) => {
+      onSubmitAction={async (payload, afterSave = "view") => {
         const singleInvoiceId =
           payload.allocations.length === 1 ? payload.allocations[0]?.invoiceId : undefined;
         const result = await createSupplierPaymentAction(businessId, {
@@ -112,7 +112,7 @@ export function SupplierPaymentForm({
           allocations: payload.allocations,
           purchaseInvoiceId: singleInvoiceId,
           invoiceId: singleInvoiceId,
-        });
+        }, afterSave);
         return result ?? {};
       }}
     />

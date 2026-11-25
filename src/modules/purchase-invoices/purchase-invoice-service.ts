@@ -26,7 +26,7 @@ import {
   type InvoiceListSummary,
 } from "@/modules/shared/list-query-helpers";
 import { convertDocumentLinesToBase, minorToCurrencyInput, parseCurrencyAmountToMinor } from "@/modules/currency/conversion";
-import { getCurrency } from "@/modules/currency/currency";
+import { getBaseCurrency, getCurrency } from "@/modules/currency/currency";
 import { resolveRateSnapshot } from "@/modules/currency/validation";
 import { calculateLines, totalsForLines, type StoredLine } from "@/modules/accounting/services/document-line-calculator";
 import { getSupplierUnallocatedPrepayments, supplierPaymentConfig, type SupplierUnallocatedPrepayment } from "@/modules/supplier-payments/supplier-payment-service";
@@ -678,6 +678,7 @@ export function duplicatePurchaseInvoice(businessId: string, userId: string, inv
   if (!record) throw new Error("Purchase invoice not found.");
   // Reuse the already-fetched DB context rather than calling getBusinessDb a second time.
   const context = getBusinessDb(businessId, userId);
+  const baseCurrency = getBaseCurrency(context.sqlite);
   const minorUnit = getCurrency(context.sqlite, record.invoice.currencyCode).minor_unit;
   const today = new Date().toISOString().split("T")[0];
   const rawTerms = (record.supplier as any)?.paymentTermsDays;
@@ -689,7 +690,7 @@ export function duplicatePurchaseInvoice(businessId: string, userId: string, inv
     projectId: record.invoice.projectId ?? "",
     currencyCode: record.invoice.currencyCode,
     exchangeRateToBase: record.invoice.exchangeRateToBase,
-    exchangeRateDate: today,
+    exchangeRateDate: record.invoice.currencyCode === baseCurrency.code ? today : record.invoice.exchangeRateDate,
     exchangeRateSource: record.invoice.exchangeRateSource as "Base" | "Manual" | "CBUAE",
     supplierInvoiceNumber: `${record.invoice.supplierInvoiceNumber}-COPY`,
     invoiceDate: today,

@@ -7,6 +7,7 @@ import { bankAccountInputSchema, type BankAccountInput } from "./bank-account-in
 export type BankAccountRow = {
   id: string;
   name: string;
+  account_code: string | null;
   bank_name: string | null;
   account_number_masked: string | null;
   currency_code: string;
@@ -22,7 +23,7 @@ export type BankAccountRow = {
 // SQL fragment reused for both list and single-record queries — defined once
 // at module level to avoid rebuilding the string on every invocation.
 const ACCOUNT_SELECT = `
-    SELECT ba.id, ba.name, ba.bank_name, ba.account_number_masked,
+    SELECT ba.id, ba.name, ba.account_code, ba.bank_name, ba.account_number_masked,
       ba.currency_code, ba.ledger_account_id, ba.is_cash_account, ba.is_active,
       a.name AS ledger_name,
       COALESCE((
@@ -124,8 +125,8 @@ export function saveBankAccount(
       UPDATE bank_accounts SET name = ?, account_code = ?, bank_name = ?,
         account_number_masked = ?, currency_code = ?, ledger_account_id = ?,
         is_cash_account = ?, is_active = ?, updated_at = ? WHERE id = ?
-    `).run(data.name, data.accountCode || null, data.bankName || null,
-      data.accountNumberMasked || null, data.currencyCode, data.ledgerAccountId,
+    `).run(data.name, data.accountCode || null, data.isCashAccount ? null : data.bankName || null,
+      data.isCashAccount ? null : data.accountNumberMasked || null, data.currencyCode, data.ledgerAccountId,
       data.isCashAccount ? 1 : 0, data.isActive ? 1 : 0, now, bankAccountId);
   } else {
     context.sqlite.prepare(`
@@ -133,8 +134,8 @@ export function saveBankAccount(
         id, name, account_code, bank_name, account_number_masked, currency_code,
         ledger_account_id, is_cash_account, is_active, created_at, updated_at
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `).run(id, data.name, data.accountCode || null, data.bankName || null,
-      data.accountNumberMasked || null, data.currencyCode, data.ledgerAccountId,
+    `).run(id, data.name, data.accountCode || null, data.isCashAccount ? null : data.bankName || null,
+      data.isCashAccount ? null : data.accountNumberMasked || null, data.currencyCode, data.ledgerAccountId,
       data.isCashAccount ? 1 : 0, data.isActive ? 1 : 0, now, now);
   }
   return id;
@@ -143,7 +144,7 @@ export function saveBankAccount(
 export function bankAccountToInput(account: BankAccountRow): BankAccountInput {
   return {
     name: account.name,
-    accountCode: "",
+    accountCode: account.account_code ?? "",
     bankName: account.bank_name ?? "",
     accountNumberMasked: account.account_number_masked ?? "",
     currencyCode: account.currency_code,

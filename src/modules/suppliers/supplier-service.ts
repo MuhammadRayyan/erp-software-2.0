@@ -197,20 +197,22 @@ export function createSupplier(
   getCurrency(context.sqlite, defaultCurrencyCode, true);
   const id = randomUUID();
   const now = new Date().toISOString();
+  const trnValue = data.taxReference?.trim() || data.trn?.trim() || null;
+  const addressValue = data.address?.trim() || data.registeredAddress?.trim() || null;
   const insertSupplier = () =>
     context.db.insert(suppliers).values({
       id,
       name: data.name,
       email: data.email || null,
       phone: data.phone || null,
-      taxReference: data.taxReference || null,
-      address: data.address || null,
+      taxReference: trnValue,
+      address: addressValue,
       legalName: data.legalName || null,
-      trn: data.trn || null,
+      trn: trnValue,
       legalRegistrationIdentifier: data.legalRegistrationIdentifier || null,
       electronicAddress: data.electronicAddress || null,
       electronicAddressScheme: data.electronicAddressScheme || null,
-      registeredAddress: data.registeredAddress || null,
+      registeredAddress: addressValue,
       countryCode: data.countryCode || null,
       defaultCurrencyCode,
       paymentTermsDays: data.paymentTermsDays ?? 0,
@@ -257,19 +259,31 @@ export function updateSupplier(
   getCurrency(context.sqlite, defaultCurrencyCode, true);
   const current = context.db.select().from(suppliers).where(eq(suppliers.id, supplierId)).get();
   if (!current) throw new Error("Supplier not found.");
+  const trnValue =
+    "taxReference" in input && input.taxReference !== undefined
+      ? data.trn && data.trn.trim() !== (current.trn ?? "")
+        ? data.trn.trim()
+        : data.taxReference.trim() || null
+      : data.trn?.trim() || null;
+  const addressValue =
+    "address" in input && input.address !== undefined
+      ? data.registeredAddress && data.registeredAddress.trim() !== (current.registeredAddress ?? "")
+        ? data.registeredAddress.trim()
+        : data.address.trim() || null
+      : data.registeredAddress?.trim() || null;
   const updateSupplierRow = () =>
     context.db.update(suppliers).set({
       name: data.name,
       email: data.email || null,
       phone: data.phone || null,
-      taxReference: data.taxReference || null,
-      address: data.address || null,
+      taxReference: trnValue,
+      address: addressValue,
       legalName: data.legalName || null,
-      trn: data.trn || null,
+      trn: trnValue,
       legalRegistrationIdentifier: data.legalRegistrationIdentifier || null,
       electronicAddress: data.electronicAddress || null,
       electronicAddressScheme: data.electronicAddressScheme || null,
-      registeredAddress: data.registeredAddress || null,
+      registeredAddress: addressValue,
       countryCode: data.countryCode || null,
       defaultCurrencyCode,
       paymentTermsDays: data.paymentTermsDays !== undefined ? data.paymentTermsDays : current.paymentTermsDays,

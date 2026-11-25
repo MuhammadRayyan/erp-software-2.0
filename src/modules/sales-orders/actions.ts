@@ -7,6 +7,8 @@ import { salesOrderInputSchema } from "./sales-order-input";
 import { cancelSalesOrder, closeSalesOrder, deleteSalesOrder, saveSalesOrder, getSalesOrder, issueSalesOrder, type SalesOrderIntent } from "./sales-order-service";
 import { createInvoice } from "@/modules/sales-invoices/invoice-service";
 
+import { getBusinessDb } from "@/core/db/business";
+import { getCurrency } from "@/modules/currency/currency";
 import { formatZodFieldErrors } from "@/lib/zod-errors";
 
 export type SalesOrderActionResult = { error?: string; fieldErrors?: Record<string, string[]> };
@@ -61,7 +63,7 @@ export async function deleteSalesOrderAction(businessId: string, orderId: string
 }
 
 import { quantityMicrosToInput } from "@/modules/accounting/calculations/money";
-import { minorToDecimalString } from "@/core/format";
+import { getBusinessTodayIso, getCurrencyMinorUnit, minorToDecimalString } from "@/core/format";
 
 export async function convertSalesOrderToInvoiceAction(businessId: string, orderId: string) {
   const { user } = await requirePermission(businessId, "sales", "create");
@@ -152,4 +154,54 @@ export async function createSalesOrderRevisionAction(businessId: string, orderId
   } catch (error) {
     return { error: error instanceof Error ? error.message : "Failed to create order revision." };
   }
+}
+
+export async function duplicateSalesOrderAction(businessId: string, orderId: string) {
+  const { user } = await requirePermission(businessId, "sales", "create");
+  let newOrderId: string;
+  try {
+    const orderData = getSalesOrder(businessId, user.id, orderId);
+    if (!orderData) return { error: "Sales order not found." };
+    const { sqlite } = getBusinessDb(businessId, user.id);
+    let minorUnit = getCurrencyMinorUnit(orderData.order.currencyCode);
+    try {
+      minorUnit = getCurrency(sqlite, orderData.order.currencyCode, false).minor_unit;
+    } catch {
+      // fallback to knownMinorUnits
+    }
+    const today = getBusinessTodayIso();
+    const input = {
+      customerId: orderData.order.customerId,
+      projectId: orderData.order.projectId || "",
+      amountsIncludeTax: Boolean(orderData.order.amountsIncludeTax),
+      date: today,
+      expectedDate: "",
+      reference: orderData.order.salesQuoteId ? "" : (orderData.order.reference || ""),
+      salesQuoteId: "",
+      notes: orderData.order.notes || "",
+      terms: orderData.order.terms || "",
+      currencyCode: orderData.order.currencyCode,
+      exchangeRateToBase: String(orderData.order.exchangeRateToBase),
+      exchangeRateDate: orderData.order.exchangeRateDate || "",
+      exchangeRateSource: (orderData.order.exchangeRateSource as "Manual" | "CBUAE" | "Base") || "Base",
+      lines: orderData.lines.map((l: any) => ({
+        itemId: l.itemId || "",
+        description: l.description,
+        quantity: quantityMicrosToInput(l.quantityMicros),
+        discountType: l.discountType || "none",
+        discountValue: l.discountValue || "0",
+        unitPrice: minorToDecimalString(l.unitPriceMinor, orderData.order.currencyCode, minorUnit),
+        salesAccountId: l.salesAccountId || "",
+        taxCodeId: l.taxCodeId || "",
+        projectId: l.projectId || "",
+        customFields: l.customFields ?? {},
+      })),
+    };
+    newOrderId = saveSalesOrder(businessId, user.id, input, "draft");
+  } catch (error) {
+    return { error: error instanceof Error ? error.message : "The sales order could not be duplicated." };
+  }
+  revalidatePath(`/b/${businessId}/sales/orders`);
+  revalidatePath(`/b/${businessId}/sales/orders/${newOrderId}`);
+  redirect(`/b/${businessId}/sales/orders/${newOrderId}?notice=Sales order duplicated as draft`);
 }

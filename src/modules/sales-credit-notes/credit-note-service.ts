@@ -309,7 +309,7 @@ export function duplicateCreditNote(businessId: string, userId: string, noteId: 
   return saveCreditNote(businessId, userId, {
     currencyCode: rate.currencyCode,
     exchangeRateToBase: rate.exchangeRateToBase,
-    exchangeRateDate: today,
+    exchangeRateDate: rate.currencyCode === rate.baseCurrencyCode ? today : rate.exchangeRateDate,
     exchangeRateSource: rate.exchangeRateSource,
     customerId: record.note.customerId,
     projectId: record.note.projectId ?? "",

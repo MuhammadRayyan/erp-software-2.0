@@ -6,6 +6,7 @@ import { CheckCircle2, Clock, RotateCcw, XCircle } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { FormError } from "@/components/form-error";
 import { formatDateTime } from "@/core/format";
 import { broadcastLiveRefresh } from "@/components/use-live-refresh";
 import type { ApprovalRequestRecord } from "@/modules/approvals/approval-service";
@@ -30,6 +31,8 @@ export function DocumentApprovalBanner({
   const [busy, setBusy] = useState(false);
   const [showReject, setShowReject] = useState(false);
   const [rejectNote, setRejectNote] = useState("");
+  const [actionError, setActionError] = useState("");
+  const [rejectError, setRejectError] = useState("");
 
   if (!approval) return null;
 
@@ -51,39 +54,76 @@ export function DocumentApprovalBanner({
 
   async function onApprove() {
     setBusy(true);
-    const res = await approveDocumentRequestAction(businessId, approval!.id);
-    setBusy(false);
-    if (res.error) return toast.error(res.error);
-    broadcastLiveRefresh();
-    toast.success("Approved and finalized. Submitter notified.");
-    router.refresh();
+    setActionError("");
+    try {
+      const res = await approveDocumentRequestAction(businessId, approval!.id);
+      if (res.error) {
+        setActionError(res.error);
+        return toast.error(res.error);
+      }
+      broadcastLiveRefresh();
+      toast.success("Approved and finalized. Submitter notified.");
+      router.refresh();
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Failed to approve request.";
+      setActionError(msg);
+      toast.error(msg);
+    } finally {
+      setBusy(false);
+    }
   }
 
   async function onReject(e: React.FormEvent) {
     e.preventDefault();
+    setRejectError("");
+    if (!rejectNote.trim()) {
+      setRejectError("Please provide a reason for returning this document to draft.");
+      return;
+    }
     setBusy(true);
-    const res = await rejectDocumentRequestAction(businessId, approval!.id, rejectNote);
-    setBusy(false);
-    if (res.error) return toast.error(res.error);
-    broadcastLiveRefresh();
-    toast.success("Returned to draft. Submitter notified.");
-    setShowReject(false);
-    setRejectNote("");
-    router.refresh();
+    try {
+      const res = await rejectDocumentRequestAction(businessId, approval!.id, rejectNote.trim());
+      if (res.error) {
+        setRejectError(res.error);
+        return toast.error(res.error);
+      }
+      broadcastLiveRefresh();
+      toast.success("Returned to draft. Submitter notified.");
+      setShowReject(false);
+      setRejectNote("");
+      router.refresh();
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Failed to reject request.";
+      setRejectError(msg);
+      toast.error(msg);
+    } finally {
+      setBusy(false);
+    }
   }
 
   async function onWithdraw() {
     setBusy(true);
-    const res = await withdrawApprovalRequestAction(
-      businessId,
-      approval!.id,
-      approval!.entityUrl,
-    );
-    setBusy(false);
-    if (res.error) return toast.error(res.error);
-    broadcastLiveRefresh();
-    toast.success("Withdrawn back to draft.");
-    router.refresh();
+    setActionError("");
+    try {
+      const res = await withdrawApprovalRequestAction(
+        businessId,
+        approval!.id,
+        approval!.entityUrl,
+      );
+      if (res.error) {
+        setActionError(res.error);
+        return toast.error(res.error);
+      }
+      broadcastLiveRefresh();
+      toast.success("Withdrawn back to draft.");
+      router.refresh();
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Failed to withdraw request.";
+      setActionError(msg);
+      toast.error(msg);
+    } finally {
+      setBusy(false);
+    }
   }
 
   return (
@@ -128,14 +168,20 @@ export function DocumentApprovalBanner({
         </div>
       </div>
 
+      {actionError && <FormError message={actionError} />}
+
       {showReject && (
-        <form onSubmit={onReject} className="flex flex-wrap items-center gap-2 pt-2 border-t border-warning/25">
+        <form onSubmit={onReject} className="flex flex-wrap items-center gap-2 pt-2 border-t border-warning/25" noValidate>
           <Input
             className="flex-1 min-w-[220px]"
             placeholder="Reason for returning to draft…"
             value={rejectNote}
-            onChange={(e) => setRejectNote(e.target.value)}
+            onChange={(e) => {
+              setRejectNote(e.target.value);
+              if (rejectError) setRejectError("");
+            }}
             required
+            aria-invalid={!!rejectError}
           />
           <Button size="sm" type="submit" variant="danger" disabled={busy}>
             Confirm Rejection
@@ -144,10 +190,18 @@ export function DocumentApprovalBanner({
             size="sm"
             type="button"
             variant="secondary"
-            onClick={() => setShowReject(false)}
+            onClick={() => {
+              setShowReject(false);
+              setRejectError("");
+            }}
           >
             Cancel
           </Button>
+          {rejectError && (
+            <div className="basis-full">
+              <FormError message={rejectError} />
+            </div>
+          )}
         </form>
       )}
     </div>

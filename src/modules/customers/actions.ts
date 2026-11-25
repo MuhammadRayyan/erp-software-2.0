@@ -14,6 +14,54 @@ export type CustomerActionResult = { error?: string; fieldErrors?: Record<string
 // custom field service validates each value against its definition.
 const customFieldValuesSchema = z.record(z.string(), z.string()).optional();
 
+export type QuickCreateCustomerResult = {
+  error?: string;
+  fieldErrors?: Record<string, string[]>;
+  customer?: {
+    id: string;
+    name: string;
+    defaultCurrencyCode: string;
+    paymentTermsDays: number;
+  };
+};
+
+export async function quickCreateCustomerAction(
+  businessId: string,
+  input: { name: string; email?: string; phone?: string; trn?: string; defaultCurrencyCode?: string },
+): Promise<QuickCreateCustomerResult> {
+  const { user, access } = await requirePermission(businessId, "sales", "create");
+  const parsed = customerInputSchema.safeParse({
+    name: input.name,
+    email: input.email ?? "",
+    phone: input.phone ?? "",
+    trn: input.trn ?? "",
+    taxReference: input.trn ?? "",
+    defaultCurrencyCode: input.defaultCurrencyCode || access.business.currency,
+    isActive: true,
+  });
+  if (!parsed.success) {
+    return {
+      error: "Check the highlighted fields.",
+      fieldErrors: z.flattenError(parsed.error).fieldErrors,
+    };
+  }
+  let customerId: string;
+  try {
+    customerId = createCustomer(businessId, user.id, parsed.data);
+  } catch (error) {
+    return { error: error instanceof Error ? error.message : "The customer could not be created." };
+  }
+  revalidatePath(`/b/${businessId}/customers`);
+  return {
+    customer: {
+      id: customerId,
+      name: parsed.data.name,
+      defaultCurrencyCode: parsed.data.defaultCurrencyCode,
+      paymentTermsDays: parsed.data.paymentTermsDays,
+    },
+  };
+}
+
 export async function createCustomerAction(
   businessId: string,
   input: unknown,

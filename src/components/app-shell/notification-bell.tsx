@@ -1,15 +1,16 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Bell, CheckCheck, CircleCheck, CircleX, Clock } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 import { formatDateTime } from "@/core/format";
+import { requestGuardedNavigation } from "@/hooks/use-unsaved-changes";
 import type { NotificationRecord } from "@/modules/notifications/notification-service";
 
 export function NotificationBell({
@@ -24,18 +25,29 @@ export function NotificationBell({
   const [unreadCount, setUnreadCount] = useState(initialUnreadCount);
   const [items, setItems] = useState<NotificationRecord[]>([]);
   const [loading, setLoading] = useState(false);
+  const [markingAll, setMarkingAll] = useState(false);
+  const abortRef = useRef<AbortController | null>(null);
 
   useEffect(() => {
     setUnreadCount(initialUnreadCount);
   }, [initialUnreadCount]);
 
+  useEffect(() => {
+    setItems([]);
+    abortRef.current?.abort();
+  }, [businessId]);
+
   async function refreshList() {
+    abortRef.current?.abort();
+    const controller = new AbortController();
+    abortRef.current = controller;
     setLoading(true);
     try {
       const res = await fetch(`/api/businesses/${businessId}/notifications`, {
         cache: "no-store",
+        signal: controller.signal,
       });
-      if (res.ok) {
+      if (res.ok && !controller.signal.aborted) {
         const data = (await res.json()) as {
           unreadCount: number;
           notifications: NotificationRecord[];
@@ -43,8 +55,12 @@ export function NotificationBell({
         setUnreadCount(data.unreadCount);
         setItems(data.notifications);
       }
+    } catch {
+      // Ignore abort / network failures on menu refresh
     } finally {
-      setLoading(false);
+      if (!controller.signal.aborted) {
+        setLoading(false);
+      }
     }
   }
 
@@ -52,41 +68,61 @@ export function NotificationBell({
     if (open) {
       void refreshList();
     }
+    return () => {
+      abortRef.current?.abort();
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, businessId]);
 
   async function markOneRead(item: NotificationRecord) {
     if (!item.isRead) {
-      await fetch(`/api/businesses/${businessId}/notifications`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "mark_read", notificationId: item.id }),
-      });
-      setItems((prev) =>
-        prev.map((n) => (n.id === item.id ? { ...n, isRead: true } : n)),
-      );
-      setUnreadCount((c) => Math.max(0, c - 1));
+      try {
+        const res = await fetch(`/api/businesses/${businessId}/notifications`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ action: "mark_read", notificationId: item.id }),
+        });
+        if (res.ok) {
+          setItems((prev) =>
+            prev.map((n) => (n.id === item.id ? { ...n, isRead: true } : n)),
+          );
+          setUnreadCount((c) => Math.max(0, c - 1));
+        }
+      } catch {
+        // Still proceed to navigate
+      }
     }
     setOpen(false);
     if (item.actionUrl) {
-      router.push(item.actionUrl);
+      const targetUrl = item.actionUrl;
+      requestGuardedNavigation(targetUrl, () => router.push(targetUrl));
     }
   }
 
   async function markAllRead() {
-    await fetch(`/api/businesses/${businessId}/notifications`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ action: "mark_all_read" }),
-    });
-    setItems((prev) => prev.map((n) => ({ ...n, isRead: true })));
-    setUnreadCount(0);
-    router.refresh();
+    if (markingAll) return;
+    setMarkingAll(true);
+    try {
+      const res = await fetch(`/api/businesses/${businessId}/notifications`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "mark_all_read" }),
+      });
+      if (res.ok) {
+        setItems((prev) => prev.map((n) => ({ ...n, isRead: true })));
+        setUnreadCount(0);
+        router.refresh();
+      }
+    } catch {
+      // Ignore transient failure
+    } finally {
+      setMarkingAll(false);
+    }
   }
 
   return (
-    <DropdownMenu open={open} onOpenChange={setOpen}>
-      <DropdownMenuTrigger asChild>
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
         <Button
           variant="ghost"
           size="icon"
@@ -96,13 +132,13 @@ export function NotificationBell({
         >
           <Bell className="size-[18px]" />
           {unreadCount > 0 && (
-            <span className="absolute -top-0.5 -right-0.5 grid min-w-[17px] h-[17px] place-items-center rounded-full bg-danger px-1 text-[10px] font-bold text-white tabular-nums">
+            <span className="absolute -top-0.5 -right-0.5 grid min-w-[17px] h-[17px] place-items-center rounded-full bg-danger px-1 text-[10px] font-bold text-danger-foreground tabular-nums">
               {unreadCount > 99 ? "99+" : unreadCount}
             </span>
           )}
         </Button>
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="w-[340px] p-0">
+      </PopoverTrigger>
+      <PopoverContent align="end" className="w-[340px] p-0">
         <div className="flex items-center justify-between border-b border-border px-3.5 py-2.5">
           <div className="flex items-center gap-2">
             <span className="text-xs font-semibold text-foreground">Notifications</span>
@@ -135,11 +171,11 @@ export function NotificationBell({
                 key={item.id}
                 type="button"
                 onClick={() => void markOneRead(item)}
-                className={`w-full text-left px-3.5 py-2.5 transition-colors hover:bg-surface-muted/50 cursor-pointer ${
+                className={`block w-full px-3.5 py-2.5 text-left transition-colors hover:bg-surface-muted/80 cursor-pointer ${
                   !item.isRead ? "bg-primary/5" : ""
                 }`}
               >
-                <div className="flex items-start gap-2.5">
+                <div className="flex w-full items-start gap-2.5">
                   <span className="mt-0.5 shrink-0">
                     {item.type === "approval_approved" ? (
                       <CircleCheck className="size-4 text-success" />
@@ -170,7 +206,7 @@ export function NotificationBell({
             ))
           )}
         </div>
-      </DropdownMenuContent>
-    </DropdownMenu>
+      </PopoverContent>
+    </Popover>
   );
 }

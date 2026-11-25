@@ -6,7 +6,8 @@ import { listActiveSuppliers } from "@/modules/suppliers/supplier-service";
 import { listProjectOptions } from "@/modules/projects/project-service";
 import { listInventoryItemOptions } from "@/modules/inventory/inventory-item-service";
 import { getCurrencySettings } from "@/modules/currency/exchange-rate";
-import { BackLink } from "@/components/back-link";
+import { Breadcrumbs } from "@/components/breadcrumbs";
+import { NoticeToast } from "@/components/notice-toast";
 import { getFormDefaults } from "@/modules/form-defaults/form-defaults-service";
 import { listCustomFieldDefinitions } from "@/modules/custom-fields/custom-field-service";
 
@@ -15,7 +16,7 @@ export default async function NewPurchaseQuotePage({
   searchParams,
 }: {
   params: Promise<{ businessId: string }>;
-  searchParams: Promise<{ supplierId?: string; projectId?: string }>;
+  searchParams: Promise<{ supplierId?: string; projectId?: string; notice?: string; fresh?: string }>;
 }) {
   const { businessId } = await params;
   const query = await searchParams;
@@ -51,13 +52,22 @@ export default async function NewPurchaseQuotePage({
 
   return (
     <div className="page-container">
-      <BackLink href={`/b/${businessId}/purchases/quotes`}>Purchase Quotes</BackLink>
+      <Breadcrumbs
+        businessId={businessId}
+        items={[
+          { label: "Purchase Quotes", href: `/b/${businessId}/purchases/quotes` },
+          { label: "New Purchase Quote" },
+        ]}
+      />
       <div className="mb-7">
+        <NoticeToast key={query.fresh ?? query.notice} message={query.notice} />
         <h1 className="page-title">New Purchase Quote</h1>
         <p className="page-description">Save a draft or issue an operational supplier quote without ledger impact.</p>
       </div>
       <PurchaseQuoteForm
+        key={query.fresh ?? "new"}
         businessId={businessId}
+        isPrefilled={Boolean(query.supplierId || query.projectId)}
         suppliers={suppliers.map(({ id, name, defaultCurrencyCode }) => ({ id, name, defaultCurrencyCode }))}
         expenseAccounts={accounts.map(({ id, name }) => ({ id, name }))}
         taxCodes={taxes.map(({ id, name, rateBasisPoints, vatCategory }) => ({ id, name, rateBasisPoints, vatCategory }))}

@@ -22,7 +22,13 @@ import { formatZodFieldErrors } from "@/lib/zod-errors";
 
 export type PurchaseInvoiceActionResult = { error?: string; fieldErrors?: Record<string, string[]> };
 
-export async function savePurchaseInvoiceAction(businessId: string, invoiceId: string | null, input: unknown, intent: PurchaseInvoiceIntent): Promise<PurchaseInvoiceActionResult> {
+export async function savePurchaseInvoiceAction(
+  businessId: string,
+  invoiceId: string | null,
+  input: unknown,
+  intent: PurchaseInvoiceIntent,
+  afterSave: "view" | "new" = "view",
+): Promise<PurchaseInvoiceActionResult> {
   const { user } = await requireSavePermission(businessId, "purchases", invoiceId, intent);
   const parsed = purchaseInvoiceInputSchema.safeParse(input);
   if (!parsed.success) return { error: "Check the purchase invoice fields and lines.", fieldErrors: formatZodFieldErrors(parsed.error) };
@@ -43,19 +49,23 @@ export async function savePurchaseInvoiceAction(businessId: string, invoiceId: s
   revalidatePath(`/b/${businessId}/purchases/invoices/${id}`);
   revalidatePath(`/b/${businessId}/approvals`);
   revalidatePath(`/b/${businessId}/overview`);
+  if (!invoiceId && afterSave === "new") {
+    redirect(`/b/${businessId}/purchases/invoices/new?notice=${encodeURIComponent(notice)}&fresh=${Date.now()}`);
+  }
   redirect(`/b/${businessId}/purchases/invoices/${id}?notice=${encodeURIComponent(notice)}`);
 }
 
 export async function duplicatePurchaseInvoiceAction(businessId: string, invoiceId: string) {
   const { user } = await requirePermission(businessId, "purchases", "create");
+  let id: string;
   try {
-    const id = duplicatePurchaseInvoice(businessId, user.id, invoiceId);
-    revalidatePath(`/b/${businessId}/purchases/invoices`);
-    revalidatePath(`/b/${businessId}/purchases/invoices/${id}`);
-    redirect(`/b/${businessId}/purchases/invoices/${id}?notice=Purchase invoice duplicated as draft`);
+    id = duplicatePurchaseInvoice(businessId, user.id, invoiceId);
   } catch (error) {
     return { error: error instanceof Error ? error.message : "The purchase invoice could not be duplicated." };
   }
+  revalidatePath(`/b/${businessId}/purchases/invoices`);
+  revalidatePath(`/b/${businessId}/purchases/invoices/${id}`);
+  redirect(`/b/${businessId}/purchases/invoices/${id}?notice=Purchase invoice duplicated as draft`);
 }
 export async function deletePurchaseInvoiceAction(businessId: string, invoiceId: string) { const { user } = await requirePermission(businessId, "purchases", "delete"); try { deletePurchaseInvoice(businessId, user.id, invoiceId); revalidatePath(`/b/${businessId}/purchases/invoices`); return {}; } catch (error) { return { error: error instanceof Error ? error.message : "The purchase invoice could not be deleted." }; } }
 export async function voidPurchaseInvoiceAction(businessId: string, invoiceId: string) { const { user } = await requirePermission(businessId, "purchases", "delete"); try { voidPurchaseInvoice(businessId, user.id, invoiceId); revalidatePath(`/b/${businessId}/purchases/invoices/${invoiceId}`); return {}; } catch (error) { return { error: error instanceof Error ? error.message : "The purchase invoice could not be voided." }; } }

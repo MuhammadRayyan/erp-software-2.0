@@ -2,7 +2,15 @@
 
 import { Controller, type Control, type FieldValues, type Path, type UseFormRegisterReturn } from "react-hook-form";
 import { SlidersHorizontal } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/cn";
 
 export interface DocumentColumnTogglesProps<
@@ -53,7 +61,7 @@ export function DocumentColumnToggles<
   const renderTaxInclusiveToggle = () => {
     if (onAmountsIncludeTaxChange !== undefined && amountsIncludeTax !== undefined) {
       return (
-        <label className="flex items-center gap-2 text-xs font-medium text-foreground cursor-pointer select-none col-span-full pb-1.5 mb-0.5 border-b border-border/60">
+        <label className="flex items-center gap-2 text-xs font-medium text-foreground cursor-pointer select-none">
           <Checkbox
             checked={amountsIncludeTax}
             onCheckedChange={(checked) => onAmountsIncludeTaxChange(Boolean(checked))}
@@ -70,7 +78,7 @@ export function DocumentColumnToggles<
           control={control as unknown as Control<FieldValues>}
           name={"amountsIncludeTax" as Path<FieldValues>}
           render={({ field }) => (
-            <label className="flex items-center gap-2 text-xs font-medium text-foreground cursor-pointer select-none col-span-full pb-1.5 mb-0.5 border-b border-border/60">
+            <label className="flex items-center gap-2 text-xs font-medium text-foreground cursor-pointer select-none">
               <Checkbox
                 checked={Boolean(field.value)}
                 onCheckedChange={(checked) => field.onChange(Boolean(checked))}
@@ -85,7 +93,7 @@ export function DocumentColumnToggles<
 
     if (registerAmountsIncludeTax) {
       return (
-        <label className="flex items-center gap-2 text-xs font-medium text-foreground cursor-pointer select-none col-span-full pb-1.5 mb-0.5 border-b border-border/60">
+        <label className="flex items-center gap-2 text-xs font-medium text-foreground cursor-pointer select-none">
           <input
             type="checkbox"
             className="size-4 rounded-[4px] border-border-strong accent-primary cursor-pointer"
@@ -99,70 +107,83 @@ export function DocumentColumnToggles<
     return null;
   };
 
+  const taxToggle = renderTaxInclusiveToggle();
+
   return (
     <div
       className={cn(
-        "rounded-lg border border-border/80 bg-surface-muted/20 p-3.5 transition-all w-full max-w-lg",
+        "flex flex-wrap items-center justify-between gap-3 rounded-lg border border-border/80 bg-surface-muted/20 px-3.5 py-2 transition-all",
         className
       )}
     >
-      <div className="flex items-center gap-2 mb-2.5">
-        <SlidersHorizontal className="size-3.5 text-muted-foreground" />
-        <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
-          Options & Columns
-        </span>
-      </div>
-
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-2.5">
-        {renderTaxInclusiveToggle()}
-
-        <label className="flex items-center gap-2 text-xs text-muted-foreground hover:text-foreground cursor-pointer select-none transition-colors">
-          <Checkbox
-            checked={showLineNumber}
-            onCheckedChange={(checked) => onShowLineNumberChange(Boolean(checked))}
-            aria-label="Column Line number"
-          />
-          <span>Column · Line number</span>
-        </label>
-
-        <label className="flex items-center gap-2 text-xs text-muted-foreground hover:text-foreground cursor-pointer select-none transition-colors">
-          <Checkbox
-            checked={showDescription}
-            onCheckedChange={(checked) => onShowDescriptionChange(Boolean(checked))}
-            aria-label="Column Description"
-          />
-          <span>Column · Description</span>
-        </label>
-
-        <label className="flex items-center gap-2 text-xs text-muted-foreground hover:text-foreground cursor-pointer select-none transition-colors">
-          <Checkbox
-            checked={showDiscounts}
-            onCheckedChange={(checked) => onShowDiscountsChange(Boolean(checked))}
-            aria-label="Column Discount"
-          />
-          <span>Column · Discount</span>
-        </label>
-
-        {onShowLineTaxCodesChange && showLineTaxCodes !== undefined && (
-          <label className="flex items-center gap-2 text-xs text-muted-foreground hover:text-foreground cursor-pointer select-none transition-colors">
-            <Checkbox
-              checked={showLineTaxCodes}
-              onCheckedChange={(checked) => onShowLineTaxCodesChange(Boolean(checked))}
-              aria-label="Column Tax code"
-            />
-            <span>Column · Tax code</span>
-          </label>
+      <div className="flex items-center gap-3">
+        {taxToggle ?? (
+          <span className="text-xs font-medium text-muted-foreground">Line item display</span>
         )}
-
-        <label className="flex items-center gap-2 text-xs text-muted-foreground hover:text-foreground cursor-pointer select-none transition-colors">
-          <Checkbox
-            checked={showLineProjects}
-            onCheckedChange={(checked) => onShowLineProjectsChange(Boolean(checked))}
-            aria-label="Column Project"
-          />
-          <span>Column · Project</span>
-        </label>
       </div>
+
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button type="button" variant="secondary" size="sm" className="h-7 gap-1.5 text-xs">
+            <SlidersHorizontal className="size-3.5 text-muted-foreground" />
+            <span>Line columns</span>
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end" className="w-52 p-2">
+          <DropdownMenuLabel className="px-1.5 py-1 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+            Visible Line Columns
+          </DropdownMenuLabel>
+          <DropdownMenuSeparator />
+          <div className="space-y-2 px-1.5 py-1.5">
+            <label className="flex items-center gap-2 text-xs text-muted-foreground hover:text-foreground cursor-pointer select-none transition-colors">
+              <Checkbox
+                checked={showLineNumber}
+                onCheckedChange={(checked) => onShowLineNumberChange(Boolean(checked))}
+                aria-label="Column Line number"
+              />
+              <span>Column · Line number</span>
+            </label>
+
+            <label className="flex items-center gap-2 text-xs text-muted-foreground hover:text-foreground cursor-pointer select-none transition-colors">
+              <Checkbox
+                checked={showDescription}
+                onCheckedChange={(checked) => onShowDescriptionChange(Boolean(checked))}
+                aria-label="Column Description"
+              />
+              <span>Column · Description</span>
+            </label>
+
+            <label className="flex items-center gap-2 text-xs text-muted-foreground hover:text-foreground cursor-pointer select-none transition-colors">
+              <Checkbox
+                checked={showDiscounts}
+                onCheckedChange={(checked) => onShowDiscountsChange(Boolean(checked))}
+                aria-label="Column Discount"
+              />
+              <span>Column · Discount</span>
+            </label>
+
+            {onShowLineTaxCodesChange && showLineTaxCodes !== undefined && (
+              <label className="flex items-center gap-2 text-xs text-muted-foreground hover:text-foreground cursor-pointer select-none transition-colors">
+                <Checkbox
+                  checked={showLineTaxCodes}
+                  onCheckedChange={(checked) => onShowLineTaxCodesChange(Boolean(checked))}
+                  aria-label="Column Tax code"
+                />
+                <span>Column · Tax code</span>
+              </label>
+            )}
+
+            <label className="flex items-center gap-2 text-xs text-muted-foreground hover:text-foreground cursor-pointer select-none transition-colors">
+              <Checkbox
+                checked={showLineProjects}
+                onCheckedChange={(checked) => onShowLineProjectsChange(Boolean(checked))}
+                aria-label="Column Project"
+              />
+              <span>Column · Project</span>
+            </label>
+          </div>
+        </DropdownMenuContent>
+      </DropdownMenu>
     </div>
   );
 }

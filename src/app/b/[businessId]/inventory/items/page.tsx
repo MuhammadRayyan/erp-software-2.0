@@ -15,13 +15,10 @@ export const metadata = {
 
 export default async function InventoryItemsPage({
   params,
-  searchParams,
 }: {
   params: Promise<{ businessId: string }>;
-  searchParams: Promise<{ search?: string; active?: string }>;
 }) {
   const { businessId } = await params;
-  const query = await searchParams;
   const { user, access } = await requireModule(businessId, "inventory");
   const rows = listInventoryItems(businessId, user.id) as unknown as InventoryItemRow[];
   const columnSnapshots = decodeColumnSnapshots(listPreferences(businessId, user.id));
@@ -49,8 +46,6 @@ export default async function InventoryItemsPage({
           businessId={businessId}
           currency={access.business.currency}
           items={rows}
-          initialSearch={query.search ?? ""}
-          initialStatus={query.active === "1" ? "active" : ""}
           serverSnapshot={columnSnapshots["inventory-items"]}
         />
       ) : (

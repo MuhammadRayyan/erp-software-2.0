@@ -13,8 +13,11 @@ import {
   Wand2,
   X,
 } from "lucide-react";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { useActionPermission } from "@/components/permissions-provider";
+import { useConfirmDialog } from "@/components/ui/confirm-dialog";
 import {
   DialogRoot,
   DialogContent,
@@ -50,9 +53,10 @@ export function BankRulesManager({
 }) {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const canEdit = useActionPermission("edit");
 
   const [search, setSearch] = useState("");
-  const [modalOpen, setModalOpen] = useState(searchParams.get("create") === "1");
+  const [modalOpen, setModalOpen] = useState(canEdit && searchParams.get("create") === "1");
   const [editingRule, setEditingRule] = useState<BankRule | null>(null);
 
   // Form states
@@ -75,6 +79,7 @@ export function BankRulesManager({
 
   const [error, setError] = useState("");
   const [pending, startTransition] = useTransition();
+  const { ask, dialog: confirmDialog } = useConfirmDialog();
 
   function openCreateModal() {
     setEditingRule(null);
@@ -148,14 +153,19 @@ export function BankRulesManager({
   }
 
   function handleDelete(ruleId: string) {
-    if (!confirm("Are you sure you want to delete this bank rule?")) return;
-    startTransition(async () => {
-      const res = await deleteBankRuleAction(businessId, ruleId);
-      if (res.error) {
-        alert(res.error);
-      } else {
+    ask({
+      title: "Delete bank rule?",
+      description: "Are you sure you want to delete this bank rule? Existing categorized transactions will remain unchanged.",
+      confirmLabel: "Delete rule",
+      tone: "danger",
+      onConfirm: async () => {
+        const res = await deleteBankRuleAction(businessId, ruleId);
+        if (res.error) {
+          throw new Error(res.error);
+        }
+        toast.success("Bank rule deleted.");
         router.refresh();
-      }
+      },
     });
   }
 
@@ -163,7 +173,7 @@ export function BankRulesManager({
     startTransition(async () => {
       const res = await toggleBankRuleActiveAction(businessId, ruleId, !current);
       if (res.error) {
-        alert(res.error);
+        toast.error(res.error);
       } else {
         router.refresh();
       }
@@ -205,7 +215,7 @@ export function BankRulesManager({
           )}
         </div>
 
-        <Button size="sm" onClick={openCreateModal} className="shrink-0 shadow-xs">
+        <Button permission="edit" size="sm" onClick={openCreateModal} className="shrink-0 shadow-xs">
           <Plus className="size-4 mr-1.5" /> New Bank Rule
         </Button>
       </div>
@@ -222,7 +232,7 @@ export function BankRulesManager({
               ? "No bank rules match your search filter."
               : "Bank rules automatically categorize recurring bank statement transactions (utility bills, subscriptions, bank charges, revenue)."}
           </p>
-          <Button size="sm" onClick={openCreateModal} className="mt-4 shadow-xs">
+          <Button permission="edit" size="sm" onClick={openCreateModal} className="mt-4 shadow-xs">
             <Plus className="size-4 mr-1.5" /> Create First Rule
           </Button>
         </div>
@@ -316,9 +326,9 @@ export function BankRulesManager({
                       <td className="py-2.5 px-3">
                         <button
                           type="button"
-                          disabled={pending}
-                          onClick={() => handleToggle(rule.id, rule.is_active)}
-                          className={`inline-flex items-center gap-1 rounded px-2 py-0.5 text-[10px] font-semibold border transition-colors ${
+                          disabled={!canEdit || pending}
+                          onClick={() => canEdit && handleToggle(rule.id, rule.is_active)}
+                          className={`inline-flex items-center gap-1 rounded px-2 py-0.5 text-[10px] font-semibold border transition-colors ${!canEdit ? "opacity-60 cursor-not-allowed " : ""}${
                             rule.is_active
                               ? "bg-success/10 text-success border-success/30 hover:bg-success/20"
                               : "bg-surface-muted text-muted-foreground border-border hover:bg-surface-muted/80"
@@ -332,6 +342,7 @@ export function BankRulesManager({
                       <td className="py-2.5 px-3 text-right">
                         <div className="flex items-center justify-end gap-1">
                           <Button
+                            permission="edit"
                             variant="ghost"
                             size="sm"
                             className="h-7 w-7 p-0"
@@ -341,6 +352,7 @@ export function BankRulesManager({
                             <Edit2 className="size-3.5" />
                           </Button>
                           <Button
+                            permission="delete"
                             variant="ghost"
                             size="sm"
                             className="h-7 w-7 p-0 text-danger hover:text-danger hover:bg-danger/10"
@@ -565,13 +577,14 @@ export function BankRulesManager({
               >
                 Cancel
               </Button>
-              <Button permission={"save"} type="submit" size="sm" disabled={pending} className="shadow-xs">
+              <Button permission="edit" type="submit" size="sm" disabled={pending} className="shadow-xs">
                 {pending ? "Saving..." : editingRule ? "Update Rule" : "Create Rule"}
               </Button>
             </div>
           </form>
         </DialogContent>
       </DialogRoot>
+      {confirmDialog}
     </div>
   );
 }
