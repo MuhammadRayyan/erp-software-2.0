@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { requireApiAuth } from "@/core/auth/api-auth";
 import { inspectManagerBackup } from "@/modules/migration/manager-importer";
 import JSZip from "jszip";
+import { BACKUP_ZIP_LIMITS, assertZipWithinDeclaredLimits, readZipEntryLimited } from "@/core/businesses/zip-limits";
 
 export const runtime = "nodejs";
 
@@ -46,11 +47,13 @@ export async function POST(request: Request) {
   // Check if it's a native .erpbackup (ZIP)
   try {
     const zip = await JSZip.loadAsync(arrayBuffer);
+    assertZipWithinDeclaredLimits(zip);
     const manifestFile = zip.file("manifest.json");
     if (!manifestFile) {
       return NextResponse.json({ error: "Missing manifest.json in backup." }, { status: 400 });
     }
-    const manifest = JSON.parse(await manifestFile.async("string"));
+    const manifestBuffer = await readZipEntryLimited(manifestFile, BACKUP_ZIP_LIMITS.maxManifestBytes);
+    const manifest = JSON.parse(manifestBuffer.toString("utf8"));
     return NextResponse.json({
       type: "uaemanager",
       manifest,

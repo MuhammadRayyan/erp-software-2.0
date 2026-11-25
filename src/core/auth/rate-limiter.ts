@@ -49,3 +49,32 @@ const cleanupTimer = setInterval(() => {
 }, 5 * 60 * 1000);
 // Never keep the process alive just for this timer (CLI scripts import auth too).
 cleanupTimer.unref?.();
+
+/**
+ * Independent fixed-window counter for actions that are not failed logins
+ * (e.g. public password-reset requests). Each limiter keeps its own map.
+ */
+export function createFixedWindowLimiter(options: { windowMs: number; max: number }) {
+  const hits = new Map<string, Attempt>();
+  const sweep = setInterval(() => {
+    const now = Date.now();
+    for (const [key, entry] of hits) {
+      if (now > entry.resetAt) hits.delete(key);
+    }
+  }, Math.min(options.windowMs, 5 * 60 * 1000));
+  sweep.unref?.();
+
+  return {
+    /** Counts one hit for `key`; returns false once the window's limit is exceeded. */
+    take(key: string) {
+      const now = Date.now();
+      let entry = hits.get(key);
+      if (!entry || now > entry.resetAt) {
+        entry = { count: 0, resetAt: now + options.windowMs };
+        hits.set(key, entry);
+      }
+      entry.count += 1;
+      return entry.count <= options.max;
+    },
+  };
+}

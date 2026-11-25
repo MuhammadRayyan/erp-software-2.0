@@ -125,6 +125,28 @@ export const getBusinessForUser = cache((businessId: string, userId: string) => 
   return undefined;
 });
 
+/**
+ * Throws QUOTA_EXCEEDED when a non-super-admin already owns their allowed
+ * number of businesses. Every path that creates a business for an end user
+ * (manual create, backup import, Manager.io import) must call this.
+ */
+export function assertBusinessQuota(userId: string) {
+  const db = getSystemDb();
+  const creator = db.select().from(users).where(eq(users.id, userId)).get();
+  if (!creator || creator.isSuperAdmin) return;
+  const existingCount = db
+    .select()
+    .from(businesses)
+    .where(and(eq(businesses.ownerUserId, userId), ne(businesses.status, "trash")))
+    .all().length;
+  const maxAllowed = creator.maxBusinesses ?? 3;
+  if (existingCount >= maxAllowed) {
+    throw new Error(
+      `QUOTA_EXCEEDED: You have reached your account limit of ${maxAllowed} business workspace(s). Please contact your administrator to upgrade your plan.`,
+    );
+  }
+}
+
 export function createBusiness(
   input: BusinessInput,
   userId: string,
@@ -139,19 +161,7 @@ export function createBusiness(
 
   const db = getSystemDb();
   const creator = db.select().from(users).where(eq(users.id, userId)).get();
-  if (options?.enforceQuota && creator && !creator.isSuperAdmin) {
-    const existingCount = db
-      .select()
-      .from(businesses)
-      .where(and(eq(businesses.ownerUserId, userId), ne(businesses.status, "trash")))
-      .all().length;
-    const maxAllowed = creator.maxBusinesses ?? 3;
-    if (existingCount >= maxAllowed) {
-      throw new Error(
-        `QUOTA_EXCEEDED: You have reached your account limit of ${maxAllowed} business workspace(s). Please contact your administrator to upgrade your plan.`,
-      );
-    }
-  }
+  if (options?.enforceQuota) assertBusinessQuota(userId);
 
   try {
     const context = openBusinessDatabase(directoryKey, { create: true });
@@ -239,6 +249,12 @@ export function archiveBusiness(businessId: string, userId: string) {
 export function deleteBusiness(businessId: string, userId: string) {
   const access = getBusinessForUser(businessId, userId);
   if (!access || access.membership.role !== "administrator") throw new Error("BUSINESS_ACCESS_DENIED");
+  // Permanent deletion destroys every record and attachment; only the owner
+  // (or a super-admin) may do it, not any administrator the owner invited.
+  const caller = getSystemDb().select({ isSuperAdmin: users.isSuperAdmin }).from(users).where(eq(users.id, userId)).get();
+  if (access.business.ownerUserId && access.business.ownerUserId !== userId && !caller?.isSuperAdmin) {
+    throw new Error("Only the business owner can permanently delete this business.");
+  }
   const paths = getBusinessPaths(access.business.directoryKey);
   closeBusinessConnection(access.business.directoryKey);
   getSystemDb().delete(businesses).where(eq(businesses.id, businessId)).run();

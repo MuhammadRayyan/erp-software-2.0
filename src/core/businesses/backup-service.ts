@@ -13,9 +13,16 @@ import { closeBusinessConnection, getBusinessDb, openBusinessDatabase } from "@/
 import { detectAndValidateBusinessBaseline } from "@/core/db/migrations/business-baseline";
 import { sqliteTableExists, validateSqliteSchema } from "@/core/db/migrations/schema-validation";
 import { getBusinessPaths } from "@/core/db/paths";
+import { enforceReferenceSchemaObjects } from "@/core/db/schema-objects";
 import { businesses, memberships } from "@/core/db/system-schema";
 import { getSystemDb } from "@/core/db/system";
 import { getBusinessForUser } from "./business-service";
+import {
+  BACKUP_ZIP_LIMITS,
+  assertZipWithinDeclaredLimits,
+  createZipBudget,
+  readZipEntryLimited,
+} from "./zip-limits";
 
 const legacyManifestSchema = z.object({
   formatVersion: z.literal(1),
@@ -172,12 +179,20 @@ export async function importBusinessBackup(buffer: ArrayBuffer | Buffer, userId:
     throw new Error("Backup file exceeds maximum allowed size of 50 MB.");
   }
 
-  const zip = await JSZip.loadAsync(buffer, { checkCRC32: true });
+  // Parse only the central directory; entries are inflated below through
+  // size-limited, CRC-checked streams so a decompression bomb cannot exhaust
+  // memory, disk, or CPU.
+  const zip = await JSZip.loadAsync(buffer);
+  assertZipWithinDeclaredLimits(zip);
+  const budget = createZipBudget();
   const manifestFile = zip.file("manifest.json");
   const databaseFile = zip.file("business.sqlite");
   if (!manifestFile || !databaseFile) throw new Error("Backup must contain manifest.json and business.sqlite");
-  const manifest = manifestSchema.parse(JSON.parse(await manifestFile.async("string")));
-  const database = await databaseFile.async("nodebuffer");
+  const manifestBuffer = await readZipEntryLimited(manifestFile, BACKUP_ZIP_LIMITS.maxManifestBytes);
+  budget.consume(manifestBuffer.length);
+  const manifest = manifestSchema.parse(JSON.parse(manifestBuffer.toString("utf8")));
+  const database = await readZipEntryLimited(databaseFile, BACKUP_ZIP_LIMITS.maxDatabaseBytes);
+  budget.consume(database.length);
   if (checksum(database) !== manifest.databaseSha256) throw new Error("Backup database checksum does not match its manifest");
 
   // Validate SQLite file header: SQLite format 3\0 (first 16 bytes)
@@ -226,6 +241,7 @@ export async function importBusinessBackup(buffer: ArrayBuffer | Buffer, userId:
 
   try {
     const context = openBusinessDatabase(directoryKey, { create: true });
+    enforceReferenceSchemaObjects(context.sqlite);
     context.sqlite.prepare("SELECT 1 FROM customers LIMIT 1").all();
     if (manifest.formatVersion === 2) {
       const restoredBase = context.sqlite.prepare(`
@@ -259,7 +275,12 @@ export async function importBusinessBackup(buffer: ArrayBuffer | Buffer, userId:
         throw new Error("Backup attachment escaped its directory");
       }
       mkdirSync(path.dirname(destination), { recursive: true });
-      writeFileSync(destination, await entry.async("nodebuffer"));
+      const attachment = await readZipEntryLimited(
+        entry,
+        Math.min(BACKUP_ZIP_LIMITS.maxAttachmentBytes, Math.max(0, budget.remaining())),
+      );
+      budget.consume(attachment.length);
+      writeFileSync(destination, attachment);
     }
     getSystemDb().transaction((tx) => {
       tx.insert(businesses)
