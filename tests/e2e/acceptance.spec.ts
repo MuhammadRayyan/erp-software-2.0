@@ -78,7 +78,9 @@ for (const purchase of [false, true]) {
     const pdf = await page.request.get(`/api/businesses/${f.businessId}/documents/${purchase ? "purchase-invoice" : "sales-invoice"}/${invoiceId}/pdf`);
     expect(pdf.status()).toBe(200); expect((await pdf.body()).subarray(0, 5).toString()).toBe("%PDF-");
     await page.screenshot({ path: `test-results/acceptance/${area}-posted.png`, fullPage: true });
-    await page.getByRole("link", { name: purchase ? "Record Payment" : "Record Receipt", exact: true }).click();
+    // Record Receipt/Payment opens the quick side sheet; this flow continues on the full form.
+    await page.getByRole("button", { name: purchase ? "Record Payment" : "Record Receipt", exact: true }).first().click();
+    await page.getByRole("dialog").getByRole("link", { name: "Open full form" }).click();
     await selectComboboxOption(page, page.getByLabel(/Bank \/ Cash Account/), f.bankAccountId);
     await page.getByLabel(/^Amount (Paid|Received)/).fill("200.00");
     await page.getByRole("button", { name: purchase ? "Post Payment" : "Post Receipt", exact: true }).click();

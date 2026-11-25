@@ -63,7 +63,7 @@ export function pushInvoiceStatusConditions(
   options: {
     tableAlias: string;
     allocatedExpr: string;
-    todayUtc: string;
+    businessToday: string;
     conditions: string[];
     values: Array<string | number>;
   },
@@ -73,7 +73,7 @@ export function pushInvoiceStatusConditions(
     return { normalizedStatus: "", isVoidFilter: false };
   }
 
-  const { tableAlias, allocatedExpr, todayUtc, conditions, values } = options;
+  const { tableAlias, allocatedExpr, businessToday, conditions, values } = options;
   switch (normalizedStatus) {
     case "document:draft":
       conditions.push(`${tableAlias}.document_status = 'draft'`);
@@ -100,20 +100,20 @@ export function pushInvoiceStatusConditions(
       conditions.push(`${tableAlias}.total_minor > (${allocatedExpr})`);
       conditions.push(`(${allocatedExpr}) = 0`);
       conditions.push(`${tableAlias}.due_date >= ?`);
-      values.push(todayUtc);
+      values.push(businessToday);
       return { normalizedStatus, isVoidFilter: false };
     case "payment:partially_paid":
       conditions.push(`${tableAlias}.document_status = 'posted'`);
       conditions.push(`(${allocatedExpr}) > 0`);
       conditions.push(`${tableAlias}.total_minor > (${allocatedExpr})`);
       conditions.push(`${tableAlias}.due_date >= ?`);
-      values.push(todayUtc);
+      values.push(businessToday);
       return { normalizedStatus, isVoidFilter: false };
     case "payment:overdue":
       conditions.push(`${tableAlias}.document_status = 'posted'`);
       conditions.push(`${tableAlias}.total_minor > (${allocatedExpr})`);
       conditions.push(`${tableAlias}.due_date < ?`);
-      values.push(todayUtc);
+      values.push(businessToday);
       return { normalizedStatus, isVoidFilter: false };
     default:
       return { normalizedStatus: "", isVoidFilter: false };

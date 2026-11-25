@@ -59,6 +59,7 @@ export function getRemainingInvoiceBalance(businessId: string, userId: string, i
 
 import { drizzle } from "drizzle-orm/better-sqlite3";
 import * as businessSchema from "@/core/db/business-schema";
+import { getBusinessTodayIso } from "@/core/format";
 
 function insertLines(
   dbOrSqlite: ReturnType<typeof getBusinessDb>["db"] | ReturnType<typeof getBusinessDb>["sqlite"],
@@ -305,7 +306,7 @@ export function duplicateCreditNote(businessId: string, userId: string, noteId: 
   const record = getCreditNote(businessId, userId, noteId);
   if (!record) throw new Error("Credit note not found.");
   const rate = storedRateSnapshot(getBusinessDb(businessId, userId).sqlite, record.note);
-  const today = new Date().toISOString().split("T")[0];
+  const today = getBusinessTodayIso();
   return saveCreditNote(businessId, userId, {
     currencyCode: rate.currencyCode,
     exchangeRateToBase: rate.exchangeRateToBase,

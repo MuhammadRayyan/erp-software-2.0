@@ -31,6 +31,8 @@ import {
   QuickCreateCustomerDialog,
   QuickCreateProjectDialog,
 } from "@/components/documents/quick-create-modals";
+import { FieldError } from "@/components/ui/field-error";
+import { fieldErrorProps, fieldErrorId, applyServerFieldErrors, focusFirstInvalidField } from "@/lib/form-errors";
 
 type Option = { id: string; name: string };
 type AccountOption = { id: string; name: string };
@@ -196,9 +198,7 @@ export function CreditNoteForm({
       values,
       intent,
     );
-    if (result.fieldErrors)
-      for (const [field, messages] of Object.entries(result.fieldErrors))
-        setError(field as keyof CreditNoteInput, { message: messages[0] });
+    applyServerFieldErrors(setError, result.fieldErrors);
     if (result.error) setServerError(result.error);
   }
 
@@ -220,10 +220,10 @@ export function CreditNoteForm({
               control={control}
               name="customerId"
               render={({ field }) => (
-                <Combobox
+                <Combobox ref={field.ref}
                   id="customerId"
                   ariaLabel="Customer"
-                  ariaInvalid={!!errors.customerId}
+                  ariaInvalid={!!errors.customerId} ariaDescribedBy={errors.customerId ? fieldErrorId("customerId") : undefined}
                   options={customerOptions}
                   value={field.value ?? ""}
                   onValueChange={(next) => {
@@ -261,10 +261,10 @@ export function CreditNoteForm({
               control={control}
               name="sourceInvoiceId"
               render={({ field }) => (
-                <Combobox
+                <Combobox ref={field.ref}
                   id="sourceInvoiceId"
                   ariaLabel="Apply to invoice"
-                  ariaInvalid={!!errors.sourceInvoiceId}
+                  ariaInvalid={!!errors.sourceInvoiceId} ariaDescribedBy={errors.sourceInvoiceId ? fieldErrorId("sourceInvoiceId") : undefined}
                   options={invoiceOptions}
                   value={field.value ?? ""}
                   onValueChange={(next) => {
@@ -307,9 +307,9 @@ export function CreditNoteForm({
               id="date"
               type="date"
               {...register("date")}
-              aria-invalid={!!errors.date}
+              {...fieldErrorProps("date", errors.date)}
             />
-            {errors.date && <p className="field-error">{errors.date.message}</p>}
+            <FieldError name="date" message={errors.date?.message} />
           </div>
 
           <div className="space-y-1.5">
@@ -318,9 +318,9 @@ export function CreditNoteForm({
               id="taxDate"
               type="date"
               {...register("taxDate")}
-              aria-invalid={!!errors.taxDate}
+              {...fieldErrorProps("taxDate", errors.taxDate)}
             />
-            {errors.taxDate && <p className="field-error">{errors.taxDate.message}</p>}
+            <FieldError name="taxDate" message={errors.taxDate?.message} />
           </div>
 
           <div className="space-y-1.5">
@@ -343,7 +343,7 @@ export function CreditNoteForm({
               control={control}
               name="projectId"
               render={({ field }) => (
-                <Combobox
+                <Combobox ref={field.ref}
                   id="projectId"
                   ariaLabel="Project"
                   options={projectOptions}
@@ -479,7 +479,7 @@ export function CreditNoteForm({
             <Button permission={["save", "post"]}
               type="button"
               disabled={isSubmitting}
-              onClick={handleSubmit((values) => save(values, "post"))}
+              onClick={handleSubmit((values) => save(values, "post"), focusFirstInvalidField)}
             >
               {isSubmitting && <LoaderCircle className="size-4 animate-spin" />}{" "}
               Update Posted Credit
@@ -490,14 +490,14 @@ export function CreditNoteForm({
                 type="button"
                 variant="secondary"
                 disabled={isSubmitting}
-                onClick={handleSubmit((values) => save(values, "draft"))}
+                onClick={handleSubmit((values) => save(values, "draft"), focusFirstInvalidField)}
               >
                 Save Draft
               </Button>
               <Button permission={["save", "post"]}
                 type="button"
                 disabled={isSubmitting}
-                onClick={handleSubmit((values) => save(values, "post"))}
+                onClick={handleSubmit((values) => save(values, "post"), focusFirstInvalidField)}
               >
                 {isSubmitting && <LoaderCircle className="size-4 animate-spin" />}{" "}
                 Post Credit Note

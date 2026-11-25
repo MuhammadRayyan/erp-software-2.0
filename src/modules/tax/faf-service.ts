@@ -6,6 +6,7 @@ import { minorToCurrencyInput } from "@/modules/currency/conversion";
 import { formatCsv } from "@/lib/csv-utils";
 import { validateUaeTrn, type TrnValidationResult } from "./trn-validation";
 import { emirateLabels, type Emirate } from "./uae-vat-config";
+import { getBusinessTodayIso } from "@/core/format";
 
 export interface FafAuditOptions {
   periodId?: string;
@@ -70,7 +71,7 @@ export function generateFtaAuditFile(
   }
 
   if (!periodStart) periodStart = `${new Date().getUTCFullYear()}-01-01`;
-  if (!periodEnd) periodEnd = new Date().toISOString().slice(0, 10);
+  if (!periodEnd) periodEnd = getBusinessTodayIso();
   if (periodStart > periodEnd) throw new Error("Period start date cannot exceed period end date.");
 
   const taxSettings = sqlite
@@ -80,7 +81,7 @@ export function generateFtaAuditFile(
   const companyTrnValue = (taxSettings?.trn || profile.taxId || "").trim();
   const companyTrn = validateUaeTrn(companyTrnValue);
   const baseCurrency = sysAccess?.business.currency ?? profile.baseCurrency ?? "AED";
-  const fafCreatedDate = new Date().toISOString().slice(0, 10);
+  const fafCreatedDate = getBusinessTodayIso();
 
   const currencyRows = sqlite.prepare("SELECT code, minor_unit FROM currencies").all() as {
     code: string;

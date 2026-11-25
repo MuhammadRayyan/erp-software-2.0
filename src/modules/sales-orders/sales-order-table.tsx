@@ -19,7 +19,7 @@ import { DataTable, ListTableCard } from "@/components/ui/data-table";
 import { ClientListPagination } from "@/components/list-pagination";
 import { ExportCsvButton } from "@/components/export-csv-button";
 import { useUrlListState } from "@/hooks/use-url-list-state";
-import { formatDate, formatMoney, minorToDecimalString } from "@/core/format";
+import { formatDate, formatMoney, minorToDecimalString, getBusinessTodayIso } from "@/core/format";
 import type { SalesOrderStatus } from "./sales-order-service";
 import { DensityToggle } from "@/components/density-toggle";
 import { useTableDensity } from "@/components/use-table-density";
@@ -303,7 +303,7 @@ export function SalesOrderTable({
         <div className="ml-auto flex items-center gap-1.5 shrink-0">
           <ExportCsvButton
             size="sm"
-            filename={`sales-orders-${new Date().toISOString().slice(0, 10)}.csv`}
+            filename={`sales-orders-${getBusinessTodayIso()}.csv`}
             data={rows}
             columns={[
               { header: "Order Number", accessorKey: "order_number" },

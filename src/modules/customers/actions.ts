@@ -6,6 +6,8 @@ import { z } from "zod";
 import { requirePermission } from "@/core/permissions/require-module";
 import { createCustomer, updateCustomer } from "./customer-service";
 import { customerInputSchema } from "./customer-input";
+import { setCustomersActive } from "./customer-service";
+import type { BatchActionResult } from "@/modules/shared/batch";
 
 export type CustomerActionResult = { error?: string; fieldErrors?: Record<string, string[]> };
 
@@ -102,4 +104,11 @@ export async function updateCustomerAction(
   revalidatePath(`/b/${businessId}/customers`);
   revalidatePath(`/b/${businessId}/customers/${customerId}`);
   redirect(`/b/${businessId}/customers/${customerId}?notice=Customer updated`);
+}
+
+export async function batchSetCustomersActiveAction(businessId: string, ids: string[], active: boolean): Promise<BatchActionResult> {
+  const { user } = await requirePermission(businessId, "sales", "edit");
+  const result = setCustomersActive(businessId, user.id, ids, active);
+  revalidatePath(`/b/${businessId}/customers`);
+  return result;
 }

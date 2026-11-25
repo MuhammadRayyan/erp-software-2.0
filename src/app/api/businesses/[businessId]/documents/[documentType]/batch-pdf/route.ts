@@ -3,6 +3,7 @@ import { requireApiAuth } from "@/core/auth/api-auth";
 import { getDocumentPdfModule } from "@/core/permissions/document-pdf-access";
 import { generateDocumentPdf } from "@/modules/document-templates/pdf-service";
 import { createStreamingZipStream, deduplicateArchiveFilename } from "@/lib/streaming-zip";
+import { getBusinessTodayIso } from "@/core/format";
 
 export const runtime = "nodejs";
 
@@ -31,7 +32,7 @@ export async function POST(
       return NextResponse.json({ error: "No document IDs provided" }, { status: 400 });
     }
     const safeIds = documentIds.slice(0, 100);
-    const today = new Date().toISOString().slice(0, 10);
+    const today = getBusinessTodayIso();
     const zipFilename = `${documentType}-batch-${today}.zip`;
 
     const stream = createStreamingZipStream({

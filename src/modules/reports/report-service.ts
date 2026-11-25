@@ -2,6 +2,7 @@ import { addMinor, sumMinorRatios } from "@/modules/accounting/calculations/mone
 import { purchaseSettlementSql } from "@/modules/purchase-invoices/purchase-balance";
 import { getBusinessDb } from "@/core/db/business";
 import { SALES_ALLOCATED_BASE_EXPR, SALES_ALLOCATED_CTE } from "@/modules/shared/list-query-helpers";
+import { getBusinessTodayIso } from "@/core/format";
 
 export type LedgerFilters = {
   dateFrom?: string;
@@ -163,7 +164,7 @@ export function getTrialBalance(businessId: string, userId: string, throughDate?
 
 export function getAccountsReceivable(businessId: string, userId: string) {
   const { sqlite } = getBusinessDb(businessId, userId);
-  const today = new Date().toISOString().slice(0, 10);
+  const today = getBusinessTodayIso();
   const rows = sqlite.prepare(`
     SELECT c.id AS customer_id, c.name AS customer_name, i.id AS document_id,
       i.invoice_number AS document_number, i.due_date, i.currency_code,
@@ -202,7 +203,7 @@ export function getAccountsReceivable(businessId: string, userId: string) {
 
 export function getAccountsPayable(businessId: string, userId: string) {
   const { sqlite } = getBusinessDb(businessId, userId);
-  const today = new Date().toISOString().slice(0, 10);
+  const today = getBusinessTodayIso();
   const settled = purchaseSettlementSql();
   const rows = sqlite.prepare(`
     SELECT s.id AS supplier_id, s.name AS supplier_name, pi.id AS document_id,
@@ -419,7 +420,7 @@ export function getMonthlyFinancialTrend(
 
 export function getReceivablesAgingSummary(businessId: string, userId: string): ReceivablesAgingSummary {
   const { sqlite } = getBusinessDb(businessId, userId);
-  const today = new Date().toISOString().slice(0, 10);
+  const today = getBusinessTodayIso();
 
   const row = sqlite
     .prepare(`
@@ -652,7 +653,7 @@ export function resolveComparativePnlPeriods(params: {
   compareDateFrom?: string;
   compareDateTo?: string;
 }): ComparativePeriodSpec[] {
-  const today = new Date().toISOString().slice(0, 10);
+  const today = getBusinessTodayIso();
   const currentFrom = validDate(params.dateFrom);
   const currentTo = validDate(params.dateTo);
   const currentLabel =
@@ -788,7 +789,7 @@ export function resolveComparativeBalanceDates(params: {
   compareMode?: string;
   compareThroughDate?: string;
 }): Array<{ label: string; throughDate?: string }> {
-  const today = new Date().toISOString().slice(0, 10);
+  const today = getBusinessTodayIso();
   const baseDate = validDate(params.throughDate) ?? today;
   const dates: Array<{ label: string; throughDate?: string }> = [
     { label: `As of ${baseDate}`, throughDate: baseDate },

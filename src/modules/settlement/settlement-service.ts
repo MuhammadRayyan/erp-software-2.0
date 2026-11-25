@@ -6,6 +6,7 @@ import { parseCurrencyAmountToMinor, convertToBase } from "@/modules/currency/co
 import { calculateSettlementAllocation } from "@/modules/currency/settlement";
 import { resolveRateSnapshot } from "@/modules/currency/validation";
 import { getBaseCurrency } from "@/modules/currency/currency";
+import { releaseStatementMatchesForSource } from "@/modules/banking/matching-service";
 
 export type SettlementConfig = {
   partyType: "customer" | "supplier";
@@ -540,18 +541,8 @@ export function voidSettlement(
     assertDateNotLocked(sqlite, payment.date, config.partyType === "customer" ? "Receipt void" : "Payment void");
     assertDateNotLocked(sqlite, now.slice(0, 10), config.partyType === "customer" ? "Receipt void" : "Payment void");
 
-    const statementLine = sqlite.prepare(`
-      SELECT id FROM bank_statement_lines
-      WHERE matched_source_type = ? AND matched_source_id = ?
-    `).get(config.partyType === "customer" ? "receipt" : "supplier_payment", paymentId) as any;
-
-    if (statementLine && sqlite.prepare(`
-      SELECT 1 FROM bank_reconciliation_items bri
-      INNER JOIN bank_reconciliations br ON br.id = bri.reconciliation_id AND br.status = 'completed'
-      WHERE bri.statement_line_id = ?
-    `).get(statementLine.id)) {
-      throw new Error("Cannot reverse a payment included in a completed bank reconciliation.");
-    }
+    releaseStatementMatchesForSource(sqlite, config.partyType === "customer" ? "receipt" : "supplier_payment", paymentId,
+      "Cannot reverse a payment included in a completed bank reconciliation.");
 
     reverseTransaction(sqlite, {
       originalSourceType: config.partyType === "customer" ? "receipt" : "supplier_payment",
@@ -567,13 +558,6 @@ export function voidSettlement(
       SET document_status = 'void', voided_at = ?
       WHERE id = ?
     `).run(now, paymentId);
-
-    if (statementLine) {
-      sqlite.prepare(`
-        UPDATE bank_statement_lines SET match_status = 'unmatched', matched_source_type = NULL,
-          matched_source_id = NULL WHERE id = ?
-      `).run(statementLine.id);
-    }
   };
 
   if (sqlite.inTransaction) {

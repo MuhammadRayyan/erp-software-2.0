@@ -32,6 +32,8 @@ import { useUnsavedChanges } from "@/hooks/use-unsaved-changes";
 import { useFormDraftRecovery } from "@/hooks/use-form-draft-recovery";
 import { useActionPermission, useApprovalPolicy } from "@/components/permissions-provider";
 import type { CustomFieldInputDefinition } from "@/modules/custom-fields/custom-field-inputs";
+import { FieldError } from "@/components/ui/field-error";
+import { fieldErrorProps, fieldErrorId, applyServerFieldErrors, focusFirstInvalidField } from "@/lib/form-errors";
 
 type Option = { id: string; name: string; defaultCurrencyCode: string | null };
 type AccountOption = { id: string; name: string };
@@ -69,7 +71,10 @@ export function PurchaseOrderForm({ businessId, orderId, isPrefilled = false, st
   const [globalTaxCodeId, setGlobalTaxCodeId] = useState(() => initial.lines[0]?.taxCodeId || taxCodes.find((taxCode) => taxCode.rateBasisPoints === 500)?.id || taxCodes[0]?.id || "");
   const form = useForm<PurchaseOrderInput>({
     resolver: zodResolver(purchaseOrderInputSchema),
-    mode: "onTouched",
+    // Validate on submit, then live as the user corrects fields. Blur validation
+    // inserted error text that shifted the Save button mid-click.
+    mode: "onSubmit",
+    reValidateMode: "onChange",
     defaultValues: initial,
   });
   const { register, control, handleSubmit, reset, watch, setError, setValue, getValues, formState: { errors, isSubmitting, isDirty, isSubmitSuccessful } } = form;
@@ -156,7 +161,7 @@ export function PurchaseOrderForm({ businessId, orderId, isPrefilled = false, st
     if (result.fieldErrors || result.error) {
       draftRecovery.preserveDraft(values);
     }
-    if (result.fieldErrors) for (const [field, messages] of Object.entries(result.fieldErrors)) setError(field as keyof PurchaseOrderInput, { message: messages[0] });
+    if (result.fieldErrors) applyServerFieldErrors(setError, result.fieldErrors);
     if (result.error) {
       setError("root.serverError", { message: result.error });
       setServerError(result.error);
@@ -194,10 +199,10 @@ export function PurchaseOrderForm({ businessId, orderId, isPrefilled = false, st
               control={control}
               name="supplierId"
               render={({ field }) => (
-                <Combobox
+                <Combobox ref={field.ref}
                   id="supplierId"
                   ariaLabel="Supplier"
-                  ariaInvalid={!!errors.supplierId}
+                  ariaInvalid={!!errors.supplierId} ariaDescribedBy={errors.supplierId ? fieldErrorId("supplierId") : undefined}
                   options={supplierOptions}
                   value={field.value ?? ""}
                   onValueChange={(next) => {
@@ -226,7 +231,7 @@ export function PurchaseOrderForm({ businessId, orderId, isPrefilled = false, st
                 />
               )}
             />
-            {errors.supplierId && <p className="field-error">{errors.supplierId.message}</p>}
+            <FieldError name="supplierId" message={errors.supplierId?.message} />
           </div>
 
           <div className="space-y-1.5">
@@ -235,7 +240,7 @@ export function PurchaseOrderForm({ businessId, orderId, isPrefilled = false, st
               control={control}
               name="purchaseQuoteId"
               render={({ field }) => (
-                <Combobox
+                <Combobox ref={field.ref}
                   id="purchaseQuoteId"
                   ariaLabel="Purchase quote"
                   options={quoteOptions}
@@ -259,8 +264,8 @@ export function PurchaseOrderForm({ businessId, orderId, isPrefilled = false, st
 
           <div className="space-y-1.5">
             <Label htmlFor="date">Order date</Label>
-            <Input id="date" type="date" {...register("date")} aria-invalid={!!errors.date} />
-            {errors.date && <p className="field-error">{errors.date.message}</p>}
+            <Input id="date" type="date" {...register("date")} {...fieldErrorProps("date", errors.date)} />
+            <FieldError name="date" message={errors.date?.message} />
           </div>
 
           <div className="space-y-1.5">
@@ -274,7 +279,7 @@ export function PurchaseOrderForm({ businessId, orderId, isPrefilled = false, st
               control={control}
               name="projectId"
               render={({ field }) => (
-                <Combobox
+                <Combobox ref={field.ref}
                   id="projectId"
                   ariaLabel="Project"
                   options={projectOptions}
@@ -426,20 +431,20 @@ export function PurchaseOrderForm({ businessId, orderId, isPrefilled = false, st
           }}
         >
           {status === "issued" ? (
-            <Button permission={["save", "approve"]} type="button" disabled={isSubmitting} onClick={handleSubmit((values) => save(values, "issue"))}>
+            <Button permission={["save", "approve"]} type="button" disabled={isSubmitting} onClick={handleSubmit((values) => save(values, "issue"), focusFirstInvalidField)}>
               {isSubmitting && <LoaderCircle className="size-4 animate-spin" />} Save Changes
             </Button>
           ) : (
             <div className="flex flex-wrap items-center gap-2">
-              <Button permission={"save"} variant="secondary" type="button" disabled={isSubmitting} onClick={handleSubmit((values) => save(values, "draft"))}>
+              <Button permission={"save"} variant="secondary" type="button" disabled={isSubmitting} onClick={handleSubmit((values) => save(values, "draft"), focusFirstInvalidField)}>
                 {isSubmitting && <LoaderCircle className="size-4 animate-spin" />} {orderId ? "Save Draft" : "Save Draft Order"}
               </Button>
               {mustSubmitForApproval ? (
-                <Button permission={"save"} type="button" disabled={isSubmitting} onClick={handleSubmit((values) => save(values, "submit_approval"))}>
+                <Button permission={"save"} type="button" disabled={isSubmitting} onClick={handleSubmit((values) => save(values, "submit_approval"), focusFirstInvalidField)}>
                   {isSubmitting && <LoaderCircle className="size-4 animate-spin" />} Submit for Approval
                 </Button>
               ) : (
-                <Button permission={["save", "approve"]} type="button" disabled={isSubmitting} onClick={handleSubmit((values) => save(values, "issue"))}>
+                <Button permission={["save", "approve"]} type="button" disabled={isSubmitting} onClick={handleSubmit((values) => save(values, "issue"), focusFirstInvalidField)}>
                   {isSubmitting && <LoaderCircle className="size-4 animate-spin" />} {orderId ? "Save & Issue" : "Create & Issue"}
                 </Button>
               )}

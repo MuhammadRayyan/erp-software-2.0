@@ -19,6 +19,8 @@ import {
 import type { InventoryDocumentStatus } from "./inventory-document";
 import { SelectNative } from "@/components/ui/select-native";
 import { useUnsavedChanges } from "@/hooks/use-unsaved-changes";
+import { FieldError } from "@/components/ui/field-error";
+import { fieldErrorProps, fieldErrorId, applyServerFieldErrors, focusFirstInvalidField } from "@/lib/form-errors";
 
 type Item = {
   id: string;
@@ -74,9 +76,7 @@ export function StockAdjustmentForm({
       intent,
     );
     if (result.fieldErrors) {
-      for (const [field, messages] of Object.entries(result.fieldErrors)) {
-        setError(field as keyof StockAdjustmentInput, { message: messages[0] });
-      }
+      applyServerFieldErrors(setError, result.fieldErrors);
     }
     if (result.error) setServerError(result.error);
   }
@@ -95,8 +95,8 @@ export function StockAdjustmentForm({
         <div className="mt-5 grid gap-5 md:grid-cols-3">
           <div className="space-y-1.5">
             <Label htmlFor="date">Date</Label>
-            <Input id="date" type="date" {...register("date")} aria-invalid={!!errors.date} />
-            {errors.date && <p className="field-error">{errors.date.message}</p>}
+            <Input id="date" type="date" {...register("date")} {...fieldErrorProps("date", errors.date)} />
+            <FieldError name="date" message={errors.date?.message} />
           </div>
           <div className="space-y-1.5">
             <Label htmlFor="locationId">Location</Label>
@@ -104,9 +104,9 @@ export function StockAdjustmentForm({
               control={control}
               name="locationId"
               render={({ field }) => (
-                <Combobox
+                <Combobox ref={field.ref}
                   id="locationId"
-                  ariaInvalid={!!errors.locationId}
+                  ariaInvalid={!!errors.locationId} ariaDescribedBy={errors.locationId ? fieldErrorId("locationId") : undefined}
                   options={locations.map((location) => ({
                     value: location.id,
                     label: `${location.code} — ${location.name}`,
@@ -119,7 +119,7 @@ export function StockAdjustmentForm({
                 />
               )}
             />
-            {errors.locationId && <p className="field-error">{errors.locationId.message}</p>}
+            <FieldError name="locationId" message={errors.locationId?.message} />
           </div>
           <div className="space-y-1.5">
             <Label htmlFor="itemId">Inventory Item</Label>
@@ -127,9 +127,9 @@ export function StockAdjustmentForm({
               control={control}
               name="itemId"
               render={({ field }) => (
-                <Combobox
+                <Combobox ref={field.ref}
                   id="itemId"
-                  ariaInvalid={!!errors.itemId}
+                  ariaInvalid={!!errors.itemId} ariaDescribedBy={errors.itemId ? fieldErrorId("itemId") : undefined}
                   options={items.map((item) => ({
                     value: item.id,
                     label: `${item.sku ? `${item.sku} — ` : ""}${item.name}`,
@@ -142,7 +142,7 @@ export function StockAdjustmentForm({
                 />
               )}
             />
-            {errors.itemId && <p className="field-error">{errors.itemId.message}</p>}
+            <FieldError name="itemId" message={errors.itemId?.message} />
           </div>
           <div className="space-y-1.5">
             <Label htmlFor="quantityChange">Quantity change</Label>
@@ -151,7 +151,7 @@ export function StockAdjustmentForm({
               inputMode="decimal"
               placeholder="+5 or -2"
               {...register("quantityChange")}
-              aria-invalid={!!errors.quantityChange}
+              {...fieldErrorProps("quantityChange", errors.quantityChange)}
             />
             {errors.quantityChange && (
               <p className="field-error">{errors.quantityChange.message}</p>
@@ -168,20 +168,20 @@ export function StockAdjustmentForm({
                   }
                 },
               })}
-              aria-invalid={!!errors.reason}
+              {...fieldErrorProps("reason", errors.reason)}
             >
               <option value="Stock count correction">Stock count correction</option>
               <option value="Damaged">Damaged</option>
               <option value="Opening Balance">Opening Balance</option>
               <option value="Other">Other</option>
             </SelectNative>
-            {errors.reason && <p className="field-error">{errors.reason.message}</p>}
+            <FieldError name="reason" message={errors.reason?.message} />
           </div>
           {reason === "Opening Balance" && (
             <div className="space-y-1.5">
               <Label htmlFor="unitCost">Unit cost</Label>
-              <Input id="unitCost" inputMode="decimal" {...register("unitCost")} aria-invalid={!!errors.unitCost} />
-              {errors.unitCost && <p className="field-error">{errors.unitCost.message}</p>}
+              <Input id="unitCost" inputMode="decimal" {...register("unitCost")} {...fieldErrorProps("unitCost", errors.unitCost)} />
+              <FieldError name="unitCost" message={errors.unitCost?.message} />
               <p className="text-xs text-muted-foreground">
                 Required for Opening Balance. Normal adjustments use current average cost.
               </p>
@@ -195,7 +195,7 @@ export function StockAdjustmentForm({
               control={control}
               name="projectId"
               render={({ field }) => (
-                <Combobox
+                <Combobox ref={field.ref}
                   id="projectId"
                   options={projects.map((project) => ({
                     value: project.id,
@@ -216,8 +216,8 @@ export function StockAdjustmentForm({
             <Label htmlFor="notes">
               Notes <span className="font-normal text-muted-foreground">(optional)</span>
             </Label>
-            <Textarea id="notes" rows={2} placeholder="Reason for inventory adjustment / discrepancy notes..." {...register("notes")} aria-invalid={!!errors.notes} />
-            {errors.notes && <p className="field-error">{errors.notes.message}</p>}
+            <Textarea id="notes" rows={2} placeholder="Reason for inventory adjustment / discrepancy notes..." {...register("notes")} {...fieldErrorProps("notes", errors.notes)} />
+            <FieldError name="notes" message={errors.notes?.message} />
           </div>
         </div>
       </section>
@@ -238,7 +238,7 @@ export function StockAdjustmentForm({
           <Button permission={["save", "post"]}
             type="button"
             disabled={isSubmitting}
-            onClick={handleSubmit((values) => save(values, "post"))}
+            onClick={handleSubmit((values) => save(values, "post"), focusFirstInvalidField)}
           >
             {isSubmitting && <LoaderCircle className="size-4 animate-spin" />}
             Update Posted Adjustment
@@ -249,14 +249,14 @@ export function StockAdjustmentForm({
               type="button"
               variant="secondary"
               disabled={isSubmitting}
-              onClick={handleSubmit((values) => save(values, "draft"))}
+              onClick={handleSubmit((values) => save(values, "draft"), focusFirstInvalidField)}
             >
               Save Draft
             </Button>
             <Button permission={["save", "post"]}
               type="button"
               disabled={isSubmitting}
-              onClick={handleSubmit((values) => save(values, "post"))}
+              onClick={handleSubmit((values) => save(values, "post"), focusFirstInvalidField)}
             >
               {isSubmitting && <LoaderCircle className="size-4 animate-spin" />}
               Post Adjustment

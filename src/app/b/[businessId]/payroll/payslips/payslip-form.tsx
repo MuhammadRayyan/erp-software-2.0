@@ -68,7 +68,7 @@ export function PayslipForm({
   );
 
   const today = getBusinessTodayIso();
-  const currentMonth = new Intl.DateTimeFormat("en-US", { month: "long", year: "numeric" }).format(new Date());
+  const currentMonth = new Intl.DateTimeFormat("en-AE", { month: "long", year: "numeric", timeZone: "Asia/Dubai" }).format(new Date());
 
   const [date, setDate] = useState<string>(initialPayslip?.date || today);
   const [payslipNumber, setPayslipNumber] = useState<string>(initialPayslip?.payslipNumber || "");

@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requireModule } from "@/core/permissions/require-module";
-import { formatDate, formatMoney } from "@/core/format";
+import { formatDate, formatMoney, getBusinessTodayIso } from "@/core/format";
 import { PrintButton } from "@/components/print-button";
 import { journalSourceLabel } from "@/modules/accounting/journal-source";
 import { getSupplier } from "@/modules/suppliers/supplier-service";
@@ -36,7 +36,7 @@ export default async function SupplierStatementPage({
     currencyCode: sp.currency,
   });
 
-  const asOfDate = to || new Date().toISOString().slice(0, 10);
+  const asOfDate = to || getBusinessTodayIso();
   const aging = getSupplierAging(businessId, user.id, supplierId, asOfDate, sp.currency);
 
   const searchParamsUrl = new URLSearchParams();

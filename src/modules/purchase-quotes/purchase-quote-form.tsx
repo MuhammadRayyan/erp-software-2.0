@@ -35,6 +35,8 @@ import {
   QuickCreateSupplierDialog,
 } from "@/components/documents/quick-create-modals";
 import type { CustomFieldInputDefinition } from "@/modules/custom-fields/custom-field-inputs";
+import { FieldError } from "@/components/ui/field-error";
+import { fieldErrorProps, fieldErrorId, applyServerFieldErrors, focusFirstInvalidField } from "@/lib/form-errors";
 
 type Option = { id: string; name: string; defaultCurrencyCode: string | null };
 type AccountOption = { id: string; name: string };
@@ -106,7 +108,10 @@ export function PurchaseQuoteForm({
 
   const form = useForm<PurchaseQuoteInput>({
     resolver: zodResolver(purchaseQuoteInputSchema),
-    mode: "onTouched",
+    // Validate on submit, then live as the user corrects fields. Blur validation
+    // inserted error text that shifted the Save button mid-click.
+    mode: "onSubmit",
+    reValidateMode: "onChange",
     defaultValues: initial,
   });
   const {
@@ -199,9 +204,7 @@ export function PurchaseQuoteForm({
       draftRecovery.preserveDraft(values);
     }
     if (result.fieldErrors) {
-      for (const [field, messages] of Object.entries(result.fieldErrors)) {
-        setError(field as keyof PurchaseQuoteInput, { message: messages[0] });
-      }
+      applyServerFieldErrors(setError, result.fieldErrors);
     }
     if (result.error) {
       setError("root.serverError", { message: result.error });
@@ -241,10 +244,10 @@ export function PurchaseQuoteForm({
               control={control}
               name="supplierId"
               render={({ field }) => (
-                <Combobox
+                <Combobox ref={field.ref}
                   id="supplierId"
                   ariaLabel="Supplier"
-                  ariaInvalid={!!errors.supplierId}
+                  ariaInvalid={!!errors.supplierId} ariaDescribedBy={errors.supplierId ? fieldErrorId("supplierId") : undefined}
                   options={supplierOptions}
                   value={field.value ?? ""}
                   onValueChange={(next) => {
@@ -273,13 +276,13 @@ export function PurchaseQuoteForm({
                 />
               )}
             />
-            {errors.supplierId && <p className="field-error">{errors.supplierId.message}</p>}
+            <FieldError name="supplierId" message={errors.supplierId?.message} />
           </div>
 
           <div className="space-y-1.5">
             <Label htmlFor="date">Quote date</Label>
-            <Input id="date" type="date" {...register("date")} aria-invalid={!!errors.date} />
-            {errors.date && <p className="field-error">{errors.date.message}</p>}
+            <Input id="date" type="date" {...register("date")} {...fieldErrorProps("date", errors.date)} />
+            <FieldError name="date" message={errors.date?.message} />
           </div>
 
           <div className="space-y-1.5">
@@ -310,7 +313,7 @@ export function PurchaseQuoteForm({
               control={control}
               name="projectId"
               render={({ field }) => (
-                <Combobox
+                <Combobox ref={field.ref}
                   id="projectId"
                   ariaLabel="Project"
                   options={projectOptions}
@@ -455,12 +458,12 @@ export function PurchaseQuoteForm({
           }}
         >
           {status === "sent" ? (
-            <Button permission={["save", "approve"]} type="button" disabled={isSubmitting} onClick={handleSubmit((values) => save(values, "issue"))}>
+            <Button permission={["save", "approve"]} type="button" disabled={isSubmitting} onClick={handleSubmit((values) => save(values, "issue"), focusFirstInvalidField)}>
               {isSubmitting && <LoaderCircle className="size-4 animate-spin" />} Save Changes
             </Button>
           ) : (
             <div className="flex flex-wrap items-center gap-2">
-              <Button permission={"save"} variant={canApprove ? "secondary" : "primary"} type="button" disabled={isSubmitting} onClick={handleSubmit((values) => save(values, "draft"))}>
+              <Button permission={"save"} variant={canApprove ? "secondary" : "primary"} type="button" disabled={isSubmitting} onClick={handleSubmit((values) => save(values, "draft"), focusFirstInvalidField)}>
                 {isSubmitting && <LoaderCircle className="size-4 animate-spin" />} {quoteId ? "Save Draft" : "Save Draft Quote"}
               </Button>
               {canApprove && (
@@ -469,17 +472,17 @@ export function PurchaseQuoteForm({
                     label="Save & Issue"
                     permission={["save", "approve"]}
                     loading={isSubmitting}
-                    onPrimaryClick={handleSubmit((values) => save(values, "issue", "view"))}
+                    onPrimaryClick={handleSubmit((values) => save(values, "issue", "view"), focusFirstInvalidField)}
                     options={[
                       {
                         label: "Save, Issue & New",
                         description: "Issue this quote and start another right away",
-                        onSelect: handleSubmit((values) => save(values, "issue", "new")),
+                        onSelect: handleSubmit((values) => save(values, "issue", "new"), focusFirstInvalidField),
                       },
                     ]}
                   />
                 ) : (
-                  <Button permission={["save", "approve"]} type="button" disabled={isSubmitting} onClick={handleSubmit((values) => save(values, "issue"))}>
+                  <Button permission={["save", "approve"]} type="button" disabled={isSubmitting} onClick={handleSubmit((values) => save(values, "issue"), focusFirstInvalidField)}>
                     {isSubmitting && <LoaderCircle className="size-4 animate-spin" />} Save &amp; Issue
                   </Button>
                 )

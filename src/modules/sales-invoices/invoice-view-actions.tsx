@@ -13,6 +13,7 @@ import { DocumentViewActions } from "@/components/document-view-actions";
 import { DocumentEmailDialog, type DocumentEmailDefaults } from "@/modules/email/email-compose-dialog";
 import { broadcastLiveRefresh } from "@/components/use-live-refresh";
 import { useActionPermission, useApprovalPolicy } from "@/components/permissions-provider";
+import { RecordPaymentSheet } from "@/components/documents/record-payment-sheet";
 
 export function InvoiceViewActions({
   businessId,
@@ -53,6 +54,7 @@ export function InvoiceViewActions({
   const mustSubmitForApproval = requiresApproval || !canPost;
   const [emailOpen, setEmailOpen] = useState(false);
   const [posting, setPosting] = useState(false);
+  const [paymentOpen, setPaymentOpen] = useState(false);
   const canReceive = documentStatus === "posted" && balanceMinor > 0;
   const canEdit = documentStatus !== "void" && documentStatus !== "pending_approval" && !hasDeliveryNotes;
   const canVoid = documentStatus === "posted" && (totalMinor === undefined || balanceMinor === totalMinor);
@@ -134,8 +136,8 @@ export function InvoiceViewActions({
                 </Button>
               )}
               {canReceive && (
-                <Button permission="create" asChild variant="secondary">
-                  <Link href={`/b/${businessId}/sales/receipts/new?invoiceId=${invoiceId}`}><CircleDollarSign className="mr-1.5 size-3.5" /> Record Receipt</Link>
+                <Button permission="create" variant="secondary" onClick={() => setPaymentOpen(true)}>
+                  <CircleDollarSign className="mr-1.5 size-3.5" /> Record Receipt
                 </Button>
               )}
             </>
@@ -175,6 +177,9 @@ export function InvoiceViewActions({
         defaults={emailDefaults}
         pdfAvailable
       />
+      {showReceive ? (
+        <RecordPaymentSheet businessId={businessId} kind="receipt" documentId={invoiceId} open={paymentOpen} onOpenChange={setPaymentOpen} />
+      ) : null}
     </>
   );
 }

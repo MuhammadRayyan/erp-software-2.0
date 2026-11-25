@@ -18,6 +18,7 @@ import {
   type DeliveryNoteInput,
 } from "./delivery-note-input";
 import type { InventoryDocumentStatus } from "./inventory-document";
+import { applyServerFieldErrors, focusFirstInvalidField } from "@/lib/form-errors";
 
 type Item = { id: string; sku: string | null; name: string; unitName: string };
 type Option = { id: string; name: string };
@@ -82,9 +83,7 @@ export function DeliveryNoteForm({
       intent,
     );
     if (result.fieldErrors) {
-      for (const [field, messages] of Object.entries(result.fieldErrors)) {
-        setError(field as keyof DeliveryNoteInput, { message: messages[0] });
-      }
+      applyServerFieldErrors(setError, result.fieldErrors);
     }
     if (result.error) setServerError(result.error);
   }
@@ -113,7 +112,7 @@ export function DeliveryNoteForm({
               control={control}
               name="customerId"
               render={({ field }) => (
-                <Combobox
+                <Combobox ref={field.ref}
                   id="customerId"
                   options={customers.map((customer) => ({ value: customer.id, label: customer.name }))}
                   value={field.value ?? ""}
@@ -137,7 +136,7 @@ export function DeliveryNoteForm({
               control={control}
               name="locationId"
               render={({ field }) => (
-                <Combobox
+                <Combobox ref={field.ref}
                   id="locationId"
                   options={locations.map((location) => ({
                     value: location.id,
@@ -160,7 +159,7 @@ export function DeliveryNoteForm({
               control={control}
               name="salesInvoiceId"
               render={({ field }) => (
-                <Combobox
+                <Combobox ref={field.ref}
                   id="salesInvoiceId"
                   options={invoices
                     .filter((invoice) => !customerId || invoice.customerId === customerId)
@@ -184,7 +183,7 @@ export function DeliveryNoteForm({
               control={control}
               name="projectId"
               render={({ field }) => (
-                <Combobox
+                <Combobox ref={field.ref}
                   id="projectId"
                   options={availableProjects.map((project) => ({
                     value: project.id,
@@ -355,16 +354,16 @@ export function DeliveryNoteForm({
           </Link>
         </Button>
         {status === "posted" ? (
-          <Button permission={["save", "post"]} type="button" disabled={isSubmitting} onClick={handleSubmit((values) => save(values, "post"))}>
+          <Button permission={["save", "post"]} type="button" disabled={isSubmitting} onClick={handleSubmit((values) => save(values, "post"), focusFirstInvalidField)}>
             {isSubmitting && <LoaderCircle className="size-4 animate-spin" />}
             Update Posted Delivery
           </Button>
         ) : (
           <div className="flex gap-2">
-            <Button permission={"save"} type="button" variant="secondary" disabled={isSubmitting} onClick={handleSubmit((values) => save(values, "draft"))}>
+            <Button permission={"save"} type="button" variant="secondary" disabled={isSubmitting} onClick={handleSubmit((values) => save(values, "draft"), focusFirstInvalidField)}>
               Save Draft
             </Button>
-            <Button permission={["save", "post"]} type="button" disabled={isSubmitting} onClick={handleSubmit((values) => save(values, "post"))}>
+            <Button permission={["save", "post"]} type="button" disabled={isSubmitting} onClick={handleSubmit((values) => save(values, "post"), focusFirstInvalidField)}>
               {isSubmitting && <LoaderCircle className="size-4 animate-spin" />}
               Post Delivery
             </Button>

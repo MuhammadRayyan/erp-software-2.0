@@ -131,8 +131,9 @@ export function getSourceBankingStatus(
       ) THEN 1 ELSE 0 END AS reconciled
     FROM ${sourceTable} r
     LEFT JOIN bank_accounts ba ON ba.ledger_account_id = r.bank_account_id
-    LEFT JOIN bank_statement_lines bsl ON bsl.matched_source_type = ?
-      AND bsl.matched_source_id = ${idColumn} AND bsl.bank_account_id = ba.id
+    LEFT JOIN bank_statement_match_items mi ON mi.source_type = ?
+      AND mi.source_id = ${idColumn} AND mi.bank_account_id = ba.id
+    LEFT JOIN bank_statement_lines bsl ON bsl.id = mi.statement_line_id
     WHERE r.id = ?
   `).get(sourceType, sourceId) as {
     bank_account_id: string | null; bank_account_name: string | null;

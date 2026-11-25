@@ -16,6 +16,7 @@ import {
   MAX_LIST_PAGE_SIZE,
   resolveSortSql,
 } from "@/modules/shared/list-query-helpers";
+import { runBatch } from "@/modules/shared/batch";
 
 const SUPPLIER_TOTALS_CTE = `
   purchase_totals AS (
@@ -315,3 +316,15 @@ export const listActiveSuppliers = cache((businessId: string, userId: string) =>
   return getBusinessDb(businessId, userId).db.select().from(suppliers)
     .where(eq(suppliers.isActive, true)).orderBy(asc(suppliers.name)).all();
 });
+
+/** Activates or deactivates several suppliers at once (inactive suppliers are hidden from pickers). */
+export function setSuppliersActive(businessId: string, userId: string, ids: readonly string[], active: boolean) {
+  assertMutationPermission(businessId, userId, "purchases", "edit");
+  const { sqlite } = getBusinessDb(businessId, userId);
+  const update = sqlite.prepare("UPDATE suppliers SET is_active = ?, updated_at = ? WHERE id = ?");
+  const name = sqlite.prepare("SELECT name FROM suppliers WHERE id = ?");
+  const now = new Date().toISOString();
+  return runBatch(ids, (id) => {
+    if (update.run(active ? 1 : 0, now, id).changes !== 1) throw new Error("Supplier not found.");
+  }, (id) => (name.get(id) as { name: string } | undefined)?.name);
+}

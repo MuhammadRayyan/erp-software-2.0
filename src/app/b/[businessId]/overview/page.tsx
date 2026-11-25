@@ -8,7 +8,7 @@ import { getPdcMaturitySummary } from "@/modules/banking/pdc-service";
 import { listApprovalRequests } from "@/modules/approvals/approval-service";
 import { requireUser } from "@/core/auth/session";
 import { getBusinessForUser } from "@/core/businesses/business-service";
-import { formatDate, formatDateTime, formatMoney } from "@/core/format";
+import { formatDate, formatDateTime, formatMoney, getBusinessTodayIso } from "@/core/format";
 import { hasActionPermission } from "@/core/permissions/permissions";
 import { listPreferences } from "@/modules/preferences/preference-service";
 import { decodeColumnSnapshots } from "@/modules/preferences/snapshot-codec";
@@ -23,6 +23,9 @@ import { DocumentStatusBadge, PaymentStatusBadge } from "@/modules/sales-invoice
 import { listSentEmails } from "@/modules/email/email-service";
 import { parseMailboxes } from "@/modules/email/email-driver";
 import { KpiCards, type KpiCardData } from "./kpi-cards";
+import { OverviewCustomization, OverviewCustomizeMenu, OverviewSection } from "./overview-customization";
+import { getPayablesDueSummary } from "@/modules/purchase-invoices/purchase-invoice-service";
+import { getNextVatReturn, getUnreconciledStatementSummary } from "@/modules/reports/overview-metrics-service";
 import { OverviewControls, type ServerDateRange } from "./overview-controls";
 import { getCashFlowForecast, type CashFlowForecastData } from "@/modules/reports/cash-flow-forecast-service";
 import type { OverviewChartsPayload } from "./overview-charts-panel";
@@ -69,6 +72,9 @@ export default async function OverviewPage({
   const canViewBanking = hasActionPermission(businessId, user.id, "banking", "view");
   const canViewSales = hasActionPermission(businessId, user.id, "sales", "view");
   const canViewReports = hasActionPermission(businessId, user.id, "reports", "view");
+  const canViewPurchases = hasActionPermission(businessId, user.id, "purchases", "view");
+  // VAT pages are part of the Reports module.
+  const canViewTax = canViewReports;
   const hiddenNavPaths = getHiddenNavPaths(businessId, user.id);
   const showEmailsWidget = canViewSales && isNavPathVisible("/emails", hiddenNavPaths);
   const showPdcsNav = canViewBanking && isNavPathVisible("/banking/pdcs", hiddenNavPaths);
@@ -135,7 +141,78 @@ export default async function OverviewPage({
       ]
     : [];
 
-  const cards = allCards.filter(card => card.id === "bank" ? canViewBanking : canViewSales);
+  const today = getBusinessTodayIso();
+  const payablesDue = !isChartView && canViewPurchases ? getPayablesDueSummary(businessId, user.id, today, 7) : null;
+  const nextVat = !isChartView && canViewTax ? getNextVatReturn(businessId, user.id, today) : null;
+  const unreconciled = !isChartView && canViewBanking ? getUnreconciledStatementSummary(businessId, user.id) : null;
+  const pendingApprovals = !isChartView ? listApprovalRequests(businessId, user.id, { status: "pending" }) : [];
+  const actionableApprovals = pendingApprovals.filter((r) => r.canApprove);
+  const attentionCards: KpiCardData[] = [
+    ...(payablesDue ? [{
+      id: "payables-due",
+      icon: "payables" as const,
+      label: "Bills Due (7 days)",
+      value: formatMoney(payablesDue.dueBaseMinor, currency),
+      note: payablesDue.overdueCount > 0
+        ? `${payablesDue.dueCount} bills · ${payablesDue.overdueCount} overdue`
+        : `${payablesDue.dueCount} ${payablesDue.dueCount === 1 ? "bill" : "bills"} due`,
+      caption: "as of today",
+      tooltip: "Open posted bills due within the next 7 days, including overdue bills (base currency).",
+      href: `/b/${businessId}/purchases/invoices?status=unpaid`,
+      attention: payablesDue.overdueCount > 0,
+    }] : []),
+    ...(canViewTax ? [nextVat ? {
+      id: "vat-due",
+      icon: "vat" as const,
+      label: "Next VAT Return",
+      value: formatMoney(nextVat.netVatMinor, currency),
+      note: nextVat.daysUntilDue < 0
+        ? `${nextVat.periodReference} · overdue by ${-nextVat.daysUntilDue} days`
+        : `${nextVat.periodReference} · due in ${nextVat.daysUntilDue} days`,
+      caption: `due ${formatDate(nextVat.filingDueDate)}`,
+      tooltip: "Net VAT payable (output less recoverable input) for the earliest open VAT period.",
+      href: `/b/${businessId}/tax/vat/periods/${nextVat.periodId}`,
+      attention: nextVat.daysUntilDue <= 7,
+    } : {
+      id: "vat-due",
+      icon: "vat" as const,
+      label: "Next VAT Return",
+      value: "—",
+      note: "No open VAT period",
+      tooltip: "Create a VAT period to track the next filing deadline.",
+      href: `/b/${businessId}/tax/vat`,
+    }] : []),
+    ...(unreconciled ? [{
+      id: "unreconciled",
+      icon: "reconcile" as const,
+      label: "Unreconciled Bank Lines",
+      value: String(unreconciled.count),
+      note: unreconciled.count === 1 ? "statement line to match" : "statement lines to match",
+      tooltip: "Imported bank statement lines that are not yet matched to a book entry.",
+      href: unreconciled.busiestAccountId
+        ? `/b/${businessId}/banking/accounts/${unreconciled.busiestAccountId}?section=reconciliation`
+        : `/b/${businessId}/banking/accounts`,
+      attention: unreconciled.count > 0,
+    }] : []),
+    // Approvals concern sales/purchase documents; users without either module
+    // (e.g. warehouse-only) keep the "Module access required" state.
+    ...(!isChartView && (canViewSales || canViewPurchases) ? [{
+      id: "approvals",
+      icon: "approvals" as const,
+      label: "Approvals",
+      value: String(actionableApprovals.length),
+      note: actionableApprovals.length === 1 ? "document awaiting you" : "documents awaiting you",
+      caption: pendingApprovals.length > actionableApprovals.length ? `${pendingApprovals.length} pending in total` : undefined,
+      tooltip: "Maker-Checker submissions you can approve.",
+      href: `/b/${businessId}/approvals`,
+      attention: actionableApprovals.length > 0,
+    }] : []),
+  ];
+
+  const cards = [
+    ...allCards.filter(card => card.id === "bank" ? canViewBanking : canViewSales),
+    ...attentionCards,
+  ];
 
   // Financial trends & Receivables aging summary (only when chart view is active on initial SSR load)
   const trend = isChartView && canViewReports ? getMonthlyFinancialTrend(businessId, user.id, 6) : [];
@@ -160,9 +237,16 @@ export default async function OverviewPage({
         pdcSummary.overdueCount > 0 ||
         pdcSummary.upcomingCheques.length > 0),
   );
-  const pendingApprovals = !isChartView ? listApprovalRequests(businessId, user.id, { status: "pending" }) : [];
-  const actionableApprovals = pendingApprovals.filter((r) => r.canApprove);
 
+
+  const overviewSections = [
+    ...(pendingApprovals.length > 0 ? [{ id: "approvals-banner", label: "Approval reminder" }] : []),
+    ...(canViewReports ? [{ id: "financial-summary", label: "Financial summary" }] : []),
+    ...(canViewSales ? [{ id: "recent-invoices", label: "Recent invoices" }] : []),
+    ...(showEmailsWidget ? [{ id: "recent-emails", label: "Recent emails" }] : []),
+    ...(showPdcsNav && hasActivePdcs ? [{ id: "pdc-tracker", label: "PDC maturity tracker" }] : []),
+  ];
+  const columnSnapshots = decodeColumnSnapshots(preferences);
 
   return (
     <div className="page-container">
@@ -180,9 +264,19 @@ export default async function OverviewPage({
         initialChartData={initialChartData}
         financialView={
           isChartView ? null : (
+          <OverviewCustomization
+            businessId={businessId}
+            cards={cards.map(({ id, label }) => ({ id, label }))}
+            sections={overviewSections}
+            cardSnapshot={columnSnapshots["overview-cards"]}
+            sectionSnapshot={columnSnapshots["overview-sections"]}
+          >
           <div className="space-y-5">
-            <OverviewControls from={from} to={to} serverRange={serverRange} businessId={businessId} />
-            {pendingApprovals.length > 0 && (
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <OverviewControls from={from} to={to} serverRange={serverRange} businessId={businessId} />
+              <OverviewCustomizeMenu />
+            </div>
+            {pendingApprovals.length > 0 && <OverviewSection id="approvals-banner">
               <section className="rounded-lg border border-warning/40 bg-warning/10 p-4 flex flex-wrap items-center justify-between gap-3">
                 <div className="flex items-center gap-3">
                   <ShieldCheck className="size-5 text-warning shrink-0" />
@@ -204,12 +298,12 @@ export default async function OverviewPage({
                   Open Approval Queue <ArrowRight className="size-3.5" />
                 </Link>
               </section>
-            )}
-            <KpiCards cards={cards} businessId={businessId} serverSnapshot={decodeColumnSnapshots(preferences)["overview-cards"]} />
-            {canViewReports && <FinancialSummary businessId={businessId} userId={user.id} currency={currency} />}
+            </OverviewSection>}
+            <KpiCards cards={cards} />
+            {canViewReports && <OverviewSection id="financial-summary"><FinancialSummary businessId={businessId} userId={user.id} currency={currency} /></OverviewSection>}
             {!cards.length && !canViewReports && <PermissionDenied module="financial overview" returnHref={`/b/${businessId}/settings/profile`} returnLabel="Open your profile" />}
-            <div className="grid gap-5 lg:grid-cols-3">
-              {canViewSales && <section className={`data-panel ${showEmailsWidget ? "lg:col-span-2" : "lg:col-span-3"}`}>
+            <div className="flex flex-col gap-5 lg:flex-row">
+              {canViewSales && <OverviewSection id="recent-invoices" className="min-w-0 lg:flex-[2]"><section className="data-panel h-full">
                 <div className="flex h-12 items-center justify-between border-b border-border px-4">
                   <h2 className="font-semibold">Recent Invoices</h2>
                   <Link href={`/b/${businessId}/sales/invoices`} className="flex items-center gap-1 text-xs font-medium text-primary hover:underline">
@@ -258,9 +352,9 @@ export default async function OverviewPage({
                     <p className="mt-1 text-sm text-muted-foreground">Create an invoice to see it listed here.</p>
                   </div>
                 )}
-              </section>}
+              </section></OverviewSection>}
               {showEmailsWidget && (
-                <section className="data-panel">
+                <OverviewSection id="recent-emails" className="min-w-0 lg:flex-1"><section className="data-panel h-full">
                   <div className="flex h-12 items-center justify-between border-b border-border px-4">
                     <h2 className="flex items-center gap-2 font-semibold">
                       <Mail className="size-4 text-muted-foreground" /> Recent Emails
@@ -295,10 +389,11 @@ export default async function OverviewPage({
                       <p className="mt-1 text-sm text-muted-foreground">Open an invoice and use the Email action.</p>
                     </div>
                   )}
-                </section>
+                </section></OverviewSection>
               )}
+            </div>
               {showPdcsNav && pdcSummary && hasActivePdcs && (
-                <section className="data-panel lg:col-span-3">
+                <OverviewSection id="pdc-tracker"><section className="data-panel">
                   <div className="flex h-12 items-center justify-between border-b border-border px-4">
                     <h2 className="flex items-center gap-2 font-semibold">
                       <Landmark className="size-4 text-primary" /> PDC Maturity Tracker (Next 30 Days)
@@ -355,10 +450,10 @@ export default async function OverviewPage({
                       No open post-dated cheques maturing soon.
                     </div>
                   )}
-                </section>
+                </section></OverviewSection>
               )}
-            </div>
           </div>
+          </OverviewCustomization>
           )
         }
       />

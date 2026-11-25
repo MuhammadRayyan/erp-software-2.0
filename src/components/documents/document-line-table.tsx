@@ -715,7 +715,7 @@ export function DocumentLineTable({
                 control={control}
                 name={`lines.${index}.${accountFieldName}`}
                 render={({ field }) => (
-                  <Combobox
+                  <Combobox ref={field.ref}
                     options={accountComboboxOptions}
                     value={String(field.value ?? "")}
                     onValueChange={(nextValue) => field.onChange(nextValue)}
@@ -777,7 +777,7 @@ export function DocumentLineTable({
                 control={control}
                 name={`lines.${index}.taxCodeId`}
                 render={({ field }) => (
-                  <Combobox
+                  <Combobox ref={field.ref}
                     options={taxComboboxOptions}
                     value={String(field.value ?? "")}
                     onValueChange={(nextValue) => field.onChange(nextValue)}
@@ -834,7 +834,7 @@ export function DocumentLineTable({
               control={control}
               name={`lines.${index}.projectId`}
               render={({ field }) => (
-                <Combobox
+                <Combobox ref={field.ref}
                   options={projectComboboxOptions}
                   value={String(field.value ?? "")}
                   onValueChange={(nextValue) => field.onChange(nextValue)}
