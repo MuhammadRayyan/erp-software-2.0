@@ -204,7 +204,7 @@ export async function generateBatchPayslipsAction(
   businessId: string,
   input: unknown
 ): Promise<ActionResult<{ createdCount: number }>> {
-  const { user } = await requirePermission(businessId, "payroll", "create");
+  const { user } = await requireInputSavePermission(businessId, "payroll", input);
   const parsed = batchPayRunSchema.safeParse(input);
   if (!parsed.success) {
     return {

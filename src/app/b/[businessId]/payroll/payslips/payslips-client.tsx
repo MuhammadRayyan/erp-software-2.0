@@ -32,7 +32,7 @@ export function PayslipsClient({ businessId, payslips, employees, currency }: Pa
         <Button permission="export" variant="secondary" onClick={() => setWpsOpen(true)}>
           <FileSpreadsheet className="size-4 text-primary" /> Export WPS (.SIF)
         </Button>
-        <Button variant="secondary" onClick={() => setPayRunOpen(true)}>
+        <Button permission="create" variant="secondary" onClick={() => setPayRunOpen(true)}>
           <Play className="size-4 text-primary" /> Generate Pay Run
         </Button>
         <Button permission="create" asChild>

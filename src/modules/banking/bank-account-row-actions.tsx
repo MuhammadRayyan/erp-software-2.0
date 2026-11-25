@@ -2,9 +2,7 @@
 
 import Link from "next/link";
 import {
-  ChevronRight,
   MoreHorizontal,
-  Eye,
   FileEdit,
   CheckCheck,
   Upload,
@@ -18,6 +16,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { useActionPermission } from "@/components/permissions-provider";
 
 export function BankAccountRowActions({
   businessId,
@@ -30,6 +29,12 @@ export function BankAccountRowActions({
   accountName: string;
   isCashAccount: boolean;
 }) {
+  const canEdit = useActionPermission("edit");
+  const canCreate = useActionPermission("create");
+  const hasUpper = canEdit || (!isCashAccount && canCreate);
+  const hasLower = canCreate;
+  if (!hasUpper && !hasLower) return null;
+
   return (
     <div className="flex items-center justify-end gap-1">
       <DropdownMenu>
@@ -44,11 +49,6 @@ export function BankAccountRowActions({
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end" className="w-48">
-          <DropdownMenuItem asChild>
-            <Link href={`/b/${businessId}/banking/accounts/${accountId}`}>
-              <Eye className="size-4 text-muted-foreground" /> View Transactions
-            </Link>
-          </DropdownMenuItem>
           <DropdownMenuItem permission="edit" asChild>
             <Link href={`/b/${businessId}/banking/accounts/${accountId}/edit`}>
               <FileEdit className="size-4 text-muted-foreground" /> Edit Account
@@ -56,20 +56,20 @@ export function BankAccountRowActions({
           </DropdownMenuItem>
           {!isCashAccount && (
             <>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem asChild>
+              {canEdit && canCreate && <DropdownMenuSeparator />}
+              <DropdownMenuItem permission="create" asChild>
                 <Link href={`/b/${businessId}/banking/accounts/${accountId}/reconcile`}>
                   <CheckCheck className="size-4 text-muted-foreground" /> Reconcile
                 </Link>
               </DropdownMenuItem>
-              <DropdownMenuItem asChild>
+              <DropdownMenuItem permission="create" asChild>
                 <Link href={`/b/${businessId}/banking/accounts/${accountId}/import`}>
                   <Upload className="size-4 text-muted-foreground" /> Import Statement
                 </Link>
               </DropdownMenuItem>
             </>
           )}
-          <DropdownMenuSeparator />
+          {hasUpper && hasLower && <DropdownMenuSeparator />}
           <DropdownMenuItem permission="create" asChild>
             <Link href={`/b/${businessId}/banking/transactions/new?accountId=${accountId}`}>
               <PlusCircle className="size-4 text-muted-foreground" /> New Transaction
@@ -77,16 +77,6 @@ export function BankAccountRowActions({
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
-      <Button
-        asChild
-        variant="ghost"
-        size="icon"
-        className="size-7 text-muted-foreground opacity-50 transition-opacity md:opacity-0 md:group-hover:opacity-100"
-      >
-        <Link href={`/b/${businessId}/banking/accounts/${accountId}`} aria-label={`Open ${accountName}`}>
-          <ChevronRight className="size-4" />
-        </Link>
-      </Button>
     </div>
   );
 }

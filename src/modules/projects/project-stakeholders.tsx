@@ -14,6 +14,7 @@ import { formatMoney } from "@/core/format";
 import { FormError } from "@/components/form-error";
 import { addProjectCustomerAction, removeProjectCustomerAction } from "./actions";
 import { ProjectCustomerRoleBadge } from "./project-status";
+import { useActionPermission } from "@/components/permissions-provider";
 import type { ProjectCustomerSummary } from "./project-service";
 import type { ProjectCustomerRole } from "./project-input";
 
@@ -33,6 +34,8 @@ export function ProjectStakeholders({
   const [openAdd, setOpenAdd] = useState(false);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState("");
+  const canCreateSales = useActionPermission("create", "sales");
+  const canDeleteProject = useActionPermission("delete", "projects");
 
   const [selectedCustomerId, setSelectedCustomerId] = useState("");
   const [selectedRole, setSelectedRole] = useState<ProjectCustomerRole>("co_client");
@@ -103,7 +106,7 @@ export function ProjectStakeholders({
             Projects can have multiple clients, joint-venture partners, or tenants billed under the same project umbrella.
           </p>
         </div>
-        <Button size="sm" variant="secondary" onClick={() => { setError(""); setOpenAdd(true); }}>
+        <Button permission="edit" size="sm" variant="secondary" onClick={() => { setError(""); setOpenAdd(true); }}>
           <UserPlus className="size-4" /> Add Client / Stakeholder
         </Button>
       </div>
@@ -167,50 +170,49 @@ export function ProjectStakeholders({
                     </td>
                     <td className="text-right">
                       <div className="flex items-center justify-end gap-1">
-                        <Button asChild size="sm" variant="ghost" className="h-8 px-2 text-xs">
+                        <Button permission="create" permissionModule="sales" asChild size="sm" variant="ghost" className="h-8 px-2 text-xs">
                           <Link href={invoiceHref}>
                             <FilePlus2 className="size-3.5 mr-1" /> Invoice
                           </Link>
                         </Button>
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
-                            <Button variant="ghost" size="icon" className="size-8">
-                              <MoreHorizontal className="size-4" />
-                            </Button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end">
-                            <DropdownMenuItem asChild>
-                              <Link href={invoiceHref}>New Sales Invoice</Link>
-                            </DropdownMenuItem>
-                            <DropdownMenuItem permission="create" asChild>
-                              <Link href={`/b/${businessId}/sales/quotes/new?projectId=${projectId}&customerId=${c.customerId}`}>
-                                New Sales Quote
-                              </Link>
-                            </DropdownMenuItem>
-                            <DropdownMenuItem permission="create" asChild>
-                              <Link href={`/b/${businessId}/sales/orders/new?projectId=${projectId}&customerId=${c.customerId}`}>
-                                New Sales Order
-                              </Link>
-                            </DropdownMenuItem>
-                            <DropdownMenuSeparator />
-                            <DropdownMenuItem asChild>
-                              <Link href={`/b/${businessId}/customers/${c.customerId}`}>
-                                View Customer Profile
-                              </Link>
-                            </DropdownMenuItem>
-                            {!c.isPrimary && (
-                              <DropdownMenuItem
-                                className="text-danger"
-                                onSelect={() => {
-                                  setError("");
-                                  setRemovingCustomer(c);
-                                }}
-                              >
-                                <Trash2 className="size-4 mr-2" /> Remove from Project
-                              </DropdownMenuItem>
-                            )}
-                          </DropdownMenuContent>
-                        </DropdownMenu>
+                        {(canCreateSales || (!c.isPrimary && canDeleteProject)) && (
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <Button variant="ghost" size="icon" className="size-8" aria-label={`Actions for ${c.customerName}`}>
+                                <MoreHorizontal className="size-4" />
+                              </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end">
+                              {canCreateSales && (
+                                <>
+                                  <DropdownMenuItem permission="create" permissionModule="sales" asChild>
+                                    <Link href={`/b/${businessId}/sales/quotes/new?projectId=${projectId}&customerId=${c.customerId}`}>
+                                      New Sales Quote
+                                    </Link>
+                                  </DropdownMenuItem>
+                                  <DropdownMenuItem permission="create" permissionModule="sales" asChild>
+                                    <Link href={`/b/${businessId}/sales/orders/new?projectId=${projectId}&customerId=${c.customerId}`}>
+                                      New Sales Order
+                                    </Link>
+                                  </DropdownMenuItem>
+                                </>
+                              )}
+                              {canCreateSales && !c.isPrimary && canDeleteProject && <DropdownMenuSeparator />}
+                              {!c.isPrimary && canDeleteProject && (
+                                <DropdownMenuItem
+                                  permission="delete"
+                                  className="text-danger"
+                                  onSelect={() => {
+                                    setError("");
+                                    setRemovingCustomer(c);
+                                  }}
+                                >
+                                  <Trash2 className="size-4 mr-2" /> Remove from Project
+                                </DropdownMenuItem>
+                              )}
+                            </DropdownMenuContent>
+                          </DropdownMenu>
+                        )}
                       </div>
                     </td>
                   </tr>
@@ -303,7 +305,7 @@ export function ProjectStakeholders({
                   Cancel
                 </Button>
               </DialogClose>
-              <Button type="submit" disabled={pending || !selectedCustomerId}>
+              <Button permission="edit" type="submit" disabled={pending || !selectedCustomerId}>
                 {pending ? "Adding…" : "Add Client"}
               </Button>
             </div>
@@ -325,7 +327,7 @@ export function ProjectStakeholders({
                 Cancel
               </Button>
             </DialogClose>
-            <Button variant="danger" disabled={pending} onClick={handleRemove}>
+            <Button permission="delete" variant="danger" disabled={pending} onClick={handleRemove}>
               {pending ? "Removing…" : "Remove Client"}
             </Button>
           </div>

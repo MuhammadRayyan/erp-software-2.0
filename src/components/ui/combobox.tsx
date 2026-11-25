@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
-import { Check, ChevronDown, X } from "lucide-react";
+import { Check, ChevronDown, Plus, X } from "lucide-react";
 import {
   Command,
   CommandEmpty,
@@ -26,6 +26,11 @@ export interface ComboboxOption {
 const VIRTUALIZATION_THRESHOLD = 40;
 const ESTIMATED_OPTION_HEIGHT = 36;
 
+export interface ComboboxCreateAction {
+  label: string;
+  onTrigger: (searchQuery: string) => void;
+}
+
 export interface ComboboxProps {
   options: ComboboxOption[];
   value: string;
@@ -37,6 +42,8 @@ export interface ComboboxProps {
   emptyText?: string;
   clearLabel?: string;
   allowClear?: boolean;
+  searchable?: boolean;
+  createAction?: ComboboxCreateAction;
   disabled?: boolean;
   size?: "sm" | "default";
   ariaLabel?: string;
@@ -145,6 +152,8 @@ export function Combobox({
   emptyText = "No matching option.",
   clearLabel = "Clear selection",
   allowClear = false,
+  searchable = true,
+  createAction,
   disabled = false,
   size = "default",
   ariaLabel,
@@ -162,6 +171,8 @@ export function Combobox({
   const [search, setSearch] = React.useState("");
   const triggerRef = React.useRef<HTMLButtonElement>(null);
   const contentRef = React.useRef<HTMLDivElement>(null);
+  const commandRef = React.useRef<HTMLDivElement>(null);
+  const createButtonRef = React.useRef<HTMLButtonElement>(null);
   const suppressCloseAutoFocusRef = React.useRef(false);
   const [scrollElement, setScrollElement] = React.useState<HTMLDivElement | null>(null);
   const listboxId = React.useId();
@@ -342,6 +353,12 @@ export function Combobox({
             "w-[max(var(--radix-popover-trigger-width),240px)] max-w-[min(420px,calc(100vw-2rem))]",
             contentClassName,
           )}
+          onOpenAutoFocus={(event) => {
+            if (!searchable) {
+              event.preventDefault();
+              commandRef.current?.focus({ preventScroll: true });
+            }
+          }}
           onEscapeKeyDown={() => {
             triggerRef.current?.focus({ preventScroll: true });
           }}
@@ -363,21 +380,34 @@ export function Combobox({
           }}
           onKeyDown={(event) => {
             if (event.key === "Tab") {
+              if (
+                !event.shiftKey &&
+                search.trim().length > 0 &&
+                createButtonRef.current &&
+                document.activeElement !== createButtonRef.current
+              ) {
+                event.preventDefault();
+                createButtonRef.current.focus();
+                return;
+              }
               handleTabKey(event);
             }
           }}
         >
           <div ref={contentRef}>
-            <Command shouldFilter={!shouldVirtualize} loop>
-            <CommandInput
-              placeholder={searchPlaceholder}
-              value={search}
-              onValueChange={setSearch}
-              aria-label={searchPlaceholder}
-            />
+            <Command ref={commandRef} tabIndex={searchable ? undefined : -1} shouldFilter={!shouldVirtualize} loop>
+            {searchable ? (
+              <CommandInput
+                placeholder={searchPlaceholder}
+                value={search}
+                onValueChange={setSearch}
+                aria-label={searchPlaceholder}
+              />
+            ) : null}
             <CommandList
               id={listboxId}
               role="listbox"
+              onWheel={(event) => event.stopPropagation()}
               className={shouldVirtualize ? "max-h-none overflow-hidden p-0" : undefined}
             >
               {allowClear &&
@@ -386,7 +416,8 @@ export function Combobox({
                   clearLabel.toLowerCase().includes(search.trim().toLowerCase())) && (
                 <CommandGroup>
                   <CommandItem
-                    value="__clear__ none empty"
+                    value={`__clear__ ${clearLabel} none empty`}
+                    keywords={[clearLabel]}
                     onSelect={() => handleSelect("")}
                     className="text-muted-foreground"
                   >
@@ -449,6 +480,28 @@ export function Combobox({
                 </>
               )}
             </CommandList>
+            {createAction ? (
+              <div className="border-t border-border bg-surface/60 p-1">
+                <button
+                  ref={createButtonRef}
+                  type="button"
+                  onClick={() => {
+                    const query = search.trim();
+                    suppressCloseAutoFocusRef.current = true;
+                    setOpen(false);
+                    createAction.onTrigger(query);
+                  }}
+                  className="flex w-full items-center gap-2 rounded-[5px] px-2 py-1.5 text-left text-xs font-medium text-primary transition-colors hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                >
+                  <Plus className="size-3.5 shrink-0" />
+                  <span className="truncate">
+                    {search.trim()
+                      ? `${createAction.label}: "${search.trim()}"`
+                      : createAction.label}
+                  </span>
+                </button>
+              </div>
+            ) : null}
           </Command>
           </div>
         </PopoverContent>

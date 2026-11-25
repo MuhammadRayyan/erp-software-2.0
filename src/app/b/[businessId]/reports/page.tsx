@@ -71,7 +71,10 @@ export default async function ReportsPage({ params }: { params: Promise<{ busine
   const { businessId } = await params;
   const { user, access } = await requireModule(businessId, "reports");
   const savedViews = listSavedReports(businessId, user.id);
-  const visibleGroups = [...groups, taxGroup];
+  const visibleGroups = [
+    ...groups.filter((g) => g.title !== "Projects" || access.modules.includes("projects")),
+    taxGroup,
+  ];
   if (access.modules.includes("banking")) visibleGroups.push(bankingGroup);
   if (access.modules.includes("inventory")) visibleGroups.push(inventoryGroup);
   return (

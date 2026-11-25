@@ -4,6 +4,7 @@ import { useCallback, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ChevronLeft, ChevronRight } from "lucide-react";
+import { SelectNative } from "@/components/ui/select-native";
 import { cn } from "@/lib/cn";
 
 export type PaginationInfo = {
@@ -80,10 +81,12 @@ export function PaginationBar({
   className?: string;
 }) {
   if (info.total === 0) return null;
-  const start = rangeStart(info.page, info.pageSize);
-  const end = rangeEnd(info.page, info.pageSize, info.total);
-  const hasPrev = info.page > 1;
-  const hasNext = info.page < info.totalPages;
+  const safeTotalPages = Math.max(1, info.totalPages);
+  const safePage = Math.min(Math.max(1, info.page), safeTotalPages);
+  const start = rangeStart(safePage, info.pageSize);
+  const end = rangeEnd(safePage, info.pageSize, info.total);
+  const hasPrev = safePage > 1;
+  const hasNext = safePage < safeTotalPages;
 
   const prevClasses = cn(
     "inline-flex h-8 items-center gap-1 rounded-md border border-border px-2.5 transition-colors",
@@ -109,18 +112,19 @@ export function PaginationBar({
         {/* Page-size selector — `aria-label` exposes the control to AT. */}
         <label className="flex items-center gap-1.5 text-xs text-muted-foreground">
           <span className="sr-only">Rows per page</span>
-          <select
+          <SelectNative
+            size="sm"
             value={info.pageSize}
             onChange={(event) => onPageSizeChange(Number(event.target.value))}
             aria-label="Rows per page"
-            className="h-7 rounded-md border border-border bg-surface px-1.5 text-xs text-foreground transition-colors hover:bg-surface-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            className="w-auto h-7 border-border bg-surface text-xs"
           >
             {pageSizeOptions.map((option) => (
               <option key={option} value={option}>
                 {option} / page
               </option>
             ))}
-          </select>
+          </SelectNative>
         </label>
       </div>
       <div className="flex items-center gap-1.5">
@@ -130,6 +134,9 @@ export function PaginationBar({
             aria-label="Previous page"
             aria-disabled={!hasPrev}
             tabIndex={!hasPrev ? -1 : undefined}
+            onClick={(e) => {
+              if (!hasPrev) e.preventDefault();
+            }}
             className={prevClasses}
           >
             <ChevronLeft className="size-3.5" /> Prev
@@ -140,7 +147,7 @@ export function PaginationBar({
           </button>
         )}
         <span className="px-2 tabular-nums">
-          Page <span className="font-medium text-foreground">{info.page}</span> of <span className="font-medium text-foreground">{info.totalPages}</span>
+          Page <span className="font-medium text-foreground">{safePage}</span> of <span className="font-medium text-foreground">{safeTotalPages}</span>
         </span>
         {target.kind === "link" ? (
           <Link
@@ -148,6 +155,9 @@ export function PaginationBar({
             aria-label="Next page"
             aria-disabled={!hasNext}
             tabIndex={!hasNext ? -1 : undefined}
+            onClick={(e) => {
+              if (!hasNext) e.preventDefault();
+            }}
             className={nextClasses}
           >
             Next <ChevronRight className="size-3.5" />

@@ -6,7 +6,7 @@ import { formatDate, formatMoney } from "@/core/format";
 import { requireModule } from "@/core/permissions/require-module";
 import { journalSourceHref, journalSourceLabel } from "@/modules/accounting/journal-source";
 import { getJournalEntry } from "@/modules/accounting/services/journal-query-service";
-import { BackLink } from "@/components/back-link";
+import { Breadcrumbs } from "@/components/breadcrumbs";
 
 export default async function JournalEntryPage({ params }: { params: Promise<{ businessId: string; journalEntryId: string }> }) {
   const { businessId, journalEntryId } = await params;
@@ -16,7 +16,13 @@ export default async function JournalEntryPage({ params }: { params: Promise<{ b
   const sourceHref = journalSourceHref(businessId, record.entry.source_type, record.entry.source_id);
   const sourceReference = record.lines.find((line) => line.reference)?.reference;
   return <div className="page-container">
-    <BackLink href={`/b/${businessId}/accounting/journal`}>Journal</BackLink>
+    <Breadcrumbs
+      businessId={businessId}
+      items={[
+        { label: "Journal", href: `/b/${businessId}/accounting/journal` },
+        { label: record.entry.entry_number },
+      ]}
+    />
     <div className="mb-5 flex flex-wrap items-start justify-between gap-4">
       <div><div className="flex items-center gap-3"><h1 className="page-title tabular">{record.entry.entry_number}</h1><StatusBadge status="posted" /></div><p className="mt-2 text-sm text-muted-foreground">{formatDate(record.entry.date)} · {record.entry.description}</p></div>
       <div className="text-right text-sm"><p className="text-muted-foreground">Source</p>{sourceHref ? <Link href={sourceHref} className="font-medium text-primary hover:underline">{journalSourceLabel(record.entry.source_type)} {sourceReference}</Link> : <p className="font-medium">{journalSourceLabel(record.entry.source_type)} {sourceReference}</p>}</div>

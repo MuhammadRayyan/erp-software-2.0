@@ -4,7 +4,7 @@ import { useMemo, type ReactNode } from "react";
 import Link from "next/link";
 import { StatusBadge } from "@/components/status-badge";
 import type { ColumnVisibility } from "@/components/use-column-visibility";
-import { formatDate, formatMoney } from "@/core/format";
+import { formatDate, formatMoney, minorToDecimalString } from "@/core/format";
 import { CashDocumentTable } from "@/modules/shared/cash-document-table";
 import type { CashDocumentListSummary } from "@/modules/shared/list-query-helpers";
 import type { SupplierPaymentListRow } from "./supplier-payment-service";
@@ -141,6 +141,27 @@ export function SupplierPaymentTable({
       noResultsMessage="No supplier payments match these filters"
       noResultsSubtext="Try a different payment number, supplier, bank account, date range, or status."
       minWidth="min-w-[1000px]"
+      getRowHref={(p) => `/b/${businessId}/purchases/payments/${p.id}`}
+      exportConfig={{
+        filename: "supplier-payments",
+        columns: [
+          { header: "Payment #", accessorKey: "payment_number" },
+          { header: "Supplier", accessorKey: "supplier_name" },
+          { header: "Date", accessorKey: "date" },
+          { header: "Bank / Cash", accessorKey: "bank_account_name" },
+          { header: "Reference", accessorFn: (r) => r.reference ?? "" },
+          {
+            header: "Amount",
+            accessorFn: (r) => minorToDecimalString(r.amount_minor, r.currency_code, r.currency_minor_unit),
+          },
+          { header: "Currency", accessorKey: "currency_code" },
+          {
+            header: `Base Bank (${baseCurrency})`,
+            accessorFn: (r) => minorToDecimalString(r.base_amount_minor, baseCurrency),
+          },
+          { header: "Status", accessorKey: "document_status" },
+        ],
+      }}
       footer={footer}
     />
   );

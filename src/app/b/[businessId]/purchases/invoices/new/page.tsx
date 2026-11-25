@@ -1,4 +1,5 @@
 import { Breadcrumbs } from "@/components/breadcrumbs";
+import { NoticeToast } from "@/components/notice-toast";
 import { requireModule } from "@/core/permissions/require-module";
 import { quantityMicrosToInput } from "@/modules/accounting/calculations/money";
 import { getExpenseAccountOptions } from "@/modules/accounting/services/account-service";
@@ -21,7 +22,7 @@ export default async function NewPurchaseInvoicePage({
   searchParams,
 }: {
   params: Promise<{ businessId: string }>;
-  searchParams: Promise<{ supplierId?: string; orderId?: string; quoteId?: string; projectId?: string }>;
+  searchParams: Promise<{ supplierId?: string; orderId?: string; quoteId?: string; projectId?: string; notice?: string; fresh?: string }>;
 }) {
   const { businessId } = await params;
   const query = await searchParams;
@@ -122,12 +123,15 @@ export default async function NewPurchaseInvoicePage({
         ]}
       />
       <div className="mb-7">
+        <NoticeToast key={query.fresh ?? query.notice} message={query.notice} />
         <h1 className="page-title">New Purchase Invoice</h1>
         <p className="page-description">Save a non-posting draft or post the journal and VAT tax detail atomically.</p>
       </div>
       <PurchaseInvoiceForm
+        key={query.fresh ?? "new"}
         businessId={businessId}
-        suppliers={suppliers.map(({ id, name, defaultCurrencyCode }) => ({ id, name, defaultCurrencyCode }))}
+        isPrefilled={Boolean(query.quoteId || query.orderId || query.supplierId || query.projectId)}
+        suppliers={suppliers.map(({ id, name, defaultCurrencyCode, paymentTermsDays }) => ({ id, name, defaultCurrencyCode, paymentTermsDays }))}
         expenseAccounts={accounts.map(({ id, name }) => ({ id, name }))}
         taxCodes={taxes.map(({ id, name, rateBasisPoints, vatCategory }) => ({
           id,

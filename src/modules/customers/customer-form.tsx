@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { SelectNative } from "@/components/ui/select-native";
 import { Textarea } from "@/components/ui/textarea";
 import { CustomFieldInputs, type CustomFieldInputDefinition } from "@/modules/custom-fields/custom-field-inputs";
 import {
@@ -152,25 +153,6 @@ export function CustomerForm({
               aria-invalid={!!errors.billingAddress}
             />
             {errors.billingAddress && <p className="field-error">{errors.billingAddress.message}</p>}
-
-            {/* Mini currency selector positioned cleanly right below billing address */}
-            <div className="mt-2.5 flex flex-wrap items-center gap-2 pt-1 text-xs">
-              <Label htmlFor="defaultCurrencyCode" className="text-xs font-medium text-muted-foreground">
-                Document Currency:
-              </Label>
-              <select
-                id="defaultCurrencyCode"
-                className="h-8 rounded-md border border-border-strong bg-surface-raised px-2.5 text-xs font-semibold text-foreground outline-none transition-colors hover:border-primary focus:border-primary focus:ring-1 focus:ring-ring"
-                {...register("defaultCurrencyCode")}
-              >
-                {currencies.map((currency) => (
-                  <option key={currency.code} value={currency.code}>
-                    {currency.code} — {currency.name}
-                  </option>
-                ))}
-              </select>
-              <span className="text-[11px] text-muted-foreground">Default currency applied to new sales documents</span>
-            </div>
           </div>
 
           <div className="space-y-1.5 sm:col-span-2">
@@ -213,6 +195,20 @@ export function CustomerForm({
               aria-invalid={!!errors.taxReference}
             />
             {errors.taxReference && <p className="field-error">{errors.taxReference.message}</p>}
+          </div>
+
+          <div className="space-y-1.5">
+            <Label htmlFor="defaultCurrencyCode">Document Currency</Label>
+            <SelectNative
+              id="defaultCurrencyCode"
+              {...register("defaultCurrencyCode")}
+            >
+              {currencies.map((currency) => (
+                <option key={currency.code} value={currency.code}>
+                  {currency.code} — {currency.name}
+                </option>
+              ))}
+            </SelectNative>
           </div>
 
           <div className="space-y-1.5">

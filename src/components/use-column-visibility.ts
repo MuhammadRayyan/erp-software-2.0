@@ -15,6 +15,14 @@ type StoreEntry = { initial: ColumnVisibility; value: ColumnVisibility };
 const entries = new Map<string, StoreEntry>();
 const listeners = new Map<string, Set<() => void>>();
 
+/** Clears the in-memory column visibility store and notifies subscribers. */
+export function clearColumnVisibilityCache(): void {
+  entries.clear();
+  for (const subscribers of listeners.values()) {
+    for (const listener of subscribers) listener();
+  }
+}
+
 function readStoredVisibility(storageKey: string, initial: ColumnVisibility): ColumnVisibility {
   if (typeof window === "undefined") return initial;
   try {

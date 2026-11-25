@@ -16,9 +16,9 @@ import { Breadcrumbs } from "@/components/breadcrumbs";
 import { getDocumentViewData } from "@/modules/document-templates/document-data-extractor";
 import { DocumentViewLayout } from "@/modules/document-templates/components/document-view-layout";
 
-export default async function QuoteViewPage({ params, searchParams }: { params: Promise<{ businessId: string; quoteId: string }>; searchParams: Promise<{ notice?: string }> }) {
+export default async function QuoteViewPage({ params, searchParams }: { params: Promise<{ businessId: string; quoteId: string }>; searchParams: Promise<{ notice?: string; composeEmail?: string }> }) {
   const { businessId, quoteId } = await params;
-  const { notice } = await searchParams;
+  const { notice, composeEmail } = await searchParams;
   const { user, access } = await requireModule(businessId, "sales");
   const record = getSalesQuote(businessId, user.id, quoteId);
   if (!record) notFound();
@@ -132,7 +132,7 @@ export default async function QuoteViewPage({ params, searchParams }: { params: 
             <span className="money text-xl font-semibold">{formatMoney(quote.totalMinor, currency)}</span>
           </div>
         </div>
-        <SalesQuoteViewActions businessId={businessId} quoteId={quote.id} quoteNumber={quote.quoteNumber} documentStatus={quote.documentStatus} emailDefaults={emailDefaults} linkedOrder={linkedOrder ? { id: linkedOrder.id, order_number: linkedOrder.order_number } : undefined} />
+        <SalesQuoteViewActions businessId={businessId} quoteId={quote.id} quoteNumber={quote.quoteNumber} documentStatus={quote.documentStatus} emailDefaults={emailDefaults} linkedOrder={linkedOrder ? { id: linkedOrder.id, order_number: linkedOrder.order_number } : undefined} autoOpenEmail={composeEmail === "1"} />
       </div>
 
       <DocumentViewLayout

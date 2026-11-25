@@ -13,14 +13,20 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { FormError } from "@/components/form-error";
 import { copyToClipboard } from "@/lib/clipboard";
 import { createTenantAction } from "./actions";
 
 function generateSecurePassword(): string {
   const chars = "abcdefghjkmnpqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789!@#$%^&*";
+  const maxValid = Math.floor(0x100000000 / chars.length) * chars.length;
+  const buf = new Uint32Array(1);
   let pwd = "";
-  for (let i = 0; i < 16; i++) {
-    pwd += chars.charAt(Math.floor(Math.random() * chars.length));
+  while (pwd.length < 16) {
+    crypto.getRandomValues(buf);
+    if (buf[0] < maxValid) {
+      pwd += chars.charAt(buf[0] % chars.length);
+    }
   }
   return pwd;
 }
@@ -37,11 +43,21 @@ export function CreateTenantDialog({
   const [maxBusinesses, setMaxBusinesses] = useState("3");
   const [maxUsers, setMaxUsers] = useState("5");
   const [copied, setCopied] = useState(false);
+  const [formError, setFormError] = useState("");
+  const [fieldErrors, setFieldErrors] = useState<{
+    name?: string;
+    email?: string;
+    password?: string;
+    maxBusinesses?: string;
+    maxUsers?: string;
+  }>({});
   const [isPending, startTransition] = useTransition();
 
   function handleGeneratePassword() {
     const generated = generateSecurePassword();
     setPassword(generated);
+    setCopied(false);
+    if (fieldErrors.password) setFieldErrors((p) => ({ ...p, password: undefined }));
   }
 
   async function handleCopyCredentials() {
@@ -58,20 +74,36 @@ export function CreateTenantDialog({
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+    setFormError("");
+    const nextErrors: {
+      name?: string;
+      email?: string;
+      password?: string;
+      maxBusinesses?: string;
+      maxUsers?: string;
+    } = {};
 
-    if (!name.trim()) return toast.error("Full name is required.");
-    if (!email.trim() || !email.includes("@")) return toast.error("A valid email address is required.");
-    if (!password || password.length < 8) return toast.error("Password must be at least 8 characters.");
+    if (!name.trim()) nextErrors.name = "Full name is required.";
+    if (!email.trim() || !email.includes("@")) nextErrors.email = "A valid email address is required.";
+    if (!password || password.length < 8) nextErrors.password = "Password must be at least 8 characters.";
 
-    const parsedBusinesses = parseInt(maxBusinesses, 10);
-    const parsedUsers = parseInt(maxUsers, 10);
+    const rawBusinesses = Number(maxBusinesses.trim());
+    const rawUsers = Number(maxUsers.trim());
 
-    if (isNaN(parsedBusinesses) || parsedBusinesses < 1) {
-      return toast.error("Max businesses must be at least 1.");
+    if (!Number.isInteger(rawBusinesses) || rawBusinesses < 1 || rawBusinesses > 1000) {
+      nextErrors.maxBusinesses = "Max businesses must be a whole number between 1 and 1000.";
     }
-    if (isNaN(parsedUsers) || parsedUsers < 1) {
-      return toast.error("Max sub-users must be at least 1.");
+    if (!Number.isInteger(rawUsers) || rawUsers < 1 || rawUsers > 10000) {
+      nextErrors.maxUsers = "Max sub-users must be a whole number between 1 and 10000.";
     }
+
+    if (Object.keys(nextErrors).length > 0) {
+      setFieldErrors(nextErrors);
+      return;
+    }
+    setFieldErrors({});
+    const parsedBusinesses = rawBusinesses;
+    const parsedUsers = rawUsers;
 
     startTransition(async () => {
       const result = await createTenantAction({
@@ -91,17 +123,33 @@ export function CreateTenantDialog({
         setPassword("");
         setMaxBusinesses("3");
         setMaxUsers("5");
+        setFormError("");
+        setFieldErrors({});
       } else {
-        toast.error(result.error || "Failed to create account holder.");
+        const msg = result.error || "Failed to create account holder.";
+        setFormError(msg);
+        toast.error(msg);
       }
     });
   }
 
   return (
-    <DialogRoot open={open} onOpenChange={setOpen}>
+    <DialogRoot
+      open={open}
+      onOpenChange={(next) => {
+        if (!next && isPending) return;
+        setOpen(next);
+        if (!next) {
+          setPassword("");
+          setCopied(false);
+          setFormError("");
+          setFieldErrors({});
+        }
+      }}
+    >
       <DialogTrigger asChild>
         <Button size="sm" variant="primary" className="gap-1.5 text-xs">
-          <UserPlus className="size-3.5" /> + New Account Holder
+          <UserPlus className="size-3.5" /> New Account Holder
         </Button>
       </DialogTrigger>
 
@@ -120,7 +168,8 @@ export function CreateTenantDialog({
           </div>
         </div>
 
-        <form onSubmit={handleSubmit} className="mt-5 space-y-4 text-sm">
+        <form onSubmit={handleSubmit} className="mt-5 space-y-4 text-sm" noValidate>
+          {formError && <FormError message={formError} />}
           {/* Full Name */}
           <div className="space-y-1.5">
             <Label htmlFor="tenant-name">Full Name</Label>
@@ -128,10 +177,15 @@ export function CreateTenantDialog({
               id="tenant-name"
               placeholder="e.g. John Doe / Acme Corp Lead"
               value={name}
-              onChange={(e) => setName(e.target.value)}
+              onChange={(e) => {
+                setName(e.target.value);
+                if (fieldErrors.name) setFieldErrors((p) => ({ ...p, name: undefined }));
+              }}
               required
+              aria-invalid={!!fieldErrors.name}
               className="text-sm"
             />
+            {fieldErrors.name && <FormError message={fieldErrors.name} />}
           </div>
 
           {/* Email */}
@@ -142,10 +196,15 @@ export function CreateTenantDialog({
               type="email"
               placeholder="tenant@clientdomain.com"
               value={email}
-              onChange={(e) => setEmail(e.target.value)}
+              onChange={(e) => {
+                setEmail(e.target.value);
+                if (fieldErrors.email) setFieldErrors((p) => ({ ...p, email: undefined }));
+              }}
               required
+              aria-invalid={!!fieldErrors.email}
               className="text-sm"
             />
+            {fieldErrors.email && <FormError message={fieldErrors.email} />}
           </div>
 
           {/* Password with generator & copy */}
@@ -179,11 +238,16 @@ export function CreateTenantDialog({
                 type="text"
                 placeholder="Min 8 characters or auto-generate"
                 value={password}
-                onChange={(e) => setPassword(e.target.value)}
+                onChange={(e) => {
+                  setPassword(e.target.value);
+                  if (fieldErrors.password) setFieldErrors((p) => ({ ...p, password: undefined }));
+                }}
                 required
+                aria-invalid={!!fieldErrors.password}
                 className="pl-9 font-mono text-sm"
               />
             </div>
+            {fieldErrors.password && <FormError message={fieldErrors.password} />}
           </div>
 
           {/* Quotas */}
@@ -196,11 +260,19 @@ export function CreateTenantDialog({
                 min="1"
                 max="1000"
                 value={maxBusinesses}
-                onChange={(e) => setMaxBusinesses(e.target.value)}
+                onChange={(e) => {
+                  setMaxBusinesses(e.target.value);
+                  if (fieldErrors.maxBusinesses) setFieldErrors((p) => ({ ...p, maxBusinesses: undefined }));
+                }}
                 required
+                aria-invalid={!!fieldErrors.maxBusinesses}
                 className="text-sm"
               />
-              <span className="text-xs text-muted-foreground">Workspaces they can create</span>
+              {fieldErrors.maxBusinesses ? (
+                <FormError message={fieldErrors.maxBusinesses} />
+              ) : (
+                <span className="text-xs text-muted-foreground">Workspaces they can create</span>
+              )}
             </div>
 
             <div className="space-y-1.5">
@@ -211,11 +283,19 @@ export function CreateTenantDialog({
                 min="1"
                 max="10000"
                 value={maxUsers}
-                onChange={(e) => setMaxUsers(e.target.value)}
+                onChange={(e) => {
+                  setMaxUsers(e.target.value);
+                  if (fieldErrors.maxUsers) setFieldErrors((p) => ({ ...p, maxUsers: undefined }));
+                }}
                 required
+                aria-invalid={!!fieldErrors.maxUsers}
                 className="text-sm"
               />
-              <span className="text-xs text-muted-foreground">Team members across businesses</span>
+              {fieldErrors.maxUsers ? (
+                <FormError message={fieldErrors.maxUsers} />
+              ) : (
+                <span className="text-xs text-muted-foreground">Team members across businesses</span>
+              )}
             </div>
           </div>
 

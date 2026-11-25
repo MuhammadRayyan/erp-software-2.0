@@ -52,6 +52,7 @@ export function BatchActionBar({
         <div className="flex items-center gap-1.5">
           {onExportSelected && (
             <Button
+              permission="export"
               type="button"
               variant="secondary"
               size="sm"

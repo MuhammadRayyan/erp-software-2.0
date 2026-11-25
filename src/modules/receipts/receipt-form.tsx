@@ -94,7 +94,7 @@ export function ReceiptForm({
         exchangeRateSource: initial.exchangeRateSource ?? "",
         allocations: initialAllocations,
       }}
-      onSubmitAction={async (payload) => {
+      onSubmitAction={async (payload, afterSave = "view") => {
         const result = await createReceiptAction(businessId, {
           customerId: payload.counterpartyId,
           bankAccountId: payload.bankAccountId,
@@ -108,7 +108,7 @@ export function ReceiptForm({
           exchangeRateSource: payload.exchangeRateSource,
           allocations: payload.allocations,
           invoiceId: payload.allocations.length === 1 ? payload.allocations[0]?.invoiceId : undefined,
-        });
+        }, afterSave);
         return result ?? {};
       }}
     />

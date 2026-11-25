@@ -97,5 +97,7 @@ export function resolveDefaultLandingPath(
       return item.path;
     }
   }
-  return "/settings";
+  return !permittedModules || permittedModules.has("settings")
+    ? "/settings"
+    : "/settings/profile";
 }

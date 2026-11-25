@@ -4,10 +4,14 @@
 
 export function escapeCsvCell(cell: unknown): string {
   if (cell === null || cell === undefined) return "";
+  if (typeof cell === "number") {
+    return Number.isFinite(cell) ? String(cell) : "";
+  }
   let str = String(cell);
-  // Protect against CSV formula injection (OWASP recommendation / CWE-1236)
-  // Prefixes formula triggers (=, +, -, @, \t, \r) with a single quote.
-  if (/^[=+\-@\t\r]/.test(str)) {
+  // Protect against CSV formula injection (OWASP CWE-1236) while keeping pure
+  // signed numbers (e.g. "-125.00") numeric so Excel SUM() and charts work.
+  const isPureSignedNumber = /^-?\d+(?:\.\d+)?$/.test(str);
+  if (!isPureSignedNumber && /^[\s\r\n]*[=+@\t\r\n]|^[\s\r\n]*-(?!\d+(?:\.\d+)?$)/.test(str)) {
     str = `'${str}`;
   }
   // If it contains quotes, commas, or newlines, enclose in quotes and double internal quotes.

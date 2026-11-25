@@ -5,7 +5,9 @@ import { GitBranch, ReceiptText, RefreshCw, Send, ShoppingCart } from "lucide-re
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
-import { cancelSalesQuoteAction, closeSalesQuoteAction, deleteSalesQuoteAction, convertSalesQuoteToOrderAction, createSalesQuoteRevisionAction, issueSalesQuoteAction } from "./actions";
+import { DropdownMenuItem } from "@/components/ui/dropdown-menu";
+import { useActionPermission } from "@/components/permissions-provider";
+import { cancelSalesQuoteAction, closeSalesQuoteAction, deleteSalesQuoteAction, convertSalesQuoteToOrderAction, createSalesQuoteRevisionAction, duplicateSalesQuoteAction, issueSalesQuoteAction } from "./actions";
 import type { SalesQuoteStatus } from "./quote-service";
 import { DocumentViewActions } from "@/components/document-view-actions";
 import { useState } from "react";
@@ -13,13 +15,20 @@ import { DocumentEmailDialog, type DocumentEmailDefaults } from "@/modules/email
 import { broadcastLiveRefresh } from "@/components/use-live-refresh";
 
 export function SalesQuoteViewActions({
-  businessId, quoteId, quoteNumber, documentStatus, emailDefaults, linkedOrder
+  businessId, quoteId, quoteNumber, documentStatus, emailDefaults, linkedOrder, autoOpenEmail
 }: {
   businessId: string; quoteId: string; quoteNumber: string; documentStatus: SalesQuoteStatus; emailDefaults: DocumentEmailDefaults;
   linkedOrder?: { id: string; order_number: string };
+  autoOpenEmail?: boolean;
 }) {
   const router = useRouter();
+  const canCreate = useActionPermission("create");
+  const canApprove = useActionPermission("approve");
   const editable = documentStatus === "draft" || documentStatus === "sent";
+  const showIssue = documentStatus === "draft" && canApprove;
+  const showRevise = documentStatus !== "cancelled" && documentStatus !== "superseded" && canCreate;
+  const showConvertOrLinked = Boolean(linkedOrder || documentStatus === "accepted") || (documentStatus === "sent" && canCreate);
+  const hasExtraPrimary = showIssue || showRevise || showConvertOrLinked;
   const [issuing, setIssuing] = useState(false);
   const [converting, setConverting] = useState(false);
   const [revising, setRevising] = useState(false);
@@ -59,7 +68,6 @@ export function SalesQuoteViewActions({
     try {
       const result = await createSalesQuoteRevisionAction(businessId, quoteId);
       if (result.error) throw new Error(result.error);
-      broadcastLiveRefresh();
       toast.success("New quote revision created.");
       router.push(`/b/${businessId}/sales/quotes/${result.quoteId}`);
     } catch (err: any) {
@@ -76,18 +84,20 @@ export function SalesQuoteViewActions({
         editHref={editable ? `/b/${businessId}/sales/quotes/${quoteId}/edit` : undefined}
         pdfHref={`/api/businesses/${businessId}/documents/sales-quote/${quoteId}/pdf`}
         onEmail={() => setEmailOpen(true)}
-        copyToActions={documentStatus !== "cancelled" && documentStatus !== "superseded" ? [
-          ...(documentStatus !== "accepted" && !linkedOrder ? [{
-            label: "Sales Order",
-            href: `/b/${businessId}/sales/orders/new?quoteId=${quoteId}`,
-            icon: ShoppingCart,
-          }] : []),
-          {
-            label: "Sales Invoice",
-            href: `/b/${businessId}/sales/invoices/new?quoteId=${quoteId}`,
-            icon: ReceiptText,
-          },
-        ] : undefined}
+        autoOpenEmail={autoOpenEmail}
+        onDuplicate={async () => {
+          const result = await duplicateSalesQuoteAction(businessId, quoteId);
+          if (result?.error) throw new Error(result.error);
+        }}
+        extraActions={
+          (documentStatus === "sent" || documentStatus === "accepted") && canCreate ? (
+            <DropdownMenuItem permission="create" asChild>
+              <Link href={`/b/${businessId}/sales/invoices/new?quoteId=${quoteId}`}>
+                <ReceiptText className="size-4" /> Convert to Invoice
+              </Link>
+            </DropdownMenuItem>
+          ) : undefined
+        }
         onClose={documentStatus === "sent" ? {
           label: "Close quote",
           description: "The quote remains available for history.",
@@ -122,33 +132,35 @@ export function SalesQuoteViewActions({
           }
         } : undefined}
         extraPrimaryActions={
-          <>
-            {documentStatus === "draft" && (
-              <Button permission={"approve"} onClick={handleIssue} disabled={issuing} className="gap-1.5">
-                <Send className={`size-4 ${issuing ? "animate-spin" : ""}`} />
-                Issue Quote
-              </Button>
-            )}
-            {documentStatus !== "cancelled" && documentStatus !== "superseded" && (
-              <Button variant="secondary" onClick={handleRevise} disabled={revising}>
-                <GitBranch className={`size-4 ${revising ? "animate-spin" : ""}`} /> 
-                New Revision
-              </Button>
-            )}
-            {linkedOrder || documentStatus === "accepted" ? (
-              <Button asChild variant="secondary" className="gap-1.5 border-primary/30 text-primary hover:bg-primary/5">
-                <Link href={linkedOrder ? `/b/${businessId}/sales/orders/${linkedOrder.id}` : `/b/${businessId}/sales/orders`}>
-                  <ShoppingCart className="size-4 text-primary" />
-                  {linkedOrder ? `Order: ${linkedOrder.order_number}` : "View Linked Order"}
-                </Link>
-              </Button>
-            ) : documentStatus === "sent" ? (
-              <Button variant="secondary" onClick={handleConvert} disabled={converting}>
-                <RefreshCw className={`size-4 ${converting ? "animate-spin" : ""}`} /> 
-                Convert to Order
-              </Button>
-            ) : null}
-          </>
+          hasExtraPrimary ? (
+            <>
+              {documentStatus === "draft" && (
+                <Button permission={"approve"} onClick={handleIssue} disabled={issuing} className="gap-1.5">
+                  <Send className={`size-4 ${issuing ? "animate-spin" : ""}`} />
+                  Issue Quote
+                </Button>
+              )}
+              {documentStatus !== "cancelled" && documentStatus !== "superseded" && (
+                <Button permission="create" variant="secondary" onClick={handleRevise} disabled={revising}>
+                  <GitBranch className={`size-4 ${revising ? "animate-spin" : ""}`} /> 
+                  New Revision
+                </Button>
+              )}
+              {linkedOrder || documentStatus === "accepted" ? (
+                <Button asChild variant="secondary" className="gap-1.5 border-primary/30 text-primary hover:bg-primary/5">
+                  <Link href={linkedOrder ? `/b/${businessId}/sales/orders/${linkedOrder.id}` : `/b/${businessId}/sales/orders`}>
+                    <ShoppingCart className="size-4 text-primary" />
+                    {linkedOrder ? `Order: ${linkedOrder.order_number}` : "View Linked Order"}
+                  </Link>
+                </Button>
+              ) : documentStatus === "sent" ? (
+                <Button permission="create" variant="secondary" onClick={handleConvert} disabled={converting}>
+                  <RefreshCw className={`size-4 ${converting ? "animate-spin" : ""}`} /> 
+                  Convert to Order
+                </Button>
+              ) : null}
+            </>
+          ) : undefined
         }
       />
       <DocumentEmailDialog

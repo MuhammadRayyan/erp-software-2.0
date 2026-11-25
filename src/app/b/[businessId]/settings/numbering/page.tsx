@@ -11,7 +11,7 @@ export default async function NumberingPage({ params }: { params: Promise<{ busi
     <SettingsShell
       businessId={businessId}
       title="Document Numbering Sequences"
-      description="Configure sequential prefixes, zero-padding, and atomic next-number allocators across all 17 sales, purchase, banking, and GL series."
+      description="Configure sequential prefixes, zero-padding, and atomic next-number allocators across all 18 sales, purchase, banking, and GL series."
     >
       <NumberingForm businessId={businessId} initial={{
         prefix: settings.invoicePrefix,

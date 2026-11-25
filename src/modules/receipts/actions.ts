@@ -12,6 +12,7 @@ export type ReceiptActionResult = { error?: string; fieldErrors?: Record<string,
 export async function createReceiptAction(
   businessId: string,
   input: unknown,
+  afterSave: "view" | "new" = "view",
 ): Promise<ReceiptActionResult> {
   const { user } = await requirePermission(businessId, "sales", "create");
   const parsed = receiptInputSchema.safeParse(input);
@@ -32,6 +33,9 @@ export async function createReceiptAction(
   revalidatePath(`/b/${businessId}/approvals`);
   revalidatePath(`/b/${businessId}/overview`);
   const notice = result.documentStatus === "pending_approval" ? "Receipt submitted for approval" : "Receipt posted";
+  if (afterSave === "new") {
+    redirect(`/b/${businessId}/sales/receipts/new?notice=${encodeURIComponent(notice)}&fresh=${Date.now()}`);
+  }
   redirect(`/b/${businessId}/sales/receipts/${result.id}?notice=${encodeURIComponent(notice)}`);
 }
 

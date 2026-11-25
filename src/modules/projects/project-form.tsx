@@ -9,10 +9,12 @@ import { useForm } from "react-hook-form";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import { createProjectAction, updateProjectAction } from "./actions";
 import { projectInputSchema, type ProjectInput } from "./project-input";
 import { DocumentFormFooter } from "@/components/document-form-footer";
 import { SelectNative } from "@/components/ui/select-native";
+import { requestGuardedNavigation, useUnsavedChanges } from "@/hooks/use-unsaved-changes";
 
 type CustomerOption = { id: string; name: string };
 
@@ -20,7 +22,8 @@ export function ProjectForm({ businessId, projectId, customers, initial }: { bus
   const router = useRouter();
   const [serverError, setServerError] = useState("");
   const form = useForm<ProjectInput>({ resolver: zodResolver(projectInputSchema), defaultValues: initial });
-  const { register, handleSubmit, setError, formState: { errors, isSubmitting } } = form;
+  const { register, handleSubmit, setError, formState: { errors, isSubmitting, isDirty, isSubmitSuccessful } } = form;
+  useUnsavedChanges(isDirty && !isSubmitSuccessful);
   const cancelHref = projectId ? `/b/${businessId}/projects/${projectId}` : `/b/${businessId}/projects`;
 
   async function save(values: ProjectInput) {
@@ -47,7 +50,7 @@ export function ProjectForm({ businessId, projectId, customers, initial }: { bus
         <div className="space-y-1.5"><Label htmlFor="targetEndDate">Target end date</Label><Input id="targetEndDate" type="date" {...register("targetEndDate")} aria-invalid={!!errors.targetEndDate} />{errors.targetEndDate && <p className="field-error">{errors.targetEndDate.message}</p>}</div>
         <div className="space-y-1.5"><Label htmlFor="actualEndDate">Actual end date</Label><Input id="actualEndDate" type="date" {...register("actualEndDate")} aria-invalid={!!errors.actualEndDate} />{errors.actualEndDate && <p className="field-error">{errors.actualEndDate.message}</p>}</div>
       </div>
-      <div className="mt-5 space-y-1.5"><Label htmlFor="description">Description <span className="font-normal text-muted-foreground">(optional)</span></Label><textarea id="description" rows={4} className={`$"h-9 w-full rounded-[6px] border border-border-strong bg-surface-raised px-2.5 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-ring/25 disabled:cursor-not-allowed disabled:opacity-60" h-auto min-h-24 py-2`} {...register("description")} /></div>
+      <div className="mt-5 space-y-1.5"><Label htmlFor="description">Description <span className="font-normal text-muted-foreground">(optional)</span></Label><Textarea id="description" rows={4} {...register("description")} /></div>
     </section>
     <section className="border-b border-border pb-7">
       <h2 className="text-base font-semibold">Budget</h2>
@@ -57,7 +60,7 @@ export function ProjectForm({ businessId, projectId, customers, initial }: { bus
         <div className="space-y-1.5"><Label htmlFor="budgetCost">Cost budget</Label><Input id="budgetCost" inputMode="decimal" placeholder="0.00" className="money text-right" {...register("budgetCost")} aria-invalid={!!errors.budgetCost} />{errors.budgetCost && <p className="field-error">{errors.budgetCost.message}</p>}</div>
       </div>
     </section>
-    <DocumentFormFooter onCancel={() => router.push(cancelHref)}>
+    <DocumentFormFooter onCancel={() => requestGuardedNavigation(cancelHref, () => router.push(cancelHref))}>
       <Button permission={"save"} type="submit" disabled={isSubmitting}>{isSubmitting && <LoaderCircle className="size-4 animate-spin" />}{projectId ? "Save Changes" : "Create Project"}</Button>
     </DocumentFormFooter>
     </form>;

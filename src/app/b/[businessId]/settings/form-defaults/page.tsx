@@ -1,8 +1,6 @@
 import Link from "next/link";
-import { notFound } from "next/navigation";
 import { ChevronRight, FileText, ShoppingCart, ReceiptText, Truck, FileInput } from "lucide-react";
-import { requireUser } from "@/core/auth/session";
-import { getBusinessForUser } from "@/core/businesses/business-service";
+import { requireModule } from "@/core/permissions/require-module";
 import { SettingsShell } from "@/components/settings-shell";
 
 const FORM_GROUPS = [
@@ -36,9 +34,7 @@ const FORM_GROUPS = [
 
 export default async function FormDefaultsListPage({ params }: { params: Promise<{ businessId: string }> }) {
   const { businessId } = await params;
-  const user = await requireUser();
-  const access = getBusinessForUser(businessId, user.id);
-  if (!access) notFound();
+  await requireModule(businessId, "settings");
 
   return (
     <SettingsShell

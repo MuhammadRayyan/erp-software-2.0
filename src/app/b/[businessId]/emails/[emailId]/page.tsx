@@ -7,8 +7,8 @@ import { requireAnyModule } from "@/core/permissions/require-module";
 import { formatBytes, formatDateTime } from "@/core/format";
 import { getSentEmail } from "@/modules/email/email-service";
 import { parseMailboxes } from "@/modules/email/email-driver";
-import { BackLink } from "@/components/back-link";
-import { getRelatedDocumentPath } from "../page";
+import { Breadcrumbs } from "@/components/breadcrumbs";
+import { getRelatedDocumentPath } from "@/modules/email/email-links";
 
 export const metadata = { title: "Sent Email" };
 
@@ -30,14 +30,22 @@ export default async function SentEmailViewPage({ params }: { params: Promise<{ 
 
   return (
     <div className="page-container">
-      <BackLink href={`/b/${businessId}/emails`}>Sent Emails</BackLink>
+      <Breadcrumbs
+        businessId={businessId}
+        items={[
+          { label: "Sent Emails", href: `/b/${businessId}/emails` },
+          { label: email.subject },
+        ]}
+      />
       <div className="mb-5 flex flex-col justify-between gap-4 lg:flex-row lg:items-start">
         <div>
           <div className="flex flex-wrap items-center gap-2">
             <h1 className="page-title">{email.subject}</h1>
             <StatusBadge status={email.status} />
           </div>
-          <p className="mt-2 text-sm text-muted-foreground">Sent {formatDateTime(email.createdAt)}</p>
+          <p className="mt-2 text-sm text-muted-foreground">
+            {email.status === "failed" ? "Attempted" : "Sent"} {formatDateTime(email.createdAt)}
+          </p>
           {email.sentAt && email.sentAt !== email.createdAt && (
             <p className="mt-1 text-xs text-muted-foreground">Delivery timestamp: {formatDateTime(email.sentAt)}</p>
           )}
@@ -46,7 +54,7 @@ export default async function SentEmailViewPage({ params }: { params: Promise<{ 
           )}
         </div>
         {documentPath && email.relatedDocumentNumber && (
-          <Button permission={"view"} asChild variant="secondary">
+          <Button asChild variant="secondary">
             <Link href={documentPath}>
               <FileText className="size-4" /> View {email.relatedDocumentNumber}
             </Link>

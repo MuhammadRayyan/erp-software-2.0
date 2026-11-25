@@ -8,7 +8,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { FormError } from "@/components/form-error";
-import { formatMoney } from "@/core/format";
+import { formatMoney, getBusinessTodayIso, getCurrencyMinorUnit, minorToDecimalString } from "@/core/format";
+import { parseCurrencyAmountToMinor } from "@/modules/currency/conversion";
 import { saveOpeningBalancesAction } from "../actions";
 import type { OpeningBalancesData } from "../services/opening-balances-service";
 
@@ -22,15 +23,18 @@ export function OpeningBalancesForm({
   currency?: string;
 }) {
   const router = useRouter();
+  const minorUnit = getCurrencyMinorUnit(currency);
+  const amountStep = minorUnit === 0 ? "1" : minorUnit === 3 ? "0.001" : "0.01";
+  const amountPlaceholder = minorToDecimalString(0, currency);
   const [openingDate, setOpeningDate] = useState<string>(
-    initialData.openingDate || new Date().toISOString().slice(0, 10),
+    initialData.openingDate || getBusinessTodayIso(),
   );
   const [entries, setEntries] = useState<Record<string, { debit: string; credit: string }>>(() => {
     const map: Record<string, { debit: string; credit: string }> = {};
     for (const a of initialData.accounts) {
       map[a.accountId] = {
-        debit: a.debitMinor > 0 ? (a.debitMinor / 100).toFixed(2) : "",
-        credit: a.creditMinor > 0 ? (a.creditMinor / 100).toFixed(2) : "",
+        debit: a.debitMinor > 0 ? minorToDecimalString(a.debitMinor, currency) : "",
+        credit: a.creditMinor > 0 ? minorToDecimalString(a.creditMinor, currency) : "",
       };
     }
     return map;
@@ -55,18 +59,25 @@ export function OpeningBalancesForm({
   const { totalDebitsMinor, totalCreditsMinor, diffMinor } = useMemo(() => {
     let debits = 0;
     let credits = 0;
+    const parseSafe = (val: string) => {
+      const trimmed = val.trim();
+      if (!trimmed) return 0;
+      try {
+        return parseCurrencyAmountToMinor(trimmed, minorUnit);
+      } catch {
+        return 0;
+      }
+    };
     for (const item of Object.values(entries)) {
-      const d = parseFloat(item.debit || "0");
-      const c = parseFloat(item.credit || "0");
-      if (!isNaN(d) && d > 0) debits += Math.round(d * 100);
-      if (!isNaN(c) && c > 0) credits += Math.round(c * 100);
+      debits += parseSafe(item.debit);
+      credits += parseSafe(item.credit);
     }
     return {
       totalDebitsMinor: debits,
       totalCreditsMinor: credits,
       diffMinor: debits - credits,
     };
-  }, [entries]);
+  }, [entries, minorUnit]);
 
   const isBalanced = diffMinor === 0;
 
@@ -75,19 +86,26 @@ export function OpeningBalancesForm({
       setError("Please set the starting balance date.");
       return;
     }
+
+    let payload: Array<{ accountId: string; debitMinor: number; creditMinor: number }>;
+    try {
+      payload = initialData.accounts.map((a) => {
+        const row = entries[a.accountId] || { debit: "", credit: "" };
+        const dTrim = row.debit.trim();
+        const cTrim = row.credit.trim();
+        return {
+          accountId: a.accountId,
+          debitMinor: dTrim ? parseCurrencyAmountToMinor(dTrim, minorUnit, `${a.name} debit`) : 0,
+          creditMinor: cTrim ? parseCurrencyAmountToMinor(cTrim, minorUnit, `${a.name} credit`) : 0,
+        };
+      });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Check the entered opening balance amounts.");
+      return;
+    }
+
     setPending(true);
     setError("");
-
-    const payload = initialData.accounts.map((a) => {
-      const row = entries[a.accountId] || { debit: "", credit: "" };
-      const d = parseFloat(row.debit || "0");
-      const c = parseFloat(row.credit || "0");
-      return {
-        accountId: a.accountId,
-        debitMinor: !isNaN(d) && d > 0 ? Math.round(d * 100) : 0,
-        creditMinor: !isNaN(c) && c > 0 ? Math.round(c * 100) : 0,
-      };
-    });
 
     const res = await saveOpeningBalancesAction(businessId, openingDate, payload);
     setPending(false);
@@ -201,9 +219,9 @@ export function OpeningBalancesForm({
                           <td>
                             <Input
                               type="number"
-                              step="0.01"
+                              step={amountStep}
                               min="0"
-                              placeholder="0.00"
+                              placeholder={amountPlaceholder}
                               value={row.debit}
                               onChange={(e) => updateRow(acct.accountId, "debit", e.target.value)}
                               className="text-right tabular-nums text-xs h-8"
@@ -212,9 +230,9 @@ export function OpeningBalancesForm({
                           <td>
                             <Input
                               type="number"
-                              step="0.01"
+                              step={amountStep}
                               min="0"
-                              placeholder="0.00"
+                              placeholder={amountPlaceholder}
                               value={row.credit}
                               onChange={(e) => updateRow(acct.accountId, "credit", e.target.value)}
                               className="text-right tabular-nums text-xs h-8"
@@ -239,7 +257,7 @@ export function OpeningBalancesForm({
             </span>
           )}
         </div>
-        <Button permission={"save"} onClick={handleSave} disabled={pending}>
+        <Button permission="edit" onClick={handleSave} disabled={pending}>
           <Save className="size-4" /> Save Opening Balances
         </Button>
       </div>

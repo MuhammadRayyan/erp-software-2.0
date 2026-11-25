@@ -8,7 +8,8 @@ import type { InventoryDocumentStatus } from "@/modules/inventory/inventory-docu
 import { getDeliveryNote } from "@/modules/inventory/delivery-note-service";
 import { DeliveryNoteViewActions } from "@/modules/inventory/delivery-note-view-actions";
 import { formatQuantityMicros } from "@/modules/inventory/inventory-valuation";
-import { BackLink } from "@/components/back-link";
+import { Breadcrumbs } from "@/components/breadcrumbs";
+import { DocumentFlowStepper, type FlowStep } from "@/components/documents/document-flow-stepper";
 import { getDocumentViewData } from "@/modules/document-templates/document-data-extractor";
 import { DocumentViewLayout } from "@/modules/document-templates/components/document-view-layout";
 
@@ -28,6 +29,36 @@ export default async function DeliveryNoteViewPage({
   const status = String(d.document_status) as InventoryDocumentStatus;
   const total = record.lines.reduce((sum, line) => sum + Number(line.value_minor), 0);
 
+  const flowSteps: FlowStep[] = [
+    ...(d.sales_invoice_id
+      ? [{
+          key: "invoice",
+          label: "Sales Invoice",
+          documentNumber: String(d.invoice_number),
+          href: `/b/${businessId}/sales/invoices/${String(d.sales_invoice_id)}`,
+          state: "completed" as const,
+        }]
+      : []),
+    {
+      key: "delivery",
+      label: "Delivery Note",
+      documentNumber: String(d.delivery_number),
+      statusLabel: status,
+      state: "current" as const,
+    },
+    ...(record.journal
+      ? [{
+          key: "journal",
+          label: "Journal",
+          documentNumber: record.journal.entry_number,
+          href: `/b/${businessId}/accounting/journal/${record.journal.id}`,
+          state: "completed" as const,
+        }]
+      : status !== "void"
+        ? [{ key: "journal", label: "Journal", state: "pending" as const }]
+        : []),
+  ];
+
   const viewBundle = getDocumentViewData(
     businessId,
     user.id,
@@ -40,7 +71,13 @@ export default async function DeliveryNoteViewPage({
   return (
     <div className="page-container">
       <NoticeToast message={notice} />
-      <BackLink href={`/b/${businessId}/sales/delivery-notes`}>Delivery Notes</BackLink>
+      <Breadcrumbs
+        businessId={businessId}
+        items={[
+          { label: "Delivery Notes", href: `/b/${businessId}/sales/delivery-notes` },
+          { label: String(d.delivery_number) },
+        ]}
+      />
       <div className="mb-6 flex flex-col justify-between gap-4 lg:flex-row lg:items-start">
         <div>
           <div className="flex items-center gap-2">
@@ -71,6 +108,7 @@ export default async function DeliveryNoteViewPage({
           journalId={record.journal?.id ?? null}
         />
       </div>
+      {(d.sales_invoice_id || record.journal) && <DocumentFlowStepper steps={flowSteps} className="no-print" />}
 
       <DocumentViewLayout
         data={viewBundle.data}

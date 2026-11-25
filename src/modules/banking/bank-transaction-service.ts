@@ -1,7 +1,9 @@
 import { assertSavePermission, assertMutationPermission } from "@/core/permissions/mutation-permissions";
 import { randomUUID } from "node:crypto";
 import { getBusinessDb } from "@/core/db/business";
-import { addMinor, minorToInput, parseMoneyToMinor, splitTaxInclusive } from "@/modules/accounting/calculations/money";
+import { getCurrencyMinorUnit, minorToDecimalString } from "@/core/format";
+import { addMinor, splitTaxInclusive } from "@/modules/accounting/calculations/money";
+import { parseCurrencyAmountToMinor } from "@/modules/currency/conversion";
 import { allocateNumber } from "@/modules/accounting/services/numbering-service";
 import { reverseTransaction } from "@/modules/accounting/services/posting-service";
 import { assertDateNotLocked } from "@/modules/accounting/services/financial-lock-service";
@@ -17,7 +19,8 @@ type StoredLine = {
   grossAmountMinor: number; position: number;
 };
 
-function prepareLines(sqlite: Sqlite, data: ReturnType<typeof bankTransactionInputSchema.parse>, bankLedgerId: string) {
+function prepareLines(sqlite: Sqlite, data: ReturnType<typeof bankTransactionInputSchema.parse>, bankLedgerId: string, bankCurrencyCode: string) {
+  const minorUnit = getCurrencyMinorUnit(bankCurrencyCode);
   const taxRows = sqlite.prepare(`
     SELECT id, rate_basis_points, direction, vat_category, is_recoverable,
       sales_tax_account_id, purchase_tax_account_id
@@ -51,7 +54,7 @@ function prepareLines(sqlite: Sqlite, data: ReturnType<typeof bankTransactionInp
         throw new Error("Output VAT account is not configured for the selected tax code.");
       }
     }
-    const grossAmountMinor = parseMoneyToMinor(line.amount);
+    const grossAmountMinor = parseCurrencyAmountToMinor(line.amount, minorUnit, "Amount");
     const split = splitTaxInclusive(grossAmountMinor, tax.rate_basis_points);
     return {
       id: randomUUID(), accountId: line.accountId, taxCodeId: line.taxCodeId,
@@ -134,7 +137,7 @@ export function saveBankTransaction(
       assertDateNotLocked(context.sqlite, current.date, "Bank transaction");
     }
     assertDateNotLocked(context.sqlite, data.date, "Bank transaction");
-    const lines = prepareLines(context.sqlite, data, bank.ledger_account_id);
+    const lines = prepareLines(context.sqlite, data, bank.ledger_account_id, bank.currency_code);
     const totalMinor = addMinor(lines.map((line) => line.grossAmountMinor));
     if (intent === "post") assertVatDateUnlocked(context.sqlite, taxDate, lines.map((line) => line.taxCodeId));
     if (data.statementLineId) validateStatementLine(context.sqlite, data.statementLineId,
@@ -185,7 +188,7 @@ export function saveBankTransaction(
 export function getBankTransaction(businessId: string, userId: string, transactionId: string) {
   const { sqlite } = getBusinessDb(businessId, userId);
   const transaction = sqlite.prepare(`
-    SELECT bt.*, ba.name AS bank_account_name, ba.ledger_account_id, a.name AS ledger_name, bsl.match_status AS statement_status
+    SELECT bt.*, ba.name AS bank_account_name, ba.currency_code, ba.ledger_account_id, a.name AS ledger_name, bsl.match_status AS statement_status
     FROM bank_transactions bt
     INNER JOIN bank_accounts ba ON ba.id = bt.bank_account_id
     INNER JOIN accounts a ON a.id = ba.ledger_account_id
@@ -224,7 +227,7 @@ export function bankTransactionToInput(record: NonNullable<ReturnType<typeof get
     lines: record.lines.map((line) => ({
       accountId: String(line.account_id), taxCodeId: String(line.tax_code_id ?? ""),
       projectId: String(line.project_id ?? ""), description: String(line.description),
-      amount: minorToInput(Number(line.gross_amount_minor)),
+      amount: minorToDecimalString(Number(line.gross_amount_minor), String(transaction.currency_code ?? "AED")),
     })),
   };
 }

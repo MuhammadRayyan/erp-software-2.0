@@ -1,11 +1,12 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { LoaderCircle } from "lucide-react";
 import { Controller, useFieldArray, useForm, useWatch } from "react-hook-form";
 import { Button } from "@/components/ui/button";
+import { SplitActionButton } from "@/components/ui/split-action-button";
 import { Combobox, type ComboboxOption } from "@/components/ui/combobox";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -23,9 +24,16 @@ import {
   IsolatedDocumentTotals,
   useDocumentColumnVisibility,
 } from "@/components/documents";
+import { DraftRecoveryBanner } from "@/components/documents/draft-recovery-banner";
 import { broadcastLiveRefresh } from "@/components/use-live-refresh";
 import { useUnsavedChanges } from "@/hooks/use-unsaved-changes";
+import { useFormDraftRecovery } from "@/hooks/use-form-draft-recovery";
 import { useActionPermission } from "@/components/permissions-provider";
+import {
+  QuickCreateItemDialog,
+  QuickCreateProjectDialog,
+  QuickCreateSupplierDialog,
+} from "@/components/documents/quick-create-modals";
 import type { CustomFieldInputDefinition } from "@/modules/custom-fields/custom-field-inputs";
 
 type Option = { id: string; name: string; defaultCurrencyCode: string | null };
@@ -37,6 +45,7 @@ type ItemOption = { id: string; sku: string | null; name: string; purchasePriceM
 export function PurchaseQuoteForm({
   businessId,
   quoteId,
+  isPrefilled = false,
   status = "draft",
   suppliers,
   expenseAccounts,
@@ -51,6 +60,7 @@ export function PurchaseQuoteForm({
 }: {
   businessId: string;
   quoteId?: string;
+  isPrefilled?: boolean;
   status?: PurchaseQuoteStatus;
   suppliers: Option[];
   expenseAccounts: AccountOption[];
@@ -65,6 +75,30 @@ export function PurchaseQuoteForm({
 }) {
   const router = useRouter();
   const canApprove = useActionPermission("approve");
+  const canCreateSupplier = useActionPermission("create", "purchases");
+  const canCreateProject = useActionPermission("create", "projects");
+  const canCreateItem = useActionPermission("create", "inventory");
+  const [supplierList, setSupplierList] = useState(suppliers);
+  useEffect(() => {
+    setSupplierList(suppliers);
+  }, [suppliers]);
+  const [projectList, setProjectList] = useState(projects);
+  useEffect(() => {
+    setProjectList(projects);
+  }, [projects]);
+  const [itemList, setItemList] = useState(items);
+  useEffect(() => {
+    setItemList(items);
+  }, [items]);
+  const [quickCreateSupplierOpen, setQuickCreateSupplierOpen] = useState(false);
+  const [quickCreateSupplierSeed, setQuickCreateSupplierSeed] = useState("");
+  const [quickCreateProjectOpen, setQuickCreateProjectOpen] = useState(false);
+  const [quickCreateProjectSeed, setQuickCreateProjectSeed] = useState("");
+  const [quickCreateItemState, setQuickCreateItemState] = useState<{
+    open: boolean;
+    lineIndex: number | null;
+    seed: string;
+  }>({ open: false, lineIndex: null, seed: "" });
   const [serverError, setServerError] = useState("");
   const [globalTaxCodeId, setGlobalTaxCodeId] = useState(
     () => initial.lines[0]?.taxCodeId || taxCodes.find((taxCode) => taxCode.rateBasisPoints === 500)?.id || taxCodes[0]?.id || "",
@@ -79,12 +113,22 @@ export function PurchaseQuoteForm({
     register,
     control,
     handleSubmit,
+    reset,
+    watch,
     setError,
     setValue,
     getValues,
     formState: { errors, isSubmitting, isDirty, isSubmitSuccessful },
   } = form;
   useUnsavedChanges(isDirty && !isSubmitSuccessful);
+  const draftRecovery = useFormDraftRecovery({
+    storageKey: `erp-draft:${businessId}:purchase-quote:new`,
+    enabled: !quoteId && !isPrefilled,
+    watch,
+    reset,
+    isDirty,
+    isSubmitSuccessful,
+  });
   const { fields, append, remove, insert, move } = useFieldArray({ control, name: "lines" });
   const colVis = useDocumentColumnVisibility({ lineTaxCodes: false, lines: initial.lines });
 
@@ -109,12 +153,12 @@ export function PurchaseQuoteForm({
   const defaultExpense = expenseAccounts[0]?.id ?? "";
 
   const supplierOptions = useMemo<ComboboxOption[]>(
-    () => suppliers.map((s) => ({ value: s.id, label: s.name })),
-    [suppliers],
+    () => supplierList.map((s) => ({ value: s.id, label: s.name })),
+    [supplierList],
   );
   const projectOptions = useMemo<ComboboxOption[]>(
-    () => projects.map((p) => ({ value: p.id, label: `${p.code} — ${p.name}`, keywords: [p.code, p.name] })),
-    [projects],
+    () => projectList.map((p) => ({ value: p.id, label: `${p.code} — ${p.name}`, keywords: [p.code, p.name] })),
+    [projectList],
   );
   const taxOptions = useMemo<ComboboxOption[]>(
     () => taxCodes.map((t) => ({ value: t.id, label: t.name })),
@@ -129,7 +173,7 @@ export function PurchaseQuoteForm({
   }
 
   function selectItem(index: number, itemId: string) {
-    const item = items.find((i) => i.id === itemId);
+    const item = itemList.find((i) => i.id === itemId);
     if (!item) {
       setValue(`lines.${index}.expenseAccountId`, defaultExpense, { shouldDirty: true });
       return;
@@ -147,29 +191,47 @@ export function PurchaseQuoteForm({
     }
   }
 
-  async function save(values: PurchaseQuoteInput, intent: "draft" | "issue") {
+  async function save(values: PurchaseQuoteInput, intent: "draft" | "issue", afterSave: "view" | "new" = "view") {
     setServerError("");
-    const result = await savePurchaseQuoteAction(businessId, quoteId ?? null, values, intent);
+    draftRecovery.clearDraft();
+    const result = await savePurchaseQuoteAction(businessId, quoteId ?? null, values, intent, afterSave);
+    if (result.fieldErrors || result.error) {
+      draftRecovery.preserveDraft(values);
+    }
     if (result.fieldErrors) {
       for (const [field, messages] of Object.entries(result.fieldErrors)) {
         setError(field as keyof PurchaseQuoteInput, { message: messages[0] });
       }
     }
-    if (result.error) setServerError(result.error);
+    if (result.error) {
+      setError("root.serverError", { message: result.error });
+      setServerError(result.error);
+    }
     if (!result.error && !result.fieldErrors) broadcastLiveRefresh();
   }
 
   const cancelHref = quoteId ? `/b/${businessId}/purchases/quotes/${quoteId}` : `/b/${businessId}/purchases/quotes`;
 
   return (
+    <>
     <DocumentWorkspaceLayout
+      banner={
+        <DraftRecoveryBanner
+          hasDraft={draftRecovery.hasDraft}
+          savedAt={draftRecovery.savedAt}
+          onRestore={draftRecovery.restoreDraft}
+          onDiscard={draftRecovery.discardDraft}
+        />
+      }
       serverError={serverError}
       headerTitle="Quote details"
       headerSubtitle="Purchase quotes (RFQs) are operational supplier documents and never affect the ledger."
       headerBadge={
-        <span className="text-xs text-muted-foreground font-medium bg-muted/60 px-2 py-0.5 rounded border border-border/50">
-          Quote # Auto-allocated on save
-        </span>
+        !quoteId ? (
+          <span className="text-xs text-muted-foreground font-medium bg-muted/60 px-2 py-0.5 rounded border border-border/50">
+            Quote # Auto-allocated on save
+          </span>
+        ) : undefined
       }
       header={
         <div className="grid gap-4 md:grid-cols-3">
@@ -188,7 +250,7 @@ export function PurchaseQuoteForm({
                   onValueChange={(next) => {
                     field.onChange(next);
                     if (status === "draft" && next) {
-                      const code = suppliers.find((s) => s.id === next)?.defaultCurrencyCode ?? currency;
+                      const code = supplierList.find((s) => s.id === next)?.defaultCurrencyCode ?? currency;
                       setValue("currencyCode", code);
                       setValue("exchangeRateToBase", code === currency ? "1" : "");
                       setValue("exchangeRateDate", code === currency ? quoteDate : "");
@@ -197,6 +259,17 @@ export function PurchaseQuoteForm({
                   }}
                   placeholder="Choose a supplier…"
                   searchPlaceholder="Search supplier..."
+                  createAction={
+                    canCreateSupplier
+                      ? {
+                          label: "New Supplier",
+                          onTrigger: (query) => {
+                            setQuickCreateSupplierSeed(query);
+                            setQuickCreateSupplierOpen(true);
+                          },
+                        }
+                      : undefined
+                  }
                 />
               )}
             />
@@ -247,6 +320,17 @@ export function PurchaseQuoteForm({
                   clearLabel="No project"
                   placeholder="No project"
                   searchPlaceholder="Search project..."
+                  createAction={
+                    canCreateProject
+                      ? {
+                          label: "New Project",
+                          onTrigger: (query) => {
+                            setQuickCreateProjectSeed(query);
+                            setQuickCreateProjectOpen(true);
+                          },
+                        }
+                      : undefined
+                  }
                 />
               )}
             />
@@ -304,13 +388,18 @@ export function PurchaseQuoteForm({
           onDuplicate={duplicateLine}
           onMoveUp={moveLineUp}
           onMoveDown={moveLineDown}
-          items={items}
+          items={itemList}
           onItemSelect={selectItem}
+          onRequestCreateItem={
+            canCreateItem
+              ? (lineIndex, query) => setQuickCreateItemState({ open: true, lineIndex, seed: query })
+              : undefined
+          }
           accounts={expenseAccounts}
           accountFieldName="expenseAccountId"
           accountAriaLabel="expense account"
           taxCodes={taxCodes}
-          projects={projects}
+          projects={projectList}
           lineCustomFields={lineCustomFields}
           currencyCode={currencyCode}
           minorUnit={minorUnit}
@@ -375,14 +464,101 @@ export function PurchaseQuoteForm({
                 {isSubmitting && <LoaderCircle className="size-4 animate-spin" />} {quoteId ? "Save Draft" : "Save Draft Quote"}
               </Button>
               {canApprove && (
-                <Button permission={["save", "approve"]} type="button" disabled={isSubmitting} onClick={handleSubmit((values) => save(values, "issue"))}>
-                  {isSubmitting && <LoaderCircle className="size-4 animate-spin" />} Save &amp; Issue
-                </Button>
+                !quoteId ? (
+                  <SplitActionButton
+                    label="Save & Issue"
+                    permission={["save", "approve"]}
+                    loading={isSubmitting}
+                    onPrimaryClick={handleSubmit((values) => save(values, "issue", "view"))}
+                    options={[
+                      {
+                        label: "Save, Issue & New",
+                        description: "Issue this quote and start another right away",
+                        onSelect: handleSubmit((values) => save(values, "issue", "new")),
+                      },
+                    ]}
+                  />
+                ) : (
+                  <Button permission={["save", "approve"]} type="button" disabled={isSubmitting} onClick={handleSubmit((values) => save(values, "issue"))}>
+                    {isSubmitting && <LoaderCircle className="size-4 animate-spin" />} Save &amp; Issue
+                  </Button>
+                )
               )}
             </div>
           )}
         </DocumentFormFooter>
       }
     />
+    <QuickCreateSupplierDialog
+      businessId={businessId}
+      open={quickCreateSupplierOpen}
+      onOpenChange={setQuickCreateSupplierOpen}
+      initialName={quickCreateSupplierSeed}
+      defaultCurrencyCode={currencyCode}
+      onCreated={(created) => {
+        setSupplierList((prev) =>
+          prev.some((s) => s.id === created.id)
+            ? prev
+            : [...prev, { id: created.id, name: created.name, defaultCurrencyCode: created.defaultCurrencyCode }],
+        );
+        setValue("supplierId", created.id, { shouldValidate: true, shouldDirty: true });
+        if (status === "draft") {
+          const code = created.defaultCurrencyCode ?? currency;
+          if (code !== getValues("currencyCode")) {
+            setValue("currencyCode", code);
+            setValue("exchangeRateToBase", code === currency ? "1" : "");
+            setValue("exchangeRateDate", code === currency ? quoteDate : "");
+            setValue("exchangeRateSource", code === currency ? "Base" : "");
+          }
+        }
+      }}
+    />
+    <QuickCreateProjectDialog
+      businessId={businessId}
+      open={quickCreateProjectOpen}
+      onOpenChange={setQuickCreateProjectOpen}
+      initialName={quickCreateProjectSeed}
+      onCreated={(created) => {
+        setProjectList((prev) =>
+          prev.some((p) => p.id === created.id)
+            ? prev
+            : [...prev, { id: created.id, code: created.code, name: created.name }],
+        );
+        setValue("projectId", created.id, { shouldValidate: true, shouldDirty: true });
+      }}
+    />
+    <QuickCreateItemDialog
+      businessId={businessId}
+      open={quickCreateItemState.open}
+      onOpenChange={(open) => setQuickCreateItemState((prev) => ({ ...prev, open }))}
+      initialName={quickCreateItemState.seed}
+      defaultMode="purchase"
+      onCreated={(created) => {
+        const nextItem: ItemOption = {
+          id: created.id,
+          sku: created.sku,
+          name: created.name,
+          purchasePriceMinor: created.purchasePriceMinor,
+          inventoryAssetAccountId: created.inventoryAssetAccountId,
+        };
+        setItemList((prev) => (prev.some((i) => i.id === created.id) ? prev : [...prev, nextItem]));
+        if (quickCreateItemState.lineIndex !== null) {
+          const idx = quickCreateItemState.lineIndex;
+          setValue(`lines.${idx}.itemId`, created.id, { shouldDirty: true, shouldTouch: true });
+          setValue(`lines.${idx}.description`, created.name, { shouldDirty: true, shouldTouch: true });
+          if (created.purchasePriceMinor != null) {
+            setValue(
+              `lines.${idx}.unitPrice`,
+              minorToCurrencyInput(created.purchasePriceMinor, minorUnit),
+              { shouldDirty: true, shouldTouch: true },
+            );
+          }
+          setValue(`lines.${idx}.expenseAccountId`, created.inventoryAssetAccountId || defaultExpense, {
+            shouldDirty: true,
+          });
+        }
+      }}
+    />
+    </>
   );
 }

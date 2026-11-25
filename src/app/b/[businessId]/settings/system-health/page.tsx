@@ -70,7 +70,7 @@ export default async function SystemHealthPage({
   const sysWalSizeBytes = sysWalStat?.size ?? 0;
 
   // 4. Recent Correlated Logs & Traces
-  const recentLogs = getRecentLogs({ limit: 50 });
+  const recentLogs = getRecentLogs({ businessId, limit: 50 });
 
   const healthData: SystemHealthData = {
     businessId,

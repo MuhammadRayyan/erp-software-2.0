@@ -78,9 +78,6 @@ export default async function PurchaseInvoicesPage({
         title="Purchase Invoices"
         description="Draft, post, pay, and inspect supplier bills."
       >
-        <Button asChild variant="secondary">
-          <Link href={`/b/${businessId}/purchases/payments`}>Supplier Payments</Link>
-        </Button>
         <Button permission="create" asChild>
           <Link href={`/b/${businessId}/purchases/invoices/new`}>
             <Plus className="size-4" /> New Purchase Invoice

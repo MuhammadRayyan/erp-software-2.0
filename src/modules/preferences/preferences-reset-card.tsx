@@ -1,9 +1,11 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { AlertTriangle, RotateCcw } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { clearColumnVisibilityCache } from "@/components/use-column-visibility";
 import { resetBusinessPreferences } from "@/modules/preferences/actions";
 
 /**
@@ -14,6 +16,7 @@ import { resetBusinessPreferences } from "@/modules/preferences/actions";
  * is in flight to prevent double-clicks.
  */
 export function PreferencesResetCard({ businessId, count }: { businessId: string; count: number }) {
+  const router = useRouter();
   const [isPending, startTransition] = useTransition();
   const [confirmed, setConfirmed] = useState(false);
 
@@ -24,8 +27,31 @@ export function PreferencesResetCard({ businessId, count }: { businessId: string
         toast.error(result.error);
         return;
       }
+      try {
+        const keysToRemove: string[] = [];
+        for (let i = 0; i < window.localStorage.length; i += 1) {
+          const k = window.localStorage.key(i);
+          if (
+            k &&
+            (k.startsWith("uaemanager.") ||
+              k.startsWith("ledgerly.") ||
+              k === "overview.range" ||
+              k.startsWith("overview.range."))
+          ) {
+            keysToRemove.push(k);
+          }
+        }
+        for (const k of keysToRemove) {
+          window.localStorage.removeItem(k);
+        }
+        document.cookie = "ui-density=; path=/; max-age=0; SameSite=Lax";
+        clearColumnVisibilityCache();
+      } catch {
+        // Ignore storage errors
+      }
       toast.success(`Cleared ${result.deleted} preference key(s).`);
       setConfirmed(false);
+      router.refresh();
     });
   };
 

@@ -18,6 +18,7 @@ import {
 } from "./stock-adjustment-input";
 import type { InventoryDocumentStatus } from "./inventory-document";
 import { SelectNative } from "@/components/ui/select-native";
+import { useUnsavedChanges } from "@/hooks/use-unsaved-changes";
 
 type Item = {
   id: string;
@@ -57,9 +58,11 @@ export function StockAdjustmentForm({
     register,
     handleSubmit,
     setError,
+    setValue,
     control,
-    formState: { errors, isSubmitting },
+    formState: { errors, isSubmitting, isDirty, isSubmitSuccessful },
   } = form;
+  useUnsavedChanges(isDirty && !isSubmitSuccessful);
   const reason = useWatch({ control, name: "reason" });
 
   async function save(values: StockAdjustmentInput, intent: "draft" | "post") {
@@ -92,7 +95,8 @@ export function StockAdjustmentForm({
         <div className="mt-5 grid gap-5 md:grid-cols-3">
           <div className="space-y-1.5">
             <Label htmlFor="date">Date</Label>
-            <Input id="date" type="date" {...register("date")} />
+            <Input id="date" type="date" {...register("date")} aria-invalid={!!errors.date} />
+            {errors.date && <p className="field-error">{errors.date.message}</p>}
           </div>
           <div className="space-y-1.5">
             <Label htmlFor="locationId">Location</Label>
@@ -102,6 +106,7 @@ export function StockAdjustmentForm({
               render={({ field }) => (
                 <Combobox
                   id="locationId"
+                  ariaInvalid={!!errors.locationId}
                   options={locations.map((location) => ({
                     value: location.id,
                     label: `${location.code} — ${location.name}`,
@@ -114,6 +119,7 @@ export function StockAdjustmentForm({
                 />
               )}
             />
+            {errors.locationId && <p className="field-error">{errors.locationId.message}</p>}
           </div>
           <div className="space-y-1.5">
             <Label htmlFor="itemId">Inventory Item</Label>
@@ -123,6 +129,7 @@ export function StockAdjustmentForm({
               render={({ field }) => (
                 <Combobox
                   id="itemId"
+                  ariaInvalid={!!errors.itemId}
                   options={items.map((item) => ({
                     value: item.id,
                     label: `${item.sku ? `${item.sku} — ` : ""}${item.name}`,
@@ -135,6 +142,7 @@ export function StockAdjustmentForm({
                 />
               )}
             />
+            {errors.itemId && <p className="field-error">{errors.itemId.message}</p>}
           </div>
           <div className="space-y-1.5">
             <Label htmlFor="quantityChange">Quantity change</Label>
@@ -151,27 +159,34 @@ export function StockAdjustmentForm({
           </div>
           <div className="space-y-1.5">
             <Label htmlFor="reason">Reason</Label>
-            <SelectNative id="reason"  {...register("reason")}>
+            <SelectNative
+              id="reason"
+              {...register("reason", {
+                onChange: (event) => {
+                  if (event.target.value !== "Opening Balance") {
+                    setValue("unitCost", "");
+                  }
+                },
+              })}
+              aria-invalid={!!errors.reason}
+            >
               <option value="Stock count correction">Stock count correction</option>
               <option value="Damaged">Damaged</option>
               <option value="Opening Balance">Opening Balance</option>
               <option value="Other">Other</option>
             </SelectNative>
+            {errors.reason && <p className="field-error">{errors.reason.message}</p>}
           </div>
-          <div className="space-y-1.5">
-            <Label htmlFor="unitCost">
-              Unit cost{" "}
-              {reason !== "Opening Balance" && (
-                <span className="font-normal text-muted-foreground">(opening only)</span>
-              )}
-            </Label>
-            <Input id="unitCost" inputMode="decimal" {...register("unitCost")} />
-            {reason === "Opening Balance" && (
+          {reason === "Opening Balance" && (
+            <div className="space-y-1.5">
+              <Label htmlFor="unitCost">Unit cost</Label>
+              <Input id="unitCost" inputMode="decimal" {...register("unitCost")} aria-invalid={!!errors.unitCost} />
+              {errors.unitCost && <p className="field-error">{errors.unitCost.message}</p>}
               <p className="text-xs text-muted-foreground">
                 Required for Opening Balance. Normal adjustments use current average cost.
               </p>
-            )}
-          </div>
+            </div>
+          )}
           <div className="space-y-1.5">
             <Label htmlFor="projectId">
               Project <span className="font-normal text-muted-foreground">(optional)</span>
@@ -201,7 +216,8 @@ export function StockAdjustmentForm({
             <Label htmlFor="notes">
               Notes <span className="font-normal text-muted-foreground">(optional)</span>
             </Label>
-            <Textarea id="notes" rows={2} placeholder="Reason for inventory adjustment / discrepancy notes..." {...register("notes")} />
+            <Textarea id="notes" rows={2} placeholder="Reason for inventory adjustment / discrepancy notes..." {...register("notes")} aria-invalid={!!errors.notes} />
+            {errors.notes && <p className="field-error">{errors.notes.message}</p>}
           </div>
         </div>
       </section>

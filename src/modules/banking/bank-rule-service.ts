@@ -2,6 +2,7 @@ import { assertMutationPermission } from "@/core/permissions/mutation-permission
 import { randomUUID } from "node:crypto";
 import { z } from "zod";
 import { getBusinessDb } from "@/core/db/business";
+import { minorToDecimalString } from "@/core/format";
 import { recordActivity } from "@/modules/activity-log/activity-log-service";
 import { saveBankTransaction } from "./bank-transaction-service";
 import type { StatementLineRow } from "./statement-service";
@@ -411,11 +412,11 @@ export function applyBankRule(
   if (!rule.is_active) throw new Error("Bank rule is inactive.");
 
   const line = context.sqlite.prepare(`
-    SELECT bsl.*, ba.name AS bank_account_name
+    SELECT bsl.*, ba.name AS bank_account_name, ba.currency_code
     FROM bank_statement_lines bsl
     INNER JOIN bank_accounts ba ON ba.id = bsl.bank_account_id
     WHERE bsl.id = ?
-  `).get(statementLineId) as (StatementLineRow & { bank_account_name: string }) | undefined;
+  `).get(statementLineId) as (StatementLineRow & { bank_account_name: string; currency_code: string }) | undefined;
 
   if (!line) throw new Error("Statement line not found.");
   if (line.match_status !== "unmatched") throw new Error("Statement line is no longer unmatched.");
@@ -427,7 +428,7 @@ export function applyBankRule(
   const isMoneyIn = line.amount_minor > 0;
   const autoDesc = rule.auto_description?.trim() || line.description;
   const absAmount = Math.abs(line.amount_minor);
-  const formattedAmount = (absAmount / 100).toFixed(2);
+  const formattedAmount = minorToDecimalString(absAmount, line.currency_code);
 
   // Fallback to a zero-rate/exempt tax code if no specific tax code is configured
   let taxCodeId = rule.target_tax_code_id;

@@ -14,7 +14,7 @@ import {
   ShieldAlert,
   Wallet,
 } from "lucide-react";
-import { formatMoney, formatDate } from "@/core/format";
+import { formatMoney, formatDate, minorToDecimalString } from "@/core/format";
 import { ExportCsvButton } from "@/components/export-csv-button";
 import type {
   CashFlowForecastData,
@@ -43,13 +43,13 @@ export function CashFlowForecastView({ businessId, data, currency }: Props) {
   const csvRows = dailyLedger.map((d) => ({
     date: d.date,
     day: d.isToday ? "Today / Overdue" : `Day +${d.dayOffset}`,
-    opening_balance: (d.openingBalanceMinor / 100).toFixed(2),
-    inflows: (d.inflowsMinor / 100).toFixed(2),
+    opening_balance: minorToDecimalString(d.openingBalanceMinor, currency),
+    inflows: minorToDecimalString(d.inflowsMinor, currency),
     inflows_count: d.inflowCount,
-    outflows: (d.outflowsMinor / 100).toFixed(2),
+    outflows: minorToDecimalString(d.outflowsMinor, currency),
     outflows_count: d.outflowCount,
-    net_change: (d.netChangeMinor / 100).toFixed(2),
-    closing_balance: (d.closingBalanceMinor / 100).toFixed(2),
+    net_change: minorToDecimalString(d.netChangeMinor, currency),
+    closing_balance: minorToDecimalString(d.closingBalanceMinor, currency),
     status: d.isDeficit ? "DEFICIT" : "HEALTHY",
   }));
 

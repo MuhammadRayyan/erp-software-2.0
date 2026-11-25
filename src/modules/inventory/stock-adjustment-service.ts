@@ -53,7 +53,7 @@ export function listStockAdjustments(businessId: string, userId: string) {
   return getBusinessDb(businessId, userId).sqlite.prepare(`
     SELECT sa.*, i.name AS item_name, i.sku, i.unit_name, l.code AS location_code,
       COALESCE((
-        SELECT ABS(value_delta_minor)
+        SELECT value_delta_minor
         FROM inventory_movements m
         WHERE m.source_type = 'stock_adjustment' AND m.source_id = sa.id
       ), 0) AS value_minor
@@ -74,7 +74,7 @@ export function getStockAdjustment(
     SELECT sa.*, i.name AS item_name, i.sku, i.unit_name,
       i.inventory_asset_account_id, l.code AS location_code, l.name AS location_name,
       COALESCE((
-        SELECT ABS(value_delta_minor)
+        SELECT value_delta_minor
         FROM inventory_movements m
         WHERE m.source_type = 'stock_adjustment' AND m.source_id = sa.id
       ), 0) AS value_minor

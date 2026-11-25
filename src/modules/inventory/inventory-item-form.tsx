@@ -14,6 +14,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { saveInventoryItemAction } from "./actions";
 import { inventoryItemInputSchema, type InventoryItemInput } from "./inventory-item-input";
+import { useUnsavedChanges } from "@/hooks/use-unsaved-changes";
 
 type AccountOption = { id: string; name: string };
 
@@ -24,7 +25,8 @@ export function InventoryItemForm({ businessId, itemId, salesAccounts, assetAcco
     mode: "onTouched",
     defaultValues: initial,
   });
-  const { register, control, handleSubmit, setError, formState: { errors, isSubmitting } } = form;
+  const { register, control, handleSubmit, setError, formState: { errors, isSubmitting, isDirty, isSubmitSuccessful } } = form;
+  useUnsavedChanges(isDirty && !isSubmitSuccessful);
   async function save(values: InventoryItemInput) {
     setServerError("");
     const result = await saveInventoryItemAction(businessId, itemId ?? null, values);
@@ -37,8 +39,8 @@ export function InventoryItemForm({ businessId, itemId, salesAccounts, assetAcco
       <div className="space-y-1.5"><Label htmlFor="sku">SKU <span className="font-normal text-muted-foreground">(optional)</span></Label><Input id="sku" {...register("sku")} aria-invalid={!!errors.sku} />{errors.sku && <p className="field-error">{errors.sku.message}</p>}</div>
       <div className="space-y-1.5 md:col-span-2"><Label htmlFor="name">Item name</Label><Input id="name" {...register("name")} aria-invalid={!!errors.name} />{errors.name && <p className="field-error">{errors.name.message}</p>}</div>
       <div className="space-y-1.5"><Label htmlFor="unitName">Unit</Label><Input id="unitName" {...register("unitName")} placeholder="pcs, kg, m" aria-invalid={!!errors.unitName} />{errors.unitName && <p className="field-error">{errors.unitName.message}</p>}</div>
-      <div className="space-y-1.5"><Label htmlFor="salesPrice">Sales price <span className="font-normal text-muted-foreground">(optional)</span></Label><Input id="salesPrice" inputMode="decimal" {...register("salesPrice")} /></div>
-      <div className="space-y-1.5"><Label htmlFor="purchasePrice">Purchase price <span className="font-normal text-muted-foreground">(optional)</span></Label><Input id="purchasePrice" inputMode="decimal" {...register("purchasePrice")} /></div>
+      <div className="space-y-1.5"><Label htmlFor="salesPrice">Sales price <span className="font-normal text-muted-foreground">(optional)</span></Label><Input id="salesPrice" inputMode="decimal" {...register("salesPrice")} aria-invalid={!!errors.salesPrice} />{errors.salesPrice && <p className="field-error">{errors.salesPrice.message}</p>}</div>
+      <div className="space-y-1.5"><Label htmlFor="purchasePrice">Purchase price <span className="font-normal text-muted-foreground">(optional)</span></Label><Input id="purchasePrice" inputMode="decimal" {...register("purchasePrice")} aria-invalid={!!errors.purchasePrice} />{errors.purchasePrice && <p className="field-error">{errors.purchasePrice.message}</p>}</div>
       <div className="space-y-1.5 md:col-span-3"><Label htmlFor="description">Description <span className="font-normal text-muted-foreground">(optional)</span></Label><Textarea id="description" rows={3} {...register("description")} aria-invalid={!!errors.description} />{errors.description && <p className="field-error">{errors.description.message}</p>}</div>
     </div></section>
     <section className="form-section"><h2 className="text-base font-semibold">Accounting</h2><div className="mt-4 grid gap-4 md:grid-cols-3">
@@ -50,6 +52,7 @@ export function InventoryItemForm({ businessId, itemId, salesAccounts, assetAcco
           render={({ field }) => (
             <Combobox
               id="salesAccountId"
+              ariaInvalid={!!errors.salesAccountId}
               value={field.value ?? ""}
               onValueChange={field.onChange}
               options={salesAccounts.map((a) => ({ value: a.id, label: a.name }))}
@@ -58,6 +61,7 @@ export function InventoryItemForm({ businessId, itemId, salesAccounts, assetAcco
             />
           )}
         />
+        {errors.salesAccountId && <p className="field-error">{errors.salesAccountId.message}</p>}
       </div>
       <div className="space-y-1.5">
         <Label htmlFor="inventoryAssetAccountId">Inventory Asset</Label>
@@ -67,6 +71,7 @@ export function InventoryItemForm({ businessId, itemId, salesAccounts, assetAcco
           render={({ field }) => (
             <Combobox
               id="inventoryAssetAccountId"
+              ariaInvalid={!!errors.inventoryAssetAccountId}
               value={field.value ?? ""}
               onValueChange={field.onChange}
               options={assetAccounts.map((a) => ({ value: a.id, label: a.name }))}
@@ -75,6 +80,7 @@ export function InventoryItemForm({ businessId, itemId, salesAccounts, assetAcco
             />
           )}
         />
+        {errors.inventoryAssetAccountId && <p className="field-error">{errors.inventoryAssetAccountId.message}</p>}
       </div>
       <div className="space-y-1.5">
         <Label htmlFor="costOfSalesAccountId">Cost of Sales</Label>
@@ -84,6 +90,7 @@ export function InventoryItemForm({ businessId, itemId, salesAccounts, assetAcco
           render={({ field }) => (
             <Combobox
               id="costOfSalesAccountId"
+              ariaInvalid={!!errors.costOfSalesAccountId}
               value={field.value ?? ""}
               onValueChange={field.onChange}
               options={expenseAccounts.map((a) => ({ value: a.id, label: a.name }))}
@@ -92,6 +99,7 @@ export function InventoryItemForm({ businessId, itemId, salesAccounts, assetAcco
             />
           )}
         />
+        {errors.costOfSalesAccountId && <p className="field-error">{errors.costOfSalesAccountId.message}</p>}
       </div>
     </div></section>
     <Controller

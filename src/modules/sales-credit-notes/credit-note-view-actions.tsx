@@ -9,6 +9,7 @@ import { deleteCreditNoteAction, duplicateCreditNoteAction, voidCreditNoteAction
 import type { CreditNoteStatus } from "./credit-note-service";
 import { DocumentViewActions } from "@/components/document-view-actions";
 import { DocumentEmailDialog, type DocumentEmailDefaults } from "@/modules/email/email-compose-dialog";
+import { useActionPermission } from "@/components/permissions-provider";
 import { useState } from "react";
 
 export function CreditNoteViewActions({
@@ -27,6 +28,7 @@ export function CreditNoteViewActions({
   emailDefaults: DocumentEmailDefaults;
 }) {
   const router = useRouter();
+  const canViewAccounting = useActionPermission("view", "accounting");
   const [emailOpen, setEmailOpen] = useState(false);
 
   return (
@@ -62,13 +64,11 @@ export function CreditNoteViewActions({
           }
         } : undefined}
         extraActions={
-          <>
-            {journalEntryId && (
-              <DropdownMenuItem asChild>
-                <Link href={`/b/${businessId}/accounting/journal/${journalEntryId}`}><BookOpenText className="size-4" /> View Journal Entry</Link>
-              </DropdownMenuItem>
-            )}
-          </>
+          journalEntryId && canViewAccounting ? (
+            <DropdownMenuItem permission="view" permissionModule="accounting" asChild>
+              <Link href={`/b/${businessId}/accounting/journal/${journalEntryId}`}><BookOpenText className="size-4" /> View Journal Entry</Link>
+            </DropdownMenuItem>
+          ) : undefined
         }
       />
       <DocumentEmailDialog

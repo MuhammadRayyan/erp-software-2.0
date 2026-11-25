@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Controller, useForm, useWatch, type Resolver } from "react-hook-form";
 import { AlertTriangle, CheckCheck, Coins, FileText, LoaderCircle, RotateCcw, Sparkles } from "lucide-react";
@@ -9,7 +9,12 @@ import { Button } from "@/components/ui/button";
 import { Combobox, type ComboboxOption } from "@/components/ui/combobox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { SplitActionButton } from "@/components/ui/split-action-button";
 import { DocumentFormFooter } from "@/components/document-form-footer";
+import {
+  QuickCreateCustomerDialog,
+  QuickCreateSupplierDialog,
+} from "@/components/documents/quick-create-modals";
 import { FormError } from "@/components/form-error";
 import { useActionPermission, useApprovalPolicy } from "@/components/permissions-provider";
 import { formatDate, formatMoney } from "@/core/format";
@@ -73,14 +78,17 @@ export interface SettlementAllocationFormProps {
   rates: DocumentRateOption[];
   initial: SettlementFormValues;
   cancelHref: string;
-  onSubmitAction: (payload: SettlementSubmitPayload) => Promise<SettlementSubmitResult>;
+  onSubmitAction: (
+    payload: SettlementSubmitPayload,
+    afterSave?: "view" | "new",
+  ) => Promise<SettlementSubmitResult>;
 }
 
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const DATE_REGEX = /^\d{4}-\d{2}-\d{2}$/;
 
 const settlementResolver =
-  (direction: "receipt" | "payment"): Resolver<SettlementFormValues> =>
+  (direction: "receipt" | "payment", currencies: DocumentCurrencyOption[]): Resolver<SettlementFormValues> =>
   async (values) => {
     const errors: Record<string, { type: string; message: string }> = {};
 
@@ -106,12 +114,27 @@ const settlementResolver =
     }
 
     const amountTrimmed = (values.amount ?? "").trim();
-    const numericAmount = Number(amountTrimmed);
-    if (!amountTrimmed || Number.isNaN(numericAmount) || numericAmount <= 0) {
+    const activeMinorUnit = currencies.find((c) => c.code === values.currencyCode)?.minorUnit ?? 2;
+    if (!amountTrimmed) {
       errors.amount = {
         type: "validate",
         message: "Amount must be greater than zero",
       };
+    } else {
+      try {
+        const minor = parseCurrencyAmountToMinor(amountTrimmed, activeMinorUnit, "Amount");
+        if (minor <= 0) {
+          errors.amount = {
+            type: "validate",
+            message: "Amount must be greater than zero",
+          };
+        }
+      } catch (err) {
+        errors.amount = {
+          type: "validate",
+          message: err instanceof Error ? err.message : "Enter a valid amount",
+        };
+      }
     }
 
     if (Object.keys(errors).length > 0) {
@@ -123,6 +146,7 @@ const settlementResolver =
 
 export function SettlementAllocationForm({
   direction,
+  businessId,
   currency,
   counterparties,
   documents,
@@ -137,7 +161,14 @@ export function SettlementAllocationForm({
   const isReceipt = direction === "receipt";
   const { requiresApproval } = useApprovalPolicy();
   const canPost = useActionPermission("post");
+  const canCreateCounterparty = useActionPermission("create", isReceipt ? "sales" : "purchases");
   const mustSubmitForApproval = requiresApproval || !canPost;
+  const [counterpartyList, setCounterpartyList] = useState(counterparties);
+  useEffect(() => {
+    setCounterpartyList(counterparties);
+  }, [counterparties]);
+  const [quickCreateOpen, setQuickCreateOpen] = useState(false);
+  const [quickCreateSeed, setQuickCreateSeed] = useState("");
   const [serverError, setServerError] = useState("");
 
   const copy = useMemo(
@@ -223,7 +254,7 @@ export function SettlementAllocationForm({
   );
 
   const form = useForm<SettlementFormValues>({
-    resolver: settlementResolver(direction),
+    resolver: settlementResolver(direction, currencies),
     mode: "onTouched",
     defaultValues: initial,
   });
@@ -250,10 +281,12 @@ export function SettlementAllocationForm({
 
   const activeCurrencyOption = currencies.find((c) => c.code === currencyCode);
   const minorUnit = activeCurrencyOption?.minorUnit ?? 2;
+  const amountStep = minorUnit === 0 ? "1" : `0.${"0".repeat(minorUnit - 1)}1`;
+  const zeroPlaceholder = minorUnit === 0 ? "0" : `0.${"0".repeat(minorUnit)}`;
 
   const counterpartyOptions = useMemo<ComboboxOption[]>(
-    () => counterparties.map((c) => ({ value: c.id, label: c.name })),
-    [counterparties],
+    () => counterpartyList.map((c) => ({ value: c.id, label: c.name })),
+    [counterpartyList],
   );
 
   const bankOptions = useMemo<ComboboxOption[]>(
@@ -327,14 +360,15 @@ export function SettlementAllocationForm({
     setValue("allocations", {}, { shouldDirty: true });
   }
 
-  async function submit(values: SettlementFormValues) {
+  async function submit(values: SettlementFormValues, afterSave: "view" | "new" = "view") {
     setServerError("");
 
     const finalAllocations: { invoiceId: string; amount: string }[] = [];
     for (const [docId, amtStr] of Object.entries(values.allocations ?? {})) {
       if (!amtStr || !amtStr.trim()) continue;
       const doc = filteredDocuments.find((item) => item.id === docId);
-      const docMinorUnit = doc?.minorUnit ?? minorUnit;
+      if (!doc) continue;
+      const docMinorUnit = doc.minorUnit ?? minorUnit;
       try {
         const minor = parseCurrencyAmountToMinor(amtStr, docMinorUnit, "Allocation");
         if (minor > 0) {
@@ -371,7 +405,7 @@ export function SettlementAllocationForm({
       exchangeRateDate: values.exchangeRateDate,
       exchangeRateSource: values.exchangeRateSource,
       allocations: finalAllocations,
-    });
+    }, afterSave);
 
     if (result.fieldErrors) {
       for (const [field, messages] of Object.entries(result.fieldErrors)) {
@@ -389,7 +423,8 @@ export function SettlementAllocationForm({
   const today = new Date().toISOString().slice(0, 10);
 
   return (
-    <form onSubmit={handleSubmit(submit)} className="space-y-6 pb-8" noValidate>
+    <>
+    <form onSubmit={handleSubmit((v) => submit(v, "view"))} className="space-y-6 pb-8" noValidate>
       {serverError && <FormError message={serverError} />}
 
       <section className="form-section border-b border-border pb-7">
@@ -413,6 +448,17 @@ export function SettlementAllocationForm({
                   emptyText={copy.counterpartyEmpty}
                   allowClear
                   ariaInvalid={!!errors.counterpartyId}
+                  createAction={
+                    canCreateCounterparty
+                      ? {
+                          label: isReceipt ? "New Customer" : "New Supplier",
+                          onTrigger: (query) => {
+                            setQuickCreateSeed(query);
+                            setQuickCreateOpen(true);
+                          },
+                        }
+                      : undefined
+                  }
                 />
               )}
             />
@@ -450,7 +496,12 @@ export function SettlementAllocationForm({
             exchangeRateSource={exchangeRateSource}
             relevantDate={settlementDate}
             lockCurrency={false}
-            onChange={(field, val) => setValue(field, val, { shouldDirty: true })}
+            onChange={(field, val) => {
+              if (field === "currencyCode" && val !== currencyCode) {
+                setValue("allocations", {}, { shouldDirty: true });
+              }
+              setValue(field, val, { shouldDirty: true });
+            }}
           />
 
           <div className="space-y-1.5">
@@ -466,15 +517,16 @@ export function SettlementAllocationForm({
             <Input
               id="amount"
               type="number"
-              min="0.01"
-              step="0.01"
+              min={amountStep}
+              step={amountStep}
+              placeholder={zeroPlaceholder}
               className="money text-right font-medium text-base tabular-nums"
               {...register("amount")}
               aria-invalid={!!errors.amount}
             />
             {errors.amount && <p className="field-error">{errors.amount.message}</p>}
             {unallocatedMinor > 0 && totalAllocatedMinor > 0 && (
-              <p className="text-xs font-medium text-emerald-600 dark:text-emerald-400">
+              <p className="text-xs font-medium text-success">
                 Includes {formatMoney(unallocatedMinor, currencyCode, minorUnit)} {copy.surplusNotice}
               </p>
             )}
@@ -515,7 +567,7 @@ export function SettlementAllocationForm({
                 className="text-xs"
                 title={copy.fifoTooltip}
               >
-                <Sparkles className="mr-1.5 size-3.5 text-amber-500" /> Auto-Allocate FIFO
+                <Sparkles className="size-3.5 text-warning" /> Auto-Allocate FIFO
               </Button>
               <Button
                 type="button"
@@ -525,7 +577,7 @@ export function SettlementAllocationForm({
                 className="text-xs"
                 title={copy.payAllTooltip}
               >
-                <CheckCheck className="mr-1.5 size-3.5 text-emerald-600" /> Pay All Open
+                <CheckCheck className="size-3.5 text-success" /> Pay All Open
               </Button>
               <Button
                 type="button"
@@ -534,7 +586,7 @@ export function SettlementAllocationForm({
                 onClick={handleClearAllocations}
                 className="text-xs text-muted-foreground"
               >
-                <RotateCcw className="mr-1.5 size-3" /> Clear
+                <RotateCcw className="size-3" /> Clear
               </Button>
             </div>
           )}
@@ -545,9 +597,9 @@ export function SettlementAllocationForm({
             {copy.chooseCounterpartyHint}
           </div>
         ) : filteredDocuments.length === 0 ? (
-          <div className="mt-4 rounded-lg border border-amber-500/30 bg-amber-500/5 p-4 text-sm text-amber-900 dark:text-amber-300">
+          <div className="mt-4 rounded-lg border border-warning/30 bg-warning/10 p-4 text-sm text-warning">
             <div className="flex items-start gap-3">
-              <Coins className="size-5 shrink-0 text-amber-600 dark:text-amber-400 mt-0.5" />
+              <Coins className="size-5 shrink-0 text-warning mt-0.5" />
               <div>
                 <h4 className="font-semibold">{copy.advanceTitle}</h4>
                 <p className="mt-0.5 text-xs">
@@ -608,9 +660,9 @@ export function SettlementAllocationForm({
                           render={({ field }) => (
                             <Input
                               type="number"
-                              step="0.01"
+                              step={doc.minorUnit === 0 ? "1" : `0.${"0".repeat(doc.minorUnit - 1)}1`}
                               min="0"
-                              placeholder="0.00"
+                              placeholder={doc.minorUnit === 0 ? "0" : `0.${"0".repeat(doc.minorUnit)}`}
                               aria-label={`Allocate amount for ${doc.documentNumber}`}
                               className={`money text-right h-8 text-sm tabular-nums ${
                                 isLineOverAllocated
@@ -697,7 +749,7 @@ export function SettlementAllocationForm({
                 {unallocatedMinor > 0 ? copy.surplusTitle : "Unallocated Balance"}
               </span>
               <div className="flex items-center gap-2 mt-0.5">
-                <span className="money text-base font-semibold text-emerald-600 dark:text-emerald-400 tabular-nums">
+                <span className="money text-base font-semibold text-success tabular-nums">
                   {formatMoney(unallocatedMinor, currencyCode, minorUnit)}
                 </span>
                 {unallocatedMinor > 0 && (
@@ -711,7 +763,7 @@ export function SettlementAllocationForm({
         )}
 
         {isOverAllocated && (
-          <div className="mt-3 flex items-center gap-2 rounded-md border border-red-500/30 bg-red-500/10 p-3 text-xs text-red-600 dark:text-red-400">
+          <div className="mt-3 flex items-center gap-2 rounded-md border border-danger/30 bg-danger/10 p-3 text-xs text-danger">
             <AlertTriangle className="size-4 shrink-0" />
             <span>
               The total allocated across {copy.entityNoun} (
@@ -730,15 +782,74 @@ export function SettlementAllocationForm({
           minorUnit,
         }}
       >
-        <Button
-          permission={mustSubmitForApproval ? "create" : ["create", "post"]}
-          type="submit"
-          disabled={isSubmitting || isOverAllocated}
-        >
-          {isSubmitting && <LoaderCircle className="size-4 animate-spin" />}{" "}
-          {mustSubmitForApproval ? "Submit for Approval" : copy.submitLabel}
-        </Button>
+        {mustSubmitForApproval ? (
+          <Button
+            permission="create"
+            type="submit"
+            disabled={isSubmitting || isOverAllocated}
+          >
+            {isSubmitting && <LoaderCircle className="size-4 animate-spin" />} Submit for Approval
+          </Button>
+        ) : (
+          <SplitActionButton
+            label={copy.submitLabel}
+            permission={["create", "post"]}
+            type="button"
+            loading={isSubmitting}
+            disabled={isOverAllocated}
+            onPrimaryClick={handleSubmit((v) => submit(v, "view"))}
+            options={[
+              {
+                label: "Post & Record Another",
+                description: isReceipt ? "Post this receipt and start another" : "Post this payment and start another",
+                onSelect: handleSubmit((v) => submit(v, "new")),
+              },
+            ]}
+          />
+        )}
       </DocumentFormFooter>
     </form>
+    {isReceipt ? (
+      <QuickCreateCustomerDialog
+        businessId={businessId}
+        open={quickCreateOpen}
+        onOpenChange={setQuickCreateOpen}
+        initialName={quickCreateSeed}
+        defaultCurrencyCode={currencyCode || currency}
+        onCreated={(created) => {
+          setCounterpartyList((prev) =>
+            prev.some((c) => c.id === created.id) ? prev : [...prev, { id: created.id, name: created.name }],
+          );
+          handleCounterpartyChange(created.id);
+          if (created.defaultCurrencyCode && created.defaultCurrencyCode !== currencyCode) {
+            setValue("currencyCode", created.defaultCurrencyCode);
+            setValue("exchangeRateToBase", created.defaultCurrencyCode === currency ? "1" : "");
+            setValue("exchangeRateDate", created.defaultCurrencyCode === currency ? settlementDate : "");
+            setValue("exchangeRateSource", created.defaultCurrencyCode === currency ? "Base" : "");
+          }
+        }}
+      />
+    ) : (
+      <QuickCreateSupplierDialog
+        businessId={businessId}
+        open={quickCreateOpen}
+        onOpenChange={setQuickCreateOpen}
+        initialName={quickCreateSeed}
+        defaultCurrencyCode={currencyCode || currency}
+        onCreated={(created) => {
+          setCounterpartyList((prev) =>
+            prev.some((c) => c.id === created.id) ? prev : [...prev, { id: created.id, name: created.name }],
+          );
+          handleCounterpartyChange(created.id);
+          if (created.defaultCurrencyCode && created.defaultCurrencyCode !== currencyCode) {
+            setValue("currencyCode", created.defaultCurrencyCode);
+            setValue("exchangeRateToBase", created.defaultCurrencyCode === currency ? "1" : "");
+            setValue("exchangeRateDate", created.defaultCurrencyCode === currency ? settlementDate : "");
+            setValue("exchangeRateSource", created.defaultCurrencyCode === currency ? "Base" : "");
+          }
+        }}
+      />
+    )}
+    </>
   );
 }

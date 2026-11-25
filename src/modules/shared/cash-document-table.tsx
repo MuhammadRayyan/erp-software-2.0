@@ -8,6 +8,7 @@ import {
 } from "@tanstack/react-table/legacy";
 import { useColumns } from "@/components/columns-dropdown";
 import { DensityToggle } from "@/components/density-toggle";
+import { ExportCsvButton } from "@/components/export-csv-button";
 import {
   ActiveFiltersRow,
   DateRangeFilter,
@@ -21,6 +22,7 @@ import { DataTable, ListTableCard } from "@/components/ui/data-table";
 import { useTableDensity } from "@/components/use-table-density";
 import type { ColumnVisibility } from "@/components/use-column-visibility";
 import { formatDate, formatMoney } from "@/core/format";
+import type { CsvColumn } from "@/lib/export-csv";
 import {
   cashDocumentListParsers,
   resolveNextSortFromUpdater,
@@ -67,6 +69,8 @@ export function CashDocumentTable<TRow extends object>({
   noResultsMessage,
   noResultsSubtext,
   minWidth = "min-w-[960px]",
+  getRowHref,
+  exportConfig,
   footer,
 }: {
   businessId: string;
@@ -87,6 +91,11 @@ export function CashDocumentTable<TRow extends object>({
   noResultsMessage: string;
   noResultsSubtext: string;
   minWidth?: string;
+  getRowHref?: (row: TRow) => string | undefined | null;
+  exportConfig?: {
+    filename: string;
+    columns: CsvColumn<TRow>[];
+  };
   footer?: ReactNode;
 }) {
   const { density } = useTableDensity(businessId);
@@ -174,6 +183,15 @@ export function CashDocumentTable<TRow extends object>({
           options={CASH_DOC_STATUS_OPTIONS}
         />
         <div className="ml-auto flex shrink-0 items-center gap-1.5">
+          {exportConfig && (
+            <ExportCsvButton
+              size="sm"
+              filename={exportConfig.filename}
+              columns={exportConfig.columns as CsvColumn<Record<string, any>>[]}
+              data={rows as Record<string, any>[]}
+              totalCount={summary.filteredTotal}
+            />
+          )}
           <DensityToggle businessId={businessId} />
           {dropdown}
         </div>
@@ -210,6 +228,7 @@ export function CashDocumentTable<TRow extends object>({
           density={density}
           framed={false}
           minWidth={minWidth}
+          getRowHref={getRowHref ? (row) => getRowHref(row as TRow) ?? undefined : undefined}
           noResultsMessage={noResultsMessage}
           noResultsSubtext={noResultsSubtext}
           onClearFilters={clearFilters}

@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import { AlertCircle, AlertTriangle, Clock, Info, Search, X } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
+import { formatDateTime } from "@/core/format";
 
 export type AuditLogRow = {
   id: string;
@@ -181,7 +182,7 @@ export function AuditLogTable({ logs }: { logs: AuditLogRow[] }) {
                       <td className="px-4 py-3 text-muted-foreground whitespace-nowrap">
                         <div className="flex items-center gap-1.5">
                           <Clock className="size-3.5 text-muted-foreground" />
-                          <span>{new Date(log.createdAt).toLocaleString()}</span>
+                          <span>{formatDateTime(log.createdAt)}</span>
                         </div>
                       </td>
 

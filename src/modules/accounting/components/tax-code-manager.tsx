@@ -77,7 +77,7 @@ export function TaxCodeManager({
 
   return (
     <>
-      <div className="mb-4 flex justify-end"><Button onClick={() => open()}><Plus className="size-4" /> New Tax Code</Button></div>
+      <div className="mb-4 flex justify-end"><Button permission="edit" onClick={() => open()}><Plus className="size-4" /> New Tax Code</Button></div>
       <div className="data-panel overflow-x-auto">
         <table className="data-table min-w-[980px]">
           <thead><tr><th>Tax code</th><th className="text-right!">Rate</th><th>Direction</th><th>VAT category</th><th>Recoverable</th><th>Sales tax account</th><th>Purchase tax account</th><th>Status</th><th className="w-20"><span className="sr-only">Actions</span></th></tr></thead>

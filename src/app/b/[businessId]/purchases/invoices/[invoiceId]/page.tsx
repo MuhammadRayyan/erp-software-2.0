@@ -3,7 +3,7 @@ import { notFound } from "next/navigation";
 import { NoticeToast } from "@/components/notice-toast";
 import { StatusBadge } from "@/components/status-badge";
 import { requireModule } from "@/core/permissions/require-module";
-import { formatDate, formatMoney } from "@/core/format";
+import { formatDate, formatMoney, getCurrencyMinorUnit } from "@/core/format";
 import { quantityMicrosToInput, rateBasisPointsToPercent } from "@/modules/accounting/calculations/money";
 import { ProjectLinks } from "@/modules/projects/project-links";
 import { getPurchaseInvoice } from "@/modules/purchase-invoices/purchase-invoice-service";
@@ -187,7 +187,7 @@ export default async function PurchaseInvoiceViewPage({
           invoiceNumber={invoice.internalNumber}
           balanceMinor={record.balanceMinor}
           currencyCode={currency}
-          minorUnit={2}
+          minorUnit={getCurrencyMinorUnit(currency)}
           availablePrepayments={availablePrepayments}
         />
       )}

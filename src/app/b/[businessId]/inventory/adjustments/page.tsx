@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { ArrowLeft, Plus, ClipboardList } from "lucide-react";
+import { Plus, ClipboardList } from "lucide-react";
 import { EmptyState } from "@/components/empty-state";
 import { PageHeader } from "@/components/page-header";
 import { Button } from "@/components/ui/button";
@@ -21,10 +21,6 @@ export default async function StockAdjustmentsPage({ params }: { params: Promise
 
   return (
     <div className="page-container">
-      <Link href={`/b/${businessId}/inventory/items`} className="mb-5 inline-flex items-center gap-1.5 text-[13px] text-muted-foreground hover:text-foreground">
-        <ArrowLeft className="size-4" /> Inventory Items
-      </Link>
-
       <PageHeader
         title="Stock Adjustments"
         description="Opening balances and controlled stock corrections."

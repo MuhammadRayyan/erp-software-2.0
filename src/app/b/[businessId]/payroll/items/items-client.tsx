@@ -8,8 +8,8 @@ import {
   getPaginationRowModel as createPaginationRowModel,
   getSortedRowModel as createSortedRowModel,
 } from "@tanstack/react-table/legacy";
-import { type SortingState } from "@tanstack/react-table";
-import { Plus, MoreHorizontal, ChevronRight, FileEdit, CheckCircle2, Ban } from "lucide-react";
+import { Plus, MoreHorizontal, FileEdit, CheckCircle2, Ban } from "lucide-react";
+import { useActionPermission } from "@/components/permissions-provider";
 import { toast } from "sonner";
 import { PageHeader } from "@/components/page-header";
 import { Button } from "@/components/ui/button";
@@ -20,9 +20,11 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSepara
 import { DataTable, ListTableCard } from "@/components/ui/data-table";
 import { useColumns } from "@/components/columns-dropdown";
 import { DensityToggle } from "@/components/density-toggle";
+import { ExportCsvButton } from "@/components/export-csv-button";
 import { useTableDensity } from "@/components/use-table-density";
-import { ClientListPagination, useTablePagination } from "@/components/list-pagination";
+import { ClientListPagination } from "@/components/list-pagination";
 import { TableTotalsBar } from "@/components/table-totals-bar";
+import { useUrlListState } from "@/hooks/use-url-list-state";
 import { type PayslipItemRecord } from "@/modules/payroll/services/payroll-service";
 import { savePayslipItemAction } from "@/modules/payroll/actions/payroll-actions";
 import { ItemDialog } from "./item-dialog";
@@ -43,10 +45,19 @@ const ITEM_COLUMN_LABELS: Record<string, string> = {
 export function ItemsClient({ businessId, items, accounts }: ItemsClientProps) {
   const router = useRouter();
   const { density } = useTableDensity(businessId);
-  const [query, setQuery] = useState("");
-  const [typeFilter, setTypeFilter] = useState("");
-  const [statusFilter, setStatusFilter] = useState("");
-  const [sorting, setSorting] = useState<SortingState>([]);
+  const canEdit = useActionPermission("edit");
+  const {
+    query,
+    type: typeFilter,
+    status: statusFilter,
+    sorting,
+    setFilter,
+    setPage,
+    setPageSize,
+    onSortingChange,
+    resetFilters,
+    buildPagination,
+  } = useUrlListState();
   const [dialogOpen, setDialogOpen] = useState(false);
   const [selectedItem, setSelectedItem] = useState<PayslipItemRecord | null>(null);
 
@@ -159,8 +170,9 @@ export function ItemsClient({ businessId, items, accounts }: ItemsClientProps) {
         id: "actions",
         header: () => <span className="sr-only">Actions</span>,
         enableSorting: false,
-        meta: { className: "w-16 text-right" },
+        meta: { className: "w-12 text-right" },
         cell: ({ row }: { row: { original: PayslipItemRecord } }) => {
+          if (!canEdit) return null;
           const item = row.original;
           return (
             <div className="flex items-center justify-end gap-1">
@@ -186,7 +198,7 @@ export function ItemsClient({ businessId, items, accounts }: ItemsClientProps) {
                     <FileEdit className="size-4 text-muted-foreground" /> Edit Item
                   </DropdownMenuItem>
                   <DropdownMenuSeparator />
-                  <DropdownMenuItem onClick={() => handleToggleItemActive(item)}>
+                  <DropdownMenuItem permission="edit" onClick={() => handleToggleItemActive(item)}>
                     {item.isActive ? (
                       <>
                         <Ban className="size-4 text-danger" />
@@ -201,35 +213,21 @@ export function ItemsClient({ businessId, items, accounts }: ItemsClientProps) {
                   </DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon"
-                className="size-7 text-muted-foreground opacity-50 transition-opacity md:opacity-0 md:group-hover:opacity-100"
-                onClick={() => {
-                  setSelectedItem(item);
-                  setDialogOpen(true);
-                }}
-                aria-label={`Open ${item.name}`}
-              >
-                <ChevronRight className="size-4" />
-              </Button>
             </div>
           );
         },
       },
     ],
-    [handleToggleItemActive],
+    [canEdit, handleToggleItemActive],
   );
 
-  const { pagination, onPaginationChange, paginationInfo, setPage, setPageSize } = useTablePagination(filteredItems.length);
+  const { pagination, paginationInfo } = buildPagination(filteredItems.length);
 
   const table = useTable({
     data: filteredItems,
     columns,
     state: { sorting, pagination, columnVisibility: colVisibility },
-    onSortingChange: setSorting,
-    onPaginationChange,
+    onSortingChange,
     getCoreRowModel: createCoreRowModel(),
     getSortedRowModel: createSortedRowModel(),
     getPaginationRowModel: createPaginationRowModel(),
@@ -238,11 +236,7 @@ export function ItemsClient({ businessId, items, accounts }: ItemsClientProps) {
   const earningsCount = useMemo(() => filteredItems.filter((i) => i.type === "earnings").length, [filteredItems]);
   const deductionsCount = useMemo(() => filteredItems.filter((i) => i.type === "deduction").length, [filteredItems]);
 
-  const clearFilters = () => {
-    setQuery("");
-    setTypeFilter("");
-    setStatusFilter("");
-  };
+  const clearFilters = resetFilters;
 
   const hasActiveFilter = Boolean(query || typeFilter || statusFilter);
 
@@ -253,7 +247,7 @@ export function ItemsClient({ businessId, items, accounts }: ItemsClientProps) {
         description="Earnings and deduction items mapped to General Ledger accounts."
       >
         <Button
-          permission="edit"
+          permission="create"
           onClick={() => {
             setSelectedItem(null);
             setDialogOpen(true);
@@ -266,13 +260,13 @@ export function ItemsClient({ businessId, items, accounts }: ItemsClientProps) {
       <ListToolbar>
         <SearchInput
           value={query}
-          onChange={setQuery}
+          onChange={(v) => setFilter("q", v)}
           placeholder="Search item name, GL account..."
           ariaLabel="Search compensation items"
         />
         <ToolbarSelect
           value={typeFilter}
-          onChange={setTypeFilter}
+          onChange={(v) => setFilter("type", v)}
           ariaLabel="Filter by type"
           options={[
             { value: "", label: "All types" },
@@ -282,7 +276,7 @@ export function ItemsClient({ businessId, items, accounts }: ItemsClientProps) {
         />
         <ToolbarSelect
           value={statusFilter}
-          onChange={setStatusFilter}
+          onChange={(v) => setFilter("status", v)}
           ariaLabel="Filter by status"
           options={[
             { value: "", label: "All statuses" },
@@ -291,6 +285,18 @@ export function ItemsClient({ businessId, items, accounts }: ItemsClientProps) {
           ]}
         />
         <div className="ml-auto flex items-center gap-2">
+          <ExportCsvButton
+            size="sm"
+            filename="payslip-items"
+            data={filteredItems}
+            columns={[
+              { header: "Name", accessorKey: "name" },
+              { header: "Type", accessorFn: (r) => (r.type === "earnings" ? "Earnings" : "Deduction") },
+              { header: "GL Account", accessorFn: (r) => r.accountName ?? "" },
+              { header: "Description", accessorFn: (r) => r.description ?? "" },
+              { header: "Status", accessorFn: (r) => (r.isActive ? "Active" : "Inactive") },
+            ]}
+          />
           <DensityToggle businessId={businessId} />
           {dropdown}
         </div>
@@ -299,16 +305,16 @@ export function ItemsClient({ businessId, items, accounts }: ItemsClientProps) {
       {hasActiveFilter && (
         <ActiveFiltersRow onClearAll={clearFilters}>
           {typeFilter && (
-            <FilterChip onRemove={() => setTypeFilter("")}>
+            <FilterChip onRemove={() => setFilter("type", "")}>
               Type: {typeFilter === "earnings" ? "Earnings" : "Deductions"}
             </FilterChip>
           )}
           {statusFilter && (
-            <FilterChip onRemove={() => setStatusFilter("")}>
+            <FilterChip onRemove={() => setFilter("status", "")}>
               Status: {statusFilter === "active" ? "Active only" : "Inactive only"}
             </FilterChip>
           )}
-          {query && <FilterChip onRemove={() => setQuery("")}>Search: {query}</FilterChip>}
+          {query && <FilterChip onRemove={() => setFilter("q", "")}>Search: {query}</FilterChip>}
         </ActiveFiltersRow>
       )}
 
@@ -318,6 +324,10 @@ export function ItemsClient({ businessId, items, accounts }: ItemsClientProps) {
           density={density}
           framed={false}
           minWidth="min-w-[760px]"
+          onRowClick={canEdit ? (item) => {
+            setSelectedItem(item);
+            setDialogOpen(true);
+          } : undefined}
           noResultsMessage={items.length === 0 ? "No payslip items configured yet." : "No payslip items match"}
           onClearFilters={hasActiveFilter ? clearFilters : undefined}
         />

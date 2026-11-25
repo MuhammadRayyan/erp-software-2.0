@@ -22,7 +22,7 @@ export function exportCsv<T extends Record<string, any>>(filename: string, colum
       })
       .join(",")
   );
-  const csvContent = [headers, ...rows].join("\n");
+  const csvContent = [headers, ...rows].join("\r\n");
 
   const blob = new Blob(["\uFEFF" + csvContent], { type: "text/csv;charset=utf-8;" }); // BOM for Excel UTF-8
   const url = URL.createObjectURL(blob);
@@ -35,5 +35,5 @@ export function exportCsv<T extends Record<string, any>>(filename: string, colum
   document.body.removeChild(link);
   
   // Cleanup
-  setTimeout(() => URL.revokeObjectURL(url), 100);
+  setTimeout(() => URL.revokeObjectURL(url), 5000);
 }

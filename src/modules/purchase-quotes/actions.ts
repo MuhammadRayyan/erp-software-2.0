@@ -15,7 +15,9 @@ import {
 } from "./purchase-quote-service";
 import { savePurchaseOrder } from "@/modules/purchase-orders/purchase-order-service";
 import { quantityMicrosToInput } from "@/modules/accounting/calculations/money";
-import { minorToDecimalString } from "@/core/format";
+import { getBusinessTodayIso, getCurrencyMinorUnit, minorToDecimalString } from "@/core/format";
+import { getBusinessDb } from "@/core/db/business";
+import { getCurrency } from "@/modules/currency/currency";
 
 import { formatZodFieldErrors } from "@/lib/zod-errors";
 
@@ -26,6 +28,7 @@ export async function savePurchaseQuoteAction(
   quoteId: string | null,
   input: unknown,
   intent: PurchaseQuoteIntent,
+  afterSave: "view" | "new" = "view",
 ): Promise<PurchaseQuoteActionResult> {
   const { user } = await requireSavePermission(businessId, "purchases", quoteId, intent);
   const parsed = purchaseQuoteInputSchema.safeParse(input);
@@ -38,10 +41,14 @@ export async function savePurchaseQuoteAction(
   } catch (error) {
     return { error: error instanceof Error ? error.message : "The purchase quote could not be saved." };
   }
+  const notice = intent === "issue" ? "Purchase quote issued" : "Draft saved";
   revalidatePath(`/b/${businessId}/purchases/quotes`);
   if (quoteId) revalidatePath(`/b/${businessId}/purchases/quotes/${quoteId}`);
   revalidatePath(`/b/${businessId}/purchases/quotes/${id}`);
-  redirect(`/b/${businessId}/purchases/quotes/${id}?notice=${intent === "issue" ? "Purchase quote issued" : "Draft saved"}`);
+  if (!quoteId && afterSave === "new") {
+    redirect(`/b/${businessId}/purchases/quotes/new?notice=${encodeURIComponent(notice)}&fresh=${Date.now()}`);
+  }
+  redirect(`/b/${businessId}/purchases/quotes/${id}?notice=${encodeURIComponent(notice)}`);
 }
 
 async function runStatusAction(businessId: string, quoteId: string, action: "close" | "cancel" | "delete") {
@@ -156,4 +163,53 @@ export async function createPurchaseQuoteRevisionAction(businessId: string, quot
   } catch (error) {
     return { error: error instanceof Error ? error.message : "Failed to create quote revision." };
   }
+}
+
+export async function duplicatePurchaseQuoteAction(businessId: string, quoteId: string) {
+  const { user } = await requirePermission(businessId, "purchases", "create");
+  let newQuoteId: string;
+  try {
+    const quoteData = getPurchaseQuote(businessId, user.id, quoteId);
+    if (!quoteData) return { error: "Purchase quote not found." };
+    const { sqlite } = getBusinessDb(businessId, user.id);
+    let minorUnit = getCurrencyMinorUnit(quoteData.quote.currencyCode);
+    try {
+      minorUnit = getCurrency(sqlite, quoteData.quote.currencyCode, false).minor_unit;
+    } catch {
+      // fallback to knownMinorUnits
+    }
+    const today = getBusinessTodayIso();
+    const input = {
+      supplierId: quoteData.quote.supplierId,
+      projectId: quoteData.quote.projectId || "",
+      amountsIncludeTax: Boolean(quoteData.quote.amountsIncludeTax),
+      date: today,
+      expiryDate: "",
+      reference: quoteData.quote.reference || "",
+      notes: quoteData.quote.notes || "",
+      terms: quoteData.quote.terms || "",
+      currencyCode: quoteData.quote.currencyCode,
+      exchangeRateToBase: String(quoteData.quote.exchangeRateToBase),
+      exchangeRateDate: quoteData.quote.exchangeRateDate || "",
+      exchangeRateSource: (quoteData.quote.exchangeRateSource as "Manual" | "CBUAE" | "Base") || "Base",
+      lines: quoteData.lines.map((l: any) => ({
+        itemId: l.itemId || "",
+        description: l.description,
+        quantity: quantityMicrosToInput(l.quantityMicros),
+        discountType: l.discountType || "none",
+        discountValue: l.discountValue || "0",
+        unitPrice: minorToDecimalString(l.unitPriceMinor, quoteData.quote.currencyCode, minorUnit),
+        expenseAccountId: l.expenseAccountId || "",
+        taxCodeId: l.taxCodeId || "",
+        projectId: l.projectId || "",
+        customFields: l.customFields ?? {},
+      })),
+    };
+    newQuoteId = savePurchaseQuote(businessId, user.id, input, "draft");
+  } catch (error) {
+    return { error: error instanceof Error ? error.message : "The purchase quote could not be duplicated." };
+  }
+  revalidatePath(`/b/${businessId}/purchases/quotes`);
+  revalidatePath(`/b/${businessId}/purchases/quotes/${newQuoteId}`);
+  redirect(`/b/${businessId}/purchases/quotes/${newQuoteId}?notice=Purchase quote duplicated as draft`);
 }

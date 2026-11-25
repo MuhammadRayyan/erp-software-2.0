@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useState } from "react";
 import Link from "next/link";
 import {
   AlertCircle,
@@ -41,77 +41,78 @@ function formatUptime(seconds: number): string {
 
 export function EngineHealthView({ initialData }: { initialData: EngineDiagnostics }) {
   const [data, setData] = useState<EngineDiagnostics>(initialData);
-  const [isPending, startTransition] = useTransition();
+  const [isRefreshing, setIsRefreshing] = useState(false);
   const [lastPingMs, setLastPingMs] = useState<number | null>(data.database.latencyMs);
 
   const [testEmail, setTestEmail] = useState("");
-  const [isTestingEmail, setIsTestingEmail] = useState(false);
+  const [emailAction, setEmailAction] = useState<"verify" | "send" | null>(null);
   const [testFeedback, setTestFeedback] = useState<{
     type: "success" | "error";
     message: string;
   } | null>(null);
 
-  function handleVerifyConnection() {
-    setIsTestingEmail(true);
+  async function handleVerifyConnection() {
+    if (emailAction) return;
+    setEmailAction("verify");
     setTestFeedback(null);
-    startTransition(async () => {
-      try {
-        const res = await testGlobalEmailDeliveryAction();
-        if (res.ok) {
-          setTestFeedback({ type: "success", message: res.message });
-          toast.success("SMTP Connection Verified: " + res.message);
-        } else {
-          setTestFeedback({ type: "error", message: res.message });
-          toast.error("SMTP Check Failed: " + res.message);
-        }
-      } catch (err) {
-        const msg = err instanceof Error ? err.message : "SMTP verification failed.";
-        setTestFeedback({ type: "error", message: msg });
-        toast.error(msg);
-      } finally {
-        setIsTestingEmail(false);
+    try {
+      const res = await testGlobalEmailDeliveryAction();
+      if (res.ok) {
+        setTestFeedback({ type: "success", message: res.message });
+        toast.success("SMTP Connection Verified: " + res.message);
+      } else {
+        setTestFeedback({ type: "error", message: res.message });
+        toast.error("SMTP Check Failed: " + res.message);
       }
-    });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "SMTP verification failed.";
+      setTestFeedback({ type: "error", message: msg });
+      toast.error(msg);
+    } finally {
+      setEmailAction(null);
+    }
   }
 
-  function handleSendTestEmail() {
+  async function handleSendTestEmail(e?: React.FormEvent) {
+    e?.preventDefault();
+    if (emailAction) return;
     if (!testEmail.trim() || !testEmail.includes("@")) {
       toast.error("Please enter a valid recipient email address.");
       return;
     }
-    setIsTestingEmail(true);
+    setEmailAction("send");
     setTestFeedback(null);
-    startTransition(async () => {
-      try {
-        const res = await testGlobalEmailDeliveryAction(testEmail.trim());
-        if (res.ok) {
-          setTestFeedback({ type: "success", message: res.message });
-          toast.success(res.message);
-        } else {
-          setTestFeedback({ type: "error", message: res.message });
-          toast.error(res.message);
-        }
-      } catch (err) {
-        const msg = err instanceof Error ? err.message : "Failed to dispatch test email.";
-        setTestFeedback({ type: "error", message: msg });
-        toast.error(msg);
-      } finally {
-        setIsTestingEmail(false);
+    try {
+      const res = await testGlobalEmailDeliveryAction(testEmail.trim());
+      if (res.ok) {
+        setTestFeedback({ type: "success", message: res.message });
+        toast.success(res.message);
+      } else {
+        setTestFeedback({ type: "error", message: res.message });
+        toast.error(res.message);
       }
-    });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Failed to dispatch test email.";
+      setTestFeedback({ type: "error", message: msg });
+      toast.error(msg);
+    } finally {
+      setEmailAction(null);
+    }
   }
 
-  function handleRefresh() {
-    startTransition(async () => {
-      try {
-        const fresh = await getEngineDiagnosticsAction();
-        setData(fresh);
-        setLastPingMs(fresh.database.latencyMs);
-        toast.success(`Engine metrics refreshed. DB latency: ${fresh.database.latencyMs}ms`);
-      } catch {
-        toast.error("Failed to refresh diagnostics.");
-      }
-    });
+  async function handleRefresh() {
+    if (isRefreshing) return;
+    setIsRefreshing(true);
+    try {
+      const fresh = await getEngineDiagnosticsAction();
+      setData(fresh);
+      setLastPingMs(fresh.database.latencyMs);
+      toast.success(`Engine metrics refreshed. DB latency: ${fresh.database.latencyMs}ms`);
+    } catch {
+      toast.error("Failed to refresh diagnostics.");
+    } finally {
+      setIsRefreshing(false);
+    }
   }
 
   const heapPct = Math.min(100, Math.round((data.memory.heapUsedMb / Math.max(1, data.memory.heapTotalMb)) * 100));
@@ -137,11 +138,11 @@ export function EngineHealthView({ initialData }: { initialData: EngineDiagnosti
             variant="secondary"
             size="sm"
             onClick={handleRefresh}
-            disabled={isPending}
+            disabled={isRefreshing}
             className="gap-2 text-sm"
           >
-            <RefreshCw className={`size-4 ${isPending ? "animate-spin text-primary" : ""}`} />
-            {isPending ? "Testing..." : "Ping & Refresh"}
+            <RefreshCw className={`size-4 ${isRefreshing ? "animate-spin text-primary" : ""}`} />
+            {isRefreshing ? "Refreshing..." : "Ping & Refresh"}
           </Button>
           <Button asChild variant="secondary" size="sm" className="gap-1.5 text-sm">
             <Link href="/api/health" target="_blank" rel="noreferrer">
@@ -152,19 +153,7 @@ export function EngineHealthView({ initialData }: { initialData: EngineDiagnosti
       </div>
 
       {/* Primary KPI Grid */}
-      <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-6">
-        {/* Status */}
-        <div className="rounded-xl border border-border bg-surface-raised p-4.5 shadow-xs">
-          <div className="flex items-center justify-between text-muted-foreground">
-            <span className="text-sm font-medium">Engine Status</span>
-            <CheckCircle2 className="size-5 text-emerald-600 dark:text-emerald-400" />
-          </div>
-          <div className="mt-2 text-xl font-bold text-emerald-600 dark:text-emerald-400 capitalize">
-            {data.status === "ok" ? "Operational" : data.status}
-          </div>
-          <span className="text-xs text-muted-foreground">All systems passing</span>
-        </div>
-
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
         {/* DB Latency */}
         <div className="rounded-xl border border-border bg-surface-raised p-4.5 shadow-xs">
           <div className="flex items-center justify-between text-muted-foreground">
@@ -199,30 +188,6 @@ export function EngineHealthView({ initialData }: { initialData: EngineDiagnosti
             {data.memory.heapUsedMb} MB
           </div>
           <span className="text-xs text-muted-foreground">of {data.memory.heapTotalMb} MB total</span>
-        </div>
-
-        {/* RSS Memory */}
-        <div className="rounded-xl border border-border bg-surface-raised p-4.5 shadow-xs">
-          <div className="flex items-center justify-between text-muted-foreground">
-            <span className="text-sm font-medium">RSS Memory</span>
-            <Server className="size-5 text-primary" />
-          </div>
-          <div className="mt-2 text-xl font-bold font-mono text-foreground">
-            {data.memory.rssMb} MB
-          </div>
-          <span className="text-xs text-muted-foreground">Resident memory set</span>
-        </div>
-
-        {/* Journal Mode */}
-        <div className="rounded-xl border border-border bg-surface-raised p-4.5 shadow-xs">
-          <div className="flex items-center justify-between text-muted-foreground">
-            <span className="text-sm font-medium">SQLite Engine</span>
-            <Database className="size-5 text-primary" />
-          </div>
-          <div className="mt-2 text-xl font-bold uppercase text-foreground">
-            {data.database.journalMode}
-          </div>
-          <span className="text-xs text-muted-foreground">Write-Ahead Logging</span>
         </div>
       </div>
 
@@ -447,7 +412,7 @@ export function EngineHealthView({ initialData }: { initialData: EngineDiagnosti
               </p>
             </div>
 
-            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5">
+            <form onSubmit={handleSendTestEmail} className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5" noValidate>
               <Input
                 type="email"
                 placeholder="Recipient email address for test (e.g. admin@example.com)"
@@ -461,25 +426,24 @@ export function EngineHealthView({ initialData }: { initialData: EngineDiagnosti
                   variant="secondary"
                   size="sm"
                   onClick={handleVerifyConnection}
-                  disabled={isTestingEmail}
+                  disabled={emailAction !== null}
                   className="gap-1.5 text-xs h-9"
                 >
-                  {isTestingEmail ? <LoaderCircle className="size-3.5 animate-spin" /> : <CheckCircle2 className="size-3.5" />}
+                  {emailAction === "verify" ? <LoaderCircle className="size-3.5 animate-spin" /> : <CheckCircle2 className="size-3.5" />}
                   Verify Connection
                 </Button>
                 <Button
-                  type="button"
+                  type="submit"
                   variant="primary"
                   size="sm"
-                  onClick={handleSendTestEmail}
-                  disabled={isTestingEmail || !testEmail.trim()}
+                  disabled={emailAction !== null || !testEmail.trim()}
                   className="gap-1.5 text-xs h-9"
                 >
-                  {isTestingEmail ? <LoaderCircle className="size-3.5 animate-spin" /> : <Send className="size-3.5" />}
+                  {emailAction === "send" ? <LoaderCircle className="size-3.5 animate-spin" /> : <Send className="size-3.5" />}
                   Send Test Email
                 </Button>
               </div>
-            </div>
+            </form>
 
             {testFeedback && (
               <div

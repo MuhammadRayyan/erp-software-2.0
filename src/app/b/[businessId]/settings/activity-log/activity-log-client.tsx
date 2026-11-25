@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, useTransition } from "react";
+import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import Link from "next/link";
 import { toast } from "sonner";
 import {
@@ -8,7 +8,6 @@ import {
   Search,
   Calendar,
   User,
-  Download,
   FileText,
   CheckCircle2,
   PlusCircle,
@@ -27,8 +26,11 @@ import {
   Sliders,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { useConfirmDialog } from "@/components/ui/confirm-dialog";
+import { ExportCsvButton } from "@/components/export-csv-button";
 import { Input } from "@/components/ui/input";
 import { SelectNative } from "@/components/ui/select-native";
+import { formatDate, formatDateTime, getBusinessDateIso, getBusinessTodayIso } from "@/core/format";
 import {
   type ActivityLogItem,
   type ListActivityLogsResult,
@@ -44,6 +46,7 @@ import {
 interface ActivityLogClientProps {
   businessId: string;
   initialData: ListActivityLogsResult;
+  initialFilters?: ActivityLogFilters;
   usersList: { id: string; name: string; email: string; role: string }[];
   initialRetentionSettings: ActivityLogSettings | null;
   currentUserId: string;
@@ -138,11 +141,16 @@ function getEntityLink(businessId: string, entityType: string, entityId: string 
     case "supplier":
       return `/b/${businessId}/suppliers/${entityId}`;
     case "inventory_item":
-      return `/b/${businessId}/inventory/items`;
+      return `/b/${businessId}/inventory/items/${entityId}`;
     case "stock_adjustment":
       return `/b/${businessId}/inventory/adjustments/${entityId}`;
     case "bank_rule":
       return `/b/${businessId}/settings/bank-rules`;
+    case "post_dated_cheque":
+      return `/b/${businessId}/banking/pdcs`;
+    case "email":
+    case "email_dispatch":
+      return `/b/${businessId}/emails`;
     case "project":
       return `/b/${businessId}/projects/${entityId}`;
     case "account":
@@ -154,7 +162,7 @@ function getEntityLink(businessId: string, entityType: string, entityId: string 
     case "custom_field":
       return `/b/${businessId}/settings/custom-fields`;
     case "financial_lock":
-      return `/b/${businessId}/settings/financial-lock`;
+      return `/b/${businessId}/settings/lock-date`;
     case "user_access":
       return `/b/${businessId}/settings/users`;
     case "activity_log_retention":
@@ -200,8 +208,12 @@ function getEntityDisplayName(entityType: string) {
       return "Project";
     case "account":
       return "Chart of Accounts";
+    case "email":
+      return "Email";
     case "email_dispatch":
       return "Email Dispatch";
+    case "post_dated_cheque":
+      return "Post-Dated Cheque";
     case "financial_lock":
       return "Financial Lock";
     case "user_access":
@@ -215,7 +227,10 @@ function getEntityDisplayName(entityType: string) {
     case "activity_log_retention":
       return "Retention Policy";
     default:
-      return entityType.replace(/_/g, " ");
+      return entityType
+        .split("_")
+        .map((w) => (w ? w[0].toUpperCase() + w.slice(1) : ""))
+        .join(" ");
   }
 }
 
@@ -228,16 +243,14 @@ function getUserInitials(name: string) {
 }
 
 function formatDateGroup(isoString: string) {
-  const d = new Date(isoString);
-  const now = new Date();
-  const isToday = d.toDateString() === now.toDateString();
-  const yesterday = new Date(now.getTime() - 24 * 60 * 60 * 1000);
-  const isYesterday = d.toDateString() === yesterday.toDateString();
+  const targetDay = getBusinessDateIso(isoString);
+  const todayDay = getBusinessTodayIso();
+  const yesterdayDay = getBusinessDateIso(new Date(Date.now() - 24 * 60 * 60 * 1000));
 
-  if (isToday) return "Today";
-  if (isYesterday) return "Yesterday";
+  if (targetDay && targetDay === todayDay) return "Today";
+  if (targetDay && targetDay === yesterdayDay) return "Yesterday";
 
-  return d.toLocaleDateString(undefined, {
+  return formatDate(isoString, {
     weekday: "short",
     year: "numeric",
     month: "short",
@@ -246,8 +259,7 @@ function formatDateGroup(isoString: string) {
 }
 
 function formatTime(isoString: string) {
-  const d = new Date(isoString);
-  return d.toLocaleTimeString(undefined, {
+  return formatDate(isoString, {
     hour: "2-digit",
     minute: "2-digit",
   });
@@ -256,6 +268,7 @@ function formatTime(isoString: string) {
 export function ActivityLogClient({
   businessId,
   initialData,
+  initialFilters,
   usersList,
   initialRetentionSettings,
   currentUserId,
@@ -263,6 +276,7 @@ export function ActivityLogClient({
 }: ActivityLogClientProps) {
   const [data, setData] = useState<ListActivityLogsResult>(initialData);
   const [isPending, startTransition] = useTransition();
+  const { ask, dialog: confirmDialog } = useConfirmDialog();
 
   // Retention policy state (Admin only)
   const [retentionSettings, setRetentionSettings] = useState<ActivityLogSettings | null>(initialRetentionSettings);
@@ -273,11 +287,34 @@ export function ActivityLogClient({
   const [showRetentionPanel, setShowRetentionPanel] = useState(false);
 
   // Filters state
-  const [search, setSearch] = useState("");
-  const [selectedUser, setSelectedUser] = useState<string>("all");
-  const [selectedAction, setSelectedAction] = useState<string>("all");
-  const [selectedEntityType, setSelectedEntityType] = useState<string>("all");
-  const [dateRange, setDateRange] = useState<"all" | "today" | "7d" | "30d">("all");
+  const [search, setSearch] = useState(initialFilters?.search ?? "");
+  const [selectedUser, setSelectedUser] = useState<string>(initialFilters?.userId ?? "all");
+  const [selectedAction, setSelectedAction] = useState<string>(initialFilters?.action ?? "all");
+  const [selectedEntityType, setSelectedEntityType] = useState<string>(initialFilters?.entityType ?? "all");
+  const [dateRange, setDateRange] = useState<"all" | "today" | "7d" | "30d" | "custom">(
+    initialFilters?.dateRange ?? "all",
+  );
+  const filtersRef = useRef<{
+    search: string;
+    userId: string;
+    action: string;
+    entityType: string;
+    dateRange: "all" | "today" | "7d" | "30d" | "custom";
+  }>({
+    search: initialFilters?.search ?? "",
+    userId: initialFilters?.userId ?? "all",
+    action: initialFilters?.action ?? "all",
+    entityType: initialFilters?.entityType ?? "all",
+    dateRange: initialFilters?.dateRange ?? "all",
+  });
+  const requestSeqRef = useRef(0);
+  const searchDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (searchDebounceRef.current) clearTimeout(searchDebounceRef.current);
+    };
+  }, []);
 
   async function handleSaveRetention() {
     try {
@@ -299,58 +336,71 @@ export function ActivityLogClient({
     }
   }
 
-  async function handlePruneLogs() {
-    const confirmed = window.confirm(
-      `Permanently purge all activity logs older than ${retentionDays} days? This action cannot be undone.`,
-    );
-    if (!confirmed) return;
-
-    try {
-      setIsPruningLogs(true);
-      const result = await runActivityLogCleanupAction(businessId, retentionDays);
-      toast.success(
-        result.deletedCount > 0
-          ? `Pruned ${result.deletedCount} activity logs older than ${retentionDays} days (${result.cutoffDate.slice(0, 10)}).`
-          : `No activity logs found older than ${retentionDays} days to prune.`,
-      );
-      setRetentionSettings((prev) =>
-        prev
-          ? {
-              ...prev,
-              lastCleanupAt: result.lastCleanupAt,
-              lastCleanupCount: result.deletedCount,
-            }
-          : prev,
-      );
-      // Reload logs
-      const refreshed = await getActivityLogsAction(businessId, {
-        search,
-        userId: selectedUser === "all" ? undefined : selectedUser,
-        action: selectedAction === "all" ? undefined : selectedAction,
-        entityType: selectedEntityType === "all" ? undefined : selectedEntityType,
-        dateRange,
-      });
-      setData(refreshed);
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Failed to execute manual pruning.");
-    } finally {
-      setIsPruningLogs(false);
-    }
+  function handlePruneLogs() {
+    ask({
+      title: "Purge old activity logs?",
+      description: `Permanently purge all activity logs older than ${retentionDays} days? This action cannot be undone.`,
+      confirmLabel: "Purge logs",
+      tone: "danger",
+      onConfirm: async () => {
+        setIsPruningLogs(true);
+        try {
+          const result = await runActivityLogCleanupAction(businessId, retentionDays);
+          toast.success(
+            result.deletedCount > 0
+              ? `Pruned ${result.deletedCount} activity logs older than ${retentionDays} days (${result.cutoffDate.slice(0, 10)}).`
+              : `No activity logs found older than ${retentionDays} days to prune.`,
+          );
+          setRetentionSettings((prev) =>
+            prev
+              ? {
+                  ...prev,
+                  lastCleanupAt: result.lastCleanupAt,
+                  lastCleanupCount: result.deletedCount,
+                }
+              : prev,
+          );
+          const cur = filtersRef.current;
+          const refreshed = await getActivityLogsAction(businessId, {
+            search: cur.search || undefined,
+            userId: cur.userId === "all" ? undefined : cur.userId,
+            action: cur.action === "all" ? undefined : cur.action,
+            entityType: cur.entityType === "all" ? undefined : cur.entityType,
+            dateRange: cur.dateRange,
+          });
+          setData(refreshed);
+        } finally {
+          setIsPruningLogs(false);
+        }
+      },
+    });
   }
 
   function handleFilterChange(newFilters: Partial<ActivityLogFilters>) {
+    const merged = {
+      search: newFilters.search !== undefined ? newFilters.search : filtersRef.current.search,
+      userId: newFilters.userId !== undefined ? newFilters.userId : filtersRef.current.userId,
+      action: newFilters.action !== undefined ? newFilters.action : filtersRef.current.action,
+      entityType: newFilters.entityType !== undefined ? newFilters.entityType : filtersRef.current.entityType,
+      dateRange: (newFilters.dateRange !== undefined ? newFilters.dateRange : filtersRef.current.dateRange) as "all" | "today" | "7d" | "30d" | "custom",
+    };
+    filtersRef.current = merged;
+
     const nextFilters: ActivityLogFilters = {
-      search: newFilters.search !== undefined ? newFilters.search : search,
-      userId: (newFilters.userId !== undefined ? newFilters.userId : selectedUser) === "all" ? undefined : (newFilters.userId ?? selectedUser),
-      action: (newFilters.action !== undefined ? newFilters.action : selectedAction) === "all" ? undefined : (newFilters.action ?? selectedAction),
-      entityType: (newFilters.entityType !== undefined ? newFilters.entityType : selectedEntityType) === "all" ? undefined : (newFilters.entityType ?? selectedEntityType),
-      dateRange: (newFilters.dateRange !== undefined ? newFilters.dateRange : dateRange),
+      search: merged.search || undefined,
+      userId: merged.userId === "all" ? undefined : merged.userId,
+      action: merged.action === "all" ? undefined : merged.action,
+      entityType: merged.entityType === "all" ? undefined : merged.entityType,
+      dateRange: merged.dateRange,
     };
 
+    const seq = ++requestSeqRef.current;
     startTransition(async () => {
       try {
         const result = await getActivityLogsAction(businessId, nextFilters);
-        setData(result);
+        if (seq === requestSeqRef.current) {
+          setData(result);
+        }
       } catch (err) {
         console.error("Failed to load activity logs:", err);
       }
@@ -358,44 +408,33 @@ export function ActivityLogClient({
   }
 
   function resetFilters() {
+    if (searchDebounceRef.current) {
+      clearTimeout(searchDebounceRef.current);
+      searchDebounceRef.current = null;
+    }
+    filtersRef.current = {
+      search: "",
+      userId: "all",
+      action: "all",
+      entityType: "all",
+      dateRange: "all",
+    };
     setSearch("");
     setSelectedUser("all");
     setSelectedAction("all");
     setSelectedEntityType("all");
     setDateRange("all");
+    const seq = ++requestSeqRef.current;
     startTransition(async () => {
       try {
         const result = await getActivityLogsAction(businessId, {});
-        setData(result);
+        if (seq === requestSeqRef.current) {
+          setData(result);
+        }
       } catch (err) {
         console.error("Failed to reset activity logs:", err);
       }
     });
-  }
-
-  // Export filtered logs to CSV
-  function exportCSV() {
-    if (!data.logs || data.logs.length === 0) return;
-    const headers = ["Timestamp", "User Name", "User Email", "Action", "Entity Type", "Entity Number", "Summary", "IP Address"];
-    const rows = data.logs.map((log) => [
-      `"${log.createdAt}"`,
-      `"${log.userName.replace(/"/g, '""')}"`,
-      `"${log.userEmail.replace(/"/g, '""')}"`,
-      `"${log.action}"`,
-      `"${log.entityType}"`,
-      `"${(log.entityNumber || "").replace(/"/g, '""')}"`,
-      `"${log.summary.replace(/"/g, '""')}"`,
-      `"${log.ipAddress || ""}"`,
-    ]);
-    const csvContent = [headers.join(","), ...rows.map((r) => r.join(","))].join("\r\n");
-    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.setAttribute("href", url);
-    link.setAttribute("download", `activity-logs-${new Date().toISOString().slice(0, 10)}.csv`);
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
   }
 
   // Group logs by date
@@ -583,7 +622,7 @@ export function ActivityLogClient({
                   >
                     <option value="30">30 Days (1 Month)</option>
                     <option value="60">60 Days (2 Months)</option>
-                    <option value="90">90 Days (Recommended · NetSuite Standard)</option>
+                    <option value="90">90 Days (Recommended)</option>
                     <option value="180">180 Days (6 Months)</option>
                     <option value="365">365 Days (1 Year)</option>
                     <option value="730">730 Days (2 Years)</option>
@@ -599,7 +638,7 @@ export function ActivityLogClient({
                     </span>
                     <p className="text-xs text-foreground mt-1">
                       {retentionSettings.lastCleanupAt
-                        ? `Last pruned: ${new Date(retentionSettings.lastCleanupAt).toLocaleString()}`
+                        ? `Last pruned: ${formatDateTime(retentionSettings.lastCleanupAt)}`
                         : "No manual or automated pruning recorded"}
                     </p>
                   </div>
@@ -653,8 +692,12 @@ export function ActivityLogClient({
               placeholder="Search by document #, customer, summary, or user..."
               value={search}
               onChange={(e) => {
-                setSearch(e.target.value);
-                handleFilterChange({ search: e.target.value });
+                const val = e.target.value;
+                setSearch(val);
+                if (searchDebounceRef.current) clearTimeout(searchDebounceRef.current);
+                searchDebounceRef.current = setTimeout(() => {
+                  handleFilterChange({ search: val });
+                }, 300);
               }}
               className="pl-9 text-sm"
             />
@@ -662,16 +705,22 @@ export function ActivityLogClient({
 
           {/* Action buttons */}
           <div className="flex items-center gap-2">
-            <Button
-              variant="secondary"
+            <ExportCsvButton
               size="sm"
-              onClick={exportCSV}
-              disabled={data.logs.length === 0}
-              className="gap-1.5"
-            >
-              <Download className="size-3.5" />
-              <span>Export CSV</span>
-            </Button>
+              filename={`activity-logs-${getBusinessTodayIso()}.csv`}
+              data={data.logs}
+              totalCount={data.metrics.totalCount}
+              columns={[
+                { header: "Timestamp", accessorKey: "createdAt" },
+                { header: "User Name", accessorKey: "userName" },
+                { header: "User Email", accessorKey: "userEmail" },
+                { header: "Action", accessorKey: "action" },
+                { header: "Entity Type", accessorKey: "entityType" },
+                { header: "Entity Number", accessorFn: (r) => r.entityNumber ?? "" },
+                { header: "Summary", accessorKey: "summary" },
+                { header: "IP Address", accessorFn: (r) => r.ipAddress ?? "" },
+              ]}
+            />
             <Button
               variant="ghost"
               size="sm"
@@ -743,6 +792,8 @@ export function ActivityLogClient({
               <optgroup label="Accounting & Operations">
                 <option value="account">Chart of Accounts</option>
                 <option value="bank_rule">Bank Rules</option>
+                <option value="post_dated_cheque">Post-Dated Cheques</option>
+                <option value="email">Emails</option>
                 <option value="email_dispatch">Email Dispatches</option>
                 <option value="financial_lock">Financial Lock</option>
                 <option value="user_access">User Access</option>
@@ -909,6 +960,7 @@ export function ActivityLogClient({
           ))
         )}
       </div>
+      {confirmDialog}
     </div>
   );
 }

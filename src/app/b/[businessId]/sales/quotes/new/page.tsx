@@ -7,10 +7,17 @@ import { listInventoryItemOptions } from "@/modules/inventory/inventory-item-ser
 import { getCurrencySettings } from "@/modules/currency/exchange-rate";
 import { SalesQuoteForm } from "@/modules/sales-quotes/quote-form";
 import { Breadcrumbs } from "@/components/breadcrumbs";
+import { NoticeToast } from "@/components/notice-toast";
 import { getFormDefaults } from "@/modules/form-defaults/form-defaults-service";
 import { listCustomFieldDefinitions } from "@/modules/custom-fields/custom-field-service";
 
-export default async function NewQuotePage({ params, searchParams }: { params: Promise<{ businessId: string }>; searchParams: Promise<{ customerId?: string; projectId?: string }> }) {
+export default async function NewQuotePage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ businessId: string }>;
+  searchParams: Promise<{ customerId?: string; projectId?: string; notice?: string; fresh?: string }>;
+}) {
   const { businessId } = await params;
   const query = await searchParams;
   const { user, access } = await requireModule(businessId, "sales");
@@ -53,11 +60,14 @@ export default async function NewQuotePage({ params, searchParams }: { params: P
         ]}
       />
       <div className="mb-7">
+        <NoticeToast key={query.fresh ?? query.notice} message={query.notice} />
         <h1 className="page-title">New Sales Quote</h1>
         <p className="page-description">Save a draft or issue a quote to a customer.</p>
       </div>
       <SalesQuoteForm
+        key={query.fresh ?? "new"}
         businessId={businessId}
+        isPrefilled={Boolean(query.customerId || query.projectId)}
         customers={customers.map(({ id, name, defaultCurrencyCode }) => ({ id, name, defaultCurrencyCode }))}
         salesAccounts={accounts.map(({ id, name }) => ({ id, name }))}
         taxCodes={taxes.map(({ id, name, rateBasisPoints, vatCategory }) => ({ id, name, rateBasisPoints, vatCategory }))}

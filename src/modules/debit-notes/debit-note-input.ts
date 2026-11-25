@@ -24,7 +24,7 @@ export const debitNoteInputSchema = z.object({
   ...exchangeRateInputShape,
   supplierId: z.string().uuid("Choose a supplier"),
   projectId: projectIdField,
-  purchaseInvoiceId: z.string().uuid("Choose a posted invoice").optional().nullable(),
+  purchaseInvoiceId: z.union([z.literal(""), z.string().uuid("Choose a posted invoice")]).optional().nullable(),
   amountsIncludeTax: amountsIncludeTaxSchema,
   date: z.iso.date("Enter a valid debit note date"),
   taxDate: z.union([z.literal(""), z.iso.date("Enter a valid VAT tax date")]).optional().default(""),

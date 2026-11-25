@@ -15,14 +15,14 @@ export type CommandItem = {
   id?: string;
   label: string;
   hint?: string;
-  group?: "Create" | "Navigation" | "Settings" | "Switch Business" | string;
+  group?: "Create" | "Navigation" | "Settings" | string;
   icon?: LucideIcon;
   keywords?: string;
   shortcut?: string;
   onSelect: () => void;
 };
 
-const GROUP_ORDER = ["Create", "Navigation", "Settings", "Switch Business"];
+const GROUP_ORDER = ["Create", "Navigation", "Settings"];
 
 function getGroupName(item: CommandItem): string {
   return item.group ?? (item.hint === "Create" ? "Create" : "Navigation");
@@ -137,7 +137,7 @@ export function CommandPalette({
       <CommandInput
         value={search}
         onValueChange={setSearch}
-        placeholder="Search pages, actions, settings, or switch business…"
+        placeholder="Search pages, actions, or settings…"
         aria-label="Search commands"
         className="h-11 pr-8 text-base sm:text-sm"
       />

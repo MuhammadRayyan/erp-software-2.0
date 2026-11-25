@@ -9,6 +9,7 @@ import {
   Ban,
   CheckCircle2,
   Landmark,
+  MoreHorizontal,
   Plus,
   Send,
 } from "lucide-react";
@@ -18,16 +19,23 @@ import {
   getPaginationRowModel as createPaginationRowModel,
   getSortedRowModel as createSortedRowModel,
 } from "@tanstack/react-table/legacy";
-import { type SortingState } from "@tanstack/react-table";
 import { toast } from "sonner";
 import { PageHeader } from "@/components/page-header";
 import { StatusBadge, statusLabel } from "@/components/status-badge";
 import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { useActionPermission } from "@/components/permissions-provider";
 import { DataTable, ListTableCard } from "@/components/ui/data-table";
 import { useColumns } from "@/components/columns-dropdown";
 import { DensityToggle } from "@/components/density-toggle";
+import { ExportCsvButton } from "@/components/export-csv-button";
 import { useTableDensity } from "@/components/use-table-density";
-import { ClientListPagination, useTablePagination } from "@/components/list-pagination";
+import { ClientListPagination } from "@/components/list-pagination";
 import { TableTotalsBar } from "@/components/table-totals-bar";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -40,7 +48,9 @@ import {
 } from "@/components/ui/dialog";
 import { ActiveFiltersRow, DateRangeFilter, FilterChip, ListToolbar, SearchInput, ToolbarSelect } from "@/components/list-toolbar";
 import { FormError } from "@/components/form-error";
-import { formatDate, formatMoney } from "@/core/format";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { useUrlListState } from "@/hooks/use-url-list-state";
+import { formatDate, formatMoney, getBusinessTodayIso, minorToDecimalString } from "@/core/format";
 import type { PdcMaturitySummary, PdcRecord } from "@/modules/banking/pdc-service";
 import {
   bouncePdcAction,
@@ -81,18 +91,26 @@ export function PdcsClient({
 }: PdcsClientProps) {
   const router = useRouter();
   const { density } = useTableDensity(businessId);
-  const [query, setQuery] = useState("");
-  const [directionFilter, setDirectionFilter] = useState("");
-  const [statusFilter, setStatusFilter] = useState("");
-  const [fromDate, setFromDate] = useState("");
-  const [toDate, setToDate] = useState("");
-  const [sorting, setSorting] = useState<SortingState>([]);
+  const {
+    query,
+    direction: directionFilter,
+    status: statusFilter,
+    fromDate,
+    toDate,
+    sorting,
+    setFilter,
+    setPage,
+    setPageSize,
+    onSortingChange,
+    resetFilters,
+    buildPagination,
+  } = useUrlListState();
 
   const [createOpen, setCreateOpen] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [formError, setFormError] = useState("");
 
-  const today = new Date().toISOString().slice(0, 10);
+  const today = getBusinessTodayIso();
   const [direction, setDirection] = useState<"receivable" | "payable">("receivable");
   const [chequeNumber, setChequeNumber] = useState("");
   const [chequeBankName, setChequeBankName] = useState("");
@@ -105,8 +123,13 @@ export function PdcsClient({
   const [reference, setReference] = useState("");
   const [notes, setNotes] = useState("");
 
+  const [pendingId, setPendingId] = useState<string | null>(null);
+  const [cancelTarget, setCancelTarget] = useState<PdcRecord | null>(null);
   const [bounceTarget, setBounceTarget] = useState<PdcRecord | null>(null);
   const [bounceReason, setBounceReason] = useState("");
+  const [bounceError, setBounceError] = useState("");
+  const canEdit = useActionPermission("edit");
+  const canApprove = useActionPermission("approve");
 
   const initialColumns = useMemo(
     () => ({
@@ -178,33 +201,56 @@ export function PdcsClient({
   }
 
   const handleDeposit = useCallback(async (pdc: PdcRecord) => {
-    const res = await depositPdcAction(businessId, pdc.id);
-    if (res.error) return toast.error(res.error);
-    toast.success(`${pdc.pdcNumber} marked as deposited at bank.`);
-    router.refresh();
-  }, [businessId, router]);
+    if (pendingId) return;
+    setPendingId(pdc.id);
+    try {
+      const res = await depositPdcAction(businessId, pdc.id);
+      if (res.error) return toast.error(res.error);
+      toast.success(`${pdc.pdcNumber} marked as deposited at bank.`);
+      router.refresh();
+    } finally {
+      setPendingId(null);
+    }
+  }, [businessId, pendingId, router]);
 
   const handleClear = useCallback(async (pdc: PdcRecord) => {
-    const res = await clearPdcAction(businessId, pdc.id);
-    if (res.error) return toast.error(res.error);
-    toast.success(`${pdc.pdcNumber} cleared and posted to bank GL.`);
-    router.refresh();
-  }, [businessId, router]);
+    if (pendingId) return;
+    setPendingId(pdc.id);
+    try {
+      const res = await clearPdcAction(businessId, pdc.id);
+      if (res.error) return toast.error(res.error);
+      toast.success(`${pdc.pdcNumber} cleared and posted to bank GL.`);
+      router.refresh();
+    } finally {
+      setPendingId(null);
+    }
+  }, [businessId, pendingId, router]);
 
   const handleCancel = useCallback(async (pdc: PdcRecord) => {
-    const res = await cancelPdcAction(businessId, pdc.id);
-    if (res.error) return toast.error(res.error);
-    toast.success(`${pdc.pdcNumber} cancelled and reversed.`);
-    router.refresh();
-  }, [businessId, router]);
+    if (pendingId) return;
+    setPendingId(pdc.id);
+    try {
+      const res = await cancelPdcAction(businessId, pdc.id);
+      if (res.error) return toast.error(res.error);
+      toast.success(`${pdc.pdcNumber} cancelled and reversed.`);
+      setCancelTarget(null);
+      router.refresh();
+    } finally {
+      setPendingId(null);
+    }
+  }, [businessId, pendingId, router]);
 
   async function handleConfirmBounce(e: React.FormEvent) {
     e.preventDefault();
     if (!bounceTarget) return;
+    setBounceError("");
     setSubmitting(true);
     const res = await bouncePdcAction(businessId, bounceTarget.id, bounceReason);
     setSubmitting(false);
-    if (res.error) return toast.error(res.error);
+    if (res.error) {
+      setBounceError(res.error);
+      return;
+    }
     toast.success(`${bounceTarget.pdcNumber} recorded as bounced.`);
     setBounceTarget(null);
     setBounceReason("");
@@ -304,69 +350,78 @@ export function PdcsClient({
         meta: { className: "text-right" },
         cell: ({ row }: { row: { original: PdcRecord } }) => {
           const pdc = row.original;
+          const isOpen = pdc.status === "held" || pdc.status === "deposited";
+          if (!isOpen) return null;
+          const hasMore = canApprove || (pdc.status === "held" && canEdit);
+          const isRowPending = pendingId === pdc.id;
           return (
             <div className="inline-flex items-center gap-1.5">
               {pdc.status === "held" && (
-                <Button permission="edit" size="sm" variant="secondary" onClick={() => handleDeposit(pdc)} title="Mark cheque deposited at bank">
+                <Button permission="edit" size="sm" variant="secondary" disabled={Boolean(pendingId)} onClick={() => handleDeposit(pdc)} title="Mark cheque deposited at bank">
                   <Send className="size-3.5" /> Deposit
                 </Button>
               )}
-              {(pdc.status === "held" || pdc.status === "deposited") && (
-                <>
-                  <Button permission="approve" size="sm" onClick={() => handleClear(pdc)} title="Clear cheque to bank ledger">
-                    <CheckCircle2 className="size-3.5" /> Clear
-                  </Button>
-                  <Button
-                    permission="approve"
-                    size="sm"
-                    variant="secondary"
-                    onClick={() => {
-                      setBounceTarget(pdc);
-                      setBounceReason("");
-                    }}
-                    title="Record cheque bounced"
-                  >
-                    <AlertTriangle className="size-3.5 text-danger" /> Bounce
-                  </Button>
-                </>
-              )}
-              {pdc.status === "held" && (
-                <Button permission="edit" size="sm" variant="ghost" onClick={() => handleCancel(pdc)} title="Cancel held cheque">
-                  <Ban className="size-3.5" />
-                </Button>
+              <Button permission="approve" size="sm" disabled={Boolean(pendingId)} onClick={() => handleClear(pdc)} title="Clear cheque to bank ledger">
+                <CheckCircle2 className="size-3.5" /> Clear
+              </Button>
+              {hasMore && (
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button variant="ghost" size="icon" disabled={isRowPending} className="size-7 text-muted-foreground hover:text-foreground" aria-label={`Actions for ${pdc.pdcNumber}`}>
+                      <MoreHorizontal className="size-4" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end" className="w-44">
+                    <DropdownMenuItem
+                      permission="approve"
+                      disabled={Boolean(pendingId)}
+                      className="text-danger focus:text-danger"
+                      onSelect={() => {
+                        setBounceError("");
+                        setBounceTarget(pdc);
+                        setBounceReason("");
+                      }}
+                    >
+                      <AlertTriangle className="size-4 text-danger" /> Bounce Cheque
+                    </DropdownMenuItem>
+                    {pdc.status === "held" && (
+                      <DropdownMenuItem
+                        permission="edit"
+                        disabled={Boolean(pendingId)}
+                        className="text-danger focus:text-danger"
+                        onSelect={() => setCancelTarget(pdc)}
+                      >
+                        <Ban className="size-4 text-danger" /> Cancel Cheque
+                      </DropdownMenuItem>
+                    )}
+                  </DropdownMenuContent>
+                </DropdownMenu>
               )}
             </div>
           );
         },
       },
     ],
-    [handleCancel, handleClear, handleDeposit, today],
+    [canApprove, canEdit, handleClear, handleDeposit, pendingId, today],
   );
 
-  const { pagination, onPaginationChange, paginationInfo, setPage, setPageSize } = useTablePagination(filtered.length);
+  const { pagination, paginationInfo } = buildPagination(filtered.length);
 
   const table = useTable({
     data: filtered,
     columns,
     state: { sorting, pagination, columnVisibility: colVisibility },
-    onSortingChange: setSorting,
-    onPaginationChange,
+    onSortingChange,
     getCoreRowModel: createCoreRowModel(),
     getSortedRowModel: createSortedRowModel(),
     getPaginationRowModel: createPaginationRowModel(),
   });
 
-  const clearFilters = () => {
-    setQuery("");
-    setDirectionFilter("");
-    setStatusFilter("");
-    setFromDate("");
-    setToDate("");
-  };
+  const clearFilters = resetFilters;
   const hasActiveFilter = Boolean(query || directionFilter || statusFilter || fromDate || toDate);
 
   const totalPdcMinor = useMemo(
-    () => filtered.filter((p) => p.status !== "cancelled").reduce((sum, p) => sum + p.amountMinor, 0),
+    () => filtered.filter((p) => p.status === "held" || p.status === "deposited").reduce((sum, p) => sum + p.amountMinor, 0),
     [filtered],
   );
 
@@ -418,13 +473,13 @@ export function PdcsClient({
       <ListToolbar>
         <SearchInput
           value={query}
-          onChange={setQuery}
+          onChange={(v) => setFilter("q", v)}
           placeholder="Search PDC #, cheque #, party, bank..."
           ariaLabel="Search PDCs"
         />
         <ToolbarSelect
           value={directionFilter}
-          onChange={setDirectionFilter}
+          onChange={(v) => setFilter("direction", v)}
           ariaLabel="Filter by direction"
           options={[
             { value: "", label: "All directions" },
@@ -435,14 +490,14 @@ export function PdcsClient({
         <DateRangeFilter
           fromDate={fromDate}
           toDate={toDate}
-          onFromChange={setFromDate}
-          onToChange={setToDate}
+          onFromChange={(v) => setFilter("from", v)}
+          onToChange={(v) => setFilter("to", v)}
           fromAriaLabel="Maturity date from"
           toAriaLabel="Maturity date to"
         />
         <ToolbarSelect
           value={statusFilter}
-          onChange={setStatusFilter}
+          onChange={(v) => setFilter("status", v)}
           ariaLabel="Filter by status"
           options={[
             { value: "", label: "All statuses" },
@@ -454,6 +509,22 @@ export function PdcsClient({
           ]}
         />
         <div className="ml-auto flex items-center gap-2">
+          <ExportCsvButton
+            size="sm"
+            filename="post-dated-cheques"
+            data={filtered}
+            columns={[
+              { header: "PDC #", accessorKey: "pdcNumber" },
+              { header: "Direction", accessorKey: "direction" },
+              { header: "Cheque #", accessorKey: "chequeNumber" },
+              { header: "Party", accessorFn: (r) => r.customerName ?? r.supplierName ?? "" },
+              { header: "Clearing Account", accessorKey: "bankAccountName" },
+              { header: "Maturity Date", accessorKey: "maturityDate" },
+              { header: "Amount", accessorFn: (r) => minorToDecimalString(r.amountMinor, r.currencyCode) },
+              { header: "Currency", accessorFn: (r) => r.currencyCode },
+              { header: "Status", accessorKey: "status" },
+            ]}
+          />
           <DensityToggle businessId={businessId} />
           {dropdown}
         </div>
@@ -461,16 +532,16 @@ export function PdcsClient({
 
       {hasActiveFilter && (
         <ActiveFiltersRow onClearAll={clearFilters}>
-          {query && <FilterChip onRemove={() => setQuery("")}>Search: {query}</FilterChip>}
+          {query && <FilterChip onRemove={() => setFilter("q", "")}>Search: {query}</FilterChip>}
           {directionFilter && (
-            <FilterChip onRemove={() => setDirectionFilter("")}>
+            <FilterChip onRemove={() => setFilter("direction", "")}>
               Direction: {directionFilter === "receivable" ? "Receivable" : "Payable"}
             </FilterChip>
           )}
-          {fromDate && <FilterChip onRemove={() => setFromDate("")}>From: {fromDate}</FilterChip>}
-          {toDate && <FilterChip onRemove={() => setToDate("")}>To: {toDate}</FilterChip>}
+          {fromDate && <FilterChip onRemove={() => setFilter("from", "")}>From: {formatDate(fromDate)}</FilterChip>}
+          {toDate && <FilterChip onRemove={() => setFilter("to", "")}>To: {formatDate(toDate)}</FilterChip>}
           {statusFilter && (
-            <FilterChip onRemove={() => setStatusFilter("")}>
+            <FilterChip onRemove={() => setFilter("status", "")}>
               Status: {statusLabel(statusFilter)}
             </FilterChip>
           )}
@@ -647,7 +718,15 @@ export function PdcsClient({
         </DialogContent>
       </DialogRoot>
 
-      <DialogRoot open={Boolean(bounceTarget)} onOpenChange={(o) => !o && setBounceTarget(null)}>
+      <DialogRoot
+        open={Boolean(bounceTarget)}
+        onOpenChange={(o) => {
+          if (!o) {
+            setBounceTarget(null);
+            setBounceError("");
+          }
+        }}
+      >
         <DialogContent className="max-w-md">
           <DialogTitle>Record Bounced Cheque</DialogTitle>
           <DialogDescription>
@@ -664,17 +743,45 @@ export function PdcsClient({
                 required
               />
             </div>
+            {bounceError && <FormError message={bounceError} />}
             <div className="flex justify-end gap-2 pt-3 border-t border-border">
-              <Button type="button" variant="secondary" onClick={() => setBounceTarget(null)}>
+              <Button
+                type="button"
+                variant="secondary"
+                onClick={() => {
+                  setBounceTarget(null);
+                  setBounceError("");
+                }}
+              >
                 Cancel
               </Button>
-              <Button permission="approve" type="submit" variant="danger" disabled={submitting}>
-                {submitting ? "Recording…" : "Confirm Bounce"}
+              <Button permission="approve" type="submit" variant="danger" loading={submitting}>
+                Confirm Bounce
               </Button>
             </div>
           </form>
         </DialogContent>
       </DialogRoot>
+
+      <ConfirmDialog
+        open={Boolean(cancelTarget)}
+        onOpenChange={(open) => {
+          if (!open) setCancelTarget(null);
+        }}
+        title={cancelTarget ? `Cancel ${cancelTarget.pdcNumber}?` : "Cancel cheque?"}
+        description={
+          cancelTarget
+            ? `This will cancel held cheque ${cancelTarget.chequeNumber} (${formatMoney(cancelTarget.amountMinor, cancelTarget.currencyCode)}) and reverse its clearing entry.`
+            : undefined
+        }
+        confirmLabel="Cancel Cheque"
+        cancelLabel="Keep Cheque"
+        tone="danger"
+        pending={Boolean(cancelTarget && pendingId === cancelTarget.id)}
+        onConfirm={async () => {
+          if (cancelTarget) await handleCancel(cancelTarget);
+        }}
+      />
     </div>
   );
 }

@@ -13,6 +13,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { saveBankAccountAction } from "./actions";
 import { bankAccountInputSchema, type BankAccountInput } from "./bank-account-input";
+import { useUnsavedChanges } from "@/hooks/use-unsaved-changes";
 
 
 export function BankAccountForm({ businessId, accountId, ledgerAccounts, initial }: {
@@ -26,7 +27,8 @@ export function BankAccountForm({ businessId, accountId, ledgerAccounts, initial
     mode: "onTouched",
     defaultValues: initial,
   });
-  const { register, control, handleSubmit, setError, formState: { errors, isSubmitting } } = form;
+  const { register, control, handleSubmit, setValue, setError, formState: { errors, isSubmitting, isDirty, isSubmitSuccessful } } = form;
+  useUnsavedChanges(isDirty && !isSubmitSuccessful);
   const isCash = useWatch({ control, name: "isCashAccount" });
   const mappedLedgerOptions = ledgerAccounts
     .filter((ledger) => ledger.available && (isCash ? ledger.subtype === "cash" : ledger.subtype === "bank"))
@@ -44,12 +46,16 @@ export function BankAccountForm({ businessId, accountId, ledgerAccounts, initial
     <section className="border-b border-border pb-7"><h2 className="text-base font-semibold">Account details</h2><div className="mt-5 grid gap-5 sm:grid-cols-2">
       <div className="space-y-1.5"><Label htmlFor="name">Account name</Label><Input id="name" {...register("name")} aria-invalid={!!errors.name} />{errors.name && <p className="field-error">{errors.name.message}</p>}</div>
       <div className="space-y-1.5"><Label htmlFor="accountCode">Account code <span className="font-normal text-muted-foreground">(optional)</span></Label><Input id="accountCode" {...register("accountCode")} /></div>
-      <div className="space-y-1.5"><Label htmlFor="bankName">Bank name <span className="font-normal text-muted-foreground">(optional)</span></Label><Input id="bankName" {...register("bankName")} disabled={isCash} /></div>
-      <div className="space-y-1.5"><Label htmlFor="accountNumberMasked">Masked account number <span className="font-normal text-muted-foreground">(optional)</span></Label><Input id="accountNumberMasked" placeholder="•••• 1234" {...register("accountNumberMasked")} disabled={isCash} /></div>
+      {!isCash && (
+        <>
+          <div className="space-y-1.5"><Label htmlFor="bankName">Bank name <span className="font-normal text-muted-foreground">(optional)</span></Label><Input id="bankName" {...register("bankName")} /></div>
+          <div className="space-y-1.5"><Label htmlFor="accountNumberMasked">Masked account number <span className="font-normal text-muted-foreground">(optional)</span></Label><Input id="accountNumberMasked" placeholder="•••• 1234" {...register("accountNumberMasked")} /></div>
+        </>
+      )}
       <div className="space-y-1.5"><Label htmlFor="currencyCode">Currency</Label><Input id="currencyCode" readOnly className="bg-surface-muted" {...register("currencyCode")} /></div>
       <div className="space-y-1.5"><Label htmlFor="ledgerAccountId">Mapped GL account</Label><Controller control={control} name="ledgerAccountId" render={({ field }) => <Combobox id="ledgerAccountId" ariaLabel="Mapped GL account" ariaInvalid={!!errors.ledgerAccountId} options={mappedLedgerOptions} value={field.value ?? ""} onValueChange={field.onChange} placeholder="Choose account" searchPlaceholder="Search ledger account..." />} />{errors.ledgerAccountId && <p className="field-error">{errors.ledgerAccountId.message}</p>}</div>
     </div></section>
-    <div className="flex flex-wrap gap-5"><label className="flex items-center gap-2 text-sm cursor-pointer select-none"><Controller control={control} name="isCashAccount" render={({ field }) => <Checkbox checked={Boolean(field.value)} onCheckedChange={(c) => field.onChange(Boolean(c))} aria-label="Cash account" />} /> Cash account</label><label className="flex items-center gap-2 text-sm cursor-pointer select-none"><Controller control={control} name="isActive" render={({ field }) => <Checkbox checked={Boolean(field.value)} onCheckedChange={(c) => field.onChange(Boolean(c))} aria-label="Active" />} /> Active</label></div>
+    <div className="flex flex-wrap gap-5"><label className="flex items-center gap-2 text-sm cursor-pointer select-none"><Controller control={control} name="isCashAccount" render={({ field }) => <Checkbox checked={Boolean(field.value)} onCheckedChange={(c) => { const next = Boolean(c); field.onChange(next); if (next) { setValue("bankName", "", { shouldDirty: true }); setValue("accountNumberMasked", "", { shouldDirty: true }); } }} aria-label="Cash account" />} /> Cash account</label><label className="flex items-center gap-2 text-sm cursor-pointer select-none"><Controller control={control} name="isActive" render={({ field }) => <Checkbox checked={Boolean(field.value)} onCheckedChange={(c) => field.onChange(Boolean(c))} aria-label="Active" />} /> Active</label></div>
     <div className="sticky bottom-0 z-20 -mx-4 flex justify-between border-t border-border bg-surface/95 px-4 py-3 backdrop-blur-sm sm:mx-0 sm:rounded-t-lg sm:border-x"><Button asChild variant="ghost"><Link href={accountId ? `/b/${businessId}/banking/accounts/${accountId}` : `/b/${businessId}/banking/accounts`}>Cancel</Link></Button><Button permission={"save"} type="submit" disabled={isSubmitting}>{isSubmitting && <LoaderCircle className="size-4 animate-spin" />} {accountId ? "Save Changes" : "Create Bank Account"}</Button></div>
   </form>;
 }

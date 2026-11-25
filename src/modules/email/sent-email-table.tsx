@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo } from "react";
 import Link from "next/link";
 import { Paperclip } from "lucide-react";
 import {
@@ -9,10 +9,11 @@ import {
   getPaginationRowModel as createPaginationRowModel,
   getSortedRowModel as createSortedRowModel,
 } from "@tanstack/react-table/legacy";
-import { type SortingState } from "@tanstack/react-table";
 import { useColumns } from "@/components/columns-dropdown";
 import { DensityToggle } from "@/components/density-toggle";
-import { ClientListPagination, useTablePagination } from "@/components/list-pagination";
+import { ClientListPagination } from "@/components/list-pagination";
+import { ExportCsvButton } from "@/components/export-csv-button";
+import { useUrlListState } from "@/hooks/use-url-list-state";
 import { ActiveFiltersRow, FilterChip, ListToolbar, SearchInput, ToolbarSelect } from "@/components/list-toolbar";
 import { StatusBadge, statusLabel } from "@/components/status-badge";
 import { TableTotalsBar } from "@/components/table-totals-bar";
@@ -56,9 +57,17 @@ export function SentEmailTable({
   serverSnapshot?: ColumnVisibility;
 }) {
   const { density } = useTableDensity(businessId);
-  const [query, setQuery] = useState("");
-  const [status, setStatus] = useState("");
-  const [sorting, setSorting] = useState<SortingState>([]);
+  const {
+    query,
+    status,
+    sorting,
+    setFilter,
+    setPage,
+    setPageSize,
+    onSortingChange,
+    resetFilters,
+    buildPagination,
+  } = useUrlListState();
 
   const initialColumns = useMemo(
     () => ({
@@ -94,12 +103,9 @@ export function SentEmailTable({
         header: "Subject",
         meta: { wrap: true },
         cell: ({ row }: { row: { original: SentEmailRow } }) => (
-          <>
-            <Link href={`/b/${businessId}/emails/${row.original.id}`} className="font-medium text-primary hover:underline">
-              {row.original.subject}
-            </Link>
-            <p className="mt-0.5 text-xs text-muted-foreground">From {row.original.fromAddress}</p>
-          </>
+          <Link href={`/b/${businessId}/emails/${row.original.id}`} className="font-medium text-primary hover:underline">
+            {row.original.subject}
+          </Link>
         ),
       },
       {
@@ -169,32 +175,28 @@ export function SentEmailTable({
     [businessId],
   );
 
-  const { pagination, onPaginationChange, paginationInfo, setPage, setPageSize } = useTablePagination(rows.length);
+  const { pagination, paginationInfo } = buildPagination(rows.length);
 
   const table = useTable({
     data: rows,
     columns,
     state: { sorting, pagination, columnVisibility: colVisibility },
-    onSortingChange: setSorting,
-    onPaginationChange,
+    onSortingChange,
     getCoreRowModel: createCoreRowModel(),
     getSortedRowModel: createSortedRowModel(),
     getPaginationRowModel: createPaginationRowModel(),
   });
 
-  const clearFilters = () => {
-    setQuery("");
-    setStatus("");
-  };
+  const clearFilters = resetFilters;
   const hasActiveFilter = Boolean(query || status);
 
   return (
     <>
       <ListToolbar>
-        <SearchInput value={query} onChange={setQuery} placeholder="Search subject, recipient, or document…" ariaLabel="Search sent emails" />
+        <SearchInput value={query} onChange={(val) => setFilter("q", val)} placeholder="Search subject, recipient, or document…" ariaLabel="Search sent emails" />
         <ToolbarSelect
           value={status}
-          onChange={setStatus}
+          onChange={(val) => setFilter("status", val)}
           ariaLabel="Filter by status"
           options={[
             { value: "", label: "All statuses" },
@@ -204,14 +206,27 @@ export function SentEmailTable({
           ]}
         />
         <div className="ml-auto flex items-center gap-1.5 shrink-0">
+          <ExportCsvButton
+            size="sm"
+            permissionModule={["sales", "purchases"]}
+            filename={`sent-emails-${new Date().toISOString().slice(0, 10)}.csv`}
+            data={rows}
+            columns={[
+              { header: "Subject", accessorKey: "subject" },
+              { header: "To", accessorKey: "toAddresses" },
+              { header: "Document", accessorKey: "relatedDocumentNumber" },
+              { header: "Sent At", accessorKey: "createdAt" },
+              { header: "Status", accessorKey: "status" },
+            ]}
+          />
           <DensityToggle businessId={businessId} />
           {dropdown}
         </div>
       </ListToolbar>
       {hasActiveFilter && (
         <ActiveFiltersRow onClearAll={clearFilters}>
-          {status && <FilterChip onRemove={() => setStatus("")}>Status: {statusLabel(status)}</FilterChip>}
-          {query && <FilterChip onRemove={() => setQuery("")}>Search: {query}</FilterChip>}
+          {status && <FilterChip onRemove={() => setFilter("status", "")}>Status: {statusLabel(status)}</FilterChip>}
+          {query && <FilterChip onRemove={() => setFilter("q", "")}>Search: {query}</FilterChip>}
         </ActiveFiltersRow>
       )}
       <ListTableCard>
@@ -222,6 +237,7 @@ export function SentEmailTable({
           minWidth="min-w-[860px]"
           noResultsMessage="No sent emails match"
           onClearFilters={clearFilters}
+          getRowHref={(row: SentEmailRow) => `/b/${businessId}/emails/${row.id}`}
         />
         {rows.length > 0 && (
           <TableTotalsBar filteredCount={rows.length} totalCount={emails.length} itemLabel="emails" />

@@ -140,15 +140,15 @@ export async function saveBankRuleAction(
   ruleId: string | null,
   input: unknown,
 ): Promise<BankingActionResult & { id?: string }> {
-  const { user } = await requirePermission(businessId, "settings", "edit");
-  const parsed = bankRuleInputSchema.safeParse(input);
-  if (!parsed.success) {
-    return {
-      error: "Please check the bank rule form fields.",
-      fieldErrors: z.flattenError(parsed.error).fieldErrors as Record<string, string[]>,
-    };
-  }
   try {
+    const { user } = await requirePermission(businessId, "settings", "edit");
+    const parsed = bankRuleInputSchema.safeParse(input);
+    if (!parsed.success) {
+      return {
+        error: "Please check the bank rule form fields.",
+        fieldErrors: z.flattenError(parsed.error).fieldErrors as Record<string, string[]>,
+      };
+    }
     if (ruleId) {
       updateBankRule(businessId, user.id, ruleId, parsed.data);
       revalidatePath(`/b/${businessId}/settings/bank-rules`);
@@ -169,8 +169,8 @@ export async function deleteBankRuleAction(
   businessId: string,
   ruleId: string,
 ): Promise<BankingActionResult> {
-  const { user } = await requirePermission(businessId, "settings", "edit");
   try {
+    const { user } = await requirePermission(businessId, "settings", "edit");
     deleteBankRule(businessId, user.id, ruleId);
     revalidatePath(`/b/${businessId}/settings/bank-rules`);
     revalidatePath(`/b/${businessId}/banking`);
@@ -185,8 +185,8 @@ export async function toggleBankRuleActiveAction(
   ruleId: string,
   isActive: boolean,
 ): Promise<BankingActionResult> {
-  const { user } = await requirePermission(businessId, "settings", "edit");
   try {
+    const { user } = await requirePermission(businessId, "settings", "edit");
     toggleBankRuleActive(businessId, user.id, ruleId, isActive);
     revalidatePath(`/b/${businessId}/settings/bank-rules`);
     revalidatePath(`/b/${businessId}/banking`);

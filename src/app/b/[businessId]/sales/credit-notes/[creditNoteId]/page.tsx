@@ -9,7 +9,8 @@ import { getCreditNote } from "@/modules/sales-credit-notes/credit-note-service"
 import { CreditNoteViewActions } from "@/modules/sales-credit-notes/credit-note-view-actions";
 import { emirateLabels, type Emirate } from "@/modules/tax/uae-vat-config";
 import { buildDocumentEmailContext, buildDocumentEmailDefaults } from "@/modules/email/email-defaults";
-import { BackLink } from "@/components/back-link";
+import { Breadcrumbs } from "@/components/breadcrumbs";
+import { DocumentFlowStepper, type FlowStep } from "@/components/documents/document-flow-stepper";
 import { getDocumentViewData } from "@/modules/document-templates/document-data-extractor";
 import { DocumentViewLayout } from "@/modules/document-templates/components/document-view-layout";
 
@@ -22,6 +23,34 @@ export default async function CreditNoteViewPage({ params, searchParams }: { par
   const { note, customer, invoice, lines } = record;
   const currency = note.currencyCode;
   const linkedProjects = Array.from(new Map(lines.filter((line) => line.project).map((line) => [line.project!.id, line.project!] as const)).values());
+
+  const flowSteps: FlowStep[] = [
+    {
+      key: "invoice",
+      label: "Sales Invoice",
+      documentNumber: invoice.invoiceNumber,
+      href: `/b/${businessId}/sales/invoices/${invoice.id}`,
+      state: "completed",
+    },
+    {
+      key: "credit-note",
+      label: "Credit Note",
+      documentNumber: note.creditNoteNumber,
+      statusLabel: note.documentStatus,
+      state: "current",
+    },
+    ...(record.journal
+      ? [{
+          key: "journal",
+          label: "Journal",
+          documentNumber: record.journal.entryNumber,
+          href: `/b/${businessId}/accounting/journal/${record.journal.id}`,
+          state: "completed" as const,
+        }]
+      : note.documentStatus !== "void"
+        ? [{ key: "journal", label: "Journal", state: "pending" as const }]
+        : []),
+  ];
 
   const viewBundle = getDocumentViewData(
     businessId,
@@ -50,7 +79,13 @@ export default async function CreditNoteViewPage({ params, searchParams }: { par
   return (
     <div className="page-container">
       <NoticeToast message={notice} />
-      <BackLink href={`/b/${businessId}/sales/credit-notes`}>Sales Credit Notes</BackLink>
+      <Breadcrumbs
+        businessId={businessId}
+        items={[
+          { label: "Sales Credit Notes", href: `/b/${businessId}/sales/credit-notes` },
+          { label: note.creditNoteNumber },
+        ]}
+      />
       <div className="mb-5 flex flex-col justify-between gap-4 lg:flex-row lg:items-start">
         <div>
           <div className="flex flex-wrap items-center gap-2"><h1 className="page-title tabular">{note.creditNoteNumber}</h1><StatusBadge status={note.documentStatus} /></div>
@@ -65,6 +100,7 @@ export default async function CreditNoteViewPage({ params, searchParams }: { par
         </div>
         <CreditNoteViewActions businessId={businessId} noteId={note.id} creditNoteNumber={note.creditNoteNumber} documentStatus={note.documentStatus} journalEntryId={record.journal?.id ?? null} emailDefaults={emailDefaults} />
       </div>
+      <DocumentFlowStepper steps={flowSteps} className="no-print" />
 
       <DocumentViewLayout
         data={viewBundle.data}

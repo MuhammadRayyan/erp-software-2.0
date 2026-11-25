@@ -1,6 +1,6 @@
 "use client";
 import { useRouter } from "next/navigation";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { LoaderCircle } from "lucide-react";
 import { Controller, useFieldArray, useForm, useWatch } from "react-hook-form";
@@ -22,7 +22,14 @@ import {
   IsolatedDocumentTotals,
   useDocumentColumnVisibility,
 } from "@/components/documents";
+import { DraftRecoveryBanner } from "@/components/documents/draft-recovery-banner";
+import {
+  QuickCreateCustomerDialog,
+  QuickCreateItemDialog,
+  QuickCreateProjectDialog,
+} from "@/components/documents/quick-create-modals";
 import { useUnsavedChanges } from "@/hooks/use-unsaved-changes";
+import { useFormDraftRecovery } from "@/hooks/use-form-draft-recovery";
 import { useActionPermission } from "@/components/permissions-provider";
 import type { CustomFieldInputDefinition } from "@/modules/custom-fields/custom-field-inputs";
 
@@ -36,6 +43,7 @@ type QuoteOption = { id: string; quoteNumber: string; customerId: string; date?:
 export function SalesOrderForm({
   businessId,
   orderId,
+  isPrefilled = false,
   status = "draft",
   customers,
   salesAccounts,
@@ -52,6 +60,7 @@ export function SalesOrderForm({
 }: {
   businessId: string;
   orderId?: string;
+  isPrefilled?: boolean;
   status?: SalesOrderStatus;
   customers: Option[];
   salesAccounts?: AccountOption[];
@@ -68,15 +77,43 @@ export function SalesOrderForm({
 }) {
   const router = useRouter();
   const canApprove = useActionPermission("approve");
+  const canCreateCustomer = useActionPermission("create", "sales");
+  const canCreateProject = useActionPermission("create", "projects");
+  const canCreateItem = useActionPermission("create", "inventory");
   const [serverError, setServerError] = useState("");
+  const [customerList, setCustomerList] = useState(customers);
+  const [projectList, setProjectList] = useState(projects);
+  const [itemList, setItemList] = useState(items);
+  useEffect(() => { setCustomerList(customers); }, [customers]);
+  useEffect(() => { setProjectList(projects); }, [projects]);
+  useEffect(() => { setItemList(items); }, [items]);
+
+  const [quickCustomerOpen, setQuickCustomerOpen] = useState(false);
+  const [quickCustomerSeed, setQuickCustomerSeed] = useState("");
+  const [quickProjectOpen, setQuickProjectOpen] = useState(false);
+  const [quickProjectSeed, setQuickProjectSeed] = useState("");
+  const [quickItemState, setQuickItemState] = useState<{ open: boolean; rowIndex: number; seed: string }>({
+    open: false,
+    rowIndex: 0,
+    seed: "",
+  });
+
   const [globalTaxCodeId, setGlobalTaxCodeId] = useState(() => initial.lines[0]?.taxCodeId || taxCodes.find((taxCode) => taxCode.rateBasisPoints === 500)?.id || taxCodes[0]?.id || "");
   const form = useForm<SalesOrderInput>({
     resolver: zodResolver(salesOrderInputSchema),
     mode: "onTouched",
     defaultValues: initial,
   });
-  const { register, control, handleSubmit, setError, setValue, getValues, formState: { errors, isSubmitting, isDirty, isSubmitSuccessful } } = form;
+  const { register, control, handleSubmit, reset, watch, setError, setValue, getValues, formState: { errors, isSubmitting, isDirty, isSubmitSuccessful } } = form;
   useUnsavedChanges(isDirty && !isSubmitSuccessful);
+  const draftRecovery = useFormDraftRecovery({
+    storageKey: `erp-draft:${businessId}:sales-order:new`,
+    enabled: !orderId && !isPrefilled,
+    watch,
+    reset,
+    isDirty,
+    isSubmitSuccessful,
+  });
   const { fields, append, remove, insert, move } = useFieldArray({ control, name: "lines" });
   const colVis = useDocumentColumnVisibility({ lineTaxCodes: false, lines: initial.lines });
 
@@ -102,13 +139,13 @@ export function SalesOrderForm({
 
   const availableProjects = useMemo(
     () =>
-      projects.filter((project) => {
+      projectList.filter((project) => {
         if (!customerId) return true;
         const cids = (project as any).customerIds as string[] | undefined;
         if (cids && cids.length > 0) return cids.includes(customerId);
         return !project.customerId || project.customerId === customerId;
       }),
-    [projects, customerId],
+    [projectList, customerId],
   );
   const availableQuotes = useMemo(
     () => (quotes ?? []).filter((q) => !customerId || q.customerId === customerId),
@@ -116,8 +153,8 @@ export function SalesOrderForm({
   );
 
   const customerOptions = useMemo<ComboboxOption[]>(
-    () => customers.map((c) => ({ value: c.id, label: c.name })),
-    [customers],
+    () => customerList.map((c) => ({ value: c.id, label: c.name })),
+    [customerList],
   );
   const quoteOptions = useMemo<ComboboxOption[]>(
     () => availableQuotes.map((q) => ({ value: q.id, label: q.quoteNumber, description: q.date })),
@@ -142,8 +179,8 @@ export function SalesOrderForm({
   const resolvedSalesAccounts = salesAccounts ?? expenseAccounts ?? [];
   const defaultSalesAccount = resolvedSalesAccounts[0]?.id ?? "";
 
-  function selectItem(index: number, itemId: string) {
-    const item = items.find((i) => i.id === itemId);
+  function selectItem(index: number, itemId: string, sourceItems = itemList) {
+    const item = sourceItems.find((i) => i.id === itemId);
     if (!item) {
       setValue(`lines.${index}.salesAccountId`, defaultSalesAccount, { shouldDirty: true });
       return;
@@ -159,22 +196,40 @@ export function SalesOrderForm({
 
   async function save(values: SalesOrderInput, intent: "draft" | "issue") {
     setServerError("");
+    draftRecovery.clearDraft();
     const result = await saveSalesOrderAction(businessId, orderId ?? null, values, intent);
+    if (result.fieldErrors || result.error) {
+      draftRecovery.preserveDraft(values);
+    }
     if (result.fieldErrors) for (const [field, messages] of Object.entries(result.fieldErrors)) setError(field as keyof SalesOrderInput, { message: messages[0] });
-    if (result.error) setServerError(result.error);
+    if (result.error) {
+      setError("root.serverError", { message: result.error });
+      setServerError(result.error);
+    }
   }
 
   const cancelHref = orderId ? `/b/${businessId}/sales/orders/${orderId}` : `/b/${businessId}/sales/orders`;
 
   return (
+    <>
     <DocumentWorkspaceLayout
+      banner={
+        <DraftRecoveryBanner
+          hasDraft={draftRecovery.hasDraft}
+          savedAt={draftRecovery.savedAt}
+          onRestore={draftRecovery.restoreDraft}
+          onDiscard={draftRecovery.discardDraft}
+        />
+      }
       serverError={serverError}
       headerTitle="Order details"
       headerSubtitle="A sales order is an operational commitment and does not create general ledger movements."
       headerBadge={
-        <span className="text-xs text-muted-foreground font-medium bg-muted/60 px-2 py-0.5 rounded border border-border/50">
-          Order # Auto-allocated on save
-        </span>
+        !orderId ? (
+          <span className="text-xs text-muted-foreground font-medium bg-muted/60 px-2 py-0.5 rounded border border-border/50">
+            Order # Auto-allocated on save
+          </span>
+        ) : undefined
       }
       header={
         <div className="grid gap-4 md:grid-cols-3">
@@ -193,13 +248,24 @@ export function SalesOrderForm({
                   onValueChange={(next) => {
                     field.onChange(next);
                     if (status === "draft" && next) {
-                      const code = customers.find((customer) => customer.id === next)?.defaultCurrencyCode ?? currency;
+                      const code = customerList.find((customer) => customer.id === next)?.defaultCurrencyCode ?? currency;
                       setValue("currencyCode", code);
                       setValue("exchangeRateToBase", code === currency ? "1" : "");
                       setValue("exchangeRateDate", code === currency ? orderDate : "");
                       setValue("exchangeRateSource", code === currency ? "Base" : "");
                     }
                   }}
+                  createAction={
+                    canCreateCustomer
+                      ? {
+                          label: "New Customer",
+                          onTrigger: (q) => {
+                            setQuickCustomerSeed(q);
+                            setQuickCustomerOpen(true);
+                          },
+                        }
+                      : undefined
+                  }
                   placeholder="Choose a customer…"
                   searchPlaceholder="Search customer..."
                 />
@@ -261,6 +327,17 @@ export function SalesOrderForm({
                   onValueChange={field.onChange}
                   allowClear
                   clearLabel="No project"
+                  createAction={
+                    canCreateProject
+                      ? {
+                          label: "New Project",
+                          onTrigger: (q) => {
+                            setQuickProjectSeed(q);
+                            setQuickProjectOpen(true);
+                          },
+                        }
+                      : undefined
+                  }
                   placeholder="No project"
                   searchPlaceholder="Search project..."
                 />
@@ -331,8 +408,13 @@ export function SalesOrderForm({
           onDuplicate={duplicateLine}
           onMoveUp={moveLineUp}
           onMoveDown={moveLineDown}
-          items={items}
+          items={itemList}
           onItemSelect={selectItem}
+          onRequestCreateItem={
+            canCreateItem
+              ? (rowIndex, q) => setQuickItemState({ open: true, rowIndex, seed: q })
+              : undefined
+          }
           accounts={resolvedSalesAccounts}
           accountFieldName="salesAccountId"
           accountAriaLabel="sales account"
@@ -407,5 +489,60 @@ export function SalesOrderForm({
         </DocumentFormFooter>
       }
     />
+    <QuickCreateCustomerDialog
+      businessId={businessId}
+      open={quickCustomerOpen}
+      onOpenChange={setQuickCustomerOpen}
+      initialName={quickCustomerSeed}
+      defaultCurrencyCode={currencyCode}
+      onCreated={(created) => {
+        setCustomerList((prev) => [...prev, created]);
+        setValue("customerId", created.id, { shouldDirty: true, shouldTouch: true });
+        if (status === "draft") {
+          const code = created.defaultCurrencyCode ?? currency;
+          if (code !== getValues("currencyCode")) {
+            setValue("currencyCode", code);
+            setValue("exchangeRateToBase", code === currency ? "1" : "");
+            setValue("exchangeRateDate", code === currency ? orderDate : "");
+            setValue("exchangeRateSource", code === currency ? "Base" : "");
+          }
+        }
+      }}
+    />
+    <QuickCreateProjectDialog
+      businessId={businessId}
+      open={quickProjectOpen}
+      onOpenChange={setQuickProjectOpen}
+      initialName={quickProjectSeed}
+      defaultCustomerId={customerId ?? ""}
+      customers={customerList}
+      onCreated={(created) => {
+        setProjectList((prev) => [...prev, created]);
+        if (!created.customerId || !customerId || created.customerId === customerId) {
+          setValue("projectId", created.id, { shouldDirty: true, shouldTouch: true });
+        }
+      }}
+    />
+    <QuickCreateItemDialog
+      businessId={businessId}
+      open={quickItemState.open}
+      onOpenChange={(open) => setQuickItemState((prev) => ({ ...prev, open }))}
+      initialName={quickItemState.seed}
+      defaultMode="sales"
+      onCreated={(created) => {
+        const nextItem: ItemOption = {
+          id: created.id,
+          sku: created.sku,
+          name: created.name,
+          salesPriceMinor: created.salesPriceMinor,
+          salesAccountId: created.salesAccountId,
+        };
+        const nextItems = [...itemList, nextItem];
+        setItemList(nextItems);
+        setValue(`lines.${quickItemState.rowIndex}.itemId`, created.id, { shouldDirty: true, shouldTouch: true });
+        selectItem(quickItemState.rowIndex, created.id, nextItems);
+      }}
+    />
+    </>
   );
 }

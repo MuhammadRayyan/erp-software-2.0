@@ -1,9 +1,10 @@
-
 "use client";
 
-import type { ReactNode } from "react";
+import type { MouseEvent, ReactNode } from "react";
+import { useRouter } from "next/navigation";
 import { flexRender } from "@tanstack/react-table";
 import { ArrowDown, ArrowUp, ChevronsUpDown, Search } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/cn";
 
 /** Outer bordered card wrapping `<DataTable framed={false} />`, `<TableTotalsBar />`, and `<ListPagination />`. */
@@ -15,6 +16,9 @@ export function ListTableCard({ children, className }: { children: ReactNode; cl
   );
 }
 
+const INTERACTIVE_CLICK_SELECTOR =
+  'a, button, input, select, textarea, label, [role="checkbox"], [role="menuitem"], [role="button"], [data-no-row-click]';
+
 interface DataTableProps {
   table: any;
   minWidth?: string;
@@ -25,19 +29,24 @@ interface DataTableProps {
   noResultsMessage?: string;
   noResultsSubtext?: string;
   onClearFilters?: () => void;
+  getRowHref?: (original: any) => string | undefined;
+  onRowClick?: (original: any) => void;
 }
 
 export function DataTable({
   table,
   minWidth = "min-w-[800px]",
-  density = "default",
+  density,
   pinFirstColumn = false,
   maxHeight,
   framed = true,
   noResultsMessage = "No results found",
   noResultsSubtext = "Try adjusting your filters.",
   onClearFilters,
+  getRowHref,
+  onRowClick,
 }: DataTableProps) {
+  const router = useRouter();
   const rows = table.getRowModel().rows;
 
   if (rows.length === 0) {
@@ -55,21 +64,59 @@ export function DataTable({
         <p className="font-semibold text-sm text-foreground">{noResultsMessage}</p>
         <p className="mt-1 text-xs text-muted-foreground max-w-sm mx-auto">{noResultsSubtext}</p>
         {onClearFilters && (
-          <button 
-            type="button" 
+          <Button
+            type="button"
+            size="sm"
             onClick={onClearFilters}
-            className="mt-4 inline-flex items-center gap-1.5 rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground hover:bg-primary/90 transition-colors"
+            className="mt-4"
           >
             Clear filters
-          </button>
+          </Button>
         )}
       </div>
     );
   }
 
+  function handleRowActivate(event: MouseEvent<HTMLTableRowElement>, original: any) {
+    if (!getRowHref && !onRowClick) return;
+    if (event.defaultPrevented || event.button !== 0 || event.altKey) return;
+    if (!(event.target instanceof Node) || !event.currentTarget.contains(event.target)) return;
+    const selectedText = window.getSelection()?.toString();
+    if (selectedText && selectedText.length > 0) return;
+    if (
+      event.target instanceof Element &&
+      event.target.closest(INTERACTIVE_CLICK_SELECTOR)
+    ) {
+      return;
+    }
+
+    if (getRowHref) {
+      const href = getRowHref(original);
+      if (!href) return;
+      if (event.metaKey || event.ctrlKey || event.shiftKey) {
+        window.open(href, "_blank", "noopener,noreferrer");
+        return;
+      }
+      router.push(href);
+      return;
+    }
+
+    onRowClick?.(original);
+  }
+
+  function handleRowAuxClick(event: MouseEvent<HTMLTableRowElement>, original: any) {
+    if (!getRowHref || event.button !== 1 || event.defaultPrevented) return;
+    if (!(event.target instanceof Node) || !event.currentTarget.contains(event.target)) return;
+    if (event.target instanceof Element && event.target.closest(INTERACTIVE_CLICK_SELECTOR)) return;
+    const href = getRowHref(original);
+    if (!href) return;
+    event.preventDefault();
+    window.open(href, "_blank", "noopener,noreferrer");
+  }
+
   return (
-    <div 
-      className={framed ? "data-panel" : "overflow-x-auto overflow-y-auto"} 
+    <div
+      className={framed ? "data-panel" : "overflow-x-auto overflow-y-auto"}
       style={{ ...(maxHeight ? (framed ? { "--table-max-height": maxHeight } : { maxHeight }) as any : {}) }}
     >
       <table className={`data-table ${minWidth}`} data-density={density}>
@@ -79,8 +126,10 @@ export function DataTable({
               {headerGroup.headers.map((header: any, index: number) => {
                 const isSorted = header.column.getIsSorted();
                 const canSort = header.column.getCanSort();
-                const meta = header.column.columnDef.meta as { className?: string, numeric?: boolean, wrap?: boolean } | undefined;
-                
+                const meta = header.column.columnDef.meta as
+                  | { className?: string; numeric?: boolean; wrap?: boolean }
+                  | undefined;
+
                 const isSticky = pinFirstColumn && index === 0;
                 let classes = meta?.className || "";
                 if (meta?.numeric) classes += " col-numeric whitespace-nowrap min-w-[118px]";
@@ -88,26 +137,52 @@ export function DataTable({
                 else classes += " truncate";
                 if (isSticky) classes += " sticky-col";
                 classes += " select-none group/th";
-                if (canSort) classes += " cursor-pointer hover:text-foreground transition-colors";
+
+                const ariaSort = canSort
+                  ? isSorted === "asc"
+                    ? "ascending"
+                    : isSorted === "desc"
+                      ? "descending"
+                      : "none"
+                  : undefined;
+
+                const headerContent = header.isPlaceholder
+                  ? null
+                  : flexRender(header.column.columnDef.header, header.getContext());
 
                 return (
                   <th
                     key={header.id}
+                    scope="col"
+                    aria-sort={ariaSort}
                     className={classes.trim()}
-                    onClick={canSort ? header.column.getToggleSortingHandler() : undefined}
                   >
-                    <div className={`flex items-center gap-1.5 ${meta?.numeric ? "justify-end" : ""}`}>
-                      {header.isPlaceholder
-                        ? null
-                        : flexRender(header.column.columnDef.header, header.getContext())}
-                      {isSorted === "asc" ? (
-                        <ArrowUp className="size-3 text-primary shrink-0" />
-                      ) : isSorted === "desc" ? (
-                        <ArrowDown className="size-3 text-primary shrink-0" />
-                      ) : canSort ? (
-                        <ChevronsUpDown className="size-3 text-muted-foreground/40 opacity-0 group-hover/th:opacity-100 transition-opacity shrink-0" />
-                      ) : null}
-                    </div>
+                    {canSort ? (
+                      <button
+                        type="button"
+                        onClick={header.column.getToggleSortingHandler()}
+                        className={cn(
+                          "inline-flex w-full items-center gap-1.5 rounded-sm py-1 text-left transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                          meta?.numeric && "justify-end",
+                        )}
+                      >
+                        {headerContent}
+                        {isSorted === "asc" ? (
+                          <ArrowUp className="size-3 text-primary shrink-0" aria-hidden="true" />
+                        ) : isSorted === "desc" ? (
+                          <ArrowDown className="size-3 text-primary shrink-0" aria-hidden="true" />
+                        ) : (
+                          <ChevronsUpDown
+                            className="size-3 text-muted-foreground/40 opacity-0 group-hover/th:opacity-100 group-focus-within/th:opacity-100 transition-opacity shrink-0"
+                            aria-hidden="true"
+                          />
+                        )}
+                      </button>
+                    ) : (
+                      <div className={cn("flex items-center gap-1.5", meta?.numeric && "justify-end")}>
+                        {headerContent}
+                      </div>
+                    )}
                   </th>
                 );
               })}
@@ -115,29 +190,39 @@ export function DataTable({
           ))}
         </thead>
         <tbody>
-          {rows.map((row: any) => (
-            <tr key={row.id} className="group">
-              {row.getVisibleCells().map((cell: any, index: number) => {
-                const meta = cell.column.columnDef.meta as { className?: string, numeric?: boolean, wrap?: boolean } | undefined;
-                
-                const isSticky = pinFirstColumn && index === 0;
-                let classes = meta?.className || "";
-                if (meta?.numeric) classes += " col-numeric whitespace-nowrap min-w-[118px]";
-                if (meta?.wrap) classes += " col-wrap";
-                else classes += " truncate";
-                if (isSticky) classes += " sticky-col";
+          {rows.map((row: any) => {
+            const rowHref = getRowHref ? getRowHref(row.original) : undefined;
+            const isClickable = Boolean(rowHref || onRowClick);
+            return (
+              <tr
+                key={row.id}
+                onClick={isClickable ? (event) => handleRowActivate(event, row.original) : undefined}
+                onAuxClick={rowHref ? (event) => handleRowAuxClick(event, row.original) : undefined}
+                className={cn("group", isClickable && "cursor-pointer")}
+              >
+                {row.getVisibleCells().map((cell: any, index: number) => {
+                  const meta = cell.column.columnDef.meta as
+                    | { className?: string; numeric?: boolean; wrap?: boolean }
+                    | undefined;
 
-                return (
-                  <td key={cell.id} className={classes.trim()}>
-                    {flexRender(cell.column.columnDef.cell, cell.getContext())}
-                  </td>
-                );
-              })}
-            </tr>
-          ))}
+                  const isSticky = pinFirstColumn && index === 0;
+                  let classes = meta?.className || "";
+                  if (meta?.numeric) classes += " col-numeric whitespace-nowrap min-w-[118px]";
+                  if (meta?.wrap) classes += " col-wrap";
+                  else classes += " truncate";
+                  if (isSticky) classes += " sticky-col";
+
+                  return (
+                    <td key={cell.id} className={classes.trim()}>
+                      {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                    </td>
+                  );
+                })}
+              </tr>
+            );
+          })}
         </tbody>
       </table>
     </div>
   );
 }
-

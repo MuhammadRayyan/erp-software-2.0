@@ -125,10 +125,6 @@ export default async function ProjectViewPage({ params, searchParams }: { params
         <Metric label="PO Committed (net)" value={operational.metrics.committedMinor} currency={currency} />
         <Metric label="Purchased (net)" value={operational.metrics.purchasedMinor} currency={currency} />
         <Metric label="Paid" value={operational.metrics.paidMinor} currency={currency} />
-        <div className="bg-surface-raised px-4 py-3">
-          <dt className="text-xs text-muted-foreground">Payment attribution</dt>
-          <dd className="mt-1 text-sm font-medium">Single-project documents</dd>
-        </div>
       </dl>
       <div className="mt-5 grid gap-5 lg:grid-cols-[1.05fr_0.95fr]">
         <section className="rounded-lg border border-border bg-surface-raised p-5">

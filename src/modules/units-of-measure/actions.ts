@@ -5,8 +5,8 @@ import { requirePermission } from "@/core/permissions/require-module";
 import { createUnitOfMeasure, deleteUnitOfMeasure, toggleUnitOfMeasure } from "./uom-service";
 
 export async function createUnitOfMeasureAction(businessId: string, code: string, name: string) {
-  const { user } = await requirePermission(businessId, "settings", "edit");
   try {
+    const { user } = await requirePermission(businessId, "settings", "edit");
     createUnitOfMeasure(businessId, user.id, code, name);
     revalidatePath(`/b/${businessId}/settings/units-of-measure`);
     return {};
@@ -16,8 +16,8 @@ export async function createUnitOfMeasureAction(businessId: string, code: string
 }
 
 export async function deleteUnitOfMeasureAction(businessId: string, id: string) {
-  const { user } = await requirePermission(businessId, "settings", "edit");
   try {
+    const { user } = await requirePermission(businessId, "settings", "edit");
     deleteUnitOfMeasure(businessId, user.id, id);
     revalidatePath(`/b/${businessId}/settings/units-of-measure`);
     return {};
@@ -27,8 +27,8 @@ export async function deleteUnitOfMeasureAction(businessId: string, id: string) 
 }
 
 export async function toggleUnitOfMeasureAction(businessId: string, id: string, isActive: boolean) {
-  const { user } = await requirePermission(businessId, "settings", "edit");
   try {
+    const { user } = await requirePermission(businessId, "settings", "edit");
     toggleUnitOfMeasure(businessId, user.id, id, isActive);
     revalidatePath(`/b/${businessId}/settings/units-of-measure`);
     return {};

@@ -1,4 +1,4 @@
-import { and, eq } from "drizzle-orm";
+import { and, eq, ne } from "drizzle-orm";
 import { getSystemDb } from "@/core/db/system";
 import { businesses, memberships, userBusinessPreferences } from "@/core/db/system-schema";
 import { getBusinessAccess } from "@/core/permissions/permissions";
@@ -105,7 +105,13 @@ export function clearPreferences(businessId: string, userId: string): number {
   assertMembership(businessId, userId);
   const result = getSystemDb()
     .delete(userBusinessPreferences)
-    .where(and(eq(userBusinessPreferences.userId, userId), eq(userBusinessPreferences.businessId, businessId)))
+    .where(
+      and(
+        eq(userBusinessPreferences.userId, userId),
+        eq(userBusinessPreferences.businessId, businessId),
+        ne(userBusinessPreferences.key, "business.pinned"),
+      ),
+    )
     .run();
   return result.changes;
 }

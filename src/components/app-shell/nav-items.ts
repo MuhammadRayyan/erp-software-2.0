@@ -17,7 +17,6 @@ import {
   PackageCheck,
   Receipt,
   HandCoins,
-  Activity,
   SlidersHorizontal,
   Users,
   Calculator,
@@ -51,7 +50,7 @@ export const primaryNav: { label?: string; items: NavItem[] }[] = [
       { label: "Sales Invoices", path: "/sales/invoices", icon: ReceiptText, module: "sales" },
       { label: "Receipts", path: "/sales/receipts", icon: Receipt, module: "sales" },
       { label: "Credit Notes", path: "/sales/credit-notes", icon: ReceiptText, module: "sales" },
-      { label: "Delivery Notes", path: "/sales/delivery-notes", icon: Truck, module: "sales" },
+      { label: "Delivery Notes", path: "/sales/delivery-notes", icon: Truck, module: "inventory" },
       { label: "Sent Emails", path: "/emails", icon: Mail, modules: ["sales", "purchases"] as const },
     ],
   },
@@ -64,7 +63,7 @@ export const primaryNav: { label?: string; items: NavItem[] }[] = [
       { label: "Purchase Invoices", path: "/purchases/invoices", icon: FileInput, module: "purchases" },
       { label: "Supplier Payments", path: "/purchases/payments", icon: HandCoins, module: "purchases" },
       { label: "Debit Notes", path: "/purchases/debit-notes", icon: ReceiptText, module: "purchases" },
-      { label: "Goods Receipts", path: "/purchases/goods-receipts", icon: PackageCheck, module: "purchases" },
+      { label: "Goods Receipts", path: "/purchases/goods-receipts", icon: PackageCheck, module: "inventory" },
     ],
   },
   {
@@ -83,6 +82,7 @@ export const primaryNav: { label?: string; items: NavItem[] }[] = [
     items: [
       { label: "Items", path: "/inventory/items", icon: Package, module: "inventory" },
       { label: "Locations", path: "/inventory/locations", icon: MapPin, module: "inventory" },
+      { label: "Stock Adjustments", path: "/inventory/adjustments", icon: SlidersHorizontal, module: "inventory" },
     ],
   },
   {
@@ -104,20 +104,11 @@ export const primaryNav: { label?: string; items: NavItem[] }[] = [
   },
   {
     label: "Reports",
-    items: [{ label: "Reports", path: "/reports", icon: FileText, module: "reports" }],
+    items: [
+      { label: "Reports", path: "/reports", icon: FileText, module: "reports" },
+      { label: "UAE VAT Return", path: "/tax/vat", icon: ReceiptText, module: "reports" },
+    ],
   },
 ];
 
 export const settingsNav: NavItem = { label: "Settings", path: "/settings", icon: Settings, module: "settings" };
-export const customizeNav: NavItem = {
-  label: "Customize",
-  path: "/settings/customize",
-  icon: SlidersHorizontal,
-  module: "settings",
-};
-export const systemHealthNav: NavItem = {
-  label: "System Health",
-  path: "/settings/system-health",
-  icon: Activity,
-  module: "settings",
-};

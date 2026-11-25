@@ -9,6 +9,7 @@ import { deleteDebitNoteAction, duplicateDebitNoteAction, voidDebitNoteAction } 
 import type { DebitNoteStatus } from "./debit-note-service";
 import { DocumentViewActions } from "@/components/document-view-actions";
 import { DocumentEmailDialog, type DocumentEmailDefaults } from "@/modules/email/email-compose-dialog";
+import { useActionPermission } from "@/components/permissions-provider";
 
 export function DebitNoteViewActions({
   businessId,
@@ -26,6 +27,7 @@ export function DebitNoteViewActions({
   emailDefaults?: DocumentEmailDefaults;
 }) {
   const router = useRouter();
+  const canViewAccounting = useActionPermission("view", "accounting");
   const [emailOpen, setEmailOpen] = useState(false);
 
   return (
@@ -61,13 +63,11 @@ export function DebitNoteViewActions({
           }
         } : undefined}
         extraActions={
-          <>
-            {journalEntryId && (
-              <DropdownMenuItem asChild>
-                <Link href={`/b/${businessId}/accounting/journal/${journalEntryId}`}><BookOpenText className="size-4" /> View Journal Entry</Link>
-              </DropdownMenuItem>
-            )}
-          </>
+          journalEntryId && canViewAccounting ? (
+            <DropdownMenuItem permission="view" permissionModule="accounting" asChild>
+              <Link href={`/b/${businessId}/accounting/journal/${journalEntryId}`}><BookOpenText className="size-4" /> View Journal Entry</Link>
+            </DropdownMenuItem>
+          ) : undefined
         }
       />
       {emailDefaults && (

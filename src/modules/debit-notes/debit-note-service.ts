@@ -22,6 +22,7 @@ import { assertDateNotLocked } from "@/modules/accounting/services/financial-loc
 import { postDebitNote } from "@/modules/accounting/services/debit-note-posting-service";
 import { reverseTransaction } from "@/modules/accounting/services/posting-service";
 import { quantityMicrosToInput, minorToInput } from "@/modules/accounting/calculations/money";
+import { getBusinessTodayIso } from "@/core/format";
 import { recordActivity } from "@/modules/activity-log/activity-log-service";
 
 type StoredLine = {
@@ -170,11 +171,13 @@ export function saveDebitNote(businessId: string, userId: string, data: DebitNot
   const now = new Date().toISOString();
   const id = noteId ?? randomUUID();
 
-  const supplier = context.sqlite.prepare("SELECT name FROM suppliers WHERE id = ?").get(data.supplierId) as { name: string };
+  const supplier = context.sqlite.prepare("SELECT name FROM suppliers WHERE id = ?").get(data.supplierId) as { name: string } | undefined;
+  if (!supplier) throw new Error("Supplier not found.");
 
   context.sqlite.transaction(() => {
     let number: string;
     let shouldPost = intent === "post";
+    let replace = false;
     
     if (noteId) {
       const current = context.db.select().from(debitNotes).where(eq(debitNotes.id, noteId)).get();
@@ -184,10 +187,13 @@ export function saveDebitNote(businessId: string, userId: string, data: DebitNot
         assertDateNotLocked(context.sqlite, current.debitNoteDate, "Debit note");
         assertVatSourceUnlocked(context.sqlite, "debit_note", noteId, current.taxDate);
       }
-      if (current.purchaseInvoiceId !== data.purchaseInvoiceId && current.documentStatus === "posted") throw new Error("Cannot change the source invoice after posting.");
+      if ((current.purchaseInvoiceId ?? null) !== (data.purchaseInvoiceId || null) && current.documentStatus === "posted") {
+        throw new Error("Cannot change the source invoice after posting.");
+      }
       
       number = current.debitNoteNumber;
       shouldPost = current.documentStatus === "posted" || intent === "post";
+      replace = current.documentStatus === "posted";
       
       context.sqlite.prepare(`UPDATE debit_notes SET supplier_id = ?, project_id = ?, purchase_invoice_id = ?, amounts_include_tax = ?, debit_note_date = ?, tax_date = ?, reference = ?, document_status = ?, subtotal_minor = ?, tax_minor = ?, total_minor = ?, currency_code = ?, exchange_rate_to_base = ?, exchange_rate_date = ?, exchange_rate_source = ?, base_subtotal_minor = ?, base_tax_minor = ?, base_total_minor = ?, updated_at = ? WHERE id = ?`).run(data.supplierId, data.projectId || null, // fix string | undefined
  (data.purchaseInvoiceId || null) as string | null, data.amountsIncludeTax ? 1 : 0, data.date, taxDate, (data.reference ?? null) as string | null, // fix ref
@@ -217,7 +223,7 @@ export function saveDebitNote(businessId: string, userId: string, data: DebitNot
       assertDateNotLocked(context.sqlite, data.date, "Debit note");
       assertVatDateUnlocked(context.sqlite, taxDate, lines.map((line) => line.taxCodeId));
       const postingLines = lines.map((line: any) => ({ ...line, projectId: effectiveProjectId(line.projectId || null, data.projectId || null) }));
-      postDebitNote(context.sqlite, { id, debitNoteNumber: number, supplierId: data.supplierId, date: data.date, totalMinor: amounts.totalMinor, rate }, postingLines, false);
+      postDebitNote(context.sqlite, { id, debitNoteNumber: number, supplierId: data.supplierId, date: data.date, totalMinor: amounts.totalMinor, rate }, postingLines, replace);
       replaceTaxEntries(context.sqlite, {
         sourceType: "debit_note", sourceId: id, sourceNumber: number,
         partyName: supplier.name, taxDate, direction: "purchases",
@@ -250,11 +256,11 @@ export function duplicateDebitNote(businessId: string, userId: string, noteId: s
   const record = getDebitNote(businessId, userId, noteId);
   if (!record) throw new Error("Debit note not found.");
   const rate = storedRateSnapshot(getBusinessDb(businessId, userId).sqlite, record.note);
-  const today = new Date().toISOString().split("T")[0];
+  const today = getBusinessTodayIso();
   return saveDebitNote(businessId, userId, { 
     currencyCode: rate.currencyCode, 
     exchangeRateToBase: rate.exchangeRateToBase, 
-    exchangeRateDate: today, 
+    exchangeRateDate: rate.currencyCode === rate.baseCurrencyCode ? today : rate.exchangeRateDate, 
     exchangeRateSource: rate.exchangeRateSource, 
     supplierId: record.note.supplierId, 
     projectId: record.note.projectId ?? "", 
@@ -266,7 +272,7 @@ export function duplicateDebitNote(businessId: string, userId: string, noteId: s
     lines: record.lines.map((line: any) => ({ 
       description: line.description, 
       quantity: quantityMicrosToInput(line.quantityMicros), 
-      unitPrice: minorToInput(line.unitPriceMinor), 
+      unitPrice: minorToInput(line.unitPriceMinor, rate.currencyMinorUnit), 
       discountType: line.discountType, 
       discountValue: line.discountValue || "0", 
       expenseAccountId: line.expenseAccountId, 
@@ -353,12 +359,17 @@ export function getDebitNote(businessId: string, userId: string, noteId: string)
     ORDER BY l.position ASC
   `).all(noteId) as any[];
 
+  const journal = context.sqlite.prepare(
+    "SELECT id, entry_number FROM journal_entries WHERE source_type = 'debit_note' AND source_id = ? LIMIT 1",
+  ).get(noteId) as { id: string; entry_number: string } | undefined;
+
   return {
     note: {
       id: header.id,
       debitNoteNumber: header.debit_note_number,
       supplierId: header.supplier_id,
       supplierName: header.supplierName,
+      supplierEmail: header.supplierEmail ?? null,
       supplierCurrency: header.supplierCurrency,
       purchaseInvoiceId: header.purchase_invoice_id,
       projectId: header.project_id,
@@ -370,11 +381,14 @@ export function getDebitNote(businessId: string, userId: string, noteId: string)
       subtotalMinor: header.subtotal_minor,
       taxMinor: header.tax_minor,
       totalMinor: header.total_minor,
+      baseTotalMinor: header.base_total_minor ?? header.total_minor,
+      journalEntryId: journal?.id ?? null,
       currencyCode: header.currency_code,
       exchangeRateToBase: header.exchange_rate_to_base,
       exchangeRateDate: header.exchange_rate_date,
       exchangeRateSource: header.exchange_rate_source,
     },
+    journal: journal ? { id: journal.id, entryNumber: journal.entry_number } : null,
     lines: lines.map((line: any) => ({
       id: line.id,
       description: line.description,
@@ -383,7 +397,6 @@ export function getDebitNote(businessId: string, userId: string, noteId: string)
       discountType: line.discount_type,
       discountValue: line.discount_value,
       expenseAccountId: line.expense_account_id,
-      expenseAccountCode: line.accountCode,
       expenseAccountName: line.accountName,
       taxCodeId: line.tax_code_id,
       taxCodeName: line.taxCodeName,

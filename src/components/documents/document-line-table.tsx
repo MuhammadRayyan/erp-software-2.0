@@ -273,6 +273,7 @@ export interface DocumentLineTableProps {
   // Options
   items?: DocumentLineItemOption[];
   onItemSelect?: (index: number, itemId: string) => void;
+  onRequestCreateItem?: (rowIndex: number, searchQuery: string) => void;
   accounts: DocumentLineAccountOption[];
   accountFieldName: "salesAccountId" | "expenseAccountId";
   accountColumnLabel?: string;
@@ -334,6 +335,7 @@ export function DocumentLineTable({
   onPasteTSV,
   items,
   onItemSelect,
+  onRequestCreateItem,
   accounts,
   accountFieldName,
   accountColumnLabel = "Account",
@@ -521,6 +523,11 @@ export function DocumentLineTable({
               dataGridRow={index}
               dataGridColId="item"
               onKeyDown={(e) => handleKeyDown(e, "item")}
+              onRequestCreateItem={
+                onRequestCreateItem
+                  ? (searchQuery) => onRequestCreateItem(index, searchQuery)
+                  : undefined
+              }
               onChange={(itemId) => {
                 if (setValue) {
                   setValue(`lines.${index}.itemId`, itemId, { shouldDirty: true, shouldTouch: true });
@@ -1065,6 +1072,7 @@ export function DocumentLineTable({
     register,
     setValue,
     onItemSelect,
+    onRequestCreateItem,
     lineCustomFields,
   ]);
 

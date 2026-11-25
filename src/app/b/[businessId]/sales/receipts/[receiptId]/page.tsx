@@ -6,18 +6,23 @@ import { requireModule } from "@/core/permissions/require-module";
 import { getReceipt } from "@/modules/receipts/receipt-service";
 import { ReceiptViewActions } from "@/modules/receipts/receipt-view-actions";
 import { getSourceBankingStatus } from "@/modules/banking/banking-report-service";
-import { BackLink } from "@/components/back-link";
+import { Breadcrumbs } from "@/components/breadcrumbs";
+import { DocumentFlowStepper, type FlowStep } from "@/components/documents/document-flow-stepper";
 import { getDocumentViewData } from "@/modules/document-templates/document-data-extractor";
 import { DocumentViewLayout } from "@/modules/document-templates/components/document-view-layout";
 import { getLatestApprovalForEntity } from "@/modules/approvals/approval-service";
 import { DocumentApprovalBanner } from "@/components/approvals/document-approval-banner";
+import { NoticeToast } from "@/components/notice-toast";
 
 export default async function ReceiptViewPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ businessId: string; receiptId: string }>;
+  searchParams: Promise<{ notice?: string }>;
 }) {
   const { businessId, receiptId } = await params;
+  const query = await searchParams;
   const { user, access } = await requireModule(businessId, "sales");
   const record = getReceipt(businessId, user.id, receiptId);
   if (!record) notFound();
@@ -26,6 +31,43 @@ export default async function ReceiptViewPage({
   const status = String(receipt.document_status) as "draft" | "pending_approval" | "posted" | "void";
   const number = String(receipt.receipt_number);
   const latestApproval = getLatestApprovalForEntity(businessId, user.id, "receipt", receiptId);
+  const primaryJournal = record.journals.find((j) => j.source_type === "receipt") ?? record.journals[0];
+
+  const flowSteps: FlowStep[] = [
+    ...(record.allocations.length > 0
+      ? [{
+          key: "invoices",
+          label: record.allocations.length === 1 ? "Sales Invoice" : "Sales Invoices",
+          documentNumber:
+            record.allocations.length === 1
+              ? record.allocations[0].invoice_number
+              : `${record.allocations.length} invoices`,
+          href:
+            record.allocations.length === 1
+              ? `/b/${businessId}/sales/invoices/${record.allocations[0].invoice_id}`
+              : undefined,
+          state: "completed" as const,
+        }]
+      : []),
+    {
+      key: "receipt",
+      label: "Receipt",
+      documentNumber: number,
+      statusLabel: status,
+      state: "current",
+    },
+    ...(primaryJournal
+      ? [{
+          key: "journal",
+          label: "Journal",
+          documentNumber: primaryJournal.entry_number,
+          href: `/b/${businessId}/accounting/journal/${primaryJournal.id}`,
+          state: "completed" as const,
+        }]
+      : status !== "void"
+        ? [{ key: "journal", label: "Journal", state: "pending" as const }]
+        : []),
+  ];
 
   const viewBundle = getDocumentViewData(
     businessId,
@@ -38,7 +80,14 @@ export default async function ReceiptViewPage({
 
   return (
     <div className="page-container">
-      <BackLink href={`/b/${businessId}/sales/receipts`}>Receipts</BackLink>
+      <NoticeToast message={query.notice} />
+      <Breadcrumbs
+        businessId={businessId}
+        items={[
+          { label: "Receipts", href: `/b/${businessId}/sales/receipts` },
+          { label: number },
+        ]}
+      />
       <div className="mb-6 flex flex-col justify-between gap-4 lg:flex-row lg:items-start">
         <div>
           <div className="flex items-center gap-2">
@@ -54,12 +103,17 @@ export default async function ReceiptViewPage({
           <p className="money mt-3 text-xl font-semibold">
             {formatMoney(Number(receipt.amount_minor), String(receipt.currency_code))}
           </p>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Bank {formatMoney(Number(receipt.base_amount_minor), access.business.currency)} at 1 {String(receipt.currency_code)} = {String(receipt.exchange_rate_to_base)} {access.business.currency} · Realized FX {formatMoney(Number(receipt.realized_fx_amount_minor), access.business.currency)}
-          </p>
+          {String(receipt.currency_code) !== access.business.currency && (
+            <p className="mt-1 text-sm text-muted-foreground">
+              Bank {formatMoney(Number(receipt.base_amount_minor), access.business.currency)} at 1 {String(receipt.currency_code)} = {String(receipt.exchange_rate_to_base)} {access.business.currency} · Realized FX {formatMoney(Number(receipt.realized_fx_amount_minor), access.business.currency)}
+            </p>
+          )}
         </div>
-        <ReceiptViewActions businessId={businessId} receiptId={receiptId} receiptNumber={number} status={status} />
+        <ReceiptViewActions businessId={businessId} receiptId={receiptId} receiptNumber={number} status={status} journalEntryId={primaryJournal?.id ?? null} />
       </div>
+      {(record.allocations.length > 0 || Boolean(primaryJournal)) && (
+        <DocumentFlowStepper steps={flowSteps} className="no-print" />
+      )}
       <div className="mb-5">
         <DocumentApprovalBanner
           businessId={businessId}

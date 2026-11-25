@@ -17,9 +17,13 @@ export default async function UsersPage({
 
   if (access.membership.role !== "administrator") {
     return (
-      <div className="page-container">
+      <SettingsShell
+        businessId={businessId}
+        title="Users & Access Control"
+        description="Invite team members, assign administrator or standard roles, configure visible modules, and manage account security."
+      >
         <p className="text-muted-foreground text-sm">Administrator access is required.</p>
-      </div>
+      </SettingsShell>
     );
   }
 

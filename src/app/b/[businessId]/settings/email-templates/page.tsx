@@ -13,7 +13,7 @@ export default async function EmailTemplatesSettingsPage({
   params: Promise<{ businessId: string }>;
 }) {
   const { businessId } = await params;
-  await requireModule(businessId, "settings");
+  const { access } = await requireModule(businessId, "settings");
   const templates = listEmailTemplates(businessId);
 
   return (
@@ -22,7 +22,12 @@ export default async function EmailTemplatesSettingsPage({
       title="Email Templates"
       description="Customize outbound messages and subjects with dynamic tokens (customer name, document number, total amount, balance due) for all document dispatches."
     >
-      <EmailTemplateManager businessId={businessId} initialTemplates={templates} />
+      <EmailTemplateManager
+        businessId={businessId}
+        initialTemplates={templates}
+        currency={access.business.currency}
+        businessName={access.business.name}
+      />
     </SettingsShell>
   );
 }

@@ -7,7 +7,7 @@ import { debounce, useQueryStates } from "nuqs";
 import { toast } from "sonner";
 import { broadcastLiveRefresh } from "@/components/use-live-refresh";
 import { useActionPermission, useApprovalPolicy } from "@/components/permissions-provider";
-import { ChevronRight, MoreHorizontal, Eye, FileEdit, Download, CircleDollarSign, CheckCircle2, FileArchive, Mail, Ban } from "lucide-react";
+import { MoreHorizontal, FileEdit, Download, CircleDollarSign, CheckCircle2, FileArchive, Mail, Ban } from "lucide-react";
 import {
   useLegacyTable as useTable,
   getCoreRowModel as createCoreRowModel,
@@ -19,7 +19,7 @@ import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { DataTable, ListTableCard } from "@/components/ui/data-table";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
-import { formatDate, formatMoney } from "@/core/format";
+import { formatDate, formatMoney, minorToDecimalString } from "@/core/format";
 import { formatCustomFieldValue, type CustomFieldColumn } from "@/modules/custom-fields/custom-field-display";
 import { DocumentStatusBadge, PaymentStatusBadge } from "./invoice-status";
 import type { DocumentStatus, PaymentStatus } from "./invoice-service";
@@ -32,6 +32,7 @@ import {
 } from "@/lib/list-query-params";
 import type { ColumnVisibility } from "@/components/use-column-visibility";
 import { DensityToggle } from "@/components/density-toggle";
+import { ExportCsvButton } from "@/components/export-csv-button";
 import { useTableDensity } from "@/components/use-table-density";
 import { TableTotalsBar, renderMultiCurrencyString } from "@/components/table-totals-bar";
 import { BatchActionBar } from "@/components/batch-action-bar";
@@ -94,6 +95,9 @@ export function InvoiceTable({
   const router = useRouter();
   const { requiresApproval } = useApprovalPolicy();
   const canPost = useActionPermission("post");
+  const canEditPerm = useActionPermission("edit");
+  const canExportPerm = useActionPermission("export");
+  const canCreatePerm = useActionPermission("create");
   const mustSubmitForApproval = requiresApproval || !canPost;
   const { density } = useTableDensity(businessId);
 
@@ -245,12 +249,15 @@ export function InvoiceTable({
     cols.push({
       id: "actions",
       header: () => <span className="sr-only">Actions</span>,
-      meta: { className: "w-16 text-right" },
+      meta: { className: "w-12 text-right" },
       enableSorting: false,
       cell: ({ row }: any) => {
         const inv = row.original;
-        const canEdit = inv.documentStatus !== "void" && inv.documentStatus !== "pending_approval";
+        const canEdit = inv.documentStatus !== "void" && inv.documentStatus !== "pending_approval" && (inv.documentStatus === "draft" || inv.balanceMinor === inv.totalMinor);
         const canReceive = inv.documentStatus === "posted" && inv.balanceMinor > 0;
+        const hasUpper = (canEdit && canEditPerm) || canExportPerm;
+        const hasLower = canReceive && canCreatePerm;
+        if (!hasUpper && !hasLower) return null;
         return (
           <div className="flex items-center justify-end gap-1">
             <DropdownMenu>
@@ -260,11 +267,6 @@ export function InvoiceTable({
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="w-48">
-                <DropdownMenuItem asChild>
-                  <Link href={`/b/${inv.businessId}/sales/invoices/${inv.id}`}>
-                    <Eye className="size-4 text-muted-foreground" /> View Details
-                  </Link>
-                </DropdownMenuItem>
                 {canEdit && (
                   <DropdownMenuItem permission="edit" asChild>
                     <Link href={`/b/${inv.businessId}/sales/invoices/${inv.id}/edit`}>
@@ -279,7 +281,7 @@ export function InvoiceTable({
                 </DropdownMenuItem>
                 {canReceive && (
                   <>
-                    <DropdownMenuSeparator />
+                    {hasUpper && hasLower && <DropdownMenuSeparator />}
                     <DropdownMenuItem permission="create" asChild>
                       <Link href={`/b/${inv.businessId}/sales/receipts/new?invoiceId=${inv.id}`}>
                         <CircleDollarSign className="size-4 text-muted-foreground" /> Record Receipt
@@ -289,18 +291,13 @@ export function InvoiceTable({
                 )}
               </DropdownMenuContent>
             </DropdownMenu>
-            <Button asChild variant="ghost" size="icon" className="size-7 text-muted-foreground opacity-50 transition-opacity md:opacity-0 md:group-hover:opacity-100">
-              <Link href={`/b/${inv.businessId}/sales/invoices/${inv.id}`} aria-label={`Open ${inv.invoiceNumber}`}>
-                <ChevronRight className="size-4" />
-              </Link>
-            </Button>
           </div>
         );
       },
     });
 
     return cols;
-  }, [customFields]);
+  }, [canCreatePerm, canEditPerm, canExportPerm, customFields]);
 
   const table = useTable({
     data: rows,
@@ -407,6 +404,23 @@ export function InvoiceTable({
       />
 
       <div className="ml-auto flex items-center gap-1.5 shrink-0">
+        <ExportCsvButton
+          size="sm"
+          filename="sales-invoices"
+          data={rows}
+          totalCount={summary.filteredTotal}
+          columns={[
+            { header: "Invoice Number", accessorKey: "invoiceNumber" },
+            { header: "Customer", accessorKey: "customerName" },
+            { header: "Date", accessorKey: "invoiceDate" },
+            { header: "Due Date", accessorKey: "dueDate" },
+            { header: "Currency", accessorKey: "currencyCode" },
+            { header: "Total", accessorFn: (r: InvoiceRow) => minorToDecimalString(r.totalMinor, r.currencyCode, r.currencyMinorUnit) },
+            { header: "Balance", accessorFn: (r: InvoiceRow) => minorToDecimalString(r.balanceMinor, r.currencyCode, r.currencyMinorUnit) },
+            { header: "Document Status", accessorKey: "documentStatus" },
+            { header: "Payment Status", accessorFn: (r: InvoiceRow) => r.paymentStatus ?? "" },
+          ]}
+        />
         <DensityToggle businessId={businessId} />
         {dropdown}
       </div>
@@ -424,11 +438,12 @@ export function InvoiceTable({
     )}
     
     <ListTableCard>
-      <DataTable 
+      <DataTable
         table={table}
         density={density}
         framed={false}
-        minWidth="min-w-[1100px]" 
+        minWidth="min-w-[1100px]"
+        getRowHref={(inv: InvoiceRow) => `/b/${businessId}/sales/invoices/${inv.id}`}
         noResultsMessage="No invoices match these filters"
         noResultsSubtext="Try a different invoice number, customer, date range, or status."
         onClearFilters={clearFilters}
@@ -599,8 +614,8 @@ export function InvoiceTable({
                   { header: "Date", accessorKey: "invoiceDate" },
                   { header: "Due Date", accessorKey: "dueDate" },
                   { header: "Currency", accessorKey: "currencyCode" },
-                  { header: "Total", accessorFn: (r: any) => (r.totalMinor / 100).toFixed(2) },
-                  { header: "Balance", accessorFn: (r: any) => (r.balanceMinor / 100).toFixed(2) },
+                  { header: "Total", accessorFn: (r: any) => minorToDecimalString(r.totalMinor, r.currencyCode, r.currencyMinorUnit) },
+                  { header: "Balance", accessorFn: (r: any) => minorToDecimalString(r.balanceMinor, r.currencyCode, r.currencyMinorUnit) },
                   { header: "Document Status", accessorKey: "documentStatus" },
                   { header: "Payment Status", accessorKey: "paymentStatus" },
                 ],
@@ -630,6 +645,7 @@ export function InvoiceTable({
             )}
 
             <Button
+              permission="export"
               type="button"
               variant="secondary"
               size="sm"
@@ -641,6 +657,7 @@ export function InvoiceTable({
             </Button>
 
             <Button
+              permission="export"
               type="button"
               variant="secondary"
               size="sm"

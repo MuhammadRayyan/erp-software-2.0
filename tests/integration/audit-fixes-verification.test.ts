@@ -22,7 +22,7 @@ const { checkDatabases } = await import("../../src/core/db/check");
 const { reconcileBusinessDatabase } = await import("../../src/core/db/reconciliation");
 const { importManagerBackupToNewBusiness } = await import("../../src/modules/migration/manager-importer");
 const { BUSINESSES_DIRECTORY } = await import("../../src/core/db/paths");
-const { getRelatedDocumentPath } = await import("../../src/app/b/[businessId]/emails/page");
+const { getRelatedDocumentPath } = await import("../../src/modules/email/email-links");
 const { primaryNav } = await import("../../src/components/app-shell/nav-items");
 const {
   installPostedCurrencyImmutabilityTriggers,

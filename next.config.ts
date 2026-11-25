@@ -2,12 +2,35 @@ import type { NextConfig } from "next";
 import { randomUUID } from "node:crypto";
 import { withSentryConfig } from "@sentry/nextjs/config";
 
+function extractOriginHostname(raw?: string | null): string | null {
+  const trimmed = raw?.trim();
+  if (!trimmed) return null;
+  const hostPort = trimmed.replace(/^https?:\/\//i, "").split("/")[0]?.trim();
+  if (!hostPort) return null;
+  if (hostPort.startsWith("[")) {
+    const end = hostPort.indexOf("]");
+    return end !== -1 ? hostPort.slice(0, end + 1) : hostPort;
+  }
+  return hostPort.split(":")[0] || null;
+}
+
+const envDevOrigins = [
+  process.env.APP_DOMAIN,
+  process.env.BETTER_AUTH_URL,
+  ...(process.env.NEXT_ALLOWED_DEV_ORIGINS?.split(",") ?? []),
+]
+  .map(extractOriginHostname)
+  .filter((entry): entry is string => Boolean(entry));
+
 const nextConfig: NextConfig = {
-  // Allow ngrok and local dev origins for dev server & HMR
+  // Allow localhost, Tailscale MagicDNS (*.ts.net), and configured dev origins for dev server & HMR
   allowedDevOrigins: [
-    "wildlife-envelope-cryptic.ngrok-free.dev",
-    "localhost:3000",
-    "127.0.0.1:3000",
+    ...new Set([
+      "localhost",
+      "127.0.0.1",
+      "**.ts.net",
+      ...envDevOrigins,
+    ]),
   ],
   // Standalone output for container deployment (server.js + traced node_modules).
   output: "standalone",

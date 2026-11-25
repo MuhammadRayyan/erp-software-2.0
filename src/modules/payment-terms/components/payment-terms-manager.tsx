@@ -5,7 +5,10 @@ import { Plus, Trash2, CheckCircle2, Star, Edit2, X } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
+import { useActionPermission } from "@/components/permissions-provider";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Combobox } from "@/components/ui/combobox";
+import { useConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
@@ -26,6 +29,7 @@ export function PaymentTermsManager({
   terms: PaymentTerm[];
 }) {
   const router = useRouter();
+  const canEdit = useActionPermission("edit");
   const [editingId, setEditingId] = useState<string | null>(null);
   const [name, setName] = useState("");
   const [daysCount, setDaysCount] = useState<number>(30);
@@ -33,6 +37,7 @@ export function PaymentTermsManager({
   const [isDefault, setIsDefault] = useState(false);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState("");
+  const { ask, dialog: confirmDialog } = useConfirmDialog();
 
   function startEdit(term: PaymentTerm) {
     setEditingId(term.id);
@@ -92,17 +97,26 @@ export function PaymentTermsManager({
     router.refresh();
   }
 
-  async function handleDelete(id: string) {
-    if (!confirm("Are you sure you want to delete this payment term?")) return;
-    setPending(true);
-    const res = await deletePaymentTermAction(businessId, id);
-    setPending(false);
-    if (res.error) {
-      toast.error(res.error);
-      return;
-    }
-    toast.success("Payment term deleted.");
-    router.refresh();
+  function handleDelete(id: string) {
+    ask({
+      title: "Delete payment term?",
+      description: "Are you sure you want to delete this payment term? Existing customers or documents using it will keep their stored days.",
+      confirmLabel: "Delete term",
+      tone: "danger",
+      onConfirm: async () => {
+        setPending(true);
+        try {
+          const res = await deletePaymentTermAction(businessId, id);
+          if (res.error) {
+            throw new Error(res.error);
+          }
+          toast.success("Payment term deleted.");
+          router.refresh();
+        } finally {
+          setPending(false);
+        }
+      },
+    });
   }
 
   async function handleSetDefault(id: string) {
@@ -141,22 +155,24 @@ export function PaymentTermsManager({
               placeholder="e.g. Net 30, Due on Receipt"
               value={name}
               onChange={(e) => setName(e.target.value)}
-              disabled={pending}
+              disabled={!canEdit || pending}
             />
           </div>
 
           <div className="space-y-1.5">
             <Label htmlFor="termType">Calculation Type</Label>
-            <select
+            <Combobox
               id="termType"
+              ariaLabel="Calculation Type"
+              searchable={false}
+              disabled={!canEdit || pending}
               value={termType}
-              onChange={(e) => setTermType(e.target.value as any)}
-              disabled={pending}
-              className="w-full flex h-9 items-center justify-between rounded-md border border-input bg-background px-3 py-2 text-sm shadow-sm ring-offset-background placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
-            >
-              <option value="days_after_invoice">Days after invoice date</option>
-              <option value="end_of_month">By end of month</option>
-            </select>
+              onValueChange={(value) => setTermType(value as "days_after_invoice" | "end_of_month")}
+              options={[
+                { value: "days_after_invoice", label: "Days after invoice date" },
+                { value: "end_of_month", label: "By end of month" },
+              ]}
+            />
           </div>
 
           <div className="space-y-1.5">
@@ -170,7 +186,7 @@ export function PaymentTermsManager({
               placeholder="0"
               value={daysCount}
               onChange={(e) => setDaysCount(Math.max(0, parseInt(e.target.value) || 0))}
-              disabled={pending}
+              disabled={!canEdit || pending}
             />
           </div>
 
@@ -179,13 +195,13 @@ export function PaymentTermsManager({
               <Checkbox
                 checked={isDefault}
                 onCheckedChange={(checked) => setIsDefault(Boolean(checked))}
-                disabled={pending}
+                disabled={!canEdit || pending}
                 aria-label="Set as default"
               />
               <span>Set as default</span>
             </label>
 
-            <Button onClick={handleSave} disabled={pending} className="gap-1.5 ml-auto">
+            <Button permission="edit" onClick={handleSave} disabled={pending} className="gap-1.5 ml-auto">
               {editingId ? <CheckCircle2 className="size-4" /> : <Plus className="size-4" />}
               {editingId ? "Update" : "Add Term"}
             </Button>
@@ -232,6 +248,7 @@ export function PaymentTermsManager({
                 <div className="flex items-center gap-2 self-end sm:self-auto">
                   {term.is_default !== 1 && (
                     <Button
+                      permission="edit"
                       variant="ghost"
                       size="sm"
                       onClick={() => handleSetDefault(term.id)}
@@ -242,6 +259,7 @@ export function PaymentTermsManager({
                     </Button>
                   )}
                   <Button
+                    permission="edit"
                     variant="ghost"
                     size="icon"
                     onClick={() => startEdit(term)}
@@ -252,6 +270,7 @@ export function PaymentTermsManager({
                     <Edit2 className="size-4" />
                   </Button>
                   <Button
+                    permission="delete"
                     variant="ghost"
                     size="icon"
                     onClick={() => handleDelete(term.id)}
@@ -267,6 +286,7 @@ export function PaymentTermsManager({
           </div>
         )}
       </div>
+      {confirmDialog}
     </div>
   );
 }

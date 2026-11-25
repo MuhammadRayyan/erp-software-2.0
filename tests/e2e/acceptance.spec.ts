@@ -98,8 +98,9 @@ test("payroll draft → posted → void renders correctly and reconciles", async
   await expect(page.getByRole("button", { name: "Void / Unpost", exact: true })).toBeVisible();
   expect(queryIn<{ n: number }>(f.payrollDatabasePath, "SELECT COUNT(*) n FROM journal_entries WHERE source_id=? AND source_type='payslip'", f.payslipId).n).toBe(1);
   await expect(page.getByRole("button", { name: "Post to Ledger", exact: true })).toHaveCount(0);
-  page.once("dialog", dialog => dialog.accept());
   await page.getByRole("button", { name: "Void / Unpost", exact: true }).click();
+  await page.getByRole("button", { name: "Void payslip", exact: true }).click();
+  await expect(page.getByRole("dialog")).toHaveCount(0);
   await expect(page.getByRole("button", { name: "Void / Unpost", exact: true })).toHaveCount(0);
   expect(queryIn<{ document_status: string }>(f.payrollDatabasePath, "SELECT document_status FROM payslips WHERE id=?", f.payslipId).document_status).toBe("void");
   const db = new Database(f.payrollDatabasePath, { readonly: true });

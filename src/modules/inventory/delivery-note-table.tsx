@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo } from "react";
 import Link from "next/link";
 import {
   useLegacyTable as useTable,
@@ -8,17 +8,18 @@ import {
   getPaginationRowModel as createPaginationRowModel,
   getSortedRowModel as createSortedRowModel,
 } from "@tanstack/react-table/legacy";
-import { type SortingState } from "@tanstack/react-table";
 import { useColumns } from "@/components/columns-dropdown";
 import { DensityToggle } from "@/components/density-toggle";
-import { ClientListPagination, useTablePagination } from "@/components/list-pagination";
+import { ClientListPagination } from "@/components/list-pagination";
+import { ExportCsvButton } from "@/components/export-csv-button";
+import { useUrlListState } from "@/hooks/use-url-list-state";
 import { ActiveFiltersRow, DateRangeFilter, FilterChip, ListToolbar, SearchInput, ToolbarSelect } from "@/components/list-toolbar";
 import { StatusBadge, statusLabel } from "@/components/status-badge";
 import { TableTotalsBar } from "@/components/table-totals-bar";
 import { DataTable, ListTableCard } from "@/components/ui/data-table";
 import { useTableDensity } from "@/components/use-table-density";
 import type { ColumnVisibility } from "@/components/use-column-visibility";
-import { formatDate, formatMoney } from "@/core/format";
+import { formatDate, formatMoney, minorToDecimalString } from "@/core/format";
 import { formatQuantityMicros } from "./inventory-valuation";
 import { DeliveryNoteRowActions } from "./delivery-note-row-actions";
 
@@ -44,24 +45,28 @@ export function DeliveryNoteTable({
   businessId,
   currency,
   rows: rawRows,
-  initialFrom = "",
-  initialTo = "",
   serverSnapshot,
 }: {
   businessId: string;
   currency: string;
   rows: DeliveryNoteRow[];
-  initialFrom?: string;
-  initialTo?: string;
   serverSnapshot?: ColumnVisibility;
 }) {
   const { density } = useTableDensity(businessId);
-  const [query, setQuery] = useState("");
-  const [customerName, setCustomerName] = useState("");
-  const [status, setStatus] = useState("");
-  const [fromDate, setFromDate] = useState(initialFrom);
-  const [toDate, setToDate] = useState(initialTo);
-  const [sorting, setSorting] = useState<SortingState>([]);
+  const {
+    query,
+    customerId: customerName,
+    status,
+    fromDate,
+    toDate,
+    sorting,
+    setFilter,
+    setPage,
+    setPageSize,
+    onSortingChange,
+    resetFilters,
+    buildPagination,
+  } = useUrlListState();
 
   const customerOptions = useMemo(
     () => Array.from(new Set(rawRows.map((r) => r.customer_name).filter(Boolean))).sort((a, b) => a.localeCompare(b)),
@@ -150,26 +155,19 @@ export function DeliveryNoteTable({
     [businessId, currency],
   );
 
-  const { pagination, onPaginationChange, paginationInfo, setPage, setPageSize } = useTablePagination(rows.length);
+  const { pagination, paginationInfo } = buildPagination(rows.length);
 
   const table = useTable({
     data: rows,
     columns,
     state: { sorting, pagination, columnVisibility: colVisibility },
-    onSortingChange: setSorting,
-    onPaginationChange,
+    onSortingChange,
     getCoreRowModel: createCoreRowModel(),
     getSortedRowModel: createSortedRowModel(),
     getPaginationRowModel: createPaginationRowModel(),
   });
 
-  const clearFilters = () => {
-    setQuery("");
-    setCustomerName("");
-    setStatus("");
-    setFromDate("");
-    setToDate("");
-  };
+  const clearFilters = resetFilters;
   const hasActiveFilter = Boolean(query || customerName || status || fromDate || toDate);
 
   const totalCogs = useMemo(
@@ -180,10 +178,10 @@ export function DeliveryNoteTable({
   return (
     <>
       <ListToolbar>
-        <SearchInput value={query} onChange={setQuery} placeholder="Search delivery notes…" ariaLabel="Search delivery notes" />
+        <SearchInput value={query} onChange={(val) => setFilter("q", val)} placeholder="Search delivery notes…" ariaLabel="Search delivery notes" />
         <ToolbarSelect
           value={customerName}
-          onChange={setCustomerName}
+          onChange={(val) => setFilter("customerId", val)}
           ariaLabel="Filter by customer"
           className="min-w-36 max-w-52"
           options={[{ value: "", label: "All customers" }, ...customerOptions.map((name) => ({ value: name, label: name }))]}
@@ -191,14 +189,14 @@ export function DeliveryNoteTable({
         <DateRangeFilter
           fromDate={fromDate}
           toDate={toDate}
-          onFromChange={setFromDate}
-          onToChange={setToDate}
+          onFromChange={(val) => setFilter("from", val)}
+          onToChange={(val) => setFilter("to", val)}
           fromAriaLabel="Delivery date from"
           toAriaLabel="Delivery date to"
         />
         <ToolbarSelect
           value={status}
-          onChange={setStatus}
+          onChange={(val) => setFilter("status", val)}
           ariaLabel="Filter by status"
           options={[
             { value: "", label: "All statuses" },
@@ -208,17 +206,31 @@ export function DeliveryNoteTable({
           ]}
         />
         <div className="ml-auto flex items-center gap-1.5 shrink-0">
+          <ExportCsvButton
+            size="sm"
+            filename={`delivery-notes-${new Date().toISOString().slice(0, 10)}.csv`}
+            data={rows}
+            columns={[
+              { header: "Delivery Number", accessorKey: "delivery_number" },
+              { header: "Customer", accessorKey: "customer_name" },
+              { header: "Date", accessorKey: "date" },
+              { header: "Location", accessorKey: "location_code" },
+              { header: "Quantity", accessorFn: (r: DeliveryNoteRow) => formatQuantityMicros(Number(r.quantity_micros)) },
+              { header: "COGS", accessorFn: (r: DeliveryNoteRow) => minorToDecimalString(Number(r.value_minor || 0), currency) },
+              { header: "Status", accessorKey: "document_status" },
+            ]}
+          />
           <DensityToggle businessId={businessId} />
           {dropdown}
         </div>
       </ListToolbar>
       {hasActiveFilter && (
         <ActiveFiltersRow onClearAll={clearFilters}>
-          {customerName && <FilterChip onRemove={() => setCustomerName("")}>Customer: {customerName}</FilterChip>}
-          {fromDate && <FilterChip onRemove={() => setFromDate("")}>From: {formatDate(fromDate)}</FilterChip>}
-          {toDate && <FilterChip onRemove={() => setToDate("")}>To: {formatDate(toDate)}</FilterChip>}
-          {status && <FilterChip onRemove={() => setStatus("")}>Status: {statusLabel(status)}</FilterChip>}
-          {query && <FilterChip onRemove={() => setQuery("")}>Search: {query}</FilterChip>}
+          {customerName && <FilterChip onRemove={() => setFilter("customerId", "")}>Customer: {customerName}</FilterChip>}
+          {fromDate && <FilterChip onRemove={() => setFilter("from", "")}>From: {formatDate(fromDate)}</FilterChip>}
+          {toDate && <FilterChip onRemove={() => setFilter("to", "")}>To: {formatDate(toDate)}</FilterChip>}
+          {status && <FilterChip onRemove={() => setFilter("status", "")}>Status: {statusLabel(status)}</FilterChip>}
+          {query && <FilterChip onRemove={() => setFilter("q", "")}>Search: {query}</FilterChip>}
         </ActiveFiltersRow>
       )}
       <ListTableCard>
@@ -229,6 +241,7 @@ export function DeliveryNoteTable({
           minWidth="min-w-[800px]"
           noResultsMessage="No delivery notes match"
           onClearFilters={clearFilters}
+          getRowHref={(row: DeliveryNoteRow) => `/b/${businessId}/sales/delivery-notes/${row.id}`}
         />
         {rows.length > 0 && (
           <TableTotalsBar

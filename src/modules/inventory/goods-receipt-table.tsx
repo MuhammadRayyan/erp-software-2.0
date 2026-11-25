@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo } from "react";
 import Link from "next/link";
 import {
   useLegacyTable as useTable,
@@ -8,17 +8,18 @@ import {
   getPaginationRowModel as createPaginationRowModel,
   getSortedRowModel as createSortedRowModel,
 } from "@tanstack/react-table/legacy";
-import { type SortingState } from "@tanstack/react-table";
 import { useColumns } from "@/components/columns-dropdown";
 import { DensityToggle } from "@/components/density-toggle";
-import { ClientListPagination, useTablePagination } from "@/components/list-pagination";
+import { ClientListPagination } from "@/components/list-pagination";
+import { ExportCsvButton } from "@/components/export-csv-button";
+import { useUrlListState } from "@/hooks/use-url-list-state";
 import { ActiveFiltersRow, DateRangeFilter, FilterChip, ListToolbar, SearchInput, ToolbarSelect } from "@/components/list-toolbar";
 import { StatusBadge, statusLabel } from "@/components/status-badge";
 import { TableTotalsBar } from "@/components/table-totals-bar";
 import { DataTable, ListTableCard } from "@/components/ui/data-table";
 import { useTableDensity } from "@/components/use-table-density";
 import type { ColumnVisibility } from "@/components/use-column-visibility";
-import { formatDate, formatMoney } from "@/core/format";
+import { formatDate, formatMoney, minorToDecimalString } from "@/core/format";
 import { formatQuantityMicros } from "./inventory-valuation";
 import { GoodsReceiptRowActions } from "./goods-receipt-row-actions";
 
@@ -44,24 +45,28 @@ export function GoodsReceiptTable({
   businessId,
   currency,
   rows: rawRows,
-  initialFrom = "",
-  initialTo = "",
   serverSnapshot,
 }: {
   businessId: string;
   currency: string;
   rows: GoodsReceiptRow[];
-  initialFrom?: string;
-  initialTo?: string;
   serverSnapshot?: ColumnVisibility;
 }) {
   const { density } = useTableDensity(businessId);
-  const [query, setQuery] = useState("");
-  const [supplierName, setSupplierName] = useState("");
-  const [status, setStatus] = useState("");
-  const [fromDate, setFromDate] = useState(initialFrom);
-  const [toDate, setToDate] = useState(initialTo);
-  const [sorting, setSorting] = useState<SortingState>([]);
+  const {
+    query,
+    supplierId: supplierName,
+    status,
+    fromDate,
+    toDate,
+    sorting,
+    setFilter,
+    setPage,
+    setPageSize,
+    onSortingChange,
+    resetFilters,
+    buildPagination,
+  } = useUrlListState();
 
   const supplierOptions = useMemo(
     () => Array.from(new Set(rawRows.map((r) => r.supplier_name).filter(Boolean))).sort((a, b) => a.localeCompare(b)),
@@ -150,26 +155,19 @@ export function GoodsReceiptTable({
     [businessId, currency],
   );
 
-  const { pagination, onPaginationChange, paginationInfo, setPage, setPageSize } = useTablePagination(rows.length);
+  const { pagination, paginationInfo } = buildPagination(rows.length);
 
   const table = useTable({
     data: rows,
     columns,
     state: { sorting, pagination, columnVisibility: colVisibility },
-    onSortingChange: setSorting,
-    onPaginationChange,
+    onSortingChange,
     getCoreRowModel: createCoreRowModel(),
     getSortedRowModel: createSortedRowModel(),
     getPaginationRowModel: createPaginationRowModel(),
   });
 
-  const clearFilters = () => {
-    setQuery("");
-    setSupplierName("");
-    setStatus("");
-    setFromDate("");
-    setToDate("");
-  };
+  const clearFilters = resetFilters;
   const hasActiveFilter = Boolean(query || supplierName || status || fromDate || toDate);
 
   const totalValue = useMemo(
@@ -180,10 +178,10 @@ export function GoodsReceiptTable({
   return (
     <>
       <ListToolbar>
-        <SearchInput value={query} onChange={setQuery} placeholder="Search goods receipts…" ariaLabel="Search goods receipts" />
+        <SearchInput value={query} onChange={(val) => setFilter("q", val)} placeholder="Search goods receipts…" ariaLabel="Search goods receipts" />
         <ToolbarSelect
           value={supplierName}
-          onChange={setSupplierName}
+          onChange={(val) => setFilter("supplierId", val)}
           ariaLabel="Filter by supplier"
           className="min-w-36 max-w-52"
           options={[{ value: "", label: "All suppliers" }, ...supplierOptions.map((name) => ({ value: name, label: name }))]}
@@ -191,14 +189,14 @@ export function GoodsReceiptTable({
         <DateRangeFilter
           fromDate={fromDate}
           toDate={toDate}
-          onFromChange={setFromDate}
-          onToChange={setToDate}
+          onFromChange={(val) => setFilter("from", val)}
+          onToChange={(val) => setFilter("to", val)}
           fromAriaLabel="Receipt date from"
           toAriaLabel="Receipt date to"
         />
         <ToolbarSelect
           value={status}
-          onChange={setStatus}
+          onChange={(val) => setFilter("status", val)}
           ariaLabel="Filter by status"
           options={[
             { value: "", label: "All statuses" },
@@ -208,17 +206,31 @@ export function GoodsReceiptTable({
           ]}
         />
         <div className="ml-auto flex items-center gap-1.5 shrink-0">
+          <ExportCsvButton
+            size="sm"
+            filename={`goods-receipts-${new Date().toISOString().slice(0, 10)}.csv`}
+            data={rows}
+            columns={[
+              { header: "Receipt Number", accessorKey: "receipt_number" },
+              { header: "Supplier", accessorKey: "supplier_name" },
+              { header: "Date", accessorKey: "date" },
+              { header: "Location", accessorKey: "location_code" },
+              { header: "Quantity", accessorFn: (r: GoodsReceiptRow) => formatQuantityMicros(Number(r.quantity_micros)) },
+              { header: "Value", accessorFn: (r: GoodsReceiptRow) => minorToDecimalString(Number(r.value_minor || 0), currency) },
+              { header: "Status", accessorKey: "document_status" },
+            ]}
+          />
           <DensityToggle businessId={businessId} />
           {dropdown}
         </div>
       </ListToolbar>
       {hasActiveFilter && (
         <ActiveFiltersRow onClearAll={clearFilters}>
-          {supplierName && <FilterChip onRemove={() => setSupplierName("")}>Supplier: {supplierName}</FilterChip>}
-          {fromDate && <FilterChip onRemove={() => setFromDate("")}>From: {formatDate(fromDate)}</FilterChip>}
-          {toDate && <FilterChip onRemove={() => setToDate("")}>To: {formatDate(toDate)}</FilterChip>}
-          {status && <FilterChip onRemove={() => setStatus("")}>Status: {statusLabel(status)}</FilterChip>}
-          {query && <FilterChip onRemove={() => setQuery("")}>Search: {query}</FilterChip>}
+          {supplierName && <FilterChip onRemove={() => setFilter("supplierId", "")}>Supplier: {supplierName}</FilterChip>}
+          {fromDate && <FilterChip onRemove={() => setFilter("from", "")}>From: {formatDate(fromDate)}</FilterChip>}
+          {toDate && <FilterChip onRemove={() => setFilter("to", "")}>To: {formatDate(toDate)}</FilterChip>}
+          {status && <FilterChip onRemove={() => setFilter("status", "")}>Status: {statusLabel(status)}</FilterChip>}
+          {query && <FilterChip onRemove={() => setFilter("q", "")}>Search: {query}</FilterChip>}
         </ActiveFiltersRow>
       )}
       <ListTableCard>
@@ -229,6 +241,7 @@ export function GoodsReceiptTable({
           minWidth="min-w-[800px]"
           noResultsMessage="No goods receipts match"
           onClearFilters={clearFilters}
+          getRowHref={(row: GoodsReceiptRow) => `/b/${businessId}/purchases/goods-receipts/${row.id}`}
         />
         {rows.length > 0 && (
           <TableTotalsBar

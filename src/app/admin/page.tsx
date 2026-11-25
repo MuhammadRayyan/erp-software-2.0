@@ -3,8 +3,6 @@ import {
   Building2,
   HardDrive,
   Mail,
-  PauseCircle,
-  Shield,
   UserCheck,
   Users,
 } from "lucide-react";
@@ -69,78 +67,60 @@ export default async function AdminPage({
             <Mail className="size-3.5" />
             <span>Email: {emailStatus.configured ? "Active" : "Unconfigured"}</span>
           </Link>
-          <CreateTenantDialog />
+          {currentTab === "tenants" && <CreateTenantDialog />}
         </div>
       </div>
 
       {/* Domain-Aligned Platform KPIs */}
-      <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-6">
-        {/* Account Holders (Main Tenants) */}
-        <div className="rounded-xl border border-border bg-surface-raised p-4 shadow-xs">
-          <div className="flex items-center justify-between text-muted-foreground">
-            <span className="text-sm font-medium">Account Holders</span>
-            <UserCheck className="size-5 text-primary" />
+      {currentTab === "tenants" && (
+        <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+          {/* Account Holders (Main Tenants) */}
+          <div className="rounded-xl border border-border bg-surface-raised p-4 shadow-xs">
+            <div className="flex items-center justify-between text-muted-foreground">
+              <span className="text-sm font-medium">Account Holders</span>
+              <UserCheck className="size-5 text-primary" />
+            </div>
+            <div className="mt-2 text-2xl font-bold text-foreground">
+              {stats.clientTenantsCount}
+            </div>
+            <span className="text-xs text-muted-foreground">
+              {stats.totalTenantsCount} total account holders
+            </span>
           </div>
-          <div className="mt-2 text-2xl font-bold text-foreground">
-            {stats.clientTenantsCount}
-          </div>
-          <span className="text-xs text-muted-foreground">
-            {stats.totalTenantsCount} total account holders
-          </span>
-        </div>
 
-        {/* Total Businesses */}
-        <div className="rounded-xl border border-border bg-surface-raised p-4 shadow-xs">
-          <div className="flex items-center justify-between text-muted-foreground">
-            <span className="text-sm font-medium">Total Businesses</span>
-            <Building2 className="size-5 text-primary" />
+          {/* Total Businesses */}
+          <div className="rounded-xl border border-border bg-surface-raised p-4 shadow-xs">
+            <div className="flex items-center justify-between text-muted-foreground">
+              <span className="text-sm font-medium">Total Businesses</span>
+              <Building2 className="size-5 text-primary" />
+            </div>
+            <div className="mt-2 text-2xl font-bold text-foreground">{stats.totalBusinessesCount}</div>
+            <span className="text-xs text-muted-foreground">Isolated ledgers</span>
           </div>
-          <div className="mt-2 text-2xl font-bold text-foreground">{stats.totalBusinessesCount}</div>
-          <span className="text-xs text-muted-foreground">Isolated ledgers</span>
-        </div>
 
-        {/* Platform Users */}
-        <div className="rounded-xl border border-border bg-surface-raised p-4 shadow-xs">
-          <div className="flex items-center justify-between text-muted-foreground">
-            <span className="text-sm font-medium">Platform Users</span>
-            <Users className="size-5 text-primary" />
+          {/* Platform Users */}
+          <div className="rounded-xl border border-border bg-surface-raised p-4 shadow-xs">
+            <div className="flex items-center justify-between text-muted-foreground">
+              <span className="text-sm font-medium">Platform Users</span>
+              <Users className="size-5 text-primary" />
+            </div>
+            <div className="mt-2 text-2xl font-bold text-foreground">{stats.totalUsersCount}</div>
+            <span className="text-xs text-muted-foreground">Tenants + team members</span>
           </div>
-          <div className="mt-2 text-2xl font-bold text-foreground">{stats.totalUsersCount}</div>
-          <span className="text-xs text-muted-foreground">Tenants + team members</span>
-        </div>
 
-        {/* Active Accounts */}
-        <div className="rounded-xl border border-border bg-surface-raised p-4 shadow-xs">
-          <div className="flex items-center justify-between text-muted-foreground">
-            <span className="text-sm font-medium">Active Accounts</span>
-            <Shield className="size-5 text-emerald-600" />
+          {/* Storage Utilized */}
+          <div className="rounded-xl border border-border bg-surface-raised p-4 shadow-xs">
+            <div className="flex items-center justify-between text-muted-foreground">
+              <span className="text-sm font-medium">Storage Utilized</span>
+              <HardDrive className="size-5 text-primary" />
+            </div>
+            <div className="mt-2 text-2xl font-bold font-mono text-foreground">
+              {formatBytes(stats.totalStorageBytes)}
+            </div>
+            <span className="text-xs text-muted-foreground">Across all SQLite DBs</span>
           </div>
-          <div className="mt-2 text-2xl font-bold text-emerald-600">{stats.activeTenantsCount}</div>
-          <span className="text-xs text-muted-foreground">In good standing</span>
         </div>
-
-        {/* Suspended Accounts */}
-        <div className="rounded-xl border border-border bg-surface-raised p-4 shadow-xs">
-          <div className="flex items-center justify-between text-muted-foreground">
-            <span className="text-sm font-medium">Suspended</span>
-            <PauseCircle className="size-5 text-amber-600" />
-          </div>
-          <div className="mt-2 text-2xl font-bold text-amber-600">{stats.suspendedTenantsCount}</div>
-          <span className="text-xs text-muted-foreground">Access revoked</span>
-        </div>
-
-        {/* Storage Utilized */}
-        <div className="rounded-xl border border-border bg-surface-raised p-4 shadow-xs">
-          <div className="flex items-center justify-between text-muted-foreground">
-            <span className="text-sm font-medium">Storage Utilized</span>
-            <HardDrive className="size-5 text-primary" />
-          </div>
-          <div className="mt-2 text-2xl font-bold font-mono text-foreground">
-            {formatBytes(stats.totalStorageBytes)}
-          </div>
-          <span className="text-xs text-muted-foreground">Across all SQLite DBs</span>
-        </div>
-      </div>
+      )}
 
       {/* Tab Contents */}
       <section className="space-y-4">

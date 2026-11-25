@@ -17,8 +17,9 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
+import { formatDate } from "@/core/format";
 import { toggleBusinessSuspensionAction } from "./actions";
-import { ConfirmDialog } from "./confirm-dialog";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 
 export type AdminBusinessRow = {
   id: string;
@@ -240,7 +241,7 @@ export function BusinessTable({ initialBusinesses }: { initialBusinesses: AdminB
                           <span>•</span>
                           <span className="font-mono">{b.currency}</span>
                           <span>•</span>
-                          <span>Created {new Date(b.createdAt).toLocaleDateString()}</span>
+                          <span>Created {formatDate(b.createdAt)}</span>
                         </div>
                       </td>
 
@@ -359,8 +360,8 @@ export function BusinessTable({ initialBusinesses }: { initialBusinesses: AdminB
           title="Confirm Business Suspension"
           description={`Suspending workspace '${confirmTarget.name}' will prevent all standard tenant members from accessing its books and accounting transactions. Super-Admins retain Live View access. Are you sure you want to suspend this workspace?`}
           confirmLabel="Suspend Workspace"
-          variant="danger"
-          isLoading={actionPending}
+          tone="danger"
+          pending={actionPending}
           onConfirm={handleConfirmSuspension}
         />
       )}

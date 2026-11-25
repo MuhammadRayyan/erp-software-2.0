@@ -67,7 +67,7 @@ export function findRecodableLines(
   userId: string,
   filters: FindLinesFilters = {},
 ): RecodableLine[] {
-  const { sqlite } = getBusinessDb(businessId, userId);
+  const { sqlite, business } = getBusinessDb(businessId, userId);
 
   const lockRow = sqlite
     .prepare("SELECT financial_lock_date FROM business_accounting_settings WHERE id = 'default'")
@@ -332,7 +332,7 @@ export function findRecodableLines(
         CASE WHEN jl.debit_minor > 0 THEN jl.debit_minor ELSE jl.credit_minor END AS net_amount_minor,
         0 AS tax_amount_minor,
         CASE WHEN jl.debit_minor > 0 THEN jl.debit_minor ELSE jl.credit_minor END AS gross_amount_minor,
-        'AED' AS currency_code
+        ? AS currency_code
       FROM journal_lines jl
       INNER JOIN journal_entries je ON je.id = jl.journal_entry_id
       INNER JOIN accounts a ON a.id = jl.account_id
@@ -341,7 +341,7 @@ export function findRecodableLines(
       LEFT JOIN suppliers s ON s.id = jl.supplier_id
       WHERE ${where}
     `);
-    params.push(...qParams);
+    params.push(business.currency, ...qParams);
   }
 
   if (queries.length === 0) return [];

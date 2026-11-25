@@ -3,7 +3,8 @@
 import { useMemo, useTransition, type ReactNode } from "react";
 import Link from "next/link";
 import { debounce, useQueryStates } from "nuqs";
-import { ChevronRight, MoreHorizontal, Eye, FileEdit, FileText, FilePlus2, BookOpenText } from "lucide-react";
+import { MoreHorizontal, FileEdit, FileText, FilePlus2, BookOpenText } from "lucide-react";
+import { useActionPermission } from "@/components/permissions-provider";
 import {
   useLegacyTable as useTable,
   getCoreRowModel as createCoreRowModel,
@@ -16,6 +17,7 @@ import { useColumns } from "@/components/columns-dropdown";
 import { DataTable, ListTableCard } from "@/components/ui/data-table";
 import { formatCustomFieldValue, type CustomFieldColumn } from "@/modules/custom-fields/custom-field-display";
 import { DensityToggle } from "@/components/density-toggle";
+import { ExportCsvButton } from "@/components/export-csv-button";
 import { useTableDensity } from "@/components/use-table-density";
 import { TableTotalsBar } from "@/components/table-totals-bar";
 import type { DirectoryListSummary } from "./customer-service";
@@ -47,6 +49,7 @@ export function CustomerTable({
   footer?: ReactNode;
 }) {
   const { density } = useTableDensity(businessId);
+  const canCreatePerm = useActionPermission("create");
 
   const [, startTransition] = useTransition();
   const [urlState, setUrlState] = useQueryStates(directoryListParsers, {
@@ -144,7 +147,7 @@ export function CustomerTable({
         {
           id: "actions",
           header: () => <span className="sr-only">Actions</span>,
-          meta: { className: "w-16 text-right" },
+          meta: { className: "w-12 text-right" },
           enableSorting: false,
           enableHiding: false,
           cell: ({ row }: any) => {
@@ -158,11 +161,6 @@ export function CustomerTable({
                     </Button>
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="end" className="w-48">
-                    <DropdownMenuItem asChild>
-                      <Link href={`/b/${cust.businessId}/customers/${cust.id}`}>
-                        <Eye className="size-4 text-muted-foreground" /> View Profile
-                      </Link>
-                    </DropdownMenuItem>
                     <DropdownMenuItem permission="edit" asChild>
                       <Link href={`/b/${cust.businessId}/customers/${cust.id}/edit`}>
                         <FileEdit className="size-4 text-muted-foreground" /> Edit Customer
@@ -173,7 +171,7 @@ export function CustomerTable({
                         <BookOpenText className="size-4 text-muted-foreground" /> Statement
                       </Link>
                     </DropdownMenuItem>
-                    <DropdownMenuSeparator />
+                    {canCreatePerm && <DropdownMenuSeparator />}
                     <DropdownMenuItem permission="create" asChild>
                       <Link href={`/b/${cust.businessId}/sales/invoices/new?customerId=${cust.id}`}>
                         <FileText className="size-4 text-muted-foreground" /> New Invoice
@@ -186,18 +184,13 @@ export function CustomerTable({
                     </DropdownMenuItem>
                   </DropdownMenuContent>
                 </DropdownMenu>
-                <Button asChild variant="ghost" size="icon" className="size-7 text-muted-foreground opacity-50 transition-opacity md:opacity-0 md:group-hover:opacity-100">
-                  <Link href={`/b/${cust.businessId}/customers/${cust.id}`} aria-label={`Open ${cust.name}`}>
-                    <ChevronRight className="size-4" />
-                  </Link>
-                </Button>
               </div>
             );
           },
         },
       ];
     },
-    [customFields]
+    [canCreatePerm, customFields]
   );
 
   const table = useTable({
@@ -242,6 +235,18 @@ export function CustomerTable({
           ]}
         />
         <div className="ml-auto flex items-center gap-1.5 shrink-0">
+          <ExportCsvButton
+            size="sm"
+            filename="customers"
+            data={customers}
+            totalCount={summary.filteredTotal}
+            columns={[
+              { header: "Name", accessorKey: "name" },
+              { header: "Email", accessorFn: (r: CustomerRow) => r.email ?? "" },
+              { header: "Phone", accessorFn: (r: CustomerRow) => r.phone ?? "" },
+              { header: "Status", accessorFn: (r: CustomerRow) => (r.isActive ? "Active" : "Inactive") },
+            ]}
+          />
           <DensityToggle businessId={businessId} />
           {dropdown}
         </div>
@@ -262,6 +267,7 @@ export function CustomerTable({
           density={density}
           framed={false}
           minWidth="min-w-[800px]"
+          getRowHref={(c: CustomerRow) => `/b/${businessId}/customers/${c.id}`}
           noResultsMessage="No customers match these filters"
           noResultsSubtext="Clear the search or active-status filter."
           onClearFilters={clearFilters}

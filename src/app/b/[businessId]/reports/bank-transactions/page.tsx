@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { formatDate, formatMoney } from "@/core/format";
+import { formatDate, formatMoney, minorToDecimalString } from "@/core/format";
 import { requireModule } from "@/core/permissions/require-module";
 import { journalSourceHref, journalSourceLabel } from "@/modules/accounting/journal-source";
 import { listBankAccounts } from "@/modules/banking/bank-account-service";
@@ -51,9 +51,9 @@ export default async function BankTransactionsReportPage({
     source: journalSourceLabel(r.source_type),
     reference: r.reference || r.entry_number || "",
     description: r.description || "",
-    money_in: (r.money_in_minor / 100).toFixed(2),
-    money_out: (r.money_out_minor / 100).toFixed(2),
-    balance: (r.balance_minor / 100).toFixed(2),
+    money_in: minorToDecimalString(r.money_in_minor, access.business.currency),
+    money_out: minorToDecimalString(r.money_out_minor, access.business.currency),
+    balance: minorToDecimalString(r.balance_minor, access.business.currency),
     reconciled: r.reconciled ? "Yes" : "No",
   }));
 

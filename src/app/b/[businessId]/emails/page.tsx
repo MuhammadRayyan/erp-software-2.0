@@ -3,12 +3,10 @@ import { EmptyState } from "@/components/empty-state";
 import { PageHeader } from "@/components/page-header";
 import { requireAnyModule } from "@/core/permissions/require-module";
 import { listSentEmails } from "@/modules/email/email-service";
-import { getRelatedDocumentPath } from "@/modules/email/email-links";
 import { SentEmailTable, type SentEmailRow } from "@/modules/email/sent-email-table";
 import { listPreferences } from "@/modules/preferences/preference-service";
 import { decodeColumnSnapshots } from "@/modules/preferences/snapshot-codec";
 
-export { getRelatedDocumentPath };
 export const metadata = { title: "Sent Emails" };
 
 export default async function SentEmailsPage({ params }: { params: Promise<{ businessId: string }> }) {

@@ -24,6 +24,7 @@ import { DialogContent, DialogDescription, DialogRoot, DialogTitle, DialogTrigge
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { FormError } from "@/components/form-error";
+import { formatDate } from "@/core/format";
 
 interface ManagerSummary {
   businessName: string;
@@ -381,7 +382,7 @@ export function ImportDialog() {
                 Original Workspace: <span className="font-semibold text-foreground">{inspection.manifest.originalBusinessName}</span>
               </p>
               <p className="text-xs text-muted-foreground">
-                Exported: {new Date(inspection.manifest.exportedAt).toLocaleDateString()}
+                Exported: {formatDate(inspection.manifest.exportedAt)}
               </p>
             </div>
           )}

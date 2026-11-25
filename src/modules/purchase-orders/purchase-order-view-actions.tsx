@@ -1,11 +1,11 @@
 "use client";
 
 import Link from "next/link";
-import { PackagePlus, RefreshCw, GitBranch, ReceiptText, ArrowDownToLine, Send } from "lucide-react";
+import { PackagePlus, RefreshCw, GitBranch, ReceiptText, Send } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
-import { cancelPurchaseOrderAction, closePurchaseOrderAction, deletePurchaseOrderAction, convertPurchaseOrderToInvoiceAction, createPurchaseOrderRevisionAction, issuePurchaseOrderAction } from "./actions";
+import { cancelPurchaseOrderAction, closePurchaseOrderAction, deletePurchaseOrderAction, convertPurchaseOrderToInvoiceAction, createPurchaseOrderRevisionAction, duplicatePurchaseOrderAction, issuePurchaseOrderAction } from "./actions";
 import type { PurchaseOrderStatus } from "./purchase-order-service";
 import { DocumentViewActions } from "@/components/document-view-actions";
 import { useState } from "react";
@@ -21,8 +21,16 @@ export function PurchaseOrderViewActions({
   const router = useRouter();
   const { requiresApproval } = useApprovalPolicy();
   const canApprove = useActionPermission("approve");
+  const canEdit = useActionPermission("edit");
+  const canCreate = useActionPermission("create");
+  const canCreateInventory = useActionPermission("create", "inventory");
   const mustSubmitForApproval = requiresApproval || !canApprove;
   const editable = status === "draft" || status === "issued";
+  const showIssue = status === "draft" && (mustSubmitForApproval ? canEdit : canApprove);
+  const showRevise = status !== "cancelled" && status !== "superseded" && status !== "pending_approval" && canCreate;
+  const showReceive = status === "issued" && inventoryEnabled && hasReceivableItems && canCreateInventory;
+  const showConvertOrLinked = Boolean(linkedInvoice || status === "closed") || (status === "issued" && canCreate);
+  const hasExtraPrimary = showIssue || showRevise || showReceive || showConvertOrLinked;
   const [issuing, setIssuing] = useState(false);
   const [converting, setConverting] = useState(false);
   const [revising, setRevising] = useState(false);
@@ -85,21 +93,10 @@ export function PurchaseOrderViewActions({
         editHref={editable ? `/b/${businessId}/purchases/orders/${orderId}/edit` : undefined}
         pdfHref={`/api/businesses/${businessId}/documents/purchase-order/${orderId}/pdf`}
         onEmail={() => setEmailOpen(true)}
-        copyToActions={status !== "cancelled" && status !== "superseded" && status !== "pending_approval" ? [
-          ...(status !== "closed" && !linkedInvoice ? [{
-            label: "Purchase Invoice",
-            href: `/b/${businessId}/purchases/invoices/new?orderId=${orderId}`,
-            icon: ReceiptText,
-          }] : []),
-          ...(inventoryEnabled ? [
-            {
-              label: "Goods Receipt",
-              href: `/b/${businessId}/purchases/goods-receipts/new?orderId=${orderId}`,
-              icon: ArrowDownToLine,
-              disabled: !hasReceivableItems,
-            }
-          ] : []),
-        ] : undefined}
+        onDuplicate={async () => {
+          const result = await duplicatePurchaseOrderAction(businessId, orderId);
+          if (result?.error) throw new Error(result.error);
+        }}
         onClose={status === "issued" ? {
           label: "Close order",
           description: "The order remains available for history.",
@@ -131,38 +128,40 @@ export function PurchaseOrderViewActions({
           }
         } : undefined}
         extraPrimaryActions={
-          <>
-            {status === "draft" && (
-              <Button permission={mustSubmitForApproval ? "edit" : "approve"} onClick={handleIssue} disabled={issuing} className="gap-1.5">
-                <Send className={`size-4 ${issuing ? "animate-spin" : ""}`} /> 
-                {mustSubmitForApproval ? "Submit for Approval" : "Issue Order"}
-              </Button>
-            )}
-            {status !== "cancelled" && status !== "superseded" && status !== "pending_approval" && (
-              <Button variant="secondary" onClick={handleRevise} disabled={revising}>
-                <GitBranch className={`size-4 ${revising ? "animate-spin" : ""}`} /> 
-                New Revision
-              </Button>
-            )}
-            {status === "issued" && inventoryEnabled && (
-              <Button permission="create" asChild variant="secondary" disabled={!hasReceivableItems}>
-                <Link href={`/b/${businessId}/purchases/goods-receipts/new?orderId=${orderId}`}><PackagePlus className="size-4 mr-2" /> Receive Goods</Link>
-              </Button>
-            )}
-            {linkedInvoice || status === "closed" ? (
-              <Button asChild variant="secondary" className="gap-1.5 border-primary/30 text-primary hover:bg-primary/5">
-                <Link href={linkedInvoice ? `/b/${businessId}/purchases/invoices/${linkedInvoice.id}` : `/b/${businessId}/purchases/invoices`}>
-                  <ReceiptText className="size-4 text-primary" />
-                  {linkedInvoice ? `Bill: ${linkedInvoice.invoice_number}` : "View Linked Bill"}
-                </Link>
-              </Button>
-            ) : status === "issued" ? (
-              <Button variant="secondary" onClick={handleConvert} disabled={converting}>
-                <RefreshCw className={`size-4 ${converting ? "animate-spin" : ""}`} /> 
-                Create Invoice
-              </Button>
-            ) : null}
-          </>
+          hasExtraPrimary ? (
+            <>
+              {status === "draft" && (
+                <Button permission={mustSubmitForApproval ? "edit" : "approve"} onClick={handleIssue} disabled={issuing} className="gap-1.5">
+                  <Send className={`size-4 ${issuing ? "animate-spin" : ""}`} /> 
+                  {mustSubmitForApproval ? "Submit for Approval" : "Issue Order"}
+                </Button>
+              )}
+              {status !== "cancelled" && status !== "superseded" && status !== "pending_approval" && (
+                <Button permission="create" variant="secondary" onClick={handleRevise} disabled={revising}>
+                  <GitBranch className={`size-4 ${revising ? "animate-spin" : ""}`} /> 
+                  New Revision
+                </Button>
+              )}
+              {status === "issued" && inventoryEnabled && hasReceivableItems && (
+                <Button permission="create" permissionModule="inventory" asChild variant="secondary">
+                  <Link href={`/b/${businessId}/purchases/goods-receipts/new?orderId=${orderId}`}><PackagePlus className="size-4 mr-2" /> Receive Goods</Link>
+                </Button>
+              )}
+              {linkedInvoice || status === "closed" ? (
+                <Button asChild variant="secondary" className="gap-1.5 border-primary/30 text-primary hover:bg-primary/5">
+                  <Link href={linkedInvoice ? `/b/${businessId}/purchases/invoices/${linkedInvoice.id}` : `/b/${businessId}/purchases/invoices`}>
+                    <ReceiptText className="size-4 text-primary" />
+                    {linkedInvoice ? `Bill: ${linkedInvoice.invoice_number}` : "View Linked Bill"}
+                  </Link>
+                </Button>
+              ) : status === "issued" ? (
+                <Button permission="create" variant="secondary" onClick={handleConvert} disabled={converting}>
+                  <RefreshCw className={`size-4 ${converting ? "animate-spin" : ""}`} /> 
+                  Create Invoice
+                </Button>
+              ) : null}
+            </>
+          ) : undefined
         }
       />
       <DocumentEmailDialog

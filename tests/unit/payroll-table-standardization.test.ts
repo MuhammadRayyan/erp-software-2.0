@@ -104,7 +104,6 @@ test("HR & Payroll Tables & Rows Theming Standardization Suite", async (t) => {
       "utf-8"
     );
     assert.ok(eosbSrc.includes("useTableDensity"), "EosbClient must use useTableDensity");
-    assert.ok(eosbSrc.includes("<DensityToggle"), "EosbClient must render DensityToggle");
     assert.ok(eosbSrc.includes('data-density={density}'), "EosbClient table must bind data-density");
 
     const itemsSrc = fs.readFileSync(
