@@ -1,5 +1,7 @@
 import { getBusinessDb } from "@/core/db/business";
+import { resolveBaseCurrencyCode } from "./currency-fallback";
 import type { StatementOptions, AgingBuckets } from "./customer-statement-service";
+import { getBusinessTodayIso } from "@/core/format";
 
 export type { StatementOptions, AgingBuckets };
 
@@ -111,7 +113,7 @@ export function getSupplierStatement(
       const presentCurrencies = Array.from(new Set(filtered.map((r) => r.currency_code)));
       if (presentCurrencies.length === 0) {
         const supp = sqlite.prepare("SELECT default_currency_code FROM suppliers WHERE id = ?").get(supplierId) as { default_currency_code?: string } | undefined;
-        const defaultCur = supp?.default_currency_code || "AED";
+        const defaultCur = supp?.default_currency_code || resolveBaseCurrencyCode(sqlite);
         openingRows.push({
           date: fromDate,
           entry_number: "OPENING",
@@ -180,8 +182,8 @@ export function getSupplierAging(
   asOfDate?: string,
   currencyCode?: string,
 ): AgingBuckets {
-  const { sqlite } = getBusinessDb(businessId, userId);
-  const targetAsOf = asOfDate || new Date().toISOString().slice(0, 10);
+  const { sqlite, business } = getBusinessDb(businessId, userId);
+  const targetAsOf = asOfDate || getBusinessTodayIso();
 
   let targetCurrency = currencyCode?.toUpperCase();
   if (!targetCurrency) {
@@ -197,8 +199,7 @@ export function getSupplierAging(
       targetCurrency = supp?.default_currency_code;
     }
     if (!targetCurrency) {
-      const biz = sqlite.prepare("SELECT currency FROM business_settings LIMIT 1").get() as { currency?: string } | undefined;
-      targetCurrency = biz?.currency || "AED";
+      targetCurrency = resolveBaseCurrencyCode(sqlite, business?.currency);
     }
   }
 

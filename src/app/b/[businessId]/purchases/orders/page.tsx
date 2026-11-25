@@ -1,11 +1,10 @@
 import Link from "next/link";
 import { Plus, ShoppingCart } from "lucide-react";
 import { EmptyState } from "@/components/empty-state";
-import { ListDateFilter } from "@/components/list-date-filter";
 import { PageHeader } from "@/components/page-header";
 import { Button } from "@/components/ui/button";
 import { requireModule } from "@/core/permissions/require-module";
-import { buildDateSearchParams, DATE_PATTERN } from "@/lib/params";
+import { DATE_PATTERN } from "@/lib/params";
 import { listPurchaseOrders } from "@/modules/purchase-orders/purchase-order-service";
 import { PurchaseOrderTable } from "@/modules/purchase-orders/purchase-order-table";
 import { LiveRefresh } from "@/components/live-refresh";
@@ -27,7 +26,6 @@ export default async function PurchaseOrdersPage({
   const to = DATE_PATTERN.test(sp.to ?? "") ? sp.to : undefined;
   
   const orders = listPurchaseOrders(businessId, user.id, { from, to });
-  const searchParamsUrl = buildDateSearchParams({ from, to });
 
   return (
     <div className="page-container">
@@ -44,17 +42,7 @@ export default async function PurchaseOrdersPage({
       </PageHeader>
       
       {orders.length ? (
-        <div className="data-panel overflow-hidden">
-          <ListDateFilter
-            pathname={`/b/${businessId}/purchases/orders`}
-            searchParams={searchParamsUrl}
-            initialFrom={from ?? ""}
-            initialTo={to ?? ""}
-            fromLabel="Order from"
-            toLabel="Order to"
-          />
-          <PurchaseOrderTable businessId={businessId} orders={orders} />
-        </div>
+        <PurchaseOrderTable businessId={businessId} orders={orders} />
       ) : (
         <EmptyState
           icon={<ShoppingCart className="mx-auto mb-3 size-7 text-muted-foreground" />}

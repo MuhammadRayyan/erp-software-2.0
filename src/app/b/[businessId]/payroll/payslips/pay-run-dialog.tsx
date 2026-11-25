@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import {
   DialogRoot,
@@ -8,10 +8,12 @@ import {
   DialogTitle,
   DialogDescription,
 } from "@/components/ui/dialog";
+import { useActionPermission } from "@/components/permissions-provider";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { formatMoney } from "@/core/format";
+import { FormError } from "@/components/form-error";
+import { formatMoney, getBusinessTodayIso } from "@/core/format";
 import { useTableDensity } from "@/components/use-table-density";
 import { cn } from "@/lib/cn";
 import { type EmployeeRecord } from "@/modules/payroll/services/payroll-service";
@@ -35,14 +37,26 @@ export function PayRunDialog({
   onGenerated,
 }: PayRunDialogProps) {
   const { density } = useTableDensity(businessId);
+  const canPost = useActionPermission("post");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [fieldErrors, setFieldErrors] = useState<{ periodDate?: string; periodDescription?: string }>({});
 
-  const today = new Date().toISOString().slice(0, 10);
-  const currentMonth = new Intl.DateTimeFormat("en-US", { month: "long", year: "numeric" }).format(new Date());
+  const today = getBusinessTodayIso();
+  const currentMonth = new Intl.DateTimeFormat("en-AE", { month: "long", year: "numeric", timeZone: "Asia/Dubai" }).format(new Date());
 
   const activeEmployees = employees.filter((e) => e.isActive);
   const [selectedIds, setSelectedIds] = useState<string[]>(activeEmployees.map((e) => e.id));
+  const [autoPost, setAutoPost] = useState<boolean>(canPost);
+
+  useEffect(() => {
+    if (open) {
+      setSelectedIds(employees.filter((e) => e.isActive).map((e) => e.id));
+      setAutoPost(canPost);
+      setError(null);
+      setFieldErrors({});
+    }
+  }, [open, employees, canPost]);
 
   const toggleAll = () => {
     if (selectedIds.length === activeEmployees.length) {
@@ -61,6 +75,18 @@ export function PayRunDialog({
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setError(null);
+    setFieldErrors({});
+
+    const formData = new FormData(e.currentTarget);
+    const periodDate = formData.get("periodDate")?.toString().trim() || "";
+    const periodDescription = formData.get("periodDescription")?.toString().trim() || "";
+    const nextErrors: { periodDate?: string; periodDescription?: string } = {};
+    if (!periodDate) nextErrors.periodDate = "Pay date is required.";
+    if (!periodDescription) nextErrors.periodDescription = "Period description is required.";
+    if (Object.keys(nextErrors).length > 0) {
+      setFieldErrors(nextErrors);
+      return;
+    }
 
     if (selectedIds.length === 0) {
       setError("Please select at least one employee for the pay run.");
@@ -68,17 +94,14 @@ export function PayRunDialog({
     }
 
     setLoading(true);
-    const formData = new FormData(e.currentTarget);
-    const periodDate = formData.get("periodDate")?.toString() || today;
-    const periodDescription = formData.get("periodDescription")?.toString() || currentMonth;
-    const autoPost = formData.get("autoPost") === "on";
+    const shouldPost = canPost && autoPost;
 
     try {
       const res = await generateBatchPayslipsAction(businessId, {
         periodDate,
         periodDescription,
         employeeIds: selectedIds,
-        autoPost,
+        autoPost: shouldPost,
       });
 
       if (res.error) {
@@ -86,7 +109,7 @@ export function PayRunDialog({
         toast.error(res.error);
       } else {
         toast.success(
-          `Generated ${res.data?.createdCount ?? 0} payslips${autoPost ? " and posted to General Ledger" : " as drafts"}.`
+          `Generated ${res.data?.createdCount ?? 0} payslips${shouldPost ? " and posted to General Ledger" : " as drafts"}.`
         );
         onOpenChange(false);
         onGenerated?.();
@@ -108,12 +131,12 @@ export function PayRunDialog({
         </DialogDescription>
 
         {error && (
-          <div className="mt-3 p-3 text-sm rounded bg-danger/10 border border-danger/30 text-danger">
-            {error}
+          <div className="mt-3">
+            <FormError message={error} />
           </div>
         )}
 
-        <form onSubmit={handleSubmit} className="mt-4 space-y-4">
+        <form onSubmit={handleSubmit} className="mt-4 space-y-4" noValidate>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="space-y-1.5">
               <Label htmlFor="periodDate">Pay Date *</Label>
@@ -123,7 +146,10 @@ export function PayRunDialog({
                 type="date"
                 defaultValue={today}
                 required
+                aria-invalid={!!fieldErrors.periodDate}
+                onChange={() => fieldErrors.periodDate && setFieldErrors((p) => ({ ...p, periodDate: undefined }))}
               />
+              {fieldErrors.periodDate && <FormError message={fieldErrors.periodDate} />}
             </div>
 
             <div className="space-y-1.5">
@@ -134,22 +160,19 @@ export function PayRunDialog({
                 defaultValue={currentMonth}
                 placeholder="e.g. October 2026"
                 required
+                aria-invalid={!!fieldErrors.periodDescription}
+                onChange={() =>
+                  fieldErrors.periodDescription &&
+                  setFieldErrors((p) => ({ ...p, periodDescription: undefined }))
+                }
               />
+              {fieldErrors.periodDescription && <FormError message={fieldErrors.periodDescription} />}
             </div>
           </div>
 
           <div className="space-y-2 pt-2 border-t border-border">
             <div className="flex justify-between items-center">
               <Label className="text-sm font-medium">Select Employees ({selectedIds.length} of {activeEmployees.length})</Label>
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                onClick={toggleAll}
-                className="h-7 text-xs text-primary"
-              >
-                {selectedIds.length === activeEmployees.length ? "Deselect All" : "Select All"}
-              </Button>
             </div>
 
             <div className="data-panel max-h-56 overflow-y-auto">
@@ -228,10 +251,12 @@ export function PayRunDialog({
               type="checkbox"
               id="autoPost"
               name="autoPost"
-              defaultChecked={true}
-              className="rounded border-border text-primary focus:ring-primary size-4"
+              checked={canPost && autoPost}
+              disabled={!canPost}
+              onChange={(e) => setAutoPost(e.target.checked)}
+              className="rounded border-border text-primary focus:ring-primary size-4 disabled:opacity-50"
             />
-            <Label htmlFor="autoPost" className="cursor-pointer text-sm">
+            <Label htmlFor="autoPost" className={cn("cursor-pointer text-sm", !canPost && "text-muted-foreground")}>
               Automatically post to General Ledger (Credits 2200 Payroll Payable, Debits 6100 Salaries Expense)
             </Label>
           </div>
@@ -245,7 +270,7 @@ export function PayRunDialog({
             >
               Cancel
             </Button>
-            <Button type="submit" disabled={loading || selectedIds.length === 0}>
+            <Button permission={canPost && autoPost ? ["create", "post"] : "create"} type="submit" disabled={loading || selectedIds.length === 0}>
               {loading ? "Generating..." : `Generate ${selectedIds.length} Payslips`}
             </Button>
           </div>

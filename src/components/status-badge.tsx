@@ -5,6 +5,11 @@ type StatusTone = "neutral" | "info" | "success" | "warning" | "danger";
 /** Shared tone map for document and payment statuses across the app. */
 const STATUS_TONES: Record<string, StatusTone> = {
   draft: "neutral",
+  pending_approval: "warning",
+  held: "warning",
+  deposited: "info",
+  cleared: "success",
+  bounced: "danger",
   posted: "info",
   sent: "info",
   open: "info",
@@ -32,6 +37,11 @@ const STATUS_TONES: Record<string, StatusTone> = {
 
 const LABELS: Record<string, string> = {
   draft: "Draft",
+  pending_approval: "Pending Approval",
+  held: "Held",
+  deposited: "Deposited",
+  cleared: "Cleared",
+  bounced: "Bounced",
   posted: "Posted",
   sent: "Sent",
   open: "Open",

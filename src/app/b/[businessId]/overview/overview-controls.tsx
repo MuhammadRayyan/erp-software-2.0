@@ -83,9 +83,11 @@ function persistRange(range: DateRange) {
 }
 
 function applyRange(router: ReturnType<typeof useRouter>, pathname: string, range: DateRange) {
-  const params = new URLSearchParams();
+  const params = new URLSearchParams(typeof window !== "undefined" ? window.location.search : "");
   if (range.from) params.set("from", range.from);
+  else params.delete("from");
   if (range.to) params.set("to", range.to);
+  else params.delete("to");
   const query = params.toString();
   router.replace(query ? `${pathname}?${query}` : pathname, { scroll: false });
 }

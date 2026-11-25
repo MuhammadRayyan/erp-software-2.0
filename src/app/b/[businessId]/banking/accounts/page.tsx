@@ -2,13 +2,12 @@ import Link from "next/link";
 import { ArrowRightLeft, Landmark, LineChart, Plus } from "lucide-react";
 import { EmptyState } from "@/components/empty-state";
 import { PageHeader } from "@/components/page-header";
-import { StatusBadge } from "@/components/status-badge";
-import { DensityToggle } from "@/components/density-toggle";
 import { Button } from "@/components/ui/button";
-import { formatMoney } from "@/core/format";
 import { requireModule } from "@/core/permissions/require-module";
 import { listBankAccounts } from "@/modules/banking/bank-account-service";
-import { BankAccountRowActions } from "@/modules/banking/bank-account-row-actions";
+import { BankAccountTable, type BankAccountRow } from "@/modules/banking/bank-account-table";
+import { listPreferences } from "@/modules/preferences/preference-service";
+import { decodeColumnSnapshots } from "@/modules/preferences/snapshot-codec";
 
 export const metadata = {
   title: "Bank Accounts",
@@ -17,15 +16,20 @@ export const metadata = {
 export default async function BankAccountsPage({ params }: { params: Promise<{ businessId: string }> }) {
   const { businessId } = await params;
   const { user, access } = await requireModule(businessId, "banking");
-  const accounts = listBankAccounts(businessId, user.id);
+  const accounts = listBankAccounts(businessId, user.id) as unknown as BankAccountRow[];
+  const columnSnapshots = decodeColumnSnapshots(listPreferences(businessId, user.id));
 
   return (
     <div className="page-container">
       <PageHeader
         title="Bank Accounts"
-        description="Base-currency bank and cash accounts mapped directly to Asset ledger accounts."
+        description="Bank and cash accounts mapped to ledger accounts."
       >
-        <DensityToggle businessId={businessId} />
+        <Button asChild variant="secondary">
+          <Link href={`/b/${businessId}/banking/pdcs`}>
+            <Landmark className="size-4" /> Post-Dated Cheques
+          </Link>
+        </Button>
         <Button asChild variant="secondary">
           <Link href={`/b/${businessId}/reports/cash-flow-forecast`}>
             <LineChart className="size-4" /> Liquidity Forecast
@@ -44,58 +48,12 @@ export default async function BankAccountsPage({ params }: { params: Promise<{ b
       </PageHeader>
 
       {accounts.length ? (
-        <div className="data-panel overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="data-table min-w-[900px]">
-              <thead>
-                <tr>
-                  <th>Account</th>
-                  <th>Institution</th>
-                  <th>Mapped GL</th>
-                  <th>Currency</th>
-                  <th className="text-right!">Book Balance</th>
-                  <th className="text-right!">Statement Balance</th>
-                  <th className="text-right!">Unmatched</th>
-                  <th>Status</th>
-                  <th className="w-16 text-right"><span className="sr-only">Actions</span></th>
-                </tr>
-              </thead>
-              <tbody>
-                {accounts.map((account) => (
-                  <tr key={account.id}>
-                    <td>
-                      <Link href={`/b/${businessId}/banking/accounts/${account.id}`} className="font-medium text-primary hover:underline">
-                        {account.name}
-                      </Link>
-                      <span className="ml-2 text-xs text-muted-foreground">{account.is_cash_account ? "Cash" : "Bank"}</span>
-                    </td>
-                    <td>{account.is_cash_account ? "—" : account.bank_name || "—"}</td>
-                    <td>
-                      {account.ledger_name}
-                    </td>
-                    <td className="tabular">{account.currency_code}</td>
-                    <td className="money text-right font-medium">{formatMoney(account.book_balance_minor, access.business.currency)}</td>
-                    <td className="money text-right">
-                      {account.statement_balance_minor === null ? "Not reconciled" : formatMoney(account.statement_balance_minor, access.business.currency)}
-                    </td>
-                    <td className="tabular text-right">{account.is_cash_account ? "—" : account.unreconciled_count}</td>
-                    <td>
-                      <StatusBadge status={account.is_active ? "active" : "inactive"} />
-                    </td>
-                    <td>
-                      <BankAccountRowActions
-                        businessId={businessId}
-                        accountId={account.id}
-                        accountName={account.name}
-                        isCashAccount={Boolean(account.is_cash_account)}
-                      />
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
+        <BankAccountTable
+          businessId={businessId}
+          baseCurrency={access.business.currency}
+          accounts={accounts}
+          serverSnapshot={columnSnapshots["bank-accounts"]}
+        />
       ) : (
         <EmptyState
           icon={<Landmark className="mx-auto mb-3 size-7 text-muted-foreground" />}

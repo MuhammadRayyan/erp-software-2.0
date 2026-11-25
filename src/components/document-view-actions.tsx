@@ -1,16 +1,17 @@
 "use client";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { Ban, ChevronDown, Copy, Download, FileEdit, FileText, LoaderCircle, Mail, MoreHorizontal, Printer, Trash2 } from "lucide-react";
+import { Ban, CheckCircle2, ChevronDown, Copy, Download, FileEdit, FileText, Mail, MoreHorizontal, Printer, Trash2 } from "lucide-react";
+import { toast } from "sonner";
+import { useActionPermission } from "@/components/permissions-provider";
 import { Button } from "@/components/ui/button";
-import { DialogContent, DialogDescription, DialogRoot, DialogTitle } from "@/components/ui/dialog";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
-import { FormError } from "@/components/form-error";
 
 export type CopyToAction = {
   label: string;
   href?: string;
-  action?: () => Promise<void>;
+  action?: () => Promise<void | { error?: string }>;
   icon?: React.ComponentType<{ className?: string }>;
   disabled?: boolean;
 };
@@ -23,10 +24,17 @@ type DocumentViewActionsProps = {
   xmlHref?: string;
   /** Optional email handler — when provided, the Email button is wired to this callback (e.g. opens a compose dialog). */
   onEmail?: () => void;
-  onDuplicate?: () => Promise<void>;
-  onVoid?: { label: string; description: string; action: () => Promise<void> };
-  onDelete?: { label: string; description: string; action: () => Promise<void> };
-  onClose?: { label: string; description: string; action: () => Promise<void> };
+  autoOpenEmail?: boolean;
+  onDuplicate?: () => Promise<void | { error?: string }>;
+  onVoid?: { label: string; description: string; action: () => Promise<void | { error?: string }> };
+  onDelete?: { label: string; description: string; action: () => Promise<void | { error?: string }> };
+  onClose?: {
+    label: string;
+    description: string;
+    action: () => Promise<void | { error?: string }>;
+    tone?: "primary" | "danger";
+    icon?: "check" | "ban";
+  };
   copyToActions?: CopyToAction[];
   extraActions?: React.ReactNode;
   extraPrimaryActions?: React.ReactNode;
@@ -41,6 +49,7 @@ export function DocumentViewActions({
   pdfHref,
   xmlHref,
   onEmail,
+  autoOpenEmail,
   onDuplicate,
   onVoid,
   onDelete,
@@ -52,16 +61,43 @@ export function DocumentViewActions({
   const [confirm, setConfirm] = useState<ConfirmState>(null);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState("");
+  const autoOpenedRef = useRef(false);
+  const canEdit = useActionPermission("edit");
+  const canCreate = useActionPermission("create");
+  const canDelete = useActionPermission("delete");
+  const canExport = useActionPermission("export");
+
+  const hasDesktopUpperItems = Boolean((xmlHref && canExport) || (onDuplicate && canCreate) || extraActions);
+  const hasDesktopLowerItems = Boolean((onClose && canEdit) || (onVoid && canDelete) || (onDelete && canDelete));
+  const hasAnyDesktopMoreItems = hasDesktopUpperItems || hasDesktopLowerItems;
+
+  useEffect(() => {
+    if (!autoOpenEmail || !onEmail || !canExport || autoOpenedRef.current) return;
+    autoOpenedRef.current = true;
+    onEmail();
+    if (typeof window !== "undefined") {
+      const url = new URL(window.location.href);
+      if (url.searchParams.has("composeEmail")) {
+        url.searchParams.delete("composeEmail");
+        window.history.replaceState({}, "", url.toString());
+      }
+    }
+  }, [autoOpenEmail, onEmail, canExport]);
 
   async function handleConfirm() {
     setPending(true);
     setError("");
     try {
-      if (confirm === "duplicate" && onDuplicate) await onDuplicate();
-      if (confirm === "void" && onVoid) await onVoid.action();
-      if (confirm === "delete" && onDelete) await onDelete.action();
-      if (confirm === "close" && onClose) await onClose.action();
-      if (!error) setConfirm(null);
+      let res: void | { error?: string } = undefined;
+      if (confirm === "duplicate" && onDuplicate) res = await onDuplicate();
+      if (confirm === "void" && onVoid) res = await onVoid.action();
+      if (confirm === "delete" && onDelete) res = await onDelete.action();
+      if (confirm === "close" && onClose) res = await onClose.action();
+      if (res && typeof res === "object" && "error" in res && res.error) {
+        setError(res.error);
+        return;
+      }
+      setConfirm(null);
     } catch (err) {
       setError(err instanceof Error ? err.message : "An unexpected error occurred.");
     } finally {
@@ -73,7 +109,7 @@ export function DocumentViewActions({
     <>
       <div className="flex flex-wrap gap-2">
         {editHref && (
-          <Button asChild>
+          <Button permission="edit" variant={extraPrimaryActions ? "secondary" : "primary"} asChild>
             <Link href={editHref}><FileEdit className="size-4" /> Edit</Link>
           </Button>
         )}
@@ -111,9 +147,15 @@ export function DocumentViewActions({
                         setPending(true);
                         setError("");
                         try {
-                          await actionItem.action!();
+                          const res = await actionItem.action!();
+                          if (res && typeof res === "object" && "error" in res && res.error) {
+                            setError(res.error);
+                            toast.error(res.error);
+                          }
                         } catch (err: any) {
-                          setError(err.message || "Action failed");
+                          const msg = err?.message || "Action failed";
+                          setError(msg);
+                          toast.error(msg);
                         } finally {
                           setPending(false);
                         }
@@ -132,7 +174,7 @@ export function DocumentViewActions({
         )}
 
         {onEmail && (
-          <Button variant="secondary" className="hidden md:inline-flex" onClick={onEmail}>
+          <Button permission="export" variant="secondary" className="hidden md:inline-flex" onClick={onEmail}>
             <Mail className="size-4" /> Email
           </Button>
         )}
@@ -147,14 +189,18 @@ export function DocumentViewActions({
         </Button>
 
         {pdfHref && (
-          <Button asChild variant="secondary" className="hidden md:inline-flex">
-            <a href={pdfHref} target="_blank" rel="noreferrer"><Download className="size-4" /> PDF</a>
+          <Button permission="export" asChild variant="secondary" className="hidden md:inline-flex">
+            <a href={pdfHref} target="_blank" rel="noreferrer"><Download className="size-4" /> Download PDF</a>
           </Button>
         )}
 
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <Button variant="secondary" aria-label="More actions">
+            <Button
+              variant="secondary"
+              aria-label="More actions"
+              className={!hasAnyDesktopMoreItems ? "md:hidden" : undefined}
+            >
               More <MoreHorizontal className="size-4" />
             </Button>
           </DropdownMenuTrigger>
@@ -168,7 +214,7 @@ export function DocumentViewActions({
               </DropdownMenuItem>
             )}
             {xmlHref && (
-              <DropdownMenuItem asChild>
+              <DropdownMenuItem permission="export" asChild>
                 <Link href={xmlHref}><FileText className="size-4" /> View XML</Link>
               </DropdownMenuItem>
             )}
@@ -189,22 +235,24 @@ export function DocumentViewActions({
 
             {extraActions}
 
-            {(onVoid || onDelete || onClose) && <DropdownMenuSeparator />}
+            {hasDesktopLowerItems && (
+              <DropdownMenuSeparator className={!hasDesktopUpperItems ? "md:hidden" : undefined} />
+            )}
 
             {onClose && (
-              <DropdownMenuItem onSelect={() => { setError(""); setConfirm("close"); }}>
-                <Ban className="size-4" /> {onClose.label}
+              <DropdownMenuItem permission="edit" onSelect={() => { setError(""); setConfirm("close"); }}>
+                {onClose.icon === "check" ? <CheckCircle2 className="size-4" /> : <Ban className="size-4" />} {onClose.label}
               </DropdownMenuItem>
             )}
 
             {onVoid && (
-              <DropdownMenuItem className="text-danger focus:text-danger" onSelect={() => { setError(""); setConfirm("void"); }}>
+              <DropdownMenuItem permission="delete" className="text-danger focus:text-danger" onSelect={() => { setError(""); setConfirm("void"); }}>
                 <Ban className="size-4" /> {onVoid.label}
               </DropdownMenuItem>
             )}
 
             {onDelete && (
-              <DropdownMenuItem className="text-danger focus:text-danger" onSelect={() => { setError(""); setConfirm("delete"); }}>
+              <DropdownMenuItem permission="delete" className="text-danger focus:text-danger" onSelect={() => { setError(""); setConfirm("delete"); }}>
                 <Trash2 className="size-4" /> {onDelete.label}
               </DropdownMenuItem>
             )}
@@ -212,33 +260,49 @@ export function DocumentViewActions({
         </DropdownMenu>
       </div>
 
-      <DialogRoot open={confirm !== null} onOpenChange={(open) => { if (!open && !pending) setConfirm(null); }}>
-        <DialogContent>
-          <DialogTitle>
-            {confirm === "duplicate" && `Duplicate ${documentType}?`}
-            {confirm === "void" && `${onVoid?.label} ${documentNumber}?`}
-            {confirm === "delete" && `${onDelete?.label} ${documentNumber}?`}
-            {confirm === "close" && `${onClose?.label} ${documentNumber}?`}
-          </DialogTitle>
-          <DialogDescription>
-            {confirm === "duplicate" && `Are you sure you want to duplicate ${documentNumber}? A new draft will be created.`}
-            {confirm === "void" && onVoid?.description}
-            {confirm === "delete" && onDelete?.description}
-            {confirm === "close" && onClose?.description}
-          </DialogDescription>
-          {error && <FormError message={error} />}
-          <div className="mt-5 flex justify-end gap-2">
-            <Button variant="secondary" disabled={pending} onClick={() => setConfirm(null)}>Cancel</Button>
-            <Button variant={confirm === "duplicate" ? "primary" : "danger"} disabled={pending} onClick={handleConfirm}>
-              {pending && <LoaderCircle className="size-4 animate-spin" />}
-              {confirm === "duplicate" && "Duplicate"}
-              {confirm === "void" && onVoid?.label}
-              {confirm === "delete" && onDelete?.label}
-              {confirm === "close" && onClose?.label}
-            </Button>
-          </div>
-        </DialogContent>
-      </DialogRoot>
+      <ConfirmDialog
+        open={confirm !== null}
+        onOpenChange={(open) => {
+          if (!open && !pending) setConfirm(null);
+        }}
+        title={
+          confirm === "duplicate"
+            ? `Duplicate ${documentType}?`
+            : confirm === "void"
+              ? `${onVoid?.label} ${documentNumber}?`
+              : confirm === "delete"
+                ? `${onDelete?.label} ${documentNumber}?`
+                : `${onClose?.label} ${documentNumber}?`
+        }
+        description={
+          confirm === "duplicate"
+            ? `Are you sure you want to duplicate ${documentNumber}? A new draft will be created.`
+            : confirm === "void"
+              ? onVoid?.description
+              : confirm === "delete"
+                ? onDelete?.description
+                : onClose?.description
+        }
+        confirmLabel={
+          confirm === "duplicate"
+            ? "Duplicate"
+            : confirm === "void"
+              ? (onVoid?.label ?? "Confirm")
+              : confirm === "delete"
+                ? (onDelete?.label ?? "Delete")
+                : (onClose?.label ?? "Confirm")
+        }
+        tone={
+          confirm === "duplicate"
+            ? "primary"
+            : confirm === "close"
+              ? (onClose?.tone ?? "danger")
+              : "danger"
+        }
+        pending={pending}
+        error={error}
+        onConfirm={handleConfirm}
+      />
     </>
   );
 }

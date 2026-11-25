@@ -242,7 +242,16 @@ export function DocumentPaperSheet({
               {data.lines.map((line, idx) => (
                 <tr key={idx} className="hover:bg-slate-50/50">
                   <td className="py-3 px-3 align-top font-medium text-slate-900 leading-snug">
-                    {line.description}
+                    <div>{line.description}</div>
+                    {settings.showCustomFields !== false && line.customFields && line.customFields.length > 0 && (
+                      <div className="mt-1 flex flex-wrap gap-x-3 gap-y-0.5 text-[11px] font-normal text-slate-500">
+                        {line.customFields.map((cf, cIdx) => (
+                          <span key={cIdx}>
+                            {cf.name}: <strong className="font-medium text-slate-700">{cf.value}</strong>
+                          </span>
+                        ))}
+                      </div>
+                    )}
                   </td>
                   {hasProject && (
                     <td className="py-3 px-3 align-top text-slate-500">

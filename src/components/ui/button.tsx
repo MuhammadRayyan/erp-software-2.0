@@ -2,9 +2,10 @@
 import * as React from "react";
 import { Slot } from "@radix-ui/react-slot";
 import { cva, type VariantProps } from "class-variance-authority";
+import { LoaderCircle } from "lucide-react";
 import { cn } from "@/lib/cn";
 import { useActionPermission } from "@/components/permissions-provider";
-import type { ActionKey } from "@/core/permissions/module-access";
+import type { ActionKey, ModuleKey } from "@/core/permissions/module-access";
 
 const buttonVariants = cva(
   "inline-flex h-9 items-center justify-center gap-2 rounded-[6px] px-3 text-sm font-medium whitespace-nowrap transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background disabled:pointer-events-none disabled:opacity-50",
@@ -28,13 +29,55 @@ const buttonVariants = cva(
 );
 
 export type ButtonProps = React.ButtonHTMLAttributes<HTMLButtonElement> &
-  VariantProps<typeof buttonVariants> & { asChild?: boolean; permission?: ActionKey | ActionKey[] };
+  VariantProps<typeof buttonVariants> & {
+    asChild?: boolean;
+    loading?: boolean;
+    permission?: ActionKey | ActionKey[];
+    permissionModule?: ModuleKey | ModuleKey[];
+  };
 
-export function Button({ className, variant, size, asChild, permission, ...props }: ButtonProps) {
-  const allowed = useActionPermission(permission);
+export function Button({
+  className,
+  variant,
+  size,
+  asChild,
+  loading = false,
+  disabled,
+  permission,
+  permissionModule,
+  children,
+  ...props
+}: ButtonProps) {
+  const allowed = useActionPermission(permission, permissionModule);
   if (!allowed) return null;
-  const Component = asChild ? Slot : "button";
-  return <Component className={cn(buttonVariants({ variant, size }), className)} {...props} />;
+  if (asChild) {
+    const isBlocked = Boolean(disabled || loading);
+    return (
+      <Slot
+        className={cn(
+          buttonVariants({ variant, size }),
+          isBlocked && "pointer-events-none opacity-50",
+          className,
+        )}
+        aria-disabled={isBlocked || undefined}
+        aria-busy={loading || undefined}
+        {...props}
+      >
+        {children}
+      </Slot>
+    );
+  }
+  return (
+    <button
+      className={cn(buttonVariants({ variant, size }), className)}
+      disabled={disabled || loading}
+      aria-busy={loading || undefined}
+      {...props}
+    >
+      {loading ? <LoaderCircle className="size-4 animate-spin" aria-hidden="true" /> : null}
+      {children}
+    </button>
+  );
 }
 
 export { buttonVariants };

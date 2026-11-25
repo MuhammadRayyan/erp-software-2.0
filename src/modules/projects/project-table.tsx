@@ -1,20 +1,25 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState } from "react";
-import { ChevronRight, MoreHorizontal, Eye, FileEdit, ReceiptText, FileInput, BarChart3 } from "lucide-react";
+import { useMemo } from "react";
+import { MoreHorizontal, FileEdit, ReceiptText, FileInput, BarChart3 } from "lucide-react";
+import { useActionPermission } from "@/components/permissions-provider";
 import { 
   useLegacyTable as useTable,
   getCoreRowModel as createCoreRowModel,
+  getPaginationRowModel as createPaginationRowModel,
   getSortedRowModel as createSortedRowModel
 } from "@tanstack/react-table/legacy";
-import { type SortingState } from "@tanstack/react-table";
 import { ListToolbar, SearchInput, ToolbarSelect, DateRangeFilter, ActiveFiltersRow, FilterChip } from "@/components/list-toolbar";
 import { Button } from "@/components/ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { useColumns } from "@/components/columns-dropdown";
-import { DataTable } from "@/components/ui/data-table";
-import { formatMoney } from "@/core/format";
+import { DataTable, ListTableCard } from "@/components/ui/data-table";
+import { ClientListPagination } from "@/components/list-pagination";
+import { ExportCsvButton } from "@/components/export-csv-button";
+import { useUrlListState } from "@/hooks/use-url-list-state";
+import { TableTotalsBar } from "@/components/table-totals-bar";
+import { formatDate, formatMoney, getBusinessTodayIso, minorToDecimalString } from "@/core/format";
 import type { ProjectListRow } from "./project-service";
 import { ProjectStatusBadge } from "./project-status";
 import { DensityToggle } from "@/components/density-toggle";
@@ -40,13 +45,25 @@ export function ProjectTable({
   serverSnapshot?: import("@/components/use-column-visibility").ColumnVisibility;
 }) {
   const { density } = useTableDensity(businessId);
+  const canEditProject = useActionPermission("edit", "projects");
+  const canCreateSales = useActionPermission("create", "sales");
+  const canCreatePurchases = useActionPermission("create", "purchases");
+  const canViewReports = useActionPermission("view", "reports");
 
-  const [query, setQuery] = useState("");
-  const [status, setStatus] = useState("");
-  const [customerId, setCustomerId] = useState("");
-  const [fromDate, setFromDate] = useState("");
-  const [toDate, setToDate] = useState("");
-  const [sorting, setSorting] = useState<SortingState>([]);
+  const {
+    query,
+    status,
+    customerId,
+    fromDate,
+    toDate,
+    sorting,
+    setFilter,
+    setPage,
+    setPageSize,
+    onSortingChange,
+    resetFilters,
+    buildPagination,
+  } = useUrlListState();
 
   const customerOptions = useMemo(() => Array.from(new Map(projects.flatMap((project) => project.customerId && project.customerName ? [[project.customerId, project.customerName] as const] : [])).entries()).sort((a, b) => a[1].localeCompare(b[1])), [projects]);
 
@@ -141,10 +158,12 @@ export function ProjectTable({
       {
         id: "actions",
         header: () => <span className="sr-only">Actions</span>,
-        meta: { className: "w-16 text-right" },
+        meta: { className: "w-12 text-right" },
         enableSorting: false,
         cell: ({ row }: any) => {
           const prj = row.original;
+          const hasSecondaryActions = canCreateSales || canCreatePurchases || canViewReports;
+          if (!canEditProject && !hasSecondaryActions) return null;
           return (
             <div className="flex items-center justify-end gap-1">
               <DropdownMenu>
@@ -154,75 +173,86 @@ export function ProjectTable({
                   </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end" className="w-52">
-                  <DropdownMenuItem asChild>
-                    <Link href={`/b/${prj.businessId}/projects/${prj.id}`}>
-                      <Eye className="size-4 text-muted-foreground" /> View Project
-                    </Link>
-                  </DropdownMenuItem>
                   <DropdownMenuItem permission="edit" asChild>
                     <Link href={`/b/${prj.businessId}/projects/${prj.id}/edit`}>
                       <FileEdit className="size-4 text-muted-foreground" /> Edit Project
                     </Link>
                   </DropdownMenuItem>
-                  <DropdownMenuSeparator />
-                  <DropdownMenuItem permission="create" asChild>
-                    <Link href={`/b/${prj.businessId}/sales/invoices/new?projectId=${prj.id}`}>
-                      <ReceiptText className="size-4 text-muted-foreground" /> New Invoice
-                    </Link>
-                  </DropdownMenuItem>
-                  <DropdownMenuItem permission="create" asChild>
-                    <Link href={`/b/${prj.businessId}/purchases/invoices/new?projectId=${prj.id}`}>
-                      <FileInput className="size-4 text-muted-foreground" /> New Bill
-                    </Link>
-                  </DropdownMenuItem>
-                  <DropdownMenuItem asChild>
+                  {canEditProject && hasSecondaryActions && <DropdownMenuSeparator />}
+                  {canCreateSales && (
+                    <DropdownMenuItem permission="create" permissionModule="sales" asChild>
+                      <Link href={`/b/${prj.businessId}/sales/invoices/new?projectId=${prj.id}`}>
+                        <ReceiptText className="size-4 text-muted-foreground" /> New Invoice
+                      </Link>
+                    </DropdownMenuItem>
+                  )}
+                  {canCreatePurchases && (
+                    <DropdownMenuItem permission="create" permissionModule="purchases" asChild>
+                      <Link href={`/b/${prj.businessId}/purchases/invoices/new?projectId=${prj.id}`}>
+                        <FileInput className="size-4 text-muted-foreground" /> New Bill
+                      </Link>
+                    </DropdownMenuItem>
+                  )}
+                  <DropdownMenuItem permission="view" permissionModule="reports" asChild>
                     <Link href={`/b/${prj.businessId}/reports/project-profitability?projectId=${prj.id}`}>
                       <BarChart3 className="size-4 text-muted-foreground" /> Profitability Report
                     </Link>
                   </DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>
-              <Button asChild variant="ghost" size="icon" className="size-7 text-muted-foreground opacity-50 transition-opacity md:opacity-0 md:group-hover:opacity-100">
-                <Link href={`/b/${prj.businessId}/projects/${prj.id}`} aria-label={`Open ${prj.code}`}>
-                  <ChevronRight className="size-4" />
-                </Link>
-              </Button>
             </div>
           );
         },
       },
     ],
-    [],
+    [canCreatePurchases, canCreateSales, canEditProject, canViewReports],
   );
+
+  const { pagination, paginationInfo } = buildPagination(rows.length);
 
   const table = useTable({
     data: rows,
     columns,
     state: {
       sorting,
+      pagination,
       columnVisibility: colVisibility,
     },
-    onSortingChange: setSorting,
+    onSortingChange,
     getCoreRowModel: createCoreRowModel(),
     getSortedRowModel: createSortedRowModel(),
+    getPaginationRowModel: createPaginationRowModel(),
   });
 
-  const clearFilters = () => {
-    setQuery("");
-    setStatus("");
-    setCustomerId("");
-    setFromDate("");
-    setToDate("");
-  };
+  const clearFilters = resetFilters;
   const hasActiveFilter = Boolean(customerId || status || query || fromDate || toDate);
   const statusLabel = (s: string) => s === "draft" ? "Draft" : s === "active" ? "Active" : s === "on_hold" ? "On Hold" : s === "completed" ? "Completed" : s === "cancelled" ? "Cancelled" : s;
 
+  const totalRevenue = useMemo(() => rows.reduce((sum, r) => sum + (r.revenueMinor ?? 0), 0), [rows]);
+  const totalCost = useMemo(() => rows.reduce((sum, r) => sum + (r.costMinor ?? 0), 0), [rows]);
+  const totalProfit = totalRevenue - totalCost;
+
   return <>
     <ListToolbar>
-      <SearchInput value={query} onChange={setQuery} placeholder="Search projects…" ariaLabel="Search projects" />
+      <SearchInput value={query} onChange={(val) => setFilter("q", val)} placeholder="Search projects…" ariaLabel="Search projects" />
+      <ToolbarSelect
+        value={customerId}
+        onChange={(val) => setFilter("customerId", val)}
+        ariaLabel="Filter by customer"
+        className="min-w-36 max-w-52"
+        options={[{ value: "", label: "All customers" }, ...customerOptions.map(([id, name]) => ({ value: id, label: name }))]}
+      />
+      <DateRangeFilter
+        fromDate={fromDate}
+        toDate={toDate}
+        onFromChange={(val) => setFilter("from", val)}
+        onToChange={(val) => setFilter("to", val)}
+        fromAriaLabel="Project start date from"
+        toAriaLabel="Project target end date to"
+      />
       <ToolbarSelect
         value={status}
-        onChange={setStatus}
+        onChange={(val) => setFilter("status", val)}
         ariaLabel="Filter by project status"
         className="min-w-32 max-w-44"
         options={[
@@ -234,22 +264,21 @@ export function ProjectTable({
           { value: "cancelled", label: "Cancelled" },
         ]}
       />
-      <ToolbarSelect
-        value={customerId}
-        onChange={setCustomerId}
-        ariaLabel="Filter by customer"
-        className="min-w-36 max-w-52"
-        options={[{ value: "", label: "All customers" }, ...customerOptions.map(([id, name]) => ({ value: id, label: name }))]}
-      />
-      <DateRangeFilter
-        fromDate={fromDate}
-        toDate={toDate}
-        onFromChange={setFromDate}
-        onToChange={setToDate}
-        fromAriaLabel="Project start date from"
-        toAriaLabel="Project target end date to"
-      />
       <div className="ml-auto flex items-center gap-1.5 shrink-0">
+        <ExportCsvButton
+          size="sm"
+          filename={`projects-${getBusinessTodayIso()}.csv`}
+          data={rows}
+          columns={[
+            { header: "Code", accessorKey: "code" },
+            { header: "Name", accessorKey: "name" },
+            { header: "Customer", accessorKey: "customerName" },
+            { header: "Status", accessorKey: "status" },
+            { header: "Revenue", accessorFn: (r: any) => minorToDecimalString(Number(r.revenueMinor || 0), currency) },
+            { header: "Cost", accessorFn: (r: any) => minorToDecimalString(Number(r.costMinor || 0), currency) },
+            { header: "Profit", accessorFn: (r: any) => minorToDecimalString(Number(r.profitMinor || 0), currency) },
+          ]}
+        />
         <DensityToggle businessId={businessId} />
         {dropdown}
       </div>
@@ -257,22 +286,43 @@ export function ProjectTable({
     {hasActiveFilter && (
       <ActiveFiltersRow onClearAll={clearFilters}>
         {customerId && (
-          <FilterChip onRemove={() => setCustomerId("")}>
+          <FilterChip onRemove={() => setFilter("customerId", "")}>
             Customer: {customerOptions.find(([id]) => id === customerId)?.[1]}
           </FilterChip>
         )}
-        {status && <FilterChip onRemove={() => setStatus("")}>Status: {statusLabel(status)}</FilterChip>}
-        {fromDate && <FilterChip onRemove={() => setFromDate("")}>From: {fromDate}</FilterChip>}
-        {toDate && <FilterChip onRemove={() => setToDate("")}>To: {toDate}</FilterChip>}
-        {query && <FilterChip onRemove={() => setQuery("")}>Search: {query}</FilterChip>}
+        {fromDate && <FilterChip onRemove={() => setFilter("from", "")}>From: {formatDate(fromDate)}</FilterChip>}
+        {toDate && <FilterChip onRemove={() => setFilter("to", "")}>To: {formatDate(toDate)}</FilterChip>}
+        {status && <FilterChip onRemove={() => setFilter("status", "")}>Status: {statusLabel(status)}</FilterChip>}
+        {query && <FilterChip onRemove={() => setFilter("q", "")}>Search: {query}</FilterChip>}
       </ActiveFiltersRow>
     )}
-    <DataTable 
-      table={table}
-      density={density} 
-      minWidth="min-w-[860px]" 
-      noResultsMessage="No projects match these filters" 
-      onClearFilters={clearFilters}
-    />
+    <ListTableCard>
+      <DataTable 
+        table={table}
+        density={density}
+        framed={false}
+        minWidth="min-w-[860px]" 
+        noResultsMessage="No projects match these filters" 
+        onClearFilters={clearFilters}
+        getRowHref={(row: any) => `/b/${row.businessId}/projects/${row.id}`}
+      />
+      {rows.length > 0 && (
+        <TableTotalsBar
+          filteredCount={rows.length}
+          totalCount={projects.length}
+          itemLabel="projects"
+          metrics={[
+            { label: "Revenue", value: formatMoney(totalRevenue, currency) },
+            { label: "Cost", value: formatMoney(totalCost, currency) },
+            { label: "Net Profit", value: formatMoney(totalProfit, currency), tone: totalProfit < 0 ? "danger" : "primary" },
+          ]}
+        />
+      )}
+      <ClientListPagination
+        info={paginationInfo}
+        onPageChange={setPage}
+        onPageSizeChange={setPageSize}
+      />
+    </ListTableCard>
   </>;
 }

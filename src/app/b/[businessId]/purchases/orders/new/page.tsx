@@ -10,8 +10,10 @@ import { getSalesOrder } from "@/modules/sales-orders/sales-order-service";
 import { listActiveSuppliers } from "@/modules/suppliers/supplier-service";
 import { listProjectOptions } from "@/modules/projects/project-service";
 import { listInventoryItemOptions } from "@/modules/inventory/inventory-item-service";
-import { BackLink } from "@/components/back-link";
+import { Breadcrumbs } from "@/components/breadcrumbs";
 import { getFormDefaults } from "@/modules/form-defaults/form-defaults-service";
+import { listCustomFieldDefinitions } from "@/modules/custom-fields/custom-field-service";
+import { getBusinessTodayIso } from "@/core/format";
 
 export default async function NewPurchaseOrderPage({
   params,
@@ -37,8 +39,11 @@ export default async function NewPurchaseOrderPage({
   const projects = listProjectOptions(businessId, user.id);
   const items = listInventoryItemOptions(businessId, user.id);
   const currencySettings = getCurrencySettings(businessId, user.id);
+  const lineCustomFields = listCustomFieldDefinitions(businessId, user.id, "purchase_order_line").map(
+    ({ id, name, fieldType, selectOptions, isRequired }) => ({ id, name, fieldType, selectOptions, isRequired }),
+  );
 
-  const today = new Date().toISOString().slice(0, 10);
+  const today = getBusinessTodayIso();
   const defaultTax =
     (formDefaults.defaultTaxCodeId ? taxes.find((tax) => tax.id === formDefaults.defaultTaxCodeId)?.id : undefined) ??
     taxes.find((tax) => tax.rateBasisPoints === 500 && tax.vatCategory === "standard")?.id ??
@@ -112,16 +117,23 @@ export default async function NewPurchaseOrderPage({
 
   return (
     <div className="page-container">
-      <BackLink href={`/b/${businessId}/purchases/orders`}>Purchase Orders</BackLink>
+      <Breadcrumbs
+        businessId={businessId}
+        items={[
+          { label: "Purchase Orders", href: `/b/${businessId}/purchases/orders` },
+          { label: "New Purchase Order" },
+        ]}
+      />
       <div className="mb-7">
         <h1 className="page-title">New Purchase Order</h1>
         <p className="page-description">Save a draft or issue an operational order without ledger impact.</p>
       </div>
       <PurchaseOrderForm
         businessId={businessId}
+        isPrefilled={Boolean(query.quoteId || query.salesOrderId || query.supplierId || query.projectId)}
         suppliers={suppliers.map(({ id, name, defaultCurrencyCode }) => ({ id, name, defaultCurrencyCode }))}
         expenseAccounts={accounts.map(({ id, name }) => ({ id, name }))}
-        taxCodes={taxes.map(({ id, name, rateBasisPoints }) => ({ id, name, rateBasisPoints }))}
+        taxCodes={taxes.map(({ id, name, rateBasisPoints, vatCategory }) => ({ id, name, rateBasisPoints, vatCategory }))}
         projects={projects}
         items={items.map(({ id, sku, name, purchasePriceMinor, inventoryAssetAccountId }) => ({
           id,
@@ -135,6 +147,7 @@ export default async function NewPurchaseOrderPage({
         currencies={currencySettings.currencies
           .filter((currency) => currency.is_active)
           .map((currency) => ({ code: currency.code, name: currency.name, minorUnit: currency.minor_unit }))}
+        lineCustomFields={lineCustomFields}
         rates={currencySettings.rates.map((rate) => ({
           id: rate.id,
           currencyCode: rate.currency_code,

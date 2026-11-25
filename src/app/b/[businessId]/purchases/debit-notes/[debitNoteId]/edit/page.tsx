@@ -12,7 +12,7 @@ import { getDebitNote } from "@/modules/debit-notes/debit-note-service";
 import { quantityMicrosToInput } from "@/modules/accounting/calculations/money";
 import { minorToCurrencyInput } from "@/modules/currency/conversion";
 import { getCurrencySettings } from "@/modules/currency/exchange-rate";
-import { BackLink } from "@/components/back-link";
+import { Breadcrumbs } from "@/components/breadcrumbs";
 
 export default async function EditDebitNotePage({
   params,
@@ -49,7 +49,14 @@ export default async function EditDebitNotePage({
 
   return (
     <div className="page-container">
-      <BackLink href={`/b/${businessId}/purchases/debit-notes/${debitNoteId}`}>{record.note.debitNoteNumber}</BackLink>
+      <Breadcrumbs
+        businessId={businessId}
+        items={[
+          { label: "Debit Notes", href: `/b/${businessId}/purchases/debit-notes` },
+          { label: record.note.debitNoteNumber, href: `/b/${businessId}/purchases/debit-notes/${debitNoteId}` },
+          { label: "Edit" },
+        ]}
+      />
       <div className="mb-7">
         <h1 className="page-title">Edit Debit Note</h1>
         <p className="page-description">
@@ -67,15 +74,18 @@ export default async function EditDebitNotePage({
           id: inv.id,
           invoiceNumber: inv.internal_number,
           supplierId: inv.supplier_id,
-          balanceMinor: inv.total_minor,
+          balanceMinor:
+            inv.id === record.note.purchaseInvoiceId && record.note.documentStatus === "posted"
+              ? inv.balanceMinor + record.note.totalMinor
+              : inv.balanceMinor,
           currencyCode: inv.currency_code,
-          minorUnit: 2,
+          minorUnit: inv.currency_minor_unit ?? 2,
           exchangeRateToBase: String(inv.exchange_rate_to_base ?? "1"),
           exchangeRateDate: inv.exchange_rate_date ?? "",
           exchangeRateSource: inv.exchange_rate_source ?? "Base",
         }))}
-        salesAccounts={expenseAccounts.map(({ id, name }) => ({ id, name }))}
-        taxCodes={taxCodes.map(({ id, name, rateBasisPoints }) => ({ id, name, rateBasisPoints }))}
+        expenseAccounts={expenseAccounts.map(({ id, name }) => ({ id, name }))}
+        taxCodes={taxCodes.map(({ id, name, rateBasisPoints, vatCategory }) => ({ id, name, rateBasisPoints, vatCategory }))}
         projects={projects.map((p) => ({
           id: p.id,
           code: p.code,

@@ -1,11 +1,13 @@
 "use client";
 
 import Link from "next/link";
-import { CheckCircle2, Truck, RefreshCw, GitBranch, ReceiptText, PackageCheck, ShoppingCart } from "lucide-react";
+import { CheckCircle2, Truck, RefreshCw, GitBranch, ReceiptText, ShoppingCart } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
-import { cancelSalesOrderAction, closeSalesOrderAction, deleteSalesOrderAction, convertSalesOrderToInvoiceAction, createSalesOrderRevisionAction, issueSalesOrderAction } from "./actions";
+import { DropdownMenuItem } from "@/components/ui/dropdown-menu";
+import { useActionPermission } from "@/components/permissions-provider";
+import { cancelSalesOrderAction, closeSalesOrderAction, deleteSalesOrderAction, convertSalesOrderToInvoiceAction, createSalesOrderRevisionAction, duplicateSalesOrderAction, issueSalesOrderAction } from "./actions";
 import type { SalesOrderStatus } from "./sales-order-service";
 import { DocumentViewActions } from "@/components/document-view-actions";
 import { useState } from "react";
@@ -25,7 +27,16 @@ export function SalesOrderViewActions({
   linkedInvoice?: { id: string; invoice_number: string };
 }) {
   const router = useRouter();
+  const canCreate = useActionPermission("create");
+  const canApprove = useActionPermission("approve");
+  const canCreatePurchase = useActionPermission("create", "purchases");
+  const canCreateInventory = useActionPermission("create", "inventory");
   const editable = documentStatus === "draft" || documentStatus === "active";
+  const showActivate = documentStatus === "draft" && canApprove;
+  const showRevise = documentStatus !== "cancelled" && documentStatus !== "superseded" && canCreate;
+  const showShip = inventoryEnabled && hasDeliverableItems && documentStatus === "active" && canCreateInventory;
+  const showInvoiceOrConvert = Boolean(linkedInvoice || documentStatus === "completed") || (documentStatus === "active" && canCreate);
+  const hasExtraPrimary = showActivate || showRevise || showShip || showInvoiceOrConvert;
   const [issuing, setIssuing] = useState(false);
   const [converting, setConverting] = useState(false);
   const [revising, setRevising] = useState(false);
@@ -80,25 +91,19 @@ export function SalesOrderViewActions({
         editHref={editable ? `/b/${businessId}/sales/orders/${orderId}/edit` : undefined}
         pdfHref={`/api/businesses/${businessId}/documents/sales-order/${orderId}/pdf`}
         onEmail={() => setEmailOpen(true)}
-        copyToActions={documentStatus !== "cancelled" && documentStatus !== "superseded" ? [
-          ...(documentStatus !== "completed" && !linkedInvoice ? [{
-            label: "Sales Invoice",
-            href: `/b/${businessId}/sales/invoices/new?orderId=${orderId}`,
-            icon: ReceiptText,
-          }] : []),
-          ...(inventoryEnabled ? [
-            {
-              label: "Delivery Note",
-              href: `/b/${businessId}/sales/delivery-notes/new?orderId=${orderId}`,
-              icon: PackageCheck,
-            }
-          ] : []),
-          {
-            label: "Purchase Order (Back-to-Back)",
-            href: `/b/${businessId}/purchases/orders/new?salesOrderId=${orderId}`,
-            icon: ShoppingCart,
-          },
-        ] : undefined}
+        onDuplicate={async () => {
+          const result = await duplicateSalesOrderAction(businessId, orderId);
+          if (result?.error) throw new Error(result.error);
+        }}
+        extraActions={
+          (documentStatus === "active" || documentStatus === "completed") && canCreatePurchase ? (
+            <DropdownMenuItem permission="create" permissionModule="purchases" asChild>
+              <Link href={`/b/${businessId}/purchases/orders/new?salesOrderId=${orderId}`}>
+                <ShoppingCart className="size-4" /> Create Back-to-Back PO
+              </Link>
+            </DropdownMenuItem>
+          ) : undefined
+        }
         onClose={documentStatus === "active" ? {
           label: "Close order",
           description: "The order remains available for history.",
@@ -130,40 +135,42 @@ export function SalesOrderViewActions({
           }
         } : undefined}
         extraPrimaryActions={
-          <>
-            {documentStatus === "draft" && (
-              <Button onClick={handleIssue} disabled={issuing} className="gap-1.5">
-                <CheckCircle2 className={`size-4 ${issuing ? "animate-spin" : ""}`} />
-                Activate Order
-              </Button>
-            )}
-            {documentStatus !== "cancelled" && documentStatus !== "superseded" && (
-              <Button variant="secondary" onClick={handleRevise} disabled={revising}>
-                <GitBranch className={`size-4 ${revising ? "animate-spin" : ""}`} />
-                New Revision
-              </Button>
-            )}
-            {inventoryEnabled && hasDeliverableItems && documentStatus === "active" && (
-              <Button permission="create" asChild variant="secondary">
-                <Link href={`/b/${businessId}/sales/delivery-notes/new?orderId=${orderId}`}>
-                  <Truck className="size-4 mr-2" /> Ship Goods
-                </Link>
-              </Button>
-            )}
-            {linkedInvoice || documentStatus === "completed" ? (
-              <Button asChild variant="secondary" className="gap-1.5 border-primary/30 text-primary hover:bg-primary/5">
-                <Link href={linkedInvoice ? `/b/${businessId}/sales/invoices/${linkedInvoice.id}` : `/b/${businessId}/sales/invoices`}>
-                  <ReceiptText className="size-4 text-primary" />
-                  {linkedInvoice ? `Invoice: ${linkedInvoice.invoice_number}` : "View Linked Invoice"}
-                </Link>
-              </Button>
-            ) : documentStatus === "active" ? (
-              <Button variant="secondary" onClick={handleConvert} disabled={converting}>
-                <RefreshCw className={`size-4 ${converting ? "animate-spin" : ""}`} />
-                Convert to Invoice
-              </Button>
-            ) : null}
-          </>
+          hasExtraPrimary ? (
+            <>
+              {documentStatus === "draft" && (
+                <Button permission={"approve"} onClick={handleIssue} disabled={issuing} className="gap-1.5">
+                  <CheckCircle2 className={`size-4 ${issuing ? "animate-spin" : ""}`} />
+                  Activate Order
+                </Button>
+              )}
+              {documentStatus !== "cancelled" && documentStatus !== "superseded" && (
+                <Button permission="create" variant="secondary" onClick={handleRevise} disabled={revising}>
+                  <GitBranch className={`size-4 ${revising ? "animate-spin" : ""}`} />
+                  New Revision
+                </Button>
+              )}
+              {inventoryEnabled && hasDeliverableItems && documentStatus === "active" && (
+                <Button permission="create" permissionModule="inventory" asChild variant="secondary">
+                  <Link href={`/b/${businessId}/sales/delivery-notes/new?orderId=${orderId}`}>
+                    <Truck className="size-4 mr-2" /> Ship Goods
+                  </Link>
+                </Button>
+              )}
+              {linkedInvoice || documentStatus === "completed" ? (
+                <Button asChild variant="secondary" className="gap-1.5 border-primary/30 text-primary hover:bg-primary/5">
+                  <Link href={linkedInvoice ? `/b/${businessId}/sales/invoices/${linkedInvoice.id}` : `/b/${businessId}/sales/invoices`}>
+                    <ReceiptText className="size-4 text-primary" />
+                    {linkedInvoice ? `Invoice: ${linkedInvoice.invoice_number}` : "View Linked Invoice"}
+                  </Link>
+                </Button>
+              ) : documentStatus === "active" ? (
+                <Button permission="create" variant="secondary" onClick={handleConvert} disabled={converting}>
+                  <RefreshCw className={`size-4 ${converting ? "animate-spin" : ""}`} />
+                  Convert to Invoice
+                </Button>
+              ) : null}
+            </>
+          ) : undefined
         }
       />
       <DocumentEmailDialog

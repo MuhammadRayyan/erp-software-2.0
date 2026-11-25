@@ -1,27 +1,35 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useState, useSyncExternalStore, useTransition } from "react";
 import { useTheme } from "next-themes";
 import { Laptop, Moon, Sun, TableProperties, Type, ZoomIn } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
+import { FormError } from "@/components/form-error";
 import { useTableDensity, type TableDensity } from "@/components/use-table-density";
 import { upsertUserSettings } from "./actions";
 
+const emptySubscribe = () => () => {};
+
 export function AppearanceForm({ initialFont, initialSize }: { initialFont: string; initialSize: string }) {
   const [isPending, startTransition] = useTransition();
+  const mounted = useSyncExternalStore(emptySubscribe, () => true, () => false);
   const { theme, setTheme } = useTheme();
   const { density, setDensity } = useTableDensity();
   const [selectedFont, setSelectedFont] = useState(initialFont);
   const [selectedSize, setSelectedSize] = useState(initialSize);
+  const [serverError, setServerError] = useState("");
+  const displayTheme = mounted ? (theme ?? "system") : "system";
 
   const handleSave = (formData: FormData) => {
     const font = (formData.get("themeFont") as string) || selectedFont;
     const size = (formData.get("themeSize") as string) || selectedSize;
+    setServerError("");
 
     startTransition(async () => {
       const result = await upsertUserSettings(font, size);
       if (result?.error) {
+        setServerError(result.error);
         toast.error(result.error);
       } else {
         toast.success("Appearance settings updated successfully.");
@@ -36,7 +44,20 @@ export function AppearanceForm({ initialFont, initialSize }: { initialFont: stri
         <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
           Live Interface Preview
         </span>
-        <div className="mt-3 rounded-md border border-border bg-surface p-4">
+        <div
+          className="mt-3 rounded-md border border-border bg-surface p-4 transition-all"
+          style={{
+            fontFamily:
+              selectedFont === "roboto"
+                ? "Roboto, sans-serif"
+                : selectedFont === "opensans"
+                  ? "'Open Sans', sans-serif"
+                  : selectedFont === "lato"
+                    ? "Lato, sans-serif"
+                    : "Inter, sans-serif",
+            fontSize: selectedSize === "small" ? "92%" : selectedSize === "large" ? "110%" : "100%",
+          }}
+        >
           <div className="flex items-center justify-between border-b border-border pb-3">
             <div>
               <p className="font-semibold text-foreground">INV-2026-0042</p>
@@ -49,7 +70,7 @@ export function AppearanceForm({ initialFont, initialSize }: { initialFont: stri
           <div className="mt-3 flex items-center justify-between text-xs text-muted-foreground">
             <span>Font: <strong className="text-foreground capitalize">{selectedFont}</strong></span>
             <span>Scaling: <strong className="text-foreground capitalize">{selectedSize}</strong></span>
-            <span>Theme: <strong className="text-foreground capitalize">{theme ?? "system"}</strong></span>
+            <span>Theme: <strong className="text-foreground capitalize">{displayTheme}</strong></span>
             <span>Density: <strong className="text-foreground capitalize">{density}</strong></span>
           </div>
         </div>
@@ -72,7 +93,7 @@ export function AppearanceForm({ initialFont, initialSize }: { initialFont: stri
               type="button"
               onClick={() => setTheme(item.id)}
               className={`flex flex-col items-start gap-2 rounded-lg border p-4 text-left transition-colors ${
-                theme === item.id
+                mounted && theme === item.id
                   ? "border-primary bg-primary/5 ring-1 ring-primary"
                   : "border-border bg-surface hover:bg-surface-muted"
               }`}
@@ -193,8 +214,10 @@ export function AppearanceForm({ initialFont, initialSize }: { initialFont: stri
         </div>
       </section>
 
+      {serverError && <FormError message={serverError} />}
+
       <div className="flex justify-end pt-2">
-        <Button permission={"save"} type="submit" disabled={isPending}>
+        <Button type="submit" disabled={isPending}>
           {isPending ? "Saving…" : "Save Appearance Settings"}
         </Button>
       </div>

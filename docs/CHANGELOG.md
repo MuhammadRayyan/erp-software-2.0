@@ -1,9 +1,97 @@
 # Changelog — UAE Manager
 
-All notable changes since the original `erp-software-2.0-antigravity-edits` upload. Grouped by development wave, newest last. Dates use the development environment calendar (August 2026 demo data).
+All notable changes since the original `erp-software-2.0-antigravity-edits` upload. Grouped by development wave and modernization sprints.
 
-Full historical task detail is retained in [history/WORKLOG.md](history/WORKLOG.md). Current acceptance and cleanup evidence is in [history/FLOW_VERIFICATION_AND_CLEANUP_2026-10-26.md](history/FLOW_VERIFICATION_AND_CLEANUP_2026-10-26.md).
+Full historical task detail is retained in [history/WORKLOG.md](history/WORKLOG.md) and the remaining point-in-time archive index in [history/README.md](history/README.md).
 
+## 2026-11-25 (Accounting correctness — GL ↔ subledger ↔ VAT tie-out)
+
+- **Reverse-charge VAT on tax-inclusive documents** (`document-line-calculator.ts`, `document-calculations.ts`): the entered price is the net and 5% VAT is self-assessed on it (VAT201 output and recoverable input). Previously it was set to 0 on both the server and the client preview.
+- **Realized FX when applying a credit** (`settlement-service.ts`): applying an unallocated receipt or supplier payment to a foreign-currency document now posts the FX difference between the AR/AP control account and FX gain/loss (`*_credit_allocation` journals, reversed when the payment is voided). A pending receipt or payment recomputes its carrying release when it is posted, so a stale value from creation time is not used.
+- **Post-dated cheques** (`pdc-service.ts`): new cheques stay off-ledger while held. Clearing records a real receipt or payment allocated to the linked invoice, so the invoice is settled exactly once. Bouncing or cancelling a held cheque only changes its status. Cheques registered before this change keep their original journals.
+- **Goods receipts against a Purchase Invoice** (`goods-receipt-service.ts`): stock is valued at the invoice line's base-currency net plus any non-recoverable VAT, the same amount the invoice debits to Inventory. Foreign currency and discounts no longer make COGS drift from the GL.
+- **Opening balances** (`opening-balances-service.ts`): each line is validated (non-negative, one side). Any difference goes to a dedicated **Opening Balance Equity** account instead of whichever equity account sorts first.
+- **Credit notes** (`credit-note-posting-service.ts`): a carrying-value difference posts to realized FX gain/loss instead of the first sales line.
+- **Payroll** (`payroll-service.ts`, `wps-service.ts`): Payroll Payable is never replaced by an arbitrary liability account; the account is created if missing. A WPS SIF takes its salary month from the filter or the payslips, rejects mixed months and duplicate employees, and records creation time in Gulf Standard Time.
+- **Void and reversal dates** (`getBusinessTodayIso()`): GL and VAT reversals use the UAE business day and are both dated on the void date, so they fall in the same period.
+- **Control tests** (`tests/accounting/gl-subledger-tieout.test.ts`): AR GL ↔ subledger tie-out across credit application and PDC clearing, reverse-charge VAT, goods-receipt valuation, opening balances, and business-day dates. All six fail on the previous code.
+
+## 2026-11-25 (Production OOM fix — SQLite statement memory)
+
+- **Root cause**: production `next-server` was killed by the 3 GB cgroup limit 14 times between 2 and 24 November. Drizzle and raw SQL call `better-sqlite3` `prepare()` on every query, and each statement's native memory (~3 KB) is retained until its connection closes, even after GC. The system connection never closes, so memory grew without bound. Reproduced locally: 300k queries grew RSS to 1,976 MB before this fix and stayed flat at 136 MB after.
+- **Statement cache (`src/core/db/statement-cache.ts`)**: per-connection LRU (2,000 entries) keyed by SQL text, installed on the system and every business connection. Cached statements are reset to object mode (`raw/pluck/expand(false)`) on handout, and a statement busy in `iterate()` is never reused.
+- **Churn recycling (`src/core/db/connection-limits.ts`, `system.ts`, `business.ts`)**: a connection that has created more than 20,000 statements (`ERP_SQLITE_RECYCLE_AFTER_STATEMENTS`) is replaced, and the retired handle closes after 60 s so in-flight requests finish. Business connection soft cap lowered from 50 to 12.
+- **Readiness (`src/core/health.ts`)**: the per-tenant schema check runs on the first probe and then every 10 minutes instead of every 15 s probe; the system DB round-trip still runs on every probe.
+- **Container (`docker-compose.yml`)**: `HTML_PDF_CONCURRENCY=2` on the 1-OCPU host.
+
+## 2026-11-14 (Sprint 4 — Test Organization, Build Isolation, Production CSP & Docs Consolidation)
+
+- **Domain-Organized Test Architecture & Glob Discovery (`package.json`, `tests/`)**:
+  - Reorganized all `57` existing Node `.test.ts` suites cleanly under domain directories (`tests/unit/`, `tests/accounting/`, `tests/platform/`, `tests/integration/`) and added `tests/unit/sprint-4-config.test.ts` (`58` total Node test files).
+  - Relocated all `29` Playwright E2E specs (`*.spec.ts`, `auth.setup.ts`) and helpers from root `e2e/` into `tests/e2e/`, updating `playwright.hardening.config.ts`, `playwright.sprint2.config.ts`, and `playwright.sprint3.config.ts` `testDir` and relative imports.
+  - Replaced the monolithic CLI file list in `package.json` `"test"` with native recursive glob discovery (`"tests/{unit,accounting,platform,integration}/**/*.test.ts"`) and added focused scripts `test:unit`, `test:accounting`, `test:platform`, and `test:integration`.
+- **Scoped `tsconfig.json` & Isolated `.next-validate` Typechecking (`tsconfig.json`, `tsconfig.validate.json`, `next.config.ts`)**:
+  - Replaced catch-all `**/*.ts` / `**/*.tsx` and `.next-validate` globs in base `tsconfig.json` with explicit active trees (`src/`, `tests/`, `scripts/`, root configs, `.next/`).
+  - Added `tsconfig.validate.json` extending `./tsconfig.json` for `.next-validate` builds and added `npm run typecheck:validate`.
+  - Updated `next.config.ts` to set `typescript.tsconfigPath = "tsconfig.validate.json"` whenever `NEXT_DIST_DIR === ".next-validate"`, preventing validation builds from mutating base `tsconfig.json`.
+- **Production CSP Hardening (`next.config.ts`, `src/core/theme/theme-provider.tsx`)**:
+  - Guarded `'unsafe-eval'` in `Content-Security-Policy` `script-src` behind `process.env.NODE_ENV !== "production"`, omitting `'unsafe-eval'` in production builds/runtime while keeping it in development mode, and configured `z.config({ jitless: true })` in client `ThemeProvider` so Zod v4 schema parsing never triggers `new Function()` (`script-src` `eval`) CSP violations under strict production headers.
+  - Added `"object-src 'self' blob:"` alongside `"frame-src 'self' blob: data:"` so Template Studio's `<object type="application/pdf" data="blob:...">` live preview renders without violating `default-src 'self'`.
+- **Ops / Container Verification & UI Polish (`scripts/verify-html-pdf.ts`, `.ops/`, `src/`)**:
+  - Updated `scripts/verify-html-pdf.ts` to close the singleton HTML-to-PDF Chromium pool via `closeHtmlPdfBrowser()` in `finally` (preventing 60s idle hangs inside `scripts/ci-image-smoke.sh`) and rebuilt `.ops/ops.cjs` and `.ops/verify-html-pdf.cjs`.
+  - Opted `DocumentGrid` and `Combobox` out of React Compiler memoization (`"use no memo"` with documented `react-hooks/incompatible-library` suppressions around TanStack `useVirtualizer`), consolidated duplicate scroll-reset effects in `Combobox`, and anchored `<span className="sr-only">Actions</span>` inside a `relative` wrapper (`document-grid.tsx`, `document-line-table.tsx`) to eliminate mobile `390px` horizontal overflow on `/sales/invoices/new`.
+  - Added a `useSyncExternalStore` hydration guard around `useTheme()` in `AppearanceForm` and `ThemeMenu` to prevent SSR `#418` mismatches on theme reload, and removed unused `initialTab` / `tab` plumbing in `SettingsPage` / `SettingsHubClient`.
+  - Hardened `Combobox` `Tab`/`Shift+Tab` grid focus advancement across row boundaries and Portal exit (`onCloseAutoFocus` / `onEscapeKeyDown` + synchronous trigger focus and virtualized `CommandList` overflow cleanup), replaced default `cmdk` group-reordering/fuzzy scoring in `CommandPalette` with deterministic `scoreCommandItem()` ranking (`shouldFilter={false}`), added grid `onKeyDown` navigation to line custom-field checkboxes (`document-line-table.tsx`), removed overly strict business-`settings:edit` `permission={"save"}` gating on the personal `AppearanceForm` submit button, pointed Trial Balance / Profit & Loss / Balance Sheet account drill-down links to `/reports/general-ledger?accountId=...` (eliminating prefetch/navigation 404s to nonexistent `/accounting/chart-of-accounts/[id]`), and aligned `DESIGN_SYSTEM.md` / `CHANGELOG.md` virtualization thresholds (`DocumentGrid > 25`, `Combobox > 40`).
+- **5-Document Hierarchy Consolidation (`README.md`, `docs/`)**:
+  - Consolidated living documentation into [README.md](../README.md), [ARCHITECTURE.md](ARCHITECTURE.md), [DESIGN_SYSTEM.md](DESIGN_SYSTEM.md), [DEPLOYMENT.md](DEPLOYMENT.md), and [CHANGELOG.md](CHANGELOG.md).
+  - Archived superseded active specs (`SYSTEM_DOSSIER.md`, `CURRENT_STATE.md`, `CONTEXT.md`, `NEXT_STEPS.md`, `THEME.md`, `IMPROVEMENT_ROADMAP.md`) under [docs/history/](history/README.md).
+
+## 2026-11-14 (Sprint 3 — UI/UX Modernization, Radix Primitives, `cmdk` & Unified Workspaces)
+
+- **Accessible UI Primitives & Virtualized Combobox (`src/components/ui/`)**:
+  - Added Radix UI wrappers (`Checkbox`, `Popover`, `Tabs`, `Tooltip`) and upgraded semantic `Badge` tones.
+  - Built searchable `Combobox` (`src/components/ui/combobox.tsx`) backed by Radix `Popover`, `cmdk`, and `@tanstack/react-virtual` (auto-virtualizing lists `> 40` options, with `Tab`/`Shift+Tab` grid cell focus advance).
+- **App Shell & Global `Ctrl/Cmd+K` Command Palette (`src/components/app-shell/app-shell.tsx`, `src/components/command-palette.tsx`)**:
+  - Added `cmdk` global Command Palette (`Ctrl/Cmd+K`) grouped cleanly across `Create`, `Navigation`, `Settings`, and `Switch Business` actions filtered by active permissions.
+  - Added collapsible desktop sidebar persistence (`localStorage` + cookie) and `Popover`-based `BusinessSwitcher`.
+- **Settings Information Architecture & Scope Clarity (`src/app/b/[businessId]/settings/layout.tsx`, `src/components/settings-sidebar-nav.tsx`, `src/components/settings-shell.tsx`)**:
+  - Introduced persistent Settings sidebar navigation and responsive mobile pill bar with explicit `Personal` vs `Business` scope badges separating user profile/theme settings from workspace-wide business settings.
+- **Document Z-Pattern Workspace & FIFO Settlement Allocation (`src/components/documents/`, `src/components/document-form-footer.tsx`)**:
+  - Unified multi-section document entry with `DocumentWorkspaceLayout` and simplified sticky `DocumentFormFooter` to a compact Net Due / Total pill with explicit `Save Draft Quote` / `Save & Issue` / `Save & Post` / `Submit for Approval` actions.
+  - Unified Customer Receipts and Supplier Payments on `SettlementAllocationForm` and deterministic `allocateFifo()` (`dueDate ASC -> invoiceDate ASC -> documentNumber ASC`) in `settlement-allocation-math.ts`.
+- **Verification**: Added unit tests (`tests/unit/sprint-3-ui.test.ts`), browser verification (`tests/e2e/sprint-3-modernization.spec.ts`, `playwright.sprint3.config.ts`), and fixture helper (`scripts/prepare-sprint3-fixture.ts`).
+
+## 2026-11-14 (Sprint 2 — Query Performance, Streaming ZIP Backups, Browser Pooling & Multi-Tenant Hardening)
+
+- **Server-Paginated & URL-Synced List Tables (`src/lib/list-query-params.ts`, `src/modules/shared/`)**:
+  - Added typed `nuqs/server` loaders and shared SQLite list query builders (`list-query-helpers.ts` with `DEFAULT_LIST_PAGE_SIZE = 50`, `MAX_LIST_PAGE_SIZE = 200`, `LIKE ... ESCAPE '\'` escaping, and normalized invoice status filter tokens).
+  - Migrated Customers, Suppliers, Sales Invoices, Purchase Invoices, Receipts, and Supplier Payments (`CashDocumentTable`) to server-driven search/filter/sort/pagination while keeping toolbars mounted when 0 rows match.
+  - Shipped Business migration **v38** (`38_settlement_date_indexes`) indexing `receipts`, `supplier_payments`, and `sales_credit_notes` date/status columns.
+- **Overview Tab SSR Deferral (`src/app/b/[businessId]/overview/`)**:
+  - Split Overview into Financial vs. Chart views (`OverviewTabsLayout` with Radix `Tabs`), skipping off-tab chart/forecast queries on initial Financial loads and skipping KPI/recent list queries on Chart loads.
+- **True Streaming ZIP Exports & Backups (`src/lib/streaming-zip.ts`, `src/core/businesses/backup-service.ts`, `batch-pdf/route.ts`)**:
+  - Implemented `createStreamingZipStream()` using `yazl` streaming into Web `ReadableStream<Uint8Array>` with backpressure control, filename deduplication, `AbortSignal` early cancellation, and once-only cleanup for SQLite `.backup()` exports and batch PDF archives.
+- **Pooled Headless Chrome HTML-to-PDF Rendering (`src/modules/document-templates/html-templates/`)**:
+  - Added singleton Puppeteer browser pool (`browser-pool.ts`: max `4` concurrent renders, `60_000ms` idle close, recycle after `100` renders) with offline incognito contexts, client JS disabled, and external network request interception (`render.ts`).
+- **Multi-Tenant & Currency Fallback Hardening**:
+  - Added `resolveBaseCurrencyCode()` fallback helper (`src/modules/reports/currency-fallback.ts`) and strengthened tenant lockout, admin quota (`tenant-service.ts`), and verification coverage (`tests/platform/sprint-2-hardening.test.ts`, `tests/e2e/sprint-2-hardening.spec.ts`, `playwright.sprint2.config.ts`).
+
+## 2026-11-14 (Sprint 1) — Reliability, Keyboard Ergonomics & SQLite / RSC Performance Fixes (Schema v38)
+
+- **Statement Aging & Modules Directory Fixes**:
+  - Replaced invalid `SELECT currency FROM business_settings LIMIT 1` queries in `src/modules/reports/customer-statement-service.ts` and `src/modules/reports/supplier-statement-service.ts` with shared `resolveBaseCurrencyCode` (`src/modules/reports/currency-fallback.ts`) using business currency and `currencies.is_base = 1`.
+  - Fixed three broken 404 routes in `src/app/b/[businessId]/modules/page.tsx` (`purchases/goods-receipts`, `sales/delivery-notes`, `sales/receipts`) and filtered directory cards against `getBusinessAccess` module permissions.
+- **CSS Tokens, Root Scaling, Grid HCI & Dirty-State Tracking**:
+  - Aliased `--color-destructive` and `--color-destructive-foreground` in `src/app/globals.css`, moved `--text-scale` calculation to `html` so Tailwind `rem` classes scale uniformly, and added `aria-invalid` attributes on `DocumentLineTable` inputs/selects while removing `fields` from the `columns` `useMemo` dependencies.
+  - Updated `DocumentGrid` (`src/components/documents/grid/document-grid.tsx`) so `Tab` on the final cell of the last row exits cleanly out of the grid while `Enter` continues to append a line; updated `SearchableItemSelect` (`src/components/documents/searchable-item-select.tsx`) with `Enter`-to-open and proper trigger focus restoration + grid-coordinate forwarding on `Tab`.
+  - Added `{ shouldDirty: true, shouldTouch: true }` on `updateGlobalTax` / `selectItem` across commercial and inventory forms, extracted shared custom-field baseline/comparison helpers (`buildInitialCustomFieldValues`, `haveCustomFieldValuesChanged` in `src/modules/custom-fields/custom-field-display.ts`), and tracked custom field + RHF unsaved changes in `invoice-form.tsx`, `customer-form.tsx`, `supplier-form.tsx`, `goods-receipt-form.tsx`, and `delivery-note-form.tsx`.
+- **SQLite PRAGMAs, Business Schema v38, Request Memoization & LiveRefresh**:
+  - Centralized SQLite PRAGMAs in `src/core/db/pragmas.ts` (`synchronous = NORMAL` under WAL with `ERP_SQLITE_SYNCHRONOUS=FULL` override, `temp_store = MEMORY`, `cache_size = -16000`, `mmap_size = 67108864`, `wal_autocheckpoint = 1000`, and idle `optimize` + `wal_checkpoint(TRUNCATE)` cleanup) across `system.ts`, `business.ts`, and `manager-importer.ts`; updated `system-health-client.tsx` to display both `NORMAL` and `FULL` cleanly.
+  - Wrapped `getCurrentSession`, `requireUser`, and `resolveBusinessDbAccess` in `React.cache()`, and cached the Drizzle wrapper singleton in `src/core/db/system.ts`.
+  - Disabled the 6-second polling loop in `useLiveRefresh` / `LiveRefresh` (`intervalMs = 0`) and gated passive focus/visibility/pageshow triggers behind `minStaleMs = 60_000` while keeping `BroadcastChannel` and `popstate` immediate.
+  - Added Business Schema `v38` (`38_settlement_date_indexes`) indexing `(date)` and `(document_status, date)` on `receipts`, `supplier_payments`, and `sales_credit_notes`.
+  - Persisted the 4-sprint blueprint in [docs/history/IMPROVEMENT_ROADMAP.md](history/IMPROVEMENT_ROADMAP.md) and added `tests/integration/sprint-1-fixes.test.ts`.
+- **Verification**: Passed `npm run lint`, `npm run typecheck`, `npm run check:permissions` (`159` guarded commands), `npm run db:migrate && npm run db:check && npx tsx scripts/verify-schema-sync.ts` (System schema `7`, local business schemas `38`), and `npm test` (`415` tests across `55` files, `0` failures).
 
 ## Core Commercial Flow Verification, Deep Accounting Audit & Hardening (improvements-settings-v1)
 
@@ -763,7 +851,7 @@ Following the modern accounting software industry standard (e.g., Xero, FreeAgen
 - Deployed shared mutation permissions and restricted financial reads, configured production origins, payroll lifecycle and financial calculation/reconciliation fixes, private runtime secrets, non-root image controls and real Chromium/WAL recovery checks. See [implementation evidence](history/HARDENING_OUTCOME_2026-10-26.md).
 - Historical release validation passed 345 unit/integration tests, five isolated browser scenarios and eight deployment recovery scenarios. These were not rerun for the documentation-only follow-up.
 - Owner-approved OCI API-only user/read-only policy and local profile ERP_OPERATIONS passed 13 read-only checks with zero failures. Read-only Sentry access verified the project, historical events and existing monitors/workflow. Keys/tokens remain outside Git and production.
-- Updated README/current state/product context to Node 22/npm and the small closed rollout. Consolidated the dossier at the repository root; the docs copy is a compatibility link. Updated runbook/skill, evidence status and [next steps](NEXT_STEPS.md).
+- Updated README/current state/product context to Node 22/npm and the small closed rollout. Consolidated the dossier at the repository root; the docs copy is a compatibility link. Updated runbook/skill, evidence status and [next steps](history/NEXT_STEPS.md).
 - Repository remains public; tracked real-data backup cleanup and additional hardening/backlog remain owner-deferred. Remaining verification includes settled OCI entitlement and current-release Sentry ingestion/source maps/delivery. No reboot, new monitoring automation or deployment was performed by this documentation follow-up.
 
 
@@ -773,3 +861,38 @@ Following the modern accounting software industry standard (e.g., Xero, FreeAgen
 - Added per-process service isolation, an isolated default browser suite, shared role-session reuse and current workflow selectors. The local CI change runs the expanded browser suite and collects its failure evidence.
 - Moved historical records to docs/history, old generated screenshots to ignored test output, and unused ZIP/Bun lock/inactive caches to ignored local archive. Existing business data and real Manager backups remain intact; quarantine does not reclaim disk space.
 - Updated [flow verification and cleanup evidence](history/FLOW_VERIFICATION_AND_CLEANUP_2026-10-26.md). Changes remain local and undeployed; optional hardening remains deferred.
+
+
+## 2026-11-11 — Production Audit, Commercial Grid & Form Standardization, and Documentation Alignment
+
+- **Verified Live Production Release (`797b679e476c90a1b7d60bef387fedc85004a587`)**:
+  - Confirmed public health endpoint (`https://erp-portal.rapidtss.com/api/health`), container digest (`sha256:65128f19e2ae8327e92d50ce5f4c27fa09b7eeb1476715be959d28aa1a4240e5`), system schema `6`, and business schema `36` (`36_legal_entity_snapshotting`) across all 6 production business databases, with 14/14 read-only OCI checks passing and active kernel `7.0.0-1013-oracle` (`REBOOT_REQUIRED=no`).
+- **Component Deduplication & Standardization**:
+  - Consolidated 4 duplicated revision switcher components into shared `DocumentRevisionSwitcher` (`src/components/documents/document-revision-switcher.tsx`).
+  - Consolidated customer advance credit and supplier prepayment modals into shared `ApplyAdvanceCreditDialog` (`src/components/documents/apply-advance-credit-dialog.tsx`) with standardized `0.01` currency input step/min precision.
+  - Standardized clipboard operations across Admin, System Health, and Template Studio onto `@/lib/clipboard`, and removed dead re-export shims (`src/app/admin/clipboard.ts`, `src/app/super-admin/actions.ts`, `src/app/super-admin/business-table.tsx`) and leftover Sentry/scratch debug files (`src/app/sentry-example-page/page.tsx`, `scripts/test-sentry.ts`, `scripts/test-fonts.ts`, `scratch/check-gl.ts`).
+- **Commercial Document Forms, Grid & Permission Fixes**:
+  - Fixed TSV spreadsheet paste in `DocumentLineTable` (`defaultPasteTSV` / `resolvePastedTSVRow`) so purchase documents resolve `purchasePriceMinor` and `inventoryAssetAccountId`, SKU-only rows resolve the catalog item name, and pasting custom descriptions/prices into existing rows is not overwritten by `onItemSelect`.
+  - Fixed `DocumentGrid` "+ Add line" button so React `MouseEvent` is not passed as initial line state into `onAppend`, and fixed `ApplyAdvanceCreditDialog` state resynchronization after partial credit application / dialog reopen.
+  - Wired `getFormDefaults` across all remaining configurable document creation pages (`sales-credit-note`, `debit-note`, `delivery-note`, `goods-receipt`, `stock-adjustment`) and aligned `listPurchaseInvoices` `PAID_MINOR_FRAGMENT` with `purchaseSettlementSql("pi").foreign` so Debit Note settlements are reflected on Purchase Bill list balances and Debit Note pickers.
+  - Fixed Reverse Charge footer total display in `PurchaseInvoiceForm` and `SalesQuoteForm` to use `totalMinor` (`billTotalMinor`) instead of `subtotalMinor + taxMinor`.
+  - Fixed copy-pasted Credit Note labels in `DebitNoteForm` to use Debit Note / Purchase Bill / Expense / Accounts Payable terminology, and passed `status` and `totals` consistently to `DocumentFormFooter` across all commercial document forms.
+  - Added `"active"` status handling to `DocumentWorkflowPermissions` and `permission={"approve"}` to `Activate Order` in `SalesOrderViewActions`; removed duplicate Email buttons in `CreditNoteViewActions` and enabled `pdfAvailable` in `DebitNoteViewActions`.
+  - Aligned `terms` max length to `10,000` characters in `purchaseQuoteInputSchema` and `creditNoteInputSchema` to match Form Defaults.
+
+## 2026-11-14 — Financial Analytics, UAE Regulatory Workflows & Maker-Checker Approvals (Schema v7 / v37)
+
+- **Pillar 1 — Report Drill-Downs, Comparative Views & Line-Level Custom Fields**:
+  - Added interactive ledger/tax drill-down modals (`src/modules/reports/drilldown-service.ts`, `ReportDrilldownButton`, `/api/businesses/[businessId]/reports/drilldown`) across Profit & Loss, Balance Sheet, Trial Balance, and UAE VAT 201 working papers, plus direct document and statement links on Accounts Receivable / Accounts Payable aging views and `journalSourceHref` linking on VAT Transaction Detail.
+  - Added multi-period comparative columns (`prior_period`, `prior_year`, `custom` dates with live client-side toggle and variance amount/percent) to Profit & Loss and Balance Sheet, and persisted custom report configurations in `saved_reports` (`src/modules/reports/saved-report-service.ts`).
+  - Extended custom field definitions (`show_on_pdf` column, `*_line` scopes) to render inline inside `DocumentGrid`, persist across document revisions (`src/core/versioning/revision-engine.ts`), and filter printed PDFs/previews via `showOnPdf`.
+- **Pillar 2 — UAE WPS `.SIF`, Post-Dated Cheques (PDC) & FTA Audit File (`FAF`)**:
+  - Implemented CBUAE/MOHRE Wage Protection System `.SIF` (`EDR` + `SCR`) validation, preview dialog, and export (`src/modules/payroll/services/wps-service.ts`, `/api/businesses/[businessId]/payroll/wps`).
+  - Implemented receivable and payable Post-Dated Cheque lifecycle (`held` → `deposited` → `cleared` | `bounced` | `cancelled`) with PDC clearing GL accounts (`1120` / `2020`), configurable PDC numbering sequences, overview maturity widget, and `/banking/pdcs` register (`src/modules/banking/pdc-service.ts`).
+  - Implemented 15-digit UAE TRN Luhn mod-10 validation (`src/modules/tax/trn-validation.ts`) with UI status badges and 1-click UAE FTA Audit File (`FAF`) export (`src/modules/tax/faf-service.ts`, `/api/businesses/[businessId]/tax/vat/faf`).
+- **Pillar 3 — Maker-Checker Approvals & Bidirectional Notifications**:
+  - Added System migration `v7` (`business_memberships.requires_approval`) and Business migration `v37` (`approval_rules`, `approval_requests`, `notifications`, and `pending_approval` document states).
+  - Administrators can configure per-user approval requirement (`Can proceed without approval` vs `Requires approval before posting`) in `/settings/users` and per-document spend thresholds / separation rules in `/settings/approvals`.
+  - Submitting a document notifies eligible approvers in-app and via email (`NotificationBell`, `src/modules/notifications/notification-service.ts`); approving or rejecting on `/approvals` or the document banner atomically posts/reverts the document, broadcasts live refresh, and notifies the submitter with a direct document link.
+  - Standardized batch-post/void/delete error details and mixed-result toasts (`postedCount` vs `pendingApprovalCount`) across Sales & Purchase Invoice tables.
+- **Verification**: Passed `typecheck`, `lint`, `check:permissions` (`159` guarded business command functions), `db:check` (system schema `7`, business schema `37`), `409` unit/integration tests across 53 suites, production build, and `15` isolated Playwright Chromium E2E scenarios (`e2e/hardening.spec.ts`, `e2e/acceptance.spec.ts`, `e2e/pillars.spec.ts`).

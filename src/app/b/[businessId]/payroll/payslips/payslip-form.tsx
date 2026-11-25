@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { SelectNative } from "@/components/ui/select-native";
-import { formatMoney } from "@/core/format";
+import { formatMoney, getBusinessTodayIso } from "@/core/format";
 import { addMinor, minorToInput } from "@/modules/accounting/calculations/money";
 import { parseCurrencyAmountToMinor } from "@/modules/currency/conversion";
 import { FormError } from "@/components/form-error";
@@ -67,8 +67,8 @@ export function PayslipForm({
     initialPayslip?.employeeId || prefill?.employeeId || (employees[0]?.id ?? "")
   );
 
-  const today = new Date().toISOString().slice(0, 10);
-  const currentMonth = new Intl.DateTimeFormat("en-US", { month: "long", year: "numeric" }).format(new Date());
+  const today = getBusinessTodayIso();
+  const currentMonth = new Intl.DateTimeFormat("en-AE", { month: "long", year: "numeric", timeZone: "Asia/Dubai" }).format(new Date());
 
   const [date, setDate] = useState<string>(initialPayslip?.date || today);
   const [payslipNumber, setPayslipNumber] = useState<string>(initialPayslip?.payslipNumber || "");
@@ -110,7 +110,7 @@ export function PayslipForm({
           type: "earnings",
           description: "Basic Salary (Final Month)",
           accountId: basicItem?.accountId || defaultAccountForEarnings,
-          amount: (selectedEmp.basicSalaryMinor / 100).toFixed(2),
+          amount: minorToInput(selectedEmp.basicSalaryMinor, currencyMinorUnit),
         });
       }
 
@@ -120,7 +120,7 @@ export function PayslipForm({
           type: "earnings",
           description: "End of Service Gratuity (UAE Article 51)",
           accountId: eosbItem?.accountId || defaultAccountForEarnings,
-          amount: parseFloat(prefill.gratuityAED).toFixed(2),
+          amount: parseFloat(prefill.gratuityAED).toFixed(currencyMinorUnit),
         });
       }
 
@@ -129,7 +129,7 @@ export function PayslipForm({
           type: "earnings",
           description: "Leave Encashment (UAE Article 29)",
           accountId: defaultAccountForEarnings,
-          amount: parseFloat(prefill.leaveEncashmentAED).toFixed(2),
+          amount: parseFloat(prefill.leaveEncashmentAED).toFixed(currencyMinorUnit),
         });
       }
 
@@ -145,7 +145,7 @@ export function PayslipForm({
         type: "earnings",
         description: basicItem?.name || "Basic Salary",
         accountId: basicItem?.accountId || defaultAccountForEarnings,
-        amount: (emp.basicSalaryMinor / 100).toFixed(2),
+        amount: minorToInput(emp.basicSalaryMinor, currencyMinorUnit),
       });
     }
     if (emp?.housingAllowanceMinor && emp.housingAllowanceMinor > 0) {
@@ -154,7 +154,7 @@ export function PayslipForm({
         type: "earnings",
         description: housingItem?.name || "Housing Allowance",
         accountId: housingItem?.accountId || defaultAccountForEarnings,
-        amount: (emp.housingAllowanceMinor / 100).toFixed(2),
+        amount: minorToInput(emp.housingAllowanceMinor, currencyMinorUnit),
       });
     }
     if (emp?.transportAllowanceMinor && emp.transportAllowanceMinor > 0) {
@@ -163,7 +163,7 @@ export function PayslipForm({
         type: "earnings",
         description: transportItem?.name || "Transport Allowance",
         accountId: transportItem?.accountId || defaultAccountForEarnings,
-        amount: (emp.transportAllowanceMinor / 100).toFixed(2),
+        amount: minorToInput(emp.transportAllowanceMinor, currencyMinorUnit),
       });
     }
     if (emp?.otherAllowancesMinor && emp.otherAllowancesMinor > 0) {
@@ -172,7 +172,7 @@ export function PayslipForm({
         type: "earnings",
         description: otherItem?.name || "Other Allowance",
         accountId: otherItem?.accountId || defaultAccountForEarnings,
-        amount: (emp.otherAllowancesMinor / 100).toFixed(2),
+        amount: minorToInput(emp.otherAllowancesMinor, currencyMinorUnit),
       });
     }
 
@@ -182,7 +182,7 @@ export function PayslipForm({
         type: "earnings",
         description: basicItem?.name || "Basic Salary",
         accountId: basicItem?.accountId || defaultAccountForEarnings,
-        amount: "0.00",
+        amount: minorToInput(0, currencyMinorUnit),
       });
     }
 
@@ -205,7 +205,7 @@ export function PayslipForm({
           type: "earnings",
           description: basicItem?.name || "Basic Salary",
           accountId: basicItem?.accountId || defaultAccountForEarnings,
-          amount: (emp.basicSalaryMinor / 100).toFixed(2),
+          amount: minorToInput(emp.basicSalaryMinor, currencyMinorUnit),
         });
       }
       if (emp.housingAllowanceMinor && emp.housingAllowanceMinor > 0) {
@@ -214,7 +214,7 @@ export function PayslipForm({
           type: "earnings",
           description: housingItem?.name || "Housing Allowance",
           accountId: housingItem?.accountId || defaultAccountForEarnings,
-          amount: (emp.housingAllowanceMinor / 100).toFixed(2),
+          amount: minorToInput(emp.housingAllowanceMinor, currencyMinorUnit),
         });
       }
       if (emp.transportAllowanceMinor && emp.transportAllowanceMinor > 0) {
@@ -223,7 +223,7 @@ export function PayslipForm({
           type: "earnings",
           description: transportItem?.name || "Transport Allowance",
           accountId: transportItem?.accountId || defaultAccountForEarnings,
-          amount: (emp.transportAllowanceMinor / 100).toFixed(2),
+          amount: minorToInput(emp.transportAllowanceMinor, currencyMinorUnit),
         });
       }
       if (emp.otherAllowancesMinor && emp.otherAllowancesMinor > 0) {
@@ -232,7 +232,7 @@ export function PayslipForm({
           type: "earnings",
           description: otherItem?.name || "Other Allowance",
           accountId: otherItem?.accountId || defaultAccountForEarnings,
-          amount: (emp.otherAllowancesMinor / 100).toFixed(2),
+          amount: minorToInput(emp.otherAllowancesMinor, currencyMinorUnit),
         });
       }
 
@@ -253,7 +253,7 @@ export function PayslipForm({
         type,
         description: itemMatch?.name || (type === "earnings" ? "Allowance" : "Deduction"),
         accountId: itemMatch?.accountId || defaultAcc,
-        amount: "0.00",
+        amount: minorToInput(0, currencyMinorUnit),
       },
     ]);
   };

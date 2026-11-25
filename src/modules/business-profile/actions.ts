@@ -31,6 +31,8 @@ export async function updateBusinessProfileAction(businessId: string, input: Bus
     revalidatePath(`/b/${businessId}/settings`);
     revalidatePath(`/b/${businessId}/settings/business-profile`);
     revalidatePath(`/b/${businessId}/settings/localization`);
+    revalidatePath(`/b/${businessId}/settings/tax`);
+    revalidatePath(`/b/${businessId}/tax/vat`);
     revalidatePath(`/b/${businessId}/overview`);
     return { ok: true, profile };
   } catch (error) {

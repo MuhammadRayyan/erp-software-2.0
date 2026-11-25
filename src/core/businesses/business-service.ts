@@ -11,7 +11,12 @@ import { getSystemDb } from "@/core/db/system";
 import { moduleKeys } from "@/core/permissions/module-access";
 import { businessInputSchema, type BusinessInput } from "./business-input";
 import { synchronizeBusinessBaseCurrency } from "@/modules/currency/exchange-rate";
-import { listInvoices } from "@/modules/sales-invoices/invoice-service";
+import {
+  SALES_ALLOCATED_BASE_EXPR,
+  SALES_ALLOCATED_CTE,
+  SALES_ALLOCATED_FOREIGN_EXPR,
+} from "@/modules/shared/list-query-helpers";
+import { getBusinessTodayIso } from "@/core/format";
 
 export function listBusinessesForUser(
   userId: string,
@@ -120,6 +125,28 @@ export const getBusinessForUser = cache((businessId: string, userId: string) => 
   return undefined;
 });
 
+/**
+ * Throws QUOTA_EXCEEDED when a non-super-admin already owns their allowed
+ * number of businesses. Every path that creates a business for an end user
+ * (manual create, backup import, Manager.io import) must call this.
+ */
+export function assertBusinessQuota(userId: string) {
+  const db = getSystemDb();
+  const creator = db.select().from(users).where(eq(users.id, userId)).get();
+  if (!creator || creator.isSuperAdmin) return;
+  const existingCount = db
+    .select()
+    .from(businesses)
+    .where(and(eq(businesses.ownerUserId, userId), ne(businesses.status, "trash")))
+    .all().length;
+  const maxAllowed = creator.maxBusinesses ?? 3;
+  if (existingCount >= maxAllowed) {
+    throw new Error(
+      `QUOTA_EXCEEDED: You have reached your account limit of ${maxAllowed} business workspace(s). Please contact your administrator to upgrade your plan.`,
+    );
+  }
+}
+
 export function createBusiness(
   input: BusinessInput,
   userId: string,
@@ -134,19 +161,7 @@ export function createBusiness(
 
   const db = getSystemDb();
   const creator = db.select().from(users).where(eq(users.id, userId)).get();
-  if (options?.enforceQuota && creator && !creator.isSuperAdmin) {
-    const existingCount = db
-      .select()
-      .from(businesses)
-      .where(and(eq(businesses.ownerUserId, userId), ne(businesses.status, "trash")))
-      .all().length;
-    const maxAllowed = creator.maxBusinesses ?? 3;
-    if (existingCount >= maxAllowed) {
-      throw new Error(
-        `QUOTA_EXCEEDED: You have reached your account limit of ${maxAllowed} business workspace(s). Please contact your administrator to upgrade your plan.`,
-      );
-    }
-  }
+  if (options?.enforceQuota) assertBusinessQuota(userId);
 
   try {
     const context = openBusinessDatabase(directoryKey, { create: true });
@@ -234,6 +249,12 @@ export function archiveBusiness(businessId: string, userId: string) {
 export function deleteBusiness(businessId: string, userId: string) {
   const access = getBusinessForUser(businessId, userId);
   if (!access || access.membership.role !== "administrator") throw new Error("BUSINESS_ACCESS_DENIED");
+  // Permanent deletion destroys every record and attachment; only the owner
+  // (or a super-admin) may do it, not any administrator the owner invited.
+  const caller = getSystemDb().select({ isSuperAdmin: users.isSuperAdmin }).from(users).where(eq(users.id, userId)).get();
+  if (access.business.ownerUserId && access.business.ownerUserId !== userId && !caller?.isSuperAdmin) {
+    throw new Error("Only the business owner can permanently delete this business.");
+  }
   const paths = getBusinessPaths(access.business.directoryKey);
   closeBusinessConnection(access.business.directoryKey);
   getSystemDb().delete(businesses).where(eq(businesses.id, businessId)).run();
@@ -274,16 +295,30 @@ export function getBusinessQuickKpis(businessId: string, userId: string): Busine
     let overdueCount = 0;
     let overdueMinor = 0;
     try {
-      const invList = listInvoices(businessId, userId).filter(
-        (inv) => inv.documentStatus === "posted" && inv.baseBalanceMinor > 0,
-      );
-      for (const inv of invList) {
-        outstandingReceivablesMinor += inv.baseBalanceMinor;
-        if (inv.paymentStatus === "overdue") {
-          overdueCount++;
-          overdueMinor += inv.baseBalanceMinor;
-        }
-      }
+      const businessToday = getBusinessTodayIso();
+      const arRow = sqlite
+        .prepare(`
+          WITH ${SALES_ALLOCATED_CTE}
+          SELECT
+            COALESCE(SUM(i.base_total_minor - (${SALES_ALLOCATED_BASE_EXPR})), 0) AS outstanding_minor,
+            COALESCE(SUM(CASE
+              WHEN (i.total_minor - (${SALES_ALLOCATED_FOREIGN_EXPR})) > 0 AND i.due_date < @today
+              THEN 1 ELSE 0 END), 0) AS overdue_count,
+            COALESCE(SUM(CASE
+              WHEN (i.total_minor - (${SALES_ALLOCATED_FOREIGN_EXPR})) > 0 AND i.due_date < @today
+              THEN (i.base_total_minor - (${SALES_ALLOCATED_BASE_EXPR})) ELSE 0 END), 0) AS overdue_minor
+          FROM sales_invoices i
+          LEFT JOIN receipt_alloc ra ON ra.invoice_id = i.id
+          LEFT JOIN credit_alloc ca ON ca.invoice_id = i.id
+          WHERE i.document_status = 'posted'
+            AND (i.base_total_minor - (${SALES_ALLOCATED_BASE_EXPR})) > 0
+        `)
+        .get({ today: businessToday }) as
+        | { outstanding_minor: number; overdue_count: number; overdue_minor: number }
+        | undefined;
+      outstandingReceivablesMinor = Number(arRow?.outstanding_minor ?? 0);
+      overdueCount = Number(arRow?.overdue_count ?? 0);
+      overdueMinor = Number(arRow?.overdue_minor ?? 0);
     } catch {
       // fallback
     }

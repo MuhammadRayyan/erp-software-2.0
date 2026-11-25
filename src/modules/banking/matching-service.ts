@@ -1,6 +1,16 @@
+import { randomUUID } from "node:crypto";
 import { assertMutationPermission } from "@/core/permissions/mutation-permissions";
 import { getBusinessDb } from "@/core/db/business";
-import type { MatchCandidate, MatchSourceType } from "./matching-types";
+import type { MatchCandidate, MatchSourceRef, MatchSourceType } from "./matching-types";
+
+type Sqlite = ReturnType<typeof getBusinessDb>["sqlite"];
+
+/** SQL predicate: the aliased movement is not yet matched to any statement line. */
+const MOVEMENT_UNMATCHED = `NOT EXISTS (
+  SELECT 1 FROM bank_statement_match_items mi
+  WHERE mi.bank_account_id = movements.bank_account_id
+    AND mi.source_type = movements.source_type AND mi.source_id = movements.source_id
+)`;
 
 function movementSql() {
   return `
@@ -45,7 +55,7 @@ function movementSql() {
 }
 
 function getMovement(
-  sqlite: ReturnType<typeof getBusinessDb>["sqlite"],
+  sqlite: Sqlite,
   sourceType: string,
   sourceId: string,
   bankAccountId: string,
@@ -76,17 +86,11 @@ export function suggestMatches(businessId: string, userId: string, statementLine
       CASE WHEN ? <> '' AND lower(COALESCE(movements.reference, '')) = lower(?) THEN 1 ELSE 0 END AS reference_match
     FROM (${movementSql()}) movements
     WHERE movements.bank_account_id = ? AND movements.amount_minor = ?
-      AND NOT EXISTS (
-        SELECT 1 FROM bank_statement_lines existing
-        WHERE existing.id <> ? AND existing.match_status IN ('matched', 'created')
-          AND existing.matched_source_type = movements.source_type
-          AND existing.matched_source_id = movements.source_id
-          AND (movements.source_type <> 'bank_transfer' OR existing.bank_account_id = movements.bank_account_id)
-      )
+      AND ${MOVEMENT_UNMATCHED}
     ORDER BY reference_match DESC, date_distance ASC, movements.date DESC
     LIMIT 12
   `).all(line.transaction_date, line.reference ?? "", line.reference ?? "", line.bank_account_id,
-    line.amount_minor, line.id) as {
+    line.amount_minor) as {
     source_type: MatchSourceType; source_id: string; source_number: string; date: string;
     amount_minor: number; party: string | null; description: string | null;
     reference: string | null; journal_entry_id: string; date_distance: number; reference_match: number;
@@ -99,6 +103,77 @@ export function suggestMatches(businessId: string, userId: string, statementLine
   }));
 }
 
+/**
+ * Every unmatched book movement in a bank account up to `throughDate`, for the
+ * reconciliation workspace. Positive amounts are money in.
+ */
+export function listUnmatchedMovements(businessId: string, userId: string, bankAccountId: string, throughDate?: string) {
+  const { sqlite } = getBusinessDb(businessId, userId);
+  const rows = sqlite.prepare(`
+    SELECT movements.* FROM (${movementSql()}) movements
+    WHERE movements.bank_account_id = ? AND (? = '' OR movements.date <= ?)
+      AND ${MOVEMENT_UNMATCHED}
+    ORDER BY movements.date DESC, movements.source_number DESC
+    LIMIT 500
+  `).all(bankAccountId, throughDate ?? "", throughDate ?? "") as {
+    source_type: MatchSourceType; source_id: string; source_number: string; date: string;
+    amount_minor: number; party: string | null; description: string | null;
+    reference: string | null; journal_entry_id: string;
+  }[];
+  return rows.map((row): MatchCandidate => ({
+    sourceType: row.source_type, sourceId: row.source_id, sourceNumber: row.source_number,
+    date: row.date, amountMinor: row.amount_minor, party: row.party,
+    description: row.description, reference: row.reference, journalEntryId: row.journal_entry_id,
+    dateDistance: 0, referenceMatch: false,
+  }));
+}
+
+/**
+ * Matches one statement line to one or more book movements whose amounts sum
+ * exactly to the line (e.g. one deposit covering several receipts).
+ */
+export function confirmStatementMatches(
+  businessId: string,
+  userId: string,
+  statementLineId: string,
+  sources: readonly MatchSourceRef[],
+) {
+  assertMutationPermission(businessId, userId, "banking", "edit");
+  const unique = [...new Map(sources.map((source) => [`${source.sourceType}:${source.sourceId}`, source])).values()];
+  if (unique.length === 0) throw new Error("Select at least one transaction to match.");
+  const context = getBusinessDb(businessId, userId);
+  context.sqlite.transaction(() => {
+    const line = context.sqlite.prepare(`
+      SELECT bank_account_id, amount_minor, match_status FROM bank_statement_lines WHERE id = ?
+    `).get(statementLineId) as { bank_account_id: string; amount_minor: number; match_status: string } | undefined;
+    if (!line) throw new Error("Statement line not found.");
+    if (line.match_status !== "unmatched") throw new Error("Statement line is no longer unmatched.");
+    let total = 0;
+    for (const source of unique) {
+      const movement = getMovement(context.sqlite, source.sourceType, source.sourceId, line.bank_account_id);
+      if (!movement) throw new Error("A selected transaction no longer exists, is void, or uses another Bank Account.");
+      const taken = context.sqlite.prepare(`
+        SELECT 1 FROM bank_statement_match_items
+        WHERE bank_account_id = ? AND source_type = ? AND source_id = ? LIMIT 1
+      `).get(line.bank_account_id, source.sourceType, source.sourceId);
+      if (taken) throw new Error(`${movement.source_number} is already matched to another statement line.`);
+      total += movement.amount_minor;
+    }
+    if (total !== line.amount_minor) {
+      throw new Error(unique.length === 1
+        ? "The selected transaction amount or direction does not match this statement line."
+        : "The selected transactions must add up exactly to the statement line amount.");
+    }
+    const single = unique.length === 1 ? unique[0] : null;
+    const result = context.sqlite.prepare(`
+      UPDATE bank_statement_lines SET match_status = 'matched', matched_source_type = ?,
+        matched_source_id = ? WHERE id = ? AND match_status = 'unmatched'
+    `).run(single ? single.sourceType : "multiple", single ? single.sourceId : statementLineId, statementLineId);
+    if (result.changes !== 1) throw new Error("Statement line changed before the match could be confirmed.");
+    recordMatchItems(context.sqlite, statementLineId, line.bank_account_id, unique);
+  }).immediate();
+}
+
 export function confirmStatementMatch(
   businessId: string,
   userId: string,
@@ -107,38 +182,57 @@ export function confirmStatementMatch(
   sourceId: string,
 ) {
   assertMutationPermission(businessId, userId, "banking", "edit");
-  const context = getBusinessDb(businessId, userId);
-  context.sqlite.transaction(() => {
-    const line = context.sqlite.prepare(`
-      SELECT bank_account_id, amount_minor, match_status FROM bank_statement_lines WHERE id = ?
-    `).get(statementLineId) as { bank_account_id: string; amount_minor: number; match_status: string } | undefined;
-    if (!line) throw new Error("Statement line not found.");
-    if (line.match_status !== "unmatched") throw new Error("Statement line is no longer unmatched.");
-    const movement = getMovement(context.sqlite, sourceType, sourceId, line.bank_account_id);
-    if (!movement) throw new Error("The selected transaction no longer exists, is void, or uses another Bank Account.");
-    if (movement.amount_minor !== line.amount_minor) throw new Error("The selected transaction amount or direction does not match this statement line.");
-    const incompatible = context.sqlite.prepare(`
-      SELECT 1 FROM bank_statement_lines
-      WHERE id <> ? AND match_status IN ('matched', 'created')
-        AND matched_source_type = ? AND matched_source_id = ?
-        AND (? <> 'bank_transfer' OR bank_account_id = ?) LIMIT 1
-    `).get(statementLineId, sourceType, sourceId, sourceType, line.bank_account_id);
-    if (incompatible) throw new Error("The selected transaction is already matched to another statement line.");
-    const result = context.sqlite.prepare(`
-      UPDATE bank_statement_lines SET match_status = 'matched', matched_source_type = ?,
-        matched_source_id = ? WHERE id = ? AND match_status = 'unmatched'
-    `).run(sourceType, sourceId, statementLineId);
-    if (result.changes !== 1) throw new Error("Statement line changed before the match could be confirmed.");
-  }).immediate();
+  confirmStatementMatches(businessId, userId, statementLineId, [{ sourceType, sourceId }]);
 }
 
-function ensureNotReconciled(sqlite: ReturnType<typeof getBusinessDb>["sqlite"], statementLineId: string) {
-  const row = sqlite.prepare(`
+/** Records which book entries a statement line clears. */
+export function recordMatchItems(sqlite: Sqlite, statementLineId: string, bankAccountId: string, sources: readonly MatchSourceRef[]) {
+  const insert = sqlite.prepare(`
+    INSERT INTO bank_statement_match_items (id, statement_line_id, bank_account_id, source_type, source_id, created_at)
+    VALUES (?, ?, ?, ?, ?, ?)
+  `);
+  const now = new Date().toISOString();
+  for (const source of sources) insert.run(randomUUID(), statementLineId, bankAccountId, source.sourceType, source.sourceId, now);
+}
+
+/**
+ * Called when a matched book document is voided: blocks if any statement line
+ * it clears is in a completed reconciliation, otherwise returns those lines to
+ * unmatched (a split line releases all of its other entries too).
+ */
+export function releaseStatementMatchesForSource(sqlite: Sqlite, sourceType: MatchSourceType, sourceId: string, reconciledMessage: string) {
+  // Match items are the source of truth; the legacy columns are also read so
+  // rows written outside the services (imports, manual fixes) are still found.
+  const lines = sqlite.prepare(`
+    SELECT statement_line_id AS id FROM bank_statement_match_items WHERE source_type = ? AND source_id = ?
+    UNION
+    SELECT id FROM bank_statement_lines
+    WHERE match_status IN ('matched', 'created') AND matched_source_type = ? AND matched_source_id = ?
+  `).all(sourceType, sourceId, sourceType, sourceId) as { id: string }[];
+  for (const line of lines) {
+    if (isReconciled(sqlite, line.id)) throw new Error(reconciledMessage);
+  }
+  for (const line of lines) unmatchLine(sqlite, line.id);
+}
+
+function isReconciled(sqlite: Sqlite, statementLineId: string) {
+  return Boolean(sqlite.prepare(`
     SELECT 1 FROM bank_reconciliation_items bri
     INNER JOIN bank_reconciliations br ON br.id = bri.reconciliation_id AND br.status = 'completed'
-    WHERE bri.statement_line_id = ?
-  `).get(statementLineId);
-  if (row) throw new Error("Completed reconciliation lines cannot be changed.");
+    WHERE bri.statement_line_id = ? LIMIT 1
+  `).get(statementLineId));
+}
+
+function unmatchLine(sqlite: Sqlite, statementLineId: string) {
+  sqlite.prepare("DELETE FROM bank_statement_match_items WHERE statement_line_id = ?").run(statementLineId);
+  sqlite.prepare(`
+    UPDATE bank_statement_lines SET match_status = 'unmatched', matched_source_type = NULL,
+      matched_source_id = NULL WHERE id = ?
+  `).run(statementLineId);
+}
+
+function ensureNotReconciled(sqlite: Sqlite, statementLineId: string) {
+  if (isReconciled(sqlite, statementLineId)) throw new Error("Completed reconciliation lines cannot be changed.");
 }
 
 export function ignoreStatementLine(businessId: string, userId: string, statementLineId: string) {
@@ -162,9 +256,6 @@ export function resetStatementLine(businessId: string, userId: string, statement
     const line = sqlite.prepare("SELECT match_status FROM bank_statement_lines WHERE id = ?").get(statementLineId) as { match_status: string } | undefined;
     if (!line) throw new Error("Statement line not found.");
     if (line.match_status === "created") throw new Error("Void the created Bank Transaction before resetting this line.");
-    sqlite.prepare(`
-      UPDATE bank_statement_lines SET match_status = 'unmatched', matched_source_type = NULL,
-        matched_source_id = NULL WHERE id = ?
-    `).run(statementLineId);
+    unmatchLine(sqlite, statementLineId);
   }).immediate();
 }

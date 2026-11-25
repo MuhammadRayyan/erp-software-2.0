@@ -6,12 +6,15 @@ import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { GitBranch, RefreshCw, Send, ShoppingCart, ReceiptText } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { DropdownMenuItem } from "@/components/ui/dropdown-menu";
+import { useActionPermission } from "@/components/permissions-provider";
 import {
   cancelPurchaseQuoteAction,
   closePurchaseQuoteAction,
   deletePurchaseQuoteAction,
   convertPurchaseQuoteToOrderAction,
   createPurchaseQuoteRevisionAction,
+  duplicatePurchaseQuoteAction,
   issuePurchaseQuoteAction,
 } from "./actions";
 import type { PurchaseQuoteStatus } from "./purchase-quote-service";
@@ -35,7 +38,13 @@ export function PurchaseQuoteViewActions({
   linkedOrder?: { id: string; order_number: string };
 }) {
   const router = useRouter();
+  const canCreate = useActionPermission("create");
+  const canApprove = useActionPermission("approve");
   const editable = documentStatus === "draft" || documentStatus === "sent";
+  const showIssue = documentStatus === "draft" && canApprove;
+  const showRevise = documentStatus !== "cancelled" && documentStatus !== "superseded" && canCreate;
+  const showConvertOrLinked = Boolean(linkedOrder || documentStatus === "accepted") || (documentStatus === "sent" && canCreate);
+  const hasExtraPrimary = showIssue || showRevise || showConvertOrLinked;
   const [issuing, setIssuing] = useState(false);
   const [converting, setConverting] = useState(false);
   const [revising, setRevising] = useState(false);
@@ -92,23 +101,26 @@ export function PurchaseQuoteViewActions({
         editHref={editable ? `/b/${businessId}/purchases/quotes/${quoteId}/edit` : undefined}
         pdfHref={`/api/businesses/${businessId}/documents/purchase-quote/${quoteId}/pdf`}
         onEmail={() => setEmailOpen(true)}
-        copyToActions={documentStatus !== "cancelled" && documentStatus !== "superseded" ? [
-          ...(documentStatus !== "accepted" && !linkedOrder ? [{
-            label: "Purchase Order",
-            href: `/b/${businessId}/purchases/orders/new?quoteId=${quoteId}`,
-            icon: ShoppingCart,
-          }] : []),
-          {
-            label: "Purchase Invoice",
-            href: `/b/${businessId}/purchases/invoices/new?quoteId=${quoteId}`,
-            icon: ReceiptText,
-          },
-        ] : undefined}
+        onDuplicate={async () => {
+          const result = await duplicatePurchaseQuoteAction(businessId, quoteId);
+          if (result?.error) throw new Error(result.error);
+        }}
+        extraActions={
+          (documentStatus === "sent" || documentStatus === "accepted") && canCreate ? (
+            <DropdownMenuItem permission="create" asChild>
+              <Link href={`/b/${businessId}/purchases/invoices/new?quoteId=${quoteId}`}>
+                <ReceiptText className="size-4" /> Create Purchase Invoice
+              </Link>
+            </DropdownMenuItem>
+          ) : undefined
+        }
         onClose={
           documentStatus === "sent"
             ? {
                 label: "Accept quote",
                 description: "The quote is marked as accepted.",
+                tone: "primary",
+                icon: "check",
                 action: async () => {
                   const result = await closePurchaseQuoteAction(businessId, quoteId);
                   if (result.error) throw new Error(result.error);
@@ -151,33 +163,35 @@ export function PurchaseQuoteViewActions({
             : undefined
         }
         extraPrimaryActions={
-          <>
-            {documentStatus === "draft" && (
-              <Button permission={"approve"} onClick={handleIssue} disabled={issuing} className="gap-1.5">
-                <Send className={`size-4 ${issuing ? "animate-spin" : ""}`} />
-                Issue Quote
-              </Button>
-            )}
-            {documentStatus !== "cancelled" && documentStatus !== "superseded" && (
-              <Button variant="secondary" onClick={handleRevise} disabled={revising}>
-                <GitBranch className={`size-4 ${revising ? "animate-spin" : ""}`} />
-                New Revision
-              </Button>
-            )}
-            {linkedOrder || documentStatus === "accepted" ? (
-              <Button asChild variant="secondary" className="gap-1.5 border-primary/30 text-primary hover:bg-primary/5">
-                <Link href={linkedOrder ? `/b/${businessId}/purchases/orders/${linkedOrder.id}` : `/b/${businessId}/purchases/orders`}>
-                  <ShoppingCart className="size-4 text-primary" />
-                  {linkedOrder ? `Order: ${linkedOrder.order_number}` : "View Linked Order"}
-                </Link>
-              </Button>
-            ) : documentStatus === "sent" ? (
-              <Button variant="secondary" onClick={handleConvert} disabled={converting}>
-                <RefreshCw className={`size-4 ${converting ? "animate-spin" : ""}`} />
-                Convert to Order
-              </Button>
-            ) : null}
-          </>
+          hasExtraPrimary ? (
+            <>
+              {documentStatus === "draft" && (
+                <Button permission={"approve"} onClick={handleIssue} disabled={issuing} className="gap-1.5">
+                  <Send className={`size-4 ${issuing ? "animate-spin" : ""}`} />
+                  Issue Quote
+                </Button>
+              )}
+              {documentStatus !== "cancelled" && documentStatus !== "superseded" && (
+                <Button permission="create" variant="secondary" onClick={handleRevise} disabled={revising}>
+                  <GitBranch className={`size-4 ${revising ? "animate-spin" : ""}`} />
+                  New Revision
+                </Button>
+              )}
+              {linkedOrder || documentStatus === "accepted" ? (
+                <Button asChild variant="secondary" className="gap-1.5 border-primary/30 text-primary hover:bg-primary/5">
+                  <Link href={linkedOrder ? `/b/${businessId}/purchases/orders/${linkedOrder.id}` : `/b/${businessId}/purchases/orders`}>
+                    <ShoppingCart className="size-4 text-primary" />
+                    {linkedOrder ? `Order: ${linkedOrder.order_number}` : "View Linked Order"}
+                  </Link>
+                </Button>
+              ) : documentStatus === "sent" ? (
+                <Button permission="create" variant="secondary" onClick={handleConvert} disabled={converting}>
+                  <RefreshCw className={`size-4 ${converting ? "animate-spin" : ""}`} />
+                  Convert to Order
+                </Button>
+              ) : null}
+            </>
+          ) : undefined
         }
       />
       <DocumentEmailDialog

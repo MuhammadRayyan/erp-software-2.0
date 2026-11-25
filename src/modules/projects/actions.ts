@@ -7,9 +7,55 @@ import { requirePermission } from "@/core/permissions/require-module";
 import { deleteProjectAttachment, uploadProjectAttachment } from "./project-attachment-service";
 import { projectCustomerInputSchema, projectInputSchema, projectNoteInputSchema } from "./project-input";
 import { createProjectNote, deleteProjectNote } from "./project-note-service";
-import { addProjectCustomer, createProject, deleteProject, removeProjectCustomer, updateProject } from "./project-service";
+import { addProjectCustomer, createProject, deleteProject, getProject, removeProjectCustomer, updateProject } from "./project-service";
 
 export type ProjectActionResult = { error?: string; fieldErrors?: Record<string, string[]> };
+
+export type QuickCreateProjectResult = {
+  error?: string;
+  fieldErrors?: Record<string, string[]>;
+  project?: {
+    id: string;
+    code: string;
+    name: string;
+    customerId: string | null;
+  };
+};
+
+export async function quickCreateProjectAction(
+  businessId: string,
+  input: { name: string; code?: string; customerId?: string },
+): Promise<QuickCreateProjectResult> {
+  const { user } = await requirePermission(businessId, "projects", "create");
+  const parsed = projectInputSchema.safeParse({
+    name: input.name,
+    code: input.code ?? "",
+    customerId: input.customerId ?? "",
+    status: "active",
+  });
+  if (!parsed.success) {
+    return {
+      error: "Check the project fields.",
+      fieldErrors: z.flattenError(parsed.error).fieldErrors,
+    };
+  }
+  let projectId: string;
+  try {
+    projectId = createProject(businessId, user.id, parsed.data);
+  } catch (error) {
+    return { error: error instanceof Error ? error.message : "The project could not be created." };
+  }
+  const created = getProject(businessId, user.id, projectId);
+  revalidatePath(`/b/${businessId}/projects`);
+  return {
+    project: {
+      id: projectId,
+      code: created?.code ?? parsed.data.code,
+      name: parsed.data.name,
+      customerId: parsed.data.customerId || null,
+    },
+  };
+}
 
 export async function createProjectAction(businessId: string, input: unknown): Promise<ProjectActionResult> {
   const { user } = await requirePermission(businessId, "projects", "create");

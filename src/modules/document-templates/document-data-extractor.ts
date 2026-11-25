@@ -1,4 +1,4 @@
-import { formatDate, formatMoney } from "@/core/format";
+import { formatDate, formatMajorMoney, formatMoney } from "@/core/format";
 import { quantityMicrosToInput } from "@/modules/accounting/calculations/money";
 import { getPurchaseInvoice } from "@/modules/purchase-invoices/purchase-invoice-service";
 import { getPurchaseOrder } from "@/modules/purchase-orders/purchase-order-service";
@@ -14,7 +14,7 @@ import { getReceipt } from "@/modules/receipts/receipt-service";
 import { getSupplierPayment } from "@/modules/supplier-payments/supplier-payment-service";
 import { getPayslipWithLines } from "@/modules/payroll/services/payroll-service";
 import { averageUnitCostMicros, formatUnitCostMicros } from "@/modules/inventory/inventory-valuation";
-import { getCustomFieldPairsForEntity } from "@/modules/custom-fields/custom-field-service";
+import { getCustomFieldPairsForEntity, getLineCustomFieldPairsByLineId } from "@/modules/custom-fields/custom-field-service";
 import { getBusinessProfile } from "@/modules/business-profile/business-profile-service";
 import { getTemplateSettings } from "./template-service";
 import { type TemplateSettings } from "./template-settings";
@@ -115,6 +115,7 @@ export function buildDocumentTemplateData(
     discount?: string;
     tax?: string;
     project?: string;
+    customFields?: Array<{ name: string; value: string }>;
   }> = [];
   let customFields: { name: string; value: string }[] = [];
   let snapshotSellerName: string | undefined = undefined;
@@ -153,6 +154,7 @@ export function buildDocumentTemplateData(
     subtotalMinor = record.invoice.subtotalMinor;
     taxMinor = record.invoice.taxMinor;
     totalMinor = record.invoice.totalMinor;
+    const lineCfMap = getLineCustomFieldPairsByLineId(businessId, userId, "sales_invoice_line", record.lines.map((l) => l.id), { forPdf: true });
     rows = record.lines.map((line) => ({
       description: line.description,
       quantity: quantityMicrosToInput(line.quantityMicros),
@@ -162,12 +164,13 @@ export function buildDocumentTemplateData(
         (line as any).discountType === "percentage"
           ? `${(line as any).discountValue}%`
           : (line as any).discountType === "fixed"
-          ? formatMoney(Number((line as any).discountValue), currency)
+          ? formatMajorMoney((line as any).discountValue, currency)
           : undefined,
       tax: line.taxCode ? `${line.taxCode.name}` : undefined,
       project: line.project?.name,
+      customFields: lineCfMap.get(line.id),
     }));
-    customFields = getCustomFieldPairsForEntity(businessId, userId, "sales_invoice", record.invoice.id);
+    customFields = getCustomFieldPairsForEntity(businessId, userId, "sales_invoice", record.invoice.id, { forPdf: true });
   } else if (documentType === "purchase-invoice") {
     const record = getPurchaseInvoice(businessId, userId, documentId);
     if (!record) throw new Error("Purchase invoice not found");
@@ -192,6 +195,7 @@ export function buildDocumentTemplateData(
     subtotalMinor = record.invoice.subtotalMinor;
     taxMinor = record.invoice.taxMinor;
     totalMinor = record.invoice.totalMinor;
+    const lineCfMap = getLineCustomFieldPairsByLineId(businessId, userId, "purchase_invoice_line", record.lines.map((l) => l.id), { forPdf: true });
     rows = record.lines.map((line) => ({
       description: line.description,
       quantity: quantityMicrosToInput(line.quantityMicros),
@@ -201,10 +205,11 @@ export function buildDocumentTemplateData(
         (line as any).discountType === "percentage"
           ? `${(line as any).discountValue}%`
           : (line as any).discountType === "fixed"
-          ? formatMoney(Number((line as any).discountValue), currency)
+          ? formatMajorMoney((line as any).discountValue, currency)
           : undefined,
       tax: (line as any).taxCode ? `${(line as any).taxCode.name}` : undefined,
       project: (line as any).project?.name,
+      customFields: lineCfMap.get(line.id),
     }));
   } else if (documentType === "purchase-order") {
     const record = getPurchaseOrder(businessId, userId, documentId);
@@ -234,6 +239,7 @@ export function buildDocumentTemplateData(
     subtotalMinor = record.order.subtotalMinor;
     taxMinor = record.order.taxMinor;
     totalMinor = record.order.totalMinor;
+    const lineCfMap = getLineCustomFieldPairsByLineId(businessId, userId, "purchase_order_line", record.lines.map((l) => l.id), { forPdf: true });
     rows = record.lines.map((line) => ({
       description: line.description,
       quantity: quantityMicrosToInput(line.quantityMicros),
@@ -243,9 +249,10 @@ export function buildDocumentTemplateData(
         (line as any).discountType === "percentage"
           ? `${(line as any).discountValue}%`
           : (line as any).discountType === "fixed"
-          ? formatMoney(Number((line as any).discountValue), currency)
+          ? formatMajorMoney((line as any).discountValue, currency)
           : undefined,
       tax: line.taxCode ? `${line.taxCode.name}` : undefined,
+      customFields: lineCfMap.get(line.id),
     }));
   } else if (documentType === "sales-credit-note") {
     const record = getCreditNote(businessId, userId, documentId);
@@ -289,7 +296,7 @@ export function buildDocumentTemplateData(
         (line as any).discountType === "percentage"
           ? `${(line as any).discountValue}%`
           : (line as any).discountType === "fixed"
-          ? formatMoney(Number((line as any).discountValue), currency)
+          ? formatMajorMoney((line as any).discountValue, currency)
           : undefined,
       tax: line.taxCode ? `${line.taxCode.name}` : undefined,
       project: line.project?.name,
@@ -324,7 +331,7 @@ export function buildDocumentTemplateData(
         (line as any).discountType === "percentage"
           ? `${(line as any).discountValue}%`
           : (line as any).discountType === "fixed"
-          ? formatMoney(Number((line as any).discountValue), currency)
+          ? formatMajorMoney((line as any).discountValue, currency)
           : undefined,
       tax: (line as any).taxCode ? `${(line as any).taxCode.name}` : undefined,
     }));
@@ -356,6 +363,7 @@ export function buildDocumentTemplateData(
     subtotalMinor = record.quote.subtotalMinor;
     taxMinor = record.quote.taxMinor;
     totalMinor = record.quote.totalMinor;
+    const lineCfMap = getLineCustomFieldPairsByLineId(businessId, userId, "sales_quote_line", record.lines.map((l) => l.id), { forPdf: true });
     rows = record.lines.map((line) => ({
       description: line.description,
       quantity: quantityMicrosToInput(line.quantityMicros),
@@ -365,12 +373,12 @@ export function buildDocumentTemplateData(
         (line as any).discountType === "percentage"
           ? `${(line as any).discountValue}%`
           : (line as any).discountType === "fixed"
-          ? formatMoney(Number((line as any).discountValue), currency)
+          ? formatMajorMoney((line as any).discountValue, currency)
           : undefined,
       tax: line.taxCode ? `${line.taxCode.name}` : undefined,
       project: line.project?.name,
+      customFields: lineCfMap.get(line.id),
     }));
-    customFields = getCustomFieldPairsForEntity(businessId, userId, "sales_quote", record.quote.id);
   } else if (documentType === "sales-order") {
     const record = getSalesOrder(businessId, userId, documentId);
     if (!record) throw new Error("Sales order not found");
@@ -399,6 +407,7 @@ export function buildDocumentTemplateData(
     subtotalMinor = record.order.subtotalMinor;
     taxMinor = record.order.taxMinor;
     totalMinor = record.order.totalMinor;
+    const lineCfMap = getLineCustomFieldPairsByLineId(businessId, userId, "sales_order_line", record.lines.map((l) => l.id), { forPdf: true });
     rows = record.lines.map((line) => ({
       description: line.description,
       quantity: quantityMicrosToInput(line.quantityMicros),
@@ -408,12 +417,12 @@ export function buildDocumentTemplateData(
         (line as any).discountType === "percentage"
           ? `${(line as any).discountValue}%`
           : (line as any).discountType === "fixed"
-          ? formatMoney(Number((line as any).discountValue), currency)
+          ? formatMajorMoney((line as any).discountValue, currency)
           : undefined,
       tax: line.taxCode ? `${line.taxCode.name}` : undefined,
       project: line.project?.name,
+      customFields: lineCfMap.get(line.id),
     }));
-    customFields = getCustomFieldPairsForEntity(businessId, userId, "sales_order", record.order.id);
   } else if (documentType === "purchase-quote") {
     const record = getPurchaseQuote(businessId, userId, documentId);
     if (!record) throw new Error("Purchase quote not found");
@@ -438,6 +447,7 @@ export function buildDocumentTemplateData(
     subtotalMinor = record.quote.subtotalMinor;
     taxMinor = record.quote.taxMinor;
     totalMinor = record.quote.totalMinor;
+    const lineCfMap = getLineCustomFieldPairsByLineId(businessId, userId, "purchase_quote_line", record.lines.map((l) => l.id), { forPdf: true });
     rows = record.lines.map((line) => ({
       description: line.description,
       quantity: quantityMicrosToInput(line.quantityMicros),
@@ -447,9 +457,10 @@ export function buildDocumentTemplateData(
         (line as any).discountType === "percentage"
           ? `${(line as any).discountValue}%`
           : (line as any).discountType === "fixed"
-          ? formatMoney(Number((line as any).discountValue), currency)
+          ? formatMajorMoney((line as any).discountValue, currency)
           : undefined,
       tax: line.taxCode ? `${line.taxCode.name}` : undefined,
+      customFields: lineCfMap.get(line.id),
     }));
   } else if (documentType === "goods-receipt") {
     const record = getGoodsReceipt(businessId, userId, documentId);

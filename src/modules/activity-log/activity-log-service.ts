@@ -511,7 +511,8 @@ export function runActivityLogCleanup(
   const sqlite = getBusinessDb(businessId, requestingUserId).sqlite;
   const currentSettings = getActivityLogSettings(businessId, requestingUserId);
 
-  const days = overrideDays ?? currentSettings.retentionDays ?? 90;
+  const rawDays = overrideDays ?? currentSettings.retentionDays ?? 90;
+  const days = Math.min(3650, Math.max(7, Number.isFinite(rawDays) ? Math.trunc(rawDays) : 90));
   const cutoffTime = Date.now() - days * 24 * 60 * 60 * 1000;
   const cutoffDate = new Date(cutoffTime).toISOString();
   const now = new Date().toISOString();

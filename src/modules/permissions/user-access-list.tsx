@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   Ban,
@@ -11,6 +11,7 @@ import {
   Copy,
   KeyRound,
   Mail,
+  MoreHorizontal,
   RotateCcw,
   Send,
   Shield,
@@ -22,6 +23,14 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
+import { useConfirmDialog } from "@/components/ui/confirm-dialog";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import {
   DialogContent,
   DialogDescription,
@@ -62,6 +71,7 @@ export type UserAccess = {
   name: string;
   email: string;
   role: "administrator" | "standard";
+  requiresApproval?: boolean;
   modules: ModuleKey[];
   capabilities?: ModuleCapabilities;
   current: boolean;
@@ -102,22 +112,26 @@ function AccessRow({
 }) {
   const router = useRouter();
   const [role, setRole] = useState(entry.role);
+  const [requiresApproval, setRequiresApproval] = useState(Boolean(entry.requiresApproval));
   const [capabilities, setCapabilities] = useState<ModuleCapabilities>(() => {
     if (entry.capabilities) return entry.capabilities;
     return parseCapabilities(entry.role, JSON.stringify(entry.modules));
   });
   const [expandedModule, setExpandedModule] = useState<ModuleKey | null>(null);
+  const [matrixOpen, setMatrixOpen] = useState(false);
   const [status, setStatus] = useState<UserAccess["status"]>(entry.status);
   const [pending, setPending] = useState(false);
   const [actionPending, setActionPending] = useState(false);
+  const { ask, dialog: confirmDialog } = useConfirmDialog();
 
   useEffect(() => {
     setRole(entry.role);
+    setRequiresApproval(Boolean(entry.requiresApproval));
     setCapabilities(
       entry.capabilities ?? parseCapabilities(entry.role, JSON.stringify(entry.modules))
     );
     setStatus(entry.status);
-  }, [entry.role, entry.modules, entry.capabilities, entry.status]);
+  }, [entry.role, entry.requiresApproval, entry.modules, entry.capabilities, entry.status]);
 
   const activeModules = moduleKeys.filter((m) => (capabilities[m]?.length ?? 0) > 0);
 
@@ -167,10 +181,31 @@ function AccessRow({
   function deselectAllModules() {
     const reset = {} as ModuleCapabilities;
     for (const m of moduleKeys) {
-      reset[m] = m === "sales" ? [...getAvailableActionsForModule("sales")] : [];
+      reset[m] = [];
     }
     setCapabilities(reset);
+    setExpandedModule(null);
   }
+
+  const savedCapabilities = useMemo(
+    () => entry.capabilities ?? parseCapabilities(entry.role, JSON.stringify(entry.modules)),
+    [entry.capabilities, entry.role, entry.modules],
+  );
+
+  const isDirty = useMemo(() => {
+    if (role !== entry.role) return true;
+    if (role === "standard" && requiresApproval !== Boolean(entry.requiresApproval)) return true;
+    if (role === "standard") {
+      for (const m of moduleKeys) {
+        const curr = [...(capabilities[m] || [])].sort();
+        const orig = [...(savedCapabilities[m] || [])].sort();
+        if (curr.length !== orig.length || curr.some((v, idx) => v !== orig[idx])) {
+          return true;
+        }
+      }
+    }
+    return false;
+  }, [role, entry.role, requiresApproval, entry.requiresApproval, capabilities, savedCapabilities]);
 
   async function save() {
     setPending(true);
@@ -179,7 +214,8 @@ function AccessRow({
       entry.membershipId,
       role,
       activeModules,
-      role === "administrator" ? undefined : capabilities
+      role === "administrator" ? undefined : capabilities,
+      role === "administrator" ? false : requiresApproval
     );
     setPending(false);
     if (result.error) toast.error(result.error);
@@ -287,24 +323,27 @@ function AccessRow({
     }
   }
 
-  async function handleRemoveUser() {
-    if (
-      !confirm(
-        `Are you sure you want to remove ${entry.name} (${entry.email}) from this business workspace?`
-      )
-    ) {
-      return;
-    }
-    setActionPending(true);
-    const result = await removeBusinessUserAction(businessId, entry.membershipId);
-    setActionPending(false);
-    if (result.error) {
-      toast.error(result.error);
-    } else {
-      toast.success(`Removed ${entry.name} from business.`);
-      onDeleted?.();
-      router.refresh();
-    }
+  function handleRemoveUser() {
+    ask({
+      title: `Remove ${entry.name}?`,
+      description: `Are you sure you want to remove ${entry.name} (${entry.email}) from this business workspace? Their audit log history will be preserved.`,
+      confirmLabel: "Remove user",
+      tone: "danger",
+      onConfirm: async () => {
+        setActionPending(true);
+        try {
+          const result = await removeBusinessUserAction(businessId, entry.membershipId);
+          if (result.error) {
+            throw new Error(result.error);
+          }
+          toast.success(`Removed ${entry.name} from business.`);
+          onDeleted?.();
+          router.refresh();
+        } finally {
+          setActionPending(false);
+        }
+      },
+    });
   }
 
   return (
@@ -343,22 +382,57 @@ function AccessRow({
                   ? "Another administrator must change your access"
                   : undefined
             }
-            onChange={(event) => setRole(event.target.value as typeof role)}
+            onChange={(event) => {
+              const nextRole = event.target.value as typeof role;
+              setRole(nextRole);
+              if (role === "administrator" && nextRole === "standard") {
+                setMatrixOpen(true);
+              }
+            }}
             className="text-xs h-8"
           >
             <option value="administrator">Administrator</option>
             <option value="standard">Standard User</option>
           </SelectNative>
+          {role === "standard" && (
+            <SelectNative
+              id={`approval-${entry.membershipId}`}
+              aria-label={`Approval policy for ${entry.name}`}
+              value={requiresApproval ? "requires_approval" : "direct"}
+              disabled={entry.current || entry.isOwner}
+              onChange={(event) => setRequiresApproval(event.target.value === "requires_approval")}
+              className="text-xs h-8"
+              title="Choose whether this user requires checker approval before posting/issuing documents"
+            >
+              <option value="direct">Can proceed without approval</option>
+              <option value="requires_approval">Requires approval before posting</option>
+            </SelectNative>
+          )}
+          {role === "standard" && (
+            <Button
+              type="button"
+              variant="secondary"
+              size="sm"
+              onClick={() => setMatrixOpen((prev) => !prev)}
+              className="h-8 text-xs gap-1"
+            >
+              <SlidersHorizontal className="size-3.5" />
+              <span>Configure permissions ({activeModules.length} of {moduleKeys.length} modules)</span>
+              {matrixOpen ? <ChevronUp className="size-3.5" /> : <ChevronDown className="size-3.5" />}
+            </Button>
+          )}
           <Button permission={"save"}
             variant="secondary"
             size="sm"
-            disabled={entry.current || entry.isOwner || pending}
+            disabled={!isDirty || entry.current || entry.isOwner || pending}
             title={
               entry.isOwner
                 ? "The workspace owner must remain an administrator"
                 : entry.current
                   ? "Another administrator must change your access"
-                  : undefined
+                  : !isDirty
+                    ? "No unsaved access changes"
+                    : undefined
             }
             onClick={save}
             className="h-8 text-xs"
@@ -367,103 +441,84 @@ function AccessRow({
           </Button>
 
           {/* User Actions */}
-          {!entry.current && (
-            <div className="flex items-center gap-1.5 ml-2 border-l border-border pl-3">
-              {status === "invited" ? (
-                <>
-                  <Button
-                    variant="secondary"
-                    size="sm"
-                    disabled={actionPending}
-                    onClick={handleCopyInviteLink}
-                    title="Generate & copy setup link without sending email"
-                    className="h-8 text-xs gap-1"
-                  >
-                    <Copy className="size-3.5" />
-                    Copy Link
-                  </Button>
-                  <Button
-                    variant="secondary"
-                    size="sm"
-                    disabled={actionPending}
-                    onClick={handleResendInvite}
-                    title="Resend invitation email"
-                    className="h-8 text-xs gap-1"
-                  >
-                    <RotateCcw className="size-3.5" />
-                    Resend Email
-                  </Button>
-                </>
-              ) : (
-                <>
-                  <Button
-                    variant="secondary"
-                    size="sm"
-                    disabled={actionPending || status === "suspended"}
-                    onClick={handleCopyResetLink}
-                    title="Generate & copy password reset link without sending email"
-                    className="h-8 text-xs gap-1"
-                  >
-                    <Copy className="size-3.5" />
-                    Copy Reset Link
-                  </Button>
-                  <Button
-                    variant="secondary"
-                    size="sm"
-                    disabled={actionPending || status === "suspended"}
-                    onClick={handleSendResetPassword}
-                    title="Send password reset link to user's email"
-                    className="h-8 text-xs gap-1"
-                  >
-                    <KeyRound className="size-3.5" />
-                    Reset Email
-                  </Button>
-                </>
-              )}
+          {!entry.current && !entry.isOwner && (
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  disabled={actionPending}
+                  aria-label={`More actions for ${entry.name}`}
+                  className="h-8 text-xs gap-1"
+                >
+                  <MoreHorizontal className="size-3.5" />
+                  <span>More</span>
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-52">
+                {status === "invited" ? (
+                  <>
+                    <DropdownMenuItem disabled={actionPending} onSelect={handleCopyInviteLink}>
+                      <Copy className="size-4" />
+                      <span>Copy Setup Link</span>
+                    </DropdownMenuItem>
+                    <DropdownMenuItem disabled={actionPending} onSelect={handleResendInvite}>
+                      <RotateCcw className="size-4" />
+                      <span>Resend Email</span>
+                    </DropdownMenuItem>
+                  </>
+                ) : (
+                  <>
+                    <DropdownMenuItem
+                      disabled={actionPending || status === "suspended"}
+                      onSelect={handleCopyResetLink}
+                    >
+                      <Copy className="size-4" />
+                      <span>Copy Reset Link</span>
+                    </DropdownMenuItem>
+                    <DropdownMenuItem
+                      disabled={actionPending || status === "suspended"}
+                      onSelect={handleSendResetPassword}
+                    >
+                      <KeyRound className="size-4" />
+                      <span>Send Reset Email</span>
+                    </DropdownMenuItem>
+                  </>
+                )}
 
-              {!entry.isOwner && (
-                <>
-                  <Button
-                    variant="secondary"
-                    size="sm"
-                    disabled={actionPending}
-                    onClick={handleToggleSuspension}
-                    title={status === "suspended" ? "Reactivate user" : "Suspend user"}
-                    className={`h-8 text-xs gap-1 ${
-                      status === "suspended"
-                        ? "text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50 dark:hover:bg-emerald-950/30"
-                        : "text-amber-600 hover:text-amber-700 hover:bg-amber-50 dark:hover:bg-amber-950/30"
-                    }`}
-                  >
-                    {status === "suspended" ? (
-                      <>
-                        <UserCheck className="size-3.5" /> Reactivate
-                      </>
-                    ) : (
-                      <>
-                        <Ban className="size-3.5" /> Suspend
-                      </>
-                    )}
-                  </Button>
-
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    disabled={actionPending}
-                    onClick={handleRemoveUser}
-                    title="Remove user from this business"
-                    className="h-8 text-xs text-danger hover:text-danger hover:bg-danger/10"
-                  >
-                    <Trash2 className="size-3.5" />
-                  </Button>
-                </>
-              )}
-            </div>
+                {!entry.isOwner && (
+                  <>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem disabled={actionPending} onSelect={handleToggleSuspension}>
+                      {status === "suspended" ? (
+                        <>
+                          <UserCheck className="size-4 text-emerald-600" />
+                          <span>Reactivate User</span>
+                        </>
+                      ) : (
+                        <>
+                          <Ban className="size-4 text-amber-600" />
+                          <span>Suspend User</span>
+                        </>
+                      )}
+                    </DropdownMenuItem>
+                    <DropdownMenuItem
+                      disabled={actionPending}
+                      onSelect={handleRemoveUser}
+                      className="text-danger focus:text-danger"
+                    >
+                      <Trash2 className="size-4" />
+                      <span>Remove User</span>
+                    </DropdownMenuItem>
+                  </>
+                )}
+              </DropdownMenuContent>
+            </DropdownMenu>
           )}
         </div>
       </div>
 
-      {role === "standard" && (
+      {role === "standard" && matrixOpen && (
         <fieldset className="mt-4 border-t border-border pt-4">
           <div className="flex items-center justify-between">
             <div>
@@ -489,7 +544,7 @@ function AccessRow({
                   onClick={deselectAllModules}
                   className="text-muted-foreground hover:underline cursor-pointer"
                 >
-                  Reset
+                  Clear all
                 </button>
               </div>
             )}
@@ -629,6 +684,7 @@ function AccessRow({
           </div>
         </fieldset>
       )}
+      {confirmDialog}
     </article>
   );
 }
@@ -639,6 +695,7 @@ export function UserAccessList({ businessId, users }: { businessId: string; user
   const [open, setOpen] = useState(false);
   const [email, setEmail] = useState("");
   const [role, setRole] = useState<"administrator" | "standard">("standard");
+  const [inviteRequiresApproval, setInviteRequiresApproval] = useState(false);
   const [selectedModules, setSelectedModules] = useState<ModuleKey[]>([
     "sales",
     "purchases",
@@ -673,22 +730,22 @@ export function UserAccessList({ businessId, users }: { businessId: string; user
   }
 
   function toggleInviteAction(module: ModuleKey, action: ActionKey) {
-    setInviteCapabilities((prev) => {
-      const current = prev[module] || [];
-      const hasAction = current.includes(action);
-      let next: ActionKey[];
-      if (hasAction) {
-        if (action === "view") {
-          next = [];
-        } else {
-          next = current.filter((a) => a !== action);
-        }
+    const current = inviteCapabilities[module] || [];
+    const hasAction = current.includes(action);
+    let next: ActionKey[];
+    if (hasAction) {
+      if (action === "view") {
+        next = [];
       } else {
-        next = [...current, action];
-        if (!next.includes("view")) next.unshift("view");
+        next = current.filter((a) => a !== action);
       }
-      return { ...prev, [module]: next };
-    });
+    } else {
+      next = [...current, action];
+      if (!next.includes("view")) next.unshift("view");
+    }
+    const nextCaps = { ...inviteCapabilities, [module]: next };
+    setInviteCapabilities(nextCaps);
+    setSelectedModules(moduleKeys.filter((m) => (nextCaps[m]?.length ?? 0) > 0));
   }
 
   async function handleInvite(sendEmail: boolean = true) {
@@ -709,6 +766,7 @@ export function UserAccessList({ businessId, users }: { businessId: string; user
         role,
         modules: role === "standard" ? selectedModules : (moduleKeys as unknown as string[]),
         capabilities: role === "standard" ? inviteCapabilities : undefined,
+        requiresApproval: role === "standard" ? inviteRequiresApproval : false,
         sendEmail,
       });
 
@@ -860,7 +918,18 @@ export function UserAccessList({ businessId, users }: { businessId: string; user
                   </div>
 
                   {role === "standard" && (
-                    <div className="space-y-2 border-t border-border pt-3">
+                    <div className="space-y-3 border-t border-border pt-3">
+                      <div className="space-y-1.5">
+                        <Label htmlFor="new-user-approval">Posting Approval Control</Label>
+                        <SelectNative
+                          id="new-user-approval"
+                          value={inviteRequiresApproval ? "requires_approval" : "direct"}
+                          onChange={(e) => setInviteRequiresApproval(e.target.value === "requires_approval")}
+                        >
+                          <option value="direct">Can proceed without approval (posts directly if permitted)</option>
+                          <option value="requires_approval">Requires approval before posting / issuing</option>
+                        </SelectNative>
+                      </div>
                       <div className="flex items-center justify-between">
                         <Label>Initial Visible Modules & Actions</Label>
                         <div className="flex items-center gap-2 text-[11px]">

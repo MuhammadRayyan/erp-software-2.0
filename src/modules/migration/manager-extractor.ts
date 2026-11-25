@@ -71,6 +71,16 @@ export interface ManagerExtractedData {
     name: string;
     type: string;
   }>;
+  /**
+   * Manager.io tax codes. `rate` is the percentage (e.g. 5 for 5%) when the
+   * backup stores it, or null when the rate field is absent and cannot be
+   * determined reliably.
+   */
+  taxCodes: Array<{
+    id: string;
+    name: string;
+    rate: number | null;
+  }>;
   salesInvoices: Array<{
     id: string;
     invoiceNumber: string;
@@ -80,10 +90,17 @@ export interface ManagerExtractedData {
     notes?: string;
     lines: Array<{
       itemId?: string;
+      /** Manager chart-of-accounts reference on the line (modern format only). */
+      accountId?: string;
       description: string;
       quantity: number;
       unitPrice: number;
       projectId?: string;
+      /**
+       * Manager tax code reference. `undefined` = the source format carries no
+       * known tax field (legacy); `null` = the line explicitly has no tax code.
+       */
+      taxCodeId?: string | null;
     }>;
     customFieldValues: Record<string, string>;
   }>;
@@ -123,10 +140,17 @@ export interface ManagerExtractedData {
     notes?: string;
     lines: Array<{
       itemId?: string;
+      /** Manager chart-of-accounts reference on the line (modern format only). */
+      accountId?: string;
       description: string;
       quantity: number;
       unitPrice: number;
       projectId?: string;
+      /**
+       * Manager tax code reference. `undefined` = the source format carries no
+       * known tax field (legacy); `null` = the line explicitly has no tax code.
+       */
+      taxCodeId?: string | null;
     }>;
   }>;
   receipts: Array<{
@@ -231,6 +255,9 @@ export const MANAGER_CONTENT_TYPES = {
   PAYMENTS_MODERN: "79f99d26-e43a-4ecb-a9c9-0774601a9b2e",
 
   INTER_ACCOUNT_TRANSFERS: "dea4f923-c498-4504-b3ef-30be3c33175e",
+  // Tax codes: field 1 = name, field 4 = rate (bcl.Decimal percentage). Modern
+  // sales/purchase invoice lines reference these through line field 21.
+  TAX_CODES: "7f368d97-8b7f-4b39-b156-dc66afd9496a",
   CUSTOM_FIELDS_DEF: "411f5975-0376-4ba9-b7ff-5bb2baa6f69f",
   CUSTOM_FIELD_OPTIONS: "cc7fc110-e3e4-4b3b-823d-86c4a4cdabbc",
 
@@ -434,6 +461,19 @@ export function extractManagerData(sqliteDb: Database.Database): ManagerExtracte
     });
   }
 
+  // 10b. Tax Codes
+  const taxCodes: ManagerExtractedData["taxCodes"] = [];
+  const taxRows = sqliteDb.prepare('SELECT Key, Content FROM "Objects" WHERE ContentType = ?').all(MANAGER_CONTENT_TYPES.TAX_CODES) as Array<{ Key: string; Content: Buffer }>;
+  for (const tc of taxRows) {
+    const d = decodeProtobuf(tc.Content);
+    taxCodes.push({
+      id: tc.Key.toLowerCase(),
+      name: String(d["1"] || "Tax Code").trim(),
+      // An absent rate field is ambiguous (protobuf omits defaults), so keep it unknown.
+      rate: d["4"] !== undefined ? decodeManagerDecimal(d["4"]) : null,
+    });
+  }
+
   // Build Item Lookup Map (by ID) for price fallback
   const itemMap = new Map<string, ManagerExtractedData["inventoryItems"][0]>();
   for (const it of inventoryItems) {
@@ -463,14 +503,27 @@ export function extractManagerData(sqliteDb: Database.Database): ManagerExtracte
     const lines: ManagerExtractedData["salesInvoices"][0]["lines"] = [];
     for (const l of rawLines) {
       if (isModern) {
-        const itemId = extractGuid(l["2"]);
+        // Modern line layout (verified against a real backup): 1 = inventory item,
+        // 2 = chart-of-accounts account, 17 = description, 18 = quantity,
+        // 19 = unit price, 21 = tax code, 26 = project. The stored price is
+        // authoritative (an omitted price means 0), so no item-price fallback.
+        const itemId = extractGuid(l["1"]);
+        const accountId = extractGuid(l["2"]);
         const item = itemId ? itemMap.get(itemId) : undefined;
         const description = String(l["17"] || item?.name || "Service Line").trim();
         const quantity = decodeManagerDecimal(l["18"]) || 1;
-        let unitPrice = decodeManagerDecimal(l["19"]);
-        if (unitPrice === 0 && item) unitPrice = item.salesUnitPrice;
+        const unitPrice = decodeManagerDecimal(l["19"]);
         const lineProjectId = extractGuid(l["26"]) || undefined;
-        lines.push({ itemId: itemId || undefined, description, quantity, unitPrice, projectId: lineProjectId });
+        const taxCodeId = extractGuid(l["21"]);
+        lines.push({
+          itemId: itemId || undefined,
+          accountId: accountId || undefined,
+          description,
+          quantity,
+          unitPrice,
+          projectId: lineProjectId,
+          taxCodeId,
+        });
       } else {
         const itemId = extractGuid(l["1"]);
         const item = itemId ? itemMap.get(itemId) : undefined;
@@ -613,14 +666,24 @@ export function extractManagerData(sqliteDb: Database.Database): ManagerExtracte
     const lines: ManagerExtractedData["purchaseInvoices"][0]["lines"] = [];
     for (const l of rawLines) {
       if (isModern) {
-        const itemId = extractGuid(l["2"]);
+        // Same modern line layout as sales invoices (see above).
+        const itemId = extractGuid(l["1"]);
+        const accountId = extractGuid(l["2"]);
         const item = itemId ? itemMap.get(itemId) : undefined;
         const description = String(l["17"] || item?.name || "Purchase Item").trim();
         const quantity = decodeManagerDecimal(l["18"]) || 1;
-        let unitPrice = decodeManagerDecimal(l["19"]);
-        if (unitPrice === 0 && item) unitPrice = item.purchaseUnitPrice;
+        const unitPrice = decodeManagerDecimal(l["19"]);
         const lineProjectId = extractGuid(l["26"]) || undefined;
-        lines.push({ itemId: itemId || undefined, description, quantity, unitPrice, projectId: lineProjectId });
+        const taxCodeId = extractGuid(l["21"]);
+        lines.push({
+          itemId: itemId || undefined,
+          accountId: accountId || undefined,
+          description,
+          quantity,
+          unitPrice,
+          projectId: lineProjectId,
+          taxCodeId,
+        });
       } else {
         const itemId = extractGuid(l["1"]);
         const item = itemId ? itemMap.get(itemId) : undefined;
@@ -865,6 +928,7 @@ export function extractManagerData(sqliteDb: Database.Database): ManagerExtracte
     fixedAssets,
     projects,
     customFields,
+    taxCodes,
     salesInvoices,
     salesQuotes,
     salesOrders,

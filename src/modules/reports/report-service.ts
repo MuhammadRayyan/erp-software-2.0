@@ -1,7 +1,8 @@
 import { addMinor, sumMinorRatios } from "@/modules/accounting/calculations/money";
 import { purchaseSettlementSql } from "@/modules/purchase-invoices/purchase-balance";
 import { getBusinessDb } from "@/core/db/business";
-import { listInvoices } from "@/modules/sales-invoices/invoice-service";
+import { SALES_ALLOCATED_BASE_EXPR, SALES_ALLOCATED_CTE } from "@/modules/shared/list-query-helpers";
+import { getBusinessTodayIso } from "@/core/format";
 
 export type LedgerFilters = {
   dateFrom?: string;
@@ -163,7 +164,7 @@ export function getTrialBalance(businessId: string, userId: string, throughDate?
 
 export function getAccountsReceivable(businessId: string, userId: string) {
   const { sqlite } = getBusinessDb(businessId, userId);
-  const today = new Date().toISOString().slice(0, 10);
+  const today = getBusinessTodayIso();
   const rows = sqlite.prepare(`
     SELECT c.id AS customer_id, c.name AS customer_name, i.id AS document_id,
       i.invoice_number AS document_number, i.due_date, i.currency_code,
@@ -202,7 +203,7 @@ export function getAccountsReceivable(businessId: string, userId: string) {
 
 export function getAccountsPayable(businessId: string, userId: string) {
   const { sqlite } = getBusinessDb(businessId, userId);
-  const today = new Date().toISOString().slice(0, 10);
+  const today = getBusinessTodayIso();
   const settled = purchaseSettlementSql();
   const rows = sqlite.prepare(`
     SELECT s.id AS supplier_id, s.name AS supplier_name, pi.id AS document_id,
@@ -245,7 +246,7 @@ export function getBankBalance(businessId: string, userId: string) {
 
 export function getDashboardCounts(businessId: string, userId: string) {
   const { sqlite } = getBusinessDb(businessId, userId);
-  
+
   const safeCount = (query: string) => {
     try {
       const result = sqlite.prepare(query).get() as { c: number } | undefined;
@@ -255,31 +256,90 @@ export function getDashboardCounts(businessId: string, userId: string) {
     }
   };
 
-  return {
-    customers: safeCount("SELECT COUNT(*) as c FROM customers"),
-    salesQuotes: safeCount("SELECT COUNT(*) as c FROM sales_quotes"),
-    salesOrders: safeCount("SELECT COUNT(*) as c FROM sales_orders"),
-    salesInvoices: safeCount("SELECT COUNT(*) as c FROM sales_invoices"),
-    salesCreditNotes: safeCount("SELECT COUNT(*) as c FROM sales_credit_notes"),
-    deliveryNotes: safeCount("SELECT COUNT(*) as c FROM delivery_notes"),
-    suppliers: safeCount("SELECT COUNT(*) as c FROM suppliers"),
-    purchaseOrders: safeCount("SELECT COUNT(*) as c FROM purchase_orders"),
-    purchaseInvoices: safeCount("SELECT COUNT(*) as c FROM purchase_invoices"),
-    supplierPayments: safeCount("SELECT COUNT(*) as c FROM supplier_payments"),
-    payments: safeCount("SELECT COUNT(*) as c FROM supplier_payments"),
-    debitNotes: safeCount("SELECT COUNT(*) as c FROM debit_notes"),
-    goodsReceipts: safeCount("SELECT COUNT(*) as c FROM goods_receipts"),
-    inventoryItems: safeCount("SELECT COUNT(*) as c FROM inventory_items"),
-    bankAccounts: safeCount("SELECT COUNT(*) as c FROM accounts WHERE subtype IN ('bank', 'cash')"),
-    receipts: safeCount("SELECT COUNT(*) as c FROM receipts"),
-    journals: safeCount("SELECT COUNT(*) as c FROM journal_entries"),
-    chartOfAccounts: safeCount("SELECT COUNT(*) as c FROM accounts"),
-    employees: safeCount("SELECT COUNT(*) as c FROM employees WHERE is_active = 1"),
-    payslips: safeCount("SELECT COUNT(*) as c FROM payslips"),
-    payslipItems: safeCount("SELECT COUNT(*) as c FROM payslip_items"),
-    projects: safeCount("SELECT COUNT(*) as c FROM projects"),
-    vatPeriods: safeCount("SELECT COUNT(*) as c FROM vat_periods"),
-  };
+  try {
+    const row = sqlite
+      .prepare(`
+        SELECT
+          (SELECT COUNT(*) FROM customers) AS customers,
+          (SELECT COUNT(*) FROM sales_quotes) AS salesQuotes,
+          (SELECT COUNT(*) FROM sales_orders) AS salesOrders,
+          (SELECT COUNT(*) FROM sales_invoices) AS salesInvoices,
+          (SELECT COUNT(*) FROM sales_credit_notes) AS salesCreditNotes,
+          (SELECT COUNT(*) FROM delivery_notes) AS deliveryNotes,
+          (SELECT COUNT(*) FROM suppliers) AS suppliers,
+          (SELECT COUNT(*) FROM purchase_orders) AS purchaseOrders,
+          (SELECT COUNT(*) FROM purchase_invoices) AS purchaseInvoices,
+          (SELECT COUNT(*) FROM supplier_payments) AS supplierPayments,
+          (SELECT COUNT(*) FROM debit_notes) AS debitNotes,
+          (SELECT COUNT(*) FROM goods_receipts) AS goodsReceipts,
+          (SELECT COUNT(*) FROM inventory_items) AS inventoryItems,
+          (SELECT COUNT(*) FROM accounts WHERE subtype IN ('bank', 'cash')) AS bankAccounts,
+          (SELECT COUNT(*) FROM receipts) AS receipts,
+          (SELECT COUNT(*) FROM journal_entries) AS journals,
+          (SELECT COUNT(*) FROM accounts) AS chartOfAccounts,
+          (SELECT COUNT(*) FROM employees WHERE is_active = 1) AS employees,
+          (SELECT COUNT(*) FROM payslips) AS payslips,
+          (SELECT COUNT(*) FROM payslip_items) AS payslipItems,
+          (SELECT COUNT(*) FROM projects) AS projects,
+          (SELECT COUNT(*) FROM vat_periods) AS vatPeriods
+      `)
+      .get() as {
+      customers: number;
+      salesQuotes: number;
+      salesOrders: number;
+      salesInvoices: number;
+      salesCreditNotes: number;
+      deliveryNotes: number;
+      suppliers: number;
+      purchaseOrders: number;
+      purchaseInvoices: number;
+      supplierPayments: number;
+      debitNotes: number;
+      goodsReceipts: number;
+      inventoryItems: number;
+      bankAccounts: number;
+      receipts: number;
+      journals: number;
+      chartOfAccounts: number;
+      employees: number;
+      payslips: number;
+      payslipItems: number;
+      projects: number;
+      vatPeriods: number;
+    };
+
+    return {
+      ...row,
+      payments: row.supplierPayments,
+    };
+  } catch {
+    const supplierPayments = safeCount("SELECT COUNT(*) as c FROM supplier_payments");
+    return {
+      customers: safeCount("SELECT COUNT(*) as c FROM customers"),
+      salesQuotes: safeCount("SELECT COUNT(*) as c FROM sales_quotes"),
+      salesOrders: safeCount("SELECT COUNT(*) as c FROM sales_orders"),
+      salesInvoices: safeCount("SELECT COUNT(*) as c FROM sales_invoices"),
+      salesCreditNotes: safeCount("SELECT COUNT(*) as c FROM sales_credit_notes"),
+      deliveryNotes: safeCount("SELECT COUNT(*) as c FROM delivery_notes"),
+      suppliers: safeCount("SELECT COUNT(*) as c FROM suppliers"),
+      purchaseOrders: safeCount("SELECT COUNT(*) as c FROM purchase_orders"),
+      purchaseInvoices: safeCount("SELECT COUNT(*) as c FROM purchase_invoices"),
+      supplierPayments,
+      payments: supplierPayments,
+      debitNotes: safeCount("SELECT COUNT(*) as c FROM debit_notes"),
+      goodsReceipts: safeCount("SELECT COUNT(*) as c FROM goods_receipts"),
+      inventoryItems: safeCount("SELECT COUNT(*) as c FROM inventory_items"),
+      bankAccounts: safeCount("SELECT COUNT(*) as c FROM accounts WHERE subtype IN ('bank', 'cash')"),
+      receipts: safeCount("SELECT COUNT(*) as c FROM receipts"),
+      journals: safeCount("SELECT COUNT(*) as c FROM journal_entries"),
+      chartOfAccounts: safeCount("SELECT COUNT(*) as c FROM accounts"),
+      employees: safeCount("SELECT COUNT(*) as c FROM employees WHERE is_active = 1"),
+      payslips: safeCount("SELECT COUNT(*) as c FROM payslips"),
+      payslipItems: safeCount("SELECT COUNT(*) as c FROM payslip_items"),
+      projects: safeCount("SELECT COUNT(*) as c FROM projects"),
+      vatPeriods: safeCount("SELECT COUNT(*) as c FROM vat_periods"),
+    };
+  }
 }
 
 export type MonthlyFinancialTrend = {
@@ -359,53 +419,60 @@ export function getMonthlyFinancialTrend(
 }
 
 export function getReceivablesAgingSummary(businessId: string, userId: string): ReceivablesAgingSummary {
-  const today = new Date().toISOString().slice(0, 10);
-  const invoices = listInvoices(businessId, userId).filter(
-    (inv) => inv.documentStatus === "posted" && inv.baseBalanceMinor > 0,
-  );
+  const { sqlite } = getBusinessDb(businessId, userId);
+  const today = getBusinessTodayIso();
 
-  let currentMinor = 0, currentCount = 0;
-  let days30Minor = 0, days30Count = 0;
-  let days60Minor = 0, days60Count = 0;
-  let days60PlusMinor = 0, days60PlusCount = 0;
-
-  for (const inv of invoices) {
-    const dueDate = inv.dueDate || today;
-    if (dueDate >= today) {
-      currentMinor += inv.baseBalanceMinor;
-      currentCount++;
-    } else {
-      const ageDays = Math.max(
-        0,
-        Math.floor((Date.parse(`${today}T00:00:00Z`) - Date.parse(`${dueDate}T00:00:00Z`)) / 86_400_000),
-      );
-      if (ageDays <= 30) {
-        days30Minor += inv.baseBalanceMinor;
-        days30Count++;
-      } else if (ageDays <= 60) {
-        days60Minor += inv.baseBalanceMinor;
-        days60Count++;
-      } else {
-        days60PlusMinor += inv.baseBalanceMinor;
-        days60PlusCount++;
-      }
-    }
-  }
-
-  const totalMinor = currentMinor + days30Minor + days60Minor + days60PlusMinor;
-  const totalCount = currentCount + days30Count + days60Count + days60PlusCount;
+  const row = sqlite
+    .prepare(`
+      WITH ${SALES_ALLOCATED_CTE},
+      open_receivables AS (
+        SELECT
+          (i.base_total_minor - (${SALES_ALLOCATED_BASE_EXPR})) AS base_balance_minor,
+          COALESCE(NULLIF(i.due_date, ''), @today) AS effective_due_date,
+          CAST(ROUND(julianday(@today) - julianday(COALESCE(NULLIF(i.due_date, ''), @today))) AS INTEGER) AS age_days
+        FROM sales_invoices i
+        LEFT JOIN receipt_alloc ra ON ra.invoice_id = i.id
+        LEFT JOIN credit_alloc ca ON ca.invoice_id = i.id
+        WHERE i.document_status = 'posted'
+          AND (i.base_total_minor - (${SALES_ALLOCATED_BASE_EXPR})) > 0
+      )
+      SELECT
+        COALESCE(SUM(CASE WHEN effective_due_date >= @today THEN base_balance_minor ELSE 0 END), 0) AS currentMinor,
+        COALESCE(SUM(CASE WHEN effective_due_date >= @today THEN 1 ELSE 0 END), 0) AS currentCount,
+        COALESCE(SUM(CASE WHEN effective_due_date < @today AND age_days <= 30 THEN base_balance_minor ELSE 0 END), 0) AS days30Minor,
+        COALESCE(SUM(CASE WHEN effective_due_date < @today AND age_days <= 30 THEN 1 ELSE 0 END), 0) AS days30Count,
+        COALESCE(SUM(CASE WHEN effective_due_date < @today AND age_days > 30 AND age_days <= 60 THEN base_balance_minor ELSE 0 END), 0) AS days60Minor,
+        COALESCE(SUM(CASE WHEN effective_due_date < @today AND age_days > 30 AND age_days <= 60 THEN 1 ELSE 0 END), 0) AS days60Count,
+        COALESCE(SUM(CASE WHEN effective_due_date < @today AND age_days > 60 THEN base_balance_minor ELSE 0 END), 0) AS days60PlusMinor,
+        COALESCE(SUM(CASE WHEN effective_due_date < @today AND age_days > 60 THEN 1 ELSE 0 END), 0) AS days60PlusCount,
+        COALESCE(SUM(base_balance_minor), 0) AS totalMinor,
+        COUNT(*) AS totalCount
+      FROM open_receivables
+    `)
+    .get({ today }) as {
+    currentMinor: number;
+    currentCount: number;
+    days30Minor: number;
+    days30Count: number;
+    days60Minor: number;
+    days60Count: number;
+    days60PlusMinor: number;
+    days60PlusCount: number;
+    totalMinor: number;
+    totalCount: number;
+  };
 
   return {
-    currentMinor,
-    currentCount,
-    days30Minor,
-    days30Count,
-    days60Minor,
-    days60Count,
-    days60PlusMinor,
-    days60PlusCount,
-    totalMinor,
-    totalCount,
+    currentMinor: Number(row.currentMinor || 0),
+    currentCount: Number(row.currentCount || 0),
+    days30Minor: Number(row.days30Minor || 0),
+    days30Count: Number(row.days30Count || 0),
+    days60Minor: Number(row.days60Minor || 0),
+    days60Count: Number(row.days60Count || 0),
+    days60PlusMinor: Number(row.days60PlusMinor || 0),
+    days60PlusCount: Number(row.days60PlusCount || 0),
+    totalMinor: Number(row.totalMinor || 0),
+    totalCount: Number(row.totalCount || 0),
   };
 }
 
@@ -545,4 +612,266 @@ export function getProfitAndLoss(
       : r.debit_total - r.credit_total;
     return { ...r, net_minor };
   }).filter(r => r.net_minor !== 0);
+}
+
+export type ComparativePeriodSpec = {
+  label: string;
+  dateFrom?: string;
+  dateTo?: string;
+};
+
+export type ComparativePnlRow = {
+  id: string;
+  name: string;
+  type: string;
+  subtype: string;
+  amountsMinor: number[];
+  varianceMinor: number | null;
+  variancePercent: number | null;
+};
+
+export type ComparativeBalanceSheetRow = {
+  id: string;
+  name: string;
+  type: string;
+  subtype: string;
+  amountsMinor: number[];
+  varianceMinor: number | null;
+  variancePercent: number | null;
+};
+
+function shiftIsoDate(dateStr: string, deltaDays: number, deltaYears = 0, deltaMonths = 0): string {
+  const [y, m, d] = dateStr.split("-").map(Number);
+  const dt = new Date(Date.UTC(y + deltaYears, (m - 1) + deltaMonths, d + deltaDays));
+  return dt.toISOString().slice(0, 10);
+}
+
+export function resolveComparativePnlPeriods(params: {
+  dateFrom?: string;
+  dateTo?: string;
+  compareMode?: string;
+  compareDateFrom?: string;
+  compareDateTo?: string;
+}): ComparativePeriodSpec[] {
+  const today = getBusinessTodayIso();
+  const currentFrom = validDate(params.dateFrom);
+  const currentTo = validDate(params.dateTo);
+  const currentLabel =
+    currentFrom || currentTo ? `${currentFrom ?? "Start"} – ${currentTo ?? "Today"}` : "Current Period";
+  const periods: ComparativePeriodSpec[] = [
+    { label: currentLabel, dateFrom: currentFrom, dateTo: currentTo },
+  ];
+
+  const mode = params.compareMode;
+  if (!mode || mode === "none") return periods;
+
+  if (mode === "custom") {
+    const cmpFrom = validDate(params.compareDateFrom);
+    const cmpTo = validDate(params.compareDateTo);
+    if (cmpFrom || cmpTo) {
+      periods.push({
+        label: `${cmpFrom ?? "Start"} – ${cmpTo ?? "Today"}`,
+        dateFrom: cmpFrom,
+        dateTo: cmpTo,
+      });
+    }
+    return periods;
+  }
+
+  if (mode === "prior_year") {
+    const end = currentTo ?? today;
+    const start = currentFrom ?? `${end.slice(0, 4)}-01-01`;
+    const cmpFrom = shiftIsoDate(start, 0, -1, 0);
+    const cmpTo = shiftIsoDate(end, 0, -1, 0);
+    periods[0] = { label: `${start} – ${end}`, dateFrom: start, dateTo: end };
+    periods.push({ label: `${cmpFrom} – ${cmpTo}`, dateFrom: cmpFrom, dateTo: cmpTo });
+    return periods;
+  }
+
+  if (mode === "prior_period") {
+    const end = currentTo ?? today;
+    const start = currentFrom ?? `${end.slice(0, 7)}-01`;
+    const spanDays = Math.max(
+      1,
+      Math.round((Date.parse(`${end}T00:00:00Z`) - Date.parse(`${start}T00:00:00Z`)) / 86_400_000) + 1,
+    );
+    const cmpTo = shiftIsoDate(start, -1);
+    const cmpFrom = shiftIsoDate(cmpTo, -(spanDays - 1));
+    periods[0] = { label: `${start} – ${end}`, dateFrom: start, dateTo: end };
+    periods.push({ label: `${cmpFrom} – ${cmpTo}`, dateFrom: cmpFrom, dateTo: cmpTo });
+    return periods;
+  }
+
+  if (mode === "last_3_months" || mode === "last_4_quarters") {
+    const anchor = currentTo ?? today;
+    const [ay, am] = anchor.split("-").map(Number);
+    const count = mode === "last_4_quarters" ? 4 : 3;
+    const multi: ComparativePeriodSpec[] = [];
+    for (let i = count - 1; i >= 0; i--) {
+      if (mode === "last_3_months") {
+        const startDt = new Date(Date.UTC(ay, am - 1 - i, 1));
+        const endDt = new Date(Date.UTC(ay, am - i, 0));
+        multi.push({
+          label: startDt.toLocaleDateString("en-US", { month: "short", year: "numeric", timeZone: "UTC" }),
+          dateFrom: startDt.toISOString().slice(0, 10),
+          dateTo: endDt.toISOString().slice(0, 10),
+        });
+      } else {
+        const qEnd = new Date(Date.UTC(ay, am - i * 3, 0));
+        const qStart = new Date(Date.UTC(qEnd.getUTCFullYear(), qEnd.getUTCMonth() - 2, 1));
+        multi.push({
+          label: `${qStart.toISOString().slice(0, 7)}..${qEnd.toISOString().slice(0, 7)}`,
+          dateFrom: qStart.toISOString().slice(0, 10),
+          dateTo: qEnd.toISOString().slice(0, 10),
+        });
+      }
+    }
+    return multi;
+  }
+
+  return periods;
+}
+
+export function computeVariance(currentMinor: number, priorMinor: number | undefined): {
+  varianceMinor: number | null;
+  variancePercent: number | null;
+} {
+  if (priorMinor === undefined) return { varianceMinor: null, variancePercent: null };
+  const varianceMinor = currentMinor - priorMinor;
+  const variancePercent =
+    priorMinor === 0
+      ? currentMinor === 0
+        ? 0
+        : null
+      : Number((((currentMinor - priorMinor) / Math.abs(priorMinor)) * 100).toFixed(1));
+  return { varianceMinor, variancePercent };
+}
+
+export function getComparativeProfitAndLoss(
+  businessId: string,
+  userId: string,
+  periods: ComparativePeriodSpec[],
+  basis: "accrual" | "cash" = "accrual",
+): ComparativePnlRow[] {
+  const periodResults = periods.map((p) => getProfitAndLoss(businessId, userId, p.dateFrom, p.dateTo, basis));
+  const accountMap = new Map<string, { id: string; name: string; type: string; subtype: string; amountsMinor: number[] }>();
+
+  periodResults.forEach((rows, idx) => {
+    for (const r of rows) {
+      let entry = accountMap.get(r.id);
+      if (!entry) {
+        entry = {
+          id: r.id,
+          name: r.name,
+          type: r.type,
+          subtype: r.subtype,
+          amountsMinor: new Array(periods.length).fill(0),
+        };
+        accountMap.set(r.id, entry);
+      }
+      entry.amountsMinor[idx] = r.net_minor;
+    }
+  });
+
+  return Array.from(accountMap.values())
+    .sort((a, b) => b.type.localeCompare(a.type) || a.name.localeCompare(b.name))
+    .map((entry) => {
+      const hasComparison = periods.length === 2;
+      const { varianceMinor, variancePercent } = hasComparison
+        ? computeVariance(entry.amountsMinor[0], entry.amountsMinor[1])
+        : { varianceMinor: null, variancePercent: null };
+      return { ...entry, varianceMinor, variancePercent };
+    });
+}
+
+export function resolveComparativeBalanceDates(params: {
+  throughDate?: string;
+  compareMode?: string;
+  compareThroughDate?: string;
+}): Array<{ label: string; throughDate?: string }> {
+  const today = getBusinessTodayIso();
+  const baseDate = validDate(params.throughDate) ?? today;
+  const dates: Array<{ label: string; throughDate?: string }> = [
+    { label: `As of ${baseDate}`, throughDate: baseDate },
+  ];
+  const mode = params.compareMode;
+  if (!mode || mode === "none") return dates;
+
+  if (mode === "custom") {
+    const cmp = validDate(params.compareThroughDate);
+    if (cmp) dates.push({ label: `As of ${cmp}`, throughDate: cmp });
+    return dates;
+  }
+  if (mode === "prior_month") {
+    const cmp = shiftIsoDate(baseDate, 0, 0, -1);
+    dates.push({ label: `As of ${cmp}`, throughDate: cmp });
+    return dates;
+  }
+  if (mode === "prior_quarter") {
+    const cmp = shiftIsoDate(baseDate, 0, 0, -3);
+    dates.push({ label: `As of ${cmp}`, throughDate: cmp });
+    return dates;
+  }
+  if (mode === "prior_year") {
+    const cmp = shiftIsoDate(baseDate, 0, -1, 0);
+    dates.push({ label: `As of ${cmp}`, throughDate: cmp });
+    return dates;
+  }
+  return dates;
+}
+
+export function getComparativeBalanceSheet(
+  businessId: string,
+  userId: string,
+  dates: Array<{ label: string; throughDate?: string }>,
+): {
+  accounts: ComparativeBalanceSheetRow[];
+  retainedEarningsMinor: number[];
+} {
+  const snapshots = dates.map((d) => getTrialBalance(businessId, userId, d.throughDate));
+  const accountMap = new Map<string, { id: string; name: string; type: string; subtype: string; amountsMinor: number[] }>();
+  const retainedEarningsMinor = new Array(dates.length).fill(0);
+
+  snapshots.forEach((tb, idx) => {
+    let incomeNet = 0;
+    let expenseNet = 0;
+    for (const r of tb.accounts) {
+      if (r.type === "income") {
+        incomeNet += r.credit_total - r.debit_total;
+        continue;
+      }
+      if (r.type === "expense") {
+        expenseNet += r.debit_total - r.credit_total;
+        continue;
+      }
+      const normalDebit = r.type === "asset";
+      const net = normalDebit ? r.debit_total - r.credit_total : r.credit_total - r.debit_total;
+      if (net === 0) continue;
+      let entry = accountMap.get(r.id);
+      if (!entry) {
+        entry = {
+          id: r.id,
+          name: r.name,
+          type: r.type,
+          subtype: r.subtype,
+          amountsMinor: new Array(dates.length).fill(0),
+        };
+        accountMap.set(r.id, entry);
+      }
+      entry.amountsMinor[idx] = net;
+    }
+    retainedEarningsMinor[idx] = incomeNet - expenseNet;
+  });
+
+  const accounts = Array.from(accountMap.values())
+    .sort((a, b) => a.type.localeCompare(b.type) || a.name.localeCompare(b.name))
+    .map((entry) => {
+      const hasComparison = dates.length === 2;
+      const { varianceMinor, variancePercent } = hasComparison
+        ? computeVariance(entry.amountsMinor[0], entry.amountsMinor[1])
+        : { varianceMinor: null, variancePercent: null };
+      return { ...entry, varianceMinor, variancePercent };
+    });
+
+  return { accounts, retainedEarningsMinor };
 }

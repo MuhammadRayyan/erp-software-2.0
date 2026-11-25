@@ -108,3 +108,18 @@ export function deleteSourceMovements(sqlite: Database.Database, sourceType: str
   if (!sqlite.inTransaction) throw new Error("Inventory source rebuild must run inside a database transaction.");
   sqlite.prepare("DELETE FROM inventory_movements WHERE source_type = ? AND source_id = ?").run(sourceType, sourceId);
 }
+
+/** `totalMinor` scaled by partQuantity / totalQuantity, rounded half-up. */
+export function proportionalValueMinor(totalMinor: number, partQuantityMicros: number, totalQuantityMicros: number) {
+  if (totalQuantityMicros <= 0) throw new Error("Quantity must be greater than zero.");
+  return toSafeNumber(
+    divideAndRound(BigInt(totalMinor) * BigInt(partQuantityMicros), BigInt(totalQuantityMicros)),
+    "Inventory value",
+  );
+}
+
+/** Per-unit cost in minor units for a value spread over a quantity. */
+export function unitCostMinorForValue(valueMinor: number, quantityMicros: number) {
+  if (quantityMicros <= 0) return 0;
+  return toSafeNumber(divideAndRound(BigInt(valueMinor) * QUANTITY_SCALE, BigInt(quantityMicros)), "Unit cost");
+}

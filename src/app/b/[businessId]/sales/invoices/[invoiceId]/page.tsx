@@ -3,13 +3,15 @@ import { Tag } from "lucide-react";
 import { notFound } from "next/navigation";
 import { NoticeToast } from "@/components/notice-toast";
 import { requireModule } from "@/core/permissions/require-module";
-import { formatDate, formatMoney } from "@/core/format";
+import { formatDate, formatMoney, getCurrencyMinorUnit } from "@/core/format";
 import { quantityMicrosToInput, rateBasisPointsToPercent } from "@/modules/accounting/calculations/money";
 import { getCustomFieldValuesForEntities, listCustomFieldDefinitions } from "@/modules/custom-fields/custom-field-service";
 import { formatCustomFieldValue } from "@/modules/custom-fields/custom-field-display";
 import { getInvoice } from "@/modules/sales-invoices/invoice-service";
 import { DocumentStatusBadge, PaymentStatusBadge } from "@/modules/sales-invoices/invoice-status";
 import { InvoiceViewActions } from "@/modules/sales-invoices/invoice-view-actions";
+import { getLatestApprovalForEntity } from "@/modules/approvals/approval-service";
+import { DocumentApprovalBanner } from "@/components/approvals/document-approval-banner";
 import { ProjectLinks } from "@/modules/projects/project-links";
 import { emirateLabels, type Emirate } from "@/modules/tax/uae-vat-config";
 import { buildDocumentEmailContext, buildDocumentEmailDefaults } from "@/modules/email/email-defaults";
@@ -20,9 +22,9 @@ import { ApplyCreditModal } from "@/modules/sales-invoices/apply-credit-modal";
 import { getDocumentViewData } from "@/modules/document-templates/document-data-extractor";
 import { DocumentViewLayout } from "@/modules/document-templates/components/document-view-layout";
 
-export default async function InvoiceViewPage({ params, searchParams }: { params: Promise<{ businessId: string; invoiceId: string }>; searchParams: Promise<{ notice?: string }> }) {
+export default async function InvoiceViewPage({ params, searchParams }: { params: Promise<{ businessId: string; invoiceId: string }>; searchParams: Promise<{ notice?: string; composeEmail?: string }> }) {
   const { businessId, invoiceId } = await params;
-  const { notice } = await searchParams;
+  const { notice, composeEmail } = await searchParams;
   const { user, access } = await requireModule(businessId, "sales");
   const record = getInvoice(businessId, user.id, invoiceId);
   if (!record) notFound();
@@ -165,7 +167,15 @@ export default async function InvoiceViewPage({ params, searchParams }: { params
             )}
           </div>
         </div>
-        <InvoiceViewActions businessId={businessId} invoiceId={invoice.id} invoiceNumber={invoice.invoiceNumber} documentStatus={invoice.documentStatus} balanceMinor={record.balanceMinor} totalMinor={invoice.totalMinor} hasDeliveryNotes={record.deliveryNotes.length > 0} journalEntryId={record.journal?.id ?? null} reversalJournalEntryId={record.reversalJournal?.id ?? null} inventoryEnabled={access.modules.includes("inventory")} hasDeliverableItems={lines.some((line) => Boolean(line.itemId) && line.remainingToDeliverMicros > 0)} emailDefaults={emailDefaults} />
+        <InvoiceViewActions businessId={businessId} invoiceId={invoice.id} invoiceNumber={invoice.invoiceNumber} documentStatus={invoice.documentStatus} balanceMinor={record.balanceMinor} totalMinor={invoice.totalMinor} hasDeliveryNotes={record.deliveryNotes.length > 0} journalEntryId={record.journal?.id ?? null} reversalJournalEntryId={record.reversalJournal?.id ?? null} inventoryEnabled={access.modules.includes("inventory")} hasDeliverableItems={lines.some((line) => Boolean(line.itemId) && line.remainingToDeliverMicros > 0)} emailDefaults={emailDefaults} autoOpenEmail={composeEmail === "1"} />
+      </div>
+      <div className="mb-5">
+        <DocumentApprovalBanner
+          businessId={businessId}
+          currentUserId={user.id}
+          isAdmin={access.membership.role === "administrator"}
+          approval={getLatestApprovalForEntity(businessId, user.id, "sales_invoice", invoice.id)}
+        />
       </div>
       <DocumentViewLayout
         data={viewBundle.data}
@@ -182,7 +192,7 @@ export default async function InvoiceViewPage({ params, searchParams }: { params
           invoiceNumber={invoice.invoiceNumber}
           balanceMinor={record.balanceMinor}
           currencyCode={currency}
-          minorUnit={2}
+          minorUnit={getCurrencyMinorUnit(currency)}
           availableCredits={availableCredits}
         />
       )}

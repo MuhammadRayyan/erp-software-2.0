@@ -11,6 +11,8 @@ import { getSalesQuote, listSalesQuotes } from "@/modules/sales-quotes/quote-ser
 import { SalesOrderForm } from "@/modules/sales-orders/sales-order-form";
 import { Breadcrumbs } from "@/components/breadcrumbs";
 import { getFormDefaults } from "@/modules/form-defaults/form-defaults-service";
+import { listCustomFieldDefinitions } from "@/modules/custom-fields/custom-field-service";
+import { getBusinessTodayIso } from "@/core/format";
 
 export default async function NewOrderPage({
   params,
@@ -34,8 +36,11 @@ export default async function NewOrderPage({
   const projects = listProjectOptions(businessId, user.id);
   const items = listInventoryItemOptions(businessId, user.id);
   const currencySettings = getCurrencySettings(businessId, user.id);
+  const lineCustomFields = listCustomFieldDefinitions(businessId, user.id, "sales_order_line").map(
+    ({ id, name, fieldType, selectOptions, isRequired }) => ({ id, name, fieldType, selectOptions, isRequired }),
+  );
 
-  const today = new Date().toISOString().slice(0, 10);
+  const today = getBusinessTodayIso();
   const defaultTax =
     (formDefaults.defaultTaxCodeId ? taxes.find((tax) => tax.id === formDefaults.defaultTaxCodeId)?.id : undefined) ??
     taxes.find((tax) => tax.rateBasisPoints === 500 && tax.vatCategory === "standard")?.id ??
@@ -95,9 +100,10 @@ export default async function NewOrderPage({
       </div>
       <SalesOrderForm
         businessId={businessId}
+        isPrefilled={Boolean(query.quoteId || query.customerId || query.projectId)}
         customers={customers.map(({ id, name, defaultCurrencyCode }) => ({ id, name, defaultCurrencyCode }))}
-        expenseAccounts={accounts.map(({ id, name }) => ({ id, name }))}
-        taxCodes={taxes.map(({ id, name, rateBasisPoints }) => ({ id, name, rateBasisPoints }))}
+        salesAccounts={accounts.map(({ id, name }) => ({ id, name }))}
+        taxCodes={taxes.map(({ id, name, rateBasisPoints, vatCategory }) => ({ id, name, rateBasisPoints, vatCategory }))}
         projects={projects}
         items={items.map(({ id, sku, name, salesPriceMinor, salesAccountId }) => ({
           id,
@@ -108,6 +114,7 @@ export default async function NewOrderPage({
         }))}
         quotes={quotes.map((q) => ({ id: q.id, quoteNumber: q.quote_number, customerId: q.customer_id, date: q.date }))}
         currency={access.business.currency}
+        lineCustomFields={lineCustomFields}
         currencies={currencySettings.currencies
           .filter((currency) => currency.is_active)
           .map((currency) => ({ code: currency.code, name: currency.name, minorUnit: currency.minor_unit }))}

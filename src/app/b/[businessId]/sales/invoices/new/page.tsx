@@ -17,6 +17,7 @@ import { listInventoryItemOptions } from "@/modules/inventory/inventory-item-ser
 import { getCurrencySettings } from "@/modules/currency/exchange-rate";
 import { getAllCustomersUnallocatedCredit } from "@/modules/receipts/receipt-service";
 import { Breadcrumbs } from "@/components/breadcrumbs";
+import { NoticeToast } from "@/components/notice-toast";
 import { getFormDefaults } from "@/modules/form-defaults/form-defaults-service";
 import { getTaxSettings } from "@/modules/tax/tax-settings-service";
 
@@ -25,7 +26,7 @@ export default async function NewInvoicePage({
   searchParams,
 }: {
   params: Promise<{ businessId: string }>;
-  searchParams: Promise<{ customerId?: string; projectId?: string; quoteId?: string; orderId?: string }>;
+  searchParams: Promise<{ customerId?: string; projectId?: string; quoteId?: string; orderId?: string; notice?: string; fresh?: string }>;
 }) {
   const { businessId } = await params;
   const query = await searchParams;
@@ -45,6 +46,15 @@ export default async function NewInvoicePage({
   const projects = listProjectOptions(businessId, user.id);
   const items = listInventoryItemOptions(businessId, user.id);
   const customFields = listCustomFieldDefinitions(businessId, user.id, "sales_invoice").map(
+    ({ id, name, fieldType, selectOptions, isRequired }) => ({
+      id,
+      name,
+      fieldType,
+      selectOptions,
+      isRequired,
+    }),
+  );
+  const lineCustomFields = listCustomFieldDefinitions(businessId, user.id, "sales_invoice_line").map(
     ({ id, name, fieldType, selectOptions, isRequired }) => ({
       id,
       name,
@@ -142,6 +152,7 @@ export default async function NewInvoicePage({
         ]}
       />
       <div className="mb-7">
+        <NoticeToast key={query.fresh ?? query.notice} message={query.notice} />
         <h1 className="page-title">New Sales Invoice</h1>
         <p className="page-description">
           Save a non-posting draft or post a balanced Accounts Receivable entry.
@@ -149,10 +160,12 @@ export default async function NewInvoicePage({
       </div>
       {ready ? (
         <InvoiceForm
+          key={query.fresh ?? "new"}
           businessId={businessId}
+          isPrefilled={Boolean(query.quoteId || query.orderId || query.customerId || query.projectId)}
           customers={customers as any}
           salesAccounts={salesAccounts.map(({ id, name }) => ({ id, name }))}
-          taxCodes={taxCodes.map(({ id, name, rateBasisPoints }) => ({ id, name, rateBasisPoints }))}
+          taxCodes={taxCodes.map(({ id, name, rateBasisPoints, vatCategory }) => ({ id, name, rateBasisPoints, vatCategory }))}
           projects={projects.map((project) => ({
             id: project.id,
             code: project.code,
@@ -169,6 +182,7 @@ export default async function NewInvoicePage({
           orders={orders.map((o) => ({ id: o.id, orderNumber: o.order_number, customerId: o.customer_id, date: o.date }))}
           quotes={quotes.map((q) => ({ id: q.id, quoteNumber: q.quote_number, customerId: q.customer_id, date: q.date }))}
           customFields={customFields}
+          lineCustomFields={lineCustomFields}
           currency={access.business.currency}
           currencies={currencySettings.currencies
             .filter((entry) => entry.is_active)

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import {
   DialogRoot,
@@ -11,12 +11,16 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { FormError } from "@/components/form-error";
+import { getCurrencyMinorUnit, minorToDecimalString } from "@/core/format";
+import { parseCurrencyAmountToMinor } from "@/modules/currency/conversion";
 import { type EmployeeRecord } from "@/modules/payroll/services/payroll-service";
 import { saveEmployeeAction } from "@/modules/payroll/actions/payroll-actions";
 
 interface EmployeeDialogProps {
   businessId: string;
   employee?: EmployeeRecord | null;
+  currency?: string;
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onSaved?: () => void;
@@ -25,57 +29,107 @@ interface EmployeeDialogProps {
 export function EmployeeDialog({
   businessId,
   employee,
+  currency = "AED",
   open,
   onOpenChange,
   onSaved,
 }: EmployeeDialogProps) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
 
   const isEdit = Boolean(employee?.id);
+  const minorUnit = getCurrencyMinorUnit(currency);
+  const amountStep = minorUnit === 0 ? "1" : minorUnit === 3 ? "0.001" : "0.01";
+  const amountPlaceholder = minorToDecimalString(0, currency);
 
-  // Salary amounts in minor units (fils) converted to major units (AED)
-  const basicAED = employee?.basicSalaryMinor ? (employee.basicSalaryMinor / 100).toFixed(2) : "";
-  const housingAED = employee?.housingAllowanceMinor ? (employee.housingAllowanceMinor / 100).toFixed(2) : "";
-  const transportAED = employee?.transportAllowanceMinor ? (employee.transportAllowanceMinor / 100).toFixed(2) : "";
-  const otherAED = employee?.otherAllowancesMinor ? (employee.otherAllowancesMinor / 100).toFixed(2) : "";
+  useEffect(() => {
+    if (open) {
+      setError(null);
+      setFieldErrors({});
+    }
+  }, [open, employee?.id]);
+
+  // Salary amounts in minor units converted to business currency display string
+  const basicAED = employee?.basicSalaryMinor ? minorToDecimalString(employee.basicSalaryMinor, currency) : "";
+  const housingAED = employee?.housingAllowanceMinor ? minorToDecimalString(employee.housingAllowanceMinor, currency) : "";
+  const transportAED = employee?.transportAllowanceMinor ? minorToDecimalString(employee.transportAllowanceMinor, currency) : "";
+  const otherAED = employee?.otherAllowancesMinor ? minorToDecimalString(employee.otherAllowancesMinor, currency) : "";
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setError(null);
-    setLoading(true);
+    setFieldErrors({});
 
     const formData = new FormData(e.currentTarget);
-    const basicVal = formData.get("basicSalary")?.toString().trim();
-    const housingVal = formData.get("housingAllowance")?.toString().trim();
-    const transportVal = formData.get("transportAllowance")?.toString().trim();
-    const otherVal = formData.get("otherAllowances")?.toString().trim();
+    const trimmedName = formData.get("name")?.toString().trim() || "";
+    const emailVal = formData.get("email")?.toString().trim() || "";
+    const basicVal = formData.get("basicSalary")?.toString().trim() || "";
+    const housingVal = formData.get("housingAllowance")?.toString().trim() || "";
+    const transportVal = formData.get("transportAllowance")?.toString().trim() || "";
+    const otherVal = formData.get("otherAllowances")?.toString().trim() || "";
 
-    const parseAEDToMinor = (val?: string) => {
+    const nextFieldErrors: Record<string, string> = {};
+    if (!trimmedName) {
+      nextFieldErrors.name = "Employee full name is required.";
+    }
+    if (emailVal && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailVal)) {
+      nextFieldErrors.email = "Invalid email address.";
+    }
+
+    const parseAmountField = (val: string, fieldKey: string, label: string) => {
       if (!val) return 0;
-      const num = parseFloat(val);
-      return isNaN(num) ? 0 : Math.round(num * 100);
+      try {
+        return parseCurrencyAmountToMinor(val, minorUnit, label);
+      } catch (err) {
+        nextFieldErrors[fieldKey] =
+          err instanceof Error ? err.message : `${label} must be a valid non-negative amount.`;
+        return 0;
+      }
     };
+
+    const basicSalaryMinor = parseAmountField(basicVal, "basicSalaryMinor", "Basic salary");
+    const housingAllowanceMinor = parseAmountField(housingVal, "housingAllowanceMinor", "Housing allowance");
+    const transportAllowanceMinor = parseAmountField(transportVal, "transportAllowanceMinor", "Transport allowance");
+    const otherAllowancesMinor = parseAmountField(otherVal, "otherAllowancesMinor", "Other allowances");
+
+    if (Object.keys(nextFieldErrors).length > 0) {
+      setFieldErrors(nextFieldErrors);
+      return;
+    }
+
+    setLoading(true);
 
     const payload = {
       id: employee?.id,
-      name: formData.get("name")?.toString().trim() || "",
+      name: trimmedName,
       code: formData.get("code")?.toString().trim() || null,
       designation: formData.get("designation")?.toString().trim() || null,
       department: formData.get("department")?.toString().trim() || null,
       joiningDate: formData.get("joiningDate")?.toString().trim() || null,
-      email: formData.get("email")?.toString().trim() || null,
+      email: emailVal || null,
       phone: formData.get("phone")?.toString().trim() || null,
       address: formData.get("address")?.toString().trim() || null,
-      basicSalaryMinor: parseAEDToMinor(basicVal),
-      housingAllowanceMinor: parseAEDToMinor(housingVal),
-      transportAllowanceMinor: parseAEDToMinor(transportVal),
-      otherAllowancesMinor: parseAEDToMinor(otherVal),
+      basicSalaryMinor,
+      housingAllowanceMinor,
+      transportAllowanceMinor,
+      otherAllowancesMinor,
+      molPersonId: formData.get("molPersonId")?.toString().trim() || null,
+      bankRoutingCode: formData.get("bankRoutingCode")?.toString().trim() || null,
+      iban: formData.get("iban")?.toString().replace(/\s+/g, "").toUpperCase() || null,
+      wpsEnabled: formData.get("wpsEnabled") === "on",
       isActive: formData.get("isActive") === "on",
     };
 
     try {
       const res = await saveEmployeeAction(businessId, payload);
+      if (res.fieldErrors) {
+        const mapped: Record<string, string> = {};
+        for (const [k, msgs] of Object.entries(res.fieldErrors)) {
+          if (msgs?.[0]) mapped[k] = msgs[0];
+        }
+        setFieldErrors(mapped);
+      }
       if (res.error) {
         setError(res.error);
         toast.error(res.error);
@@ -103,12 +157,12 @@ export function EmployeeDialog({
         </DialogDescription>
 
         {error && (
-          <div className="mt-3 p-3 text-sm rounded bg-danger/10 border border-danger/30 text-danger">
-            {error}
+          <div className="mt-3">
+            <FormError message={error} />
           </div>
         )}
 
-        <form onSubmit={handleSubmit} className="mt-4 space-y-4">
+        <form key={`${employee?.id ?? "new"}-${open}`} onSubmit={handleSubmit} className="mt-4 space-y-4" noValidate>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="space-y-1.5 sm:col-span-2">
               <Label htmlFor="name">Full Name *</Label>
@@ -118,7 +172,10 @@ export function EmployeeDialog({
                 defaultValue={employee?.name || ""}
                 placeholder="e.g. Mohammed Salem"
                 required
+                aria-invalid={!!fieldErrors.name}
+                onChange={() => fieldErrors.name && setFieldErrors((p) => { const n = { ...p }; delete n.name; return n; })}
               />
+              {fieldErrors.name && <p className="field-error">{fieldErrors.name}</p>}
             </div>
 
             <div className="space-y-1.5">
@@ -169,7 +226,10 @@ export function EmployeeDialog({
                 type="email"
                 defaultValue={employee?.email || ""}
                 placeholder="employee@company.ae"
+                aria-invalid={!!fieldErrors.email}
+                onChange={() => fieldErrors.email && setFieldErrors((p) => { const n = { ...p }; delete n.email; return n; })}
               />
+              {fieldErrors.email && <p className="field-error">{fieldErrors.email}</p>}
             </div>
 
             <div className="space-y-1.5">
@@ -196,61 +256,119 @@ export function EmployeeDialog({
           <div className="pt-2 border-t border-border">
             <h4 className="text-sm font-medium text-foreground mb-1">Standard Monthly Salary Structure</h4>
             <p className="text-xs text-muted-foreground mb-3">
-              Standard monthly amounts in AED used for 1-click batch pay runs and EOSB computations.
+              Standard monthly amounts in {currency} used for 1-click batch pay runs and EOSB computations.
             </p>
 
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
               <div className="space-y-1.5">
-                <Label htmlFor="basicSalary" className="text-xs">Basic Salary (AED)</Label>
+                <Label htmlFor="basicSalary" className="text-xs">Basic Salary ({currency})</Label>
                 <Input
                   id="basicSalary"
                   name="basicSalary"
                   type="number"
-                  step="0.01"
+                  step={amountStep}
                   min="0"
                   defaultValue={basicAED}
-                  placeholder="0.00"
+                  placeholder={amountPlaceholder}
+                  aria-invalid={!!fieldErrors.basicSalaryMinor}
                 />
+                {fieldErrors.basicSalaryMinor && <p className="field-error">{fieldErrors.basicSalaryMinor}</p>}
               </div>
 
               <div className="space-y-1.5">
-                <Label htmlFor="housingAllowance" className="text-xs">Housing (AED)</Label>
+                <Label htmlFor="housingAllowance" className="text-xs">Housing ({currency})</Label>
                 <Input
                   id="housingAllowance"
                   name="housingAllowance"
                   type="number"
-                  step="0.01"
+                  step={amountStep}
                   min="0"
                   defaultValue={housingAED}
-                  placeholder="0.00"
+                  placeholder={amountPlaceholder}
+                  aria-invalid={!!fieldErrors.housingAllowanceMinor}
                 />
+                {fieldErrors.housingAllowanceMinor && <p className="field-error">{fieldErrors.housingAllowanceMinor}</p>}
               </div>
 
               <div className="space-y-1.5">
-                <Label htmlFor="transportAllowance" className="text-xs">Transport (AED)</Label>
+                <Label htmlFor="transportAllowance" className="text-xs">Transport ({currency})</Label>
                 <Input
                   id="transportAllowance"
                   name="transportAllowance"
                   type="number"
-                  step="0.01"
+                  step={amountStep}
                   min="0"
                   defaultValue={transportAED}
-                  placeholder="0.00"
+                  placeholder={amountPlaceholder}
+                  aria-invalid={!!fieldErrors.transportAllowanceMinor}
                 />
+                {fieldErrors.transportAllowanceMinor && <p className="field-error">{fieldErrors.transportAllowanceMinor}</p>}
               </div>
 
               <div className="space-y-1.5">
-                <Label htmlFor="otherAllowances" className="text-xs">Other (AED)</Label>
+                <Label htmlFor="otherAllowances" className="text-xs">Other ({currency})</Label>
                 <Input
                   id="otherAllowances"
                   name="otherAllowances"
                   type="number"
-                  step="0.01"
+                  step={amountStep}
                   min="0"
                   defaultValue={otherAED}
-                  placeholder="0.00"
+                  placeholder={amountPlaceholder}
+                  aria-invalid={!!fieldErrors.otherAllowancesMinor}
+                />
+                {fieldErrors.otherAllowancesMinor && <p className="field-error">{fieldErrors.otherAllowancesMinor}</p>}
+              </div>
+            </div>
+          </div>
+
+          <div className="pt-2 border-t border-border space-y-3">
+            <div>
+              <h4 className="text-sm font-medium text-foreground">UAE WPS Banking Details</h4>
+              <p className="text-xs text-muted-foreground">
+                Used when generating Central Bank / MOHRE Wage Protection System (.SIF) files.
+              </p>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <div className="space-y-1.5">
+                <Label htmlFor="molPersonId" className="text-xs">MOL / Labour Card ID (14 digits)</Label>
+                <Input
+                  id="molPersonId"
+                  name="molPersonId"
+                  defaultValue={employee?.molPersonId || ""}
+                  placeholder="14-digit Person ID"
                 />
               </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="bankRoutingCode" className="text-xs">Bank Routing Code (9 digits)</Label>
+                <Input
+                  id="bankRoutingCode"
+                  name="bankRoutingCode"
+                  defaultValue={employee?.bankRoutingCode || ""}
+                  placeholder="e.g. 303100001"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="iban" className="text-xs">Employee IBAN (AE + 21 digits)</Label>
+                <Input
+                  id="iban"
+                  name="iban"
+                  defaultValue={employee?.iban || ""}
+                  placeholder="AE070331234567890123456"
+                />
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              <input
+                type="checkbox"
+                id="wpsEnabled"
+                name="wpsEnabled"
+                defaultChecked={employee ? employee.wpsEnabled : true}
+                className="rounded border-border text-primary focus:ring-primary size-4"
+              />
+              <Label htmlFor="wpsEnabled" className="cursor-pointer text-xs text-muted-foreground">
+                Include employee in WPS (.SIF) salary transfers
+              </Label>
             </div>
           </div>
 
@@ -276,7 +394,7 @@ export function EmployeeDialog({
             >
               Cancel
             </Button>
-            <Button permission={"save"} type="submit" disabled={loading}>
+            <Button permission={isEdit ? "edit" : "create"} type="submit" disabled={loading}>
               {loading ? "Saving..." : isEdit ? "Update Employee" : "Create Employee"}
             </Button>
           </div>

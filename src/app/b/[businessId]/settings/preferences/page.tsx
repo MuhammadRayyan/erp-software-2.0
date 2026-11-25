@@ -1,5 +1,6 @@
-import { getCurrentSession } from "@/core/auth/session";
-import { requireModule } from "@/core/permissions/require-module";
+import { notFound } from "next/navigation";
+import { requireUser } from "@/core/auth/session";
+import { getBusinessForUser } from "@/core/businesses/business-service";
 import { listPreferences } from "@/modules/preferences/preference-service";
 import { PreferencesResetCard } from "@/modules/preferences/preferences-reset-card";
 import { SettingsShell } from "@/components/settings-shell";
@@ -17,11 +18,14 @@ export const metadata = { title: "Display preferences" };
  */
 export default async function PreferencesSettingsPage({ params }: { params: Promise<{ businessId: string }> }) {
   const { businessId } = await params;
-  await requireModule(businessId, "settings");
+  const user = await requireUser();
+  const access = getBusinessForUser(businessId, user.id);
+  if (!access) notFound();
 
-  const session = await getCurrentSession();
-  const preferences = session?.user ? listPreferences(businessId, session.user.id) : {};
-  const entries = Object.entries(preferences).sort(([a], [b]) => a.localeCompare(b));
+  const preferences = listPreferences(businessId, user.id);
+  const entries = Object.entries(preferences)
+    .filter(([key]) => key !== "business.pinned")
+    .sort(([a], [b]) => a.localeCompare(b));
   const decoded = entries.map(([key, value]) => {
     if (!key.startsWith("cols.")) return { key, value, decoded: null };
     try {
@@ -53,7 +57,7 @@ export default async function PreferencesSettingsPage({ params }: { params: Prom
                 <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
                   <code className="text-[12px] font-medium text-foreground">{entry.key}</code>
                   {entry.decoded ? (
-                    <code className="text-[11px] text-muted-foreground">{Object.keys(entry.decoded).length} hidden flag(s)</code>
+                    <code className="text-[11px] text-muted-foreground">{Object.values(entry.decoded).filter((v) => v === false).length} hidden column(s)</code>
                   ) : (
                     <code className="text-[11px] text-muted-foreground truncate max-w-[60%]">{entry.value}</code>
                   )}

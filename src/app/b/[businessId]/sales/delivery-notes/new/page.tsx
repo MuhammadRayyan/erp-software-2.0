@@ -10,6 +10,8 @@ import { getDefaultInventoryLocation, listInventoryLocations } from "@/modules/i
 import { listProjectOptions } from "@/modules/projects/project-service";
 import { listInvoices } from "@/modules/sales-invoices/invoice-service";
 import { getSalesOrder } from "@/modules/sales-orders/sales-order-service";
+import { getFormDefaults } from "@/modules/form-defaults/form-defaults-service";
+import { getBusinessTodayIso } from "@/core/format";
 
 export default async function NewDeliveryNotePage({
   params,
@@ -21,6 +23,7 @@ export default async function NewDeliveryNotePage({
   const { businessId } = await params;
   const query = await searchParams;
   const { user } = await requireModule(businessId, "inventory");
+  const formDefaults = getFormDefaults(businessId, user.id, "delivery-note");
 
   const items = listInventoryItemOptions(businessId, user.id);
   const locations = listInventoryLocations(businessId, user.id, true);
@@ -106,11 +109,11 @@ export default async function NewDeliveryNotePage({
         initial={{
           customerId,
           salesInvoiceId: query.invoiceId ?? "",
-          date: new Date().toISOString().slice(0, 10),
+          date: getBusinessTodayIso(),
           locationId: defaultLocation?.id ?? "",
           reference,
           projectId,
-          notes: "",
+          notes: formDefaults.defaultNotes ?? "",
           lines,
         }}
       />

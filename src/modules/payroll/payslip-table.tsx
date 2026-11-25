@@ -1,25 +1,32 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import type { RowSelectionState } from "@tanstack/react-table";
+import { BatchDocumentActions } from "@/components/batch/batch-document-actions";
+import { selectionColumn } from "@/components/batch/selection-column";
+import { batchPostPayslipsAction, batchVoidPayslipsAction } from "@/modules/payroll/actions/payroll-actions";
 import Link from "next/link";
-import { Plus, Play, MoreHorizontal, ChevronRight, Eye, FileEdit } from "lucide-react";
+import { FileEdit } from "lucide-react";
+import { useActionPermission } from "@/components/permissions-provider";
 import { 
   useLegacyTable as useTable,
   getCoreRowModel as createCoreRowModel,
+  getPaginationRowModel as createPaginationRowModel,
   getSortedRowModel as createSortedRowModel
 } from "@tanstack/react-table/legacy";
-import { type SortingState } from "@tanstack/react-table";
 import { Button } from "@/components/ui/button";
 import { StatusBadge } from "@/components/status-badge";
-import { ListToolbar, SearchInput, ToolbarSelect, ActiveFiltersRow, FilterChip } from "@/components/list-toolbar";
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
-import { DataTable } from "@/components/ui/data-table";
+import { ListToolbar, SearchInput, ToolbarSelect, DateRangeFilter, ActiveFiltersRow, FilterChip } from "@/components/list-toolbar";
+import { DataTable, ListTableCard } from "@/components/ui/data-table";
+import { ClientListPagination } from "@/components/list-pagination";
+import { ExportCsvButton } from "@/components/export-csv-button";
+import { useUrlListState } from "@/hooks/use-url-list-state";
 import { DensityToggle } from "@/components/density-toggle";
 import { useTableDensity } from "@/components/use-table-density";
 import { useColumns } from "@/components/columns-dropdown";
 import { type ColumnVisibility } from "@/components/use-column-visibility";
 import { TableTotalsBar } from "@/components/table-totals-bar";
-import { formatDate, formatMoney } from "@/core/format";
+import { formatDate, formatMoney, getBusinessTodayIso, minorToDecimalString } from "@/core/format";
 import { type PayslipRecord } from "@/modules/payroll/services/payroll-service";
 
 interface PayslipTableProps {
@@ -27,7 +34,6 @@ interface PayslipTableProps {
   payslips: PayslipRecord[];
   currency?: string;
   serverSnapshot?: ColumnVisibility;
-  onOpenPayRun: () => void;
 }
 
 const columnLabels: Record<string, string> = {
@@ -44,12 +50,22 @@ export function PayslipTable({
   payslips,
   currency = "AED",
   serverSnapshot,
-  onOpenPayRun,
 }: PayslipTableProps) {
   const { density } = useTableDensity(businessId);
-  const [query, setQuery] = useState("");
-  const [statusFilter, setStatusFilter] = useState<string>("all");
-  const [sorting, setSorting] = useState<SortingState>([{ id: "date", desc: true }]);
+  const canEdit = useActionPermission("edit");
+  const {
+    query,
+    status: statusFilter,
+    fromDate,
+    toDate,
+    sorting,
+    setFilter,
+    setPage,
+    setPageSize,
+    onSortingChange,
+    resetFilters,
+    buildPagination,
+  } = useUrlListState({ defaultSort: "date", defaultDir: "desc" });
 
   const initialColumns = useMemo(
     () => ({
@@ -73,7 +89,9 @@ export function PayslipTable({
 
   const filteredRows = useMemo(() => {
     return payslips.filter((p) => {
-      if (statusFilter !== "all" && p.documentStatus !== statusFilter) return false;
+      if (statusFilter && p.documentStatus !== statusFilter) return false;
+      if (fromDate && p.date < fromDate) return false;
+      if (toDate && p.date > toDate) return false;
 
       if (!query.trim()) return true;
       const term = query.toLowerCase().trim();
@@ -85,9 +103,21 @@ export function PayslipTable({
         (p.employeeDepartment && p.employeeDepartment.toLowerCase().includes(term))
       );
     });
-  }, [payslips, query, statusFilter]);
+  }, [payslips, query, statusFilter, fromDate, toDate]);
+
+  const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
+  const exportColumns = useMemo(() => [
+    { header: "Payslip #", accessorKey: "payslipNumber" as const },
+    { header: "Employee", accessorKey: "employeeName" as const },
+    { header: "Date", accessorKey: "date" as const },
+    { header: "Gross", accessorFn: (r: PayslipRecord) => minorToDecimalString(Number(r.grossAmountMinor || 0), currency) },
+    { header: "Deductions", accessorFn: (r: PayslipRecord) => minorToDecimalString(Number(r.deductionsMinor || 0), currency) },
+    { header: "Net Pay", accessorFn: (r: PayslipRecord) => minorToDecimalString(Number(r.netAmountMinor || 0), currency) },
+    { header: "Status", accessorKey: "documentStatus" as const },
+  ], [currency]);
 
   const columns: any[] = useMemo(() => [
+    selectionColumn<PayslipRecord>((slip) => `payslip ${slip.payslipNumber}`),
     {
       accessorKey: "payslipNumber",
       header: "Payslip #",
@@ -174,84 +204,65 @@ export function PayslipTable({
     {
       id: "actions",
       header: () => <span className="sr-only">Actions</span>,
-      meta: { className: "w-16 text-right" },
+      meta: { className: "w-12 text-right" },
       enableSorting: false,
       enableHiding: false,
       cell: ({ row }: any) => {
         const slip = row.original;
+        if (slip.documentStatus !== "draft" || !canEdit) return null;
         return (
           <div className="flex items-center justify-end gap-1">
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="size-7 text-muted-foreground hover:text-foreground"
-                  aria-label={`Actions for ${slip.payslipNumber}`}
-                >
-                  <MoreHorizontal className="size-4" />
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-48">
-                <DropdownMenuItem asChild>
-                  <Link href={`/b/${businessId}/payroll/payslips/${slip.id}`}>
-                    <Eye className="size-4 text-muted-foreground" /> View Details
-                  </Link>
-                </DropdownMenuItem>
-                {slip.documentStatus === "draft" && (
-                  <DropdownMenuItem permission="edit" asChild>
-                    <Link href={`/b/${businessId}/payroll/payslips/${slip.id}/edit`}>
-                      <FileEdit className="size-4 text-muted-foreground" /> Edit Draft
-                    </Link>
-                  </DropdownMenuItem>
-                )}
-              </DropdownMenuContent>
-            </DropdownMenu>
             <Button
+              permission="edit"
               asChild
               variant="ghost"
               size="icon"
-              className="size-7 text-muted-foreground opacity-50 transition-opacity md:opacity-0 md:group-hover:opacity-100"
+              className="size-7 text-muted-foreground hover:text-foreground"
             >
-              <Link href={`/b/${businessId}/payroll/payslips/${slip.id}`} aria-label={`Open ${slip.payslipNumber}`}>
-                <ChevronRight className="size-4" />
+              <Link href={`/b/${businessId}/payroll/payslips/${slip.id}/edit`} aria-label={`Edit ${slip.payslipNumber}`}>
+                <FileEdit className="size-4" />
               </Link>
             </Button>
           </div>
         );
       },
     },
-  ], [businessId, currency]);
+  ], [businessId, canEdit, currency]);
+
+  const { pagination, paginationInfo } = buildPagination(filteredRows.length);
 
   const table = useTable({
     data: filteredRows,
     columns,
+    getRowId: (row: PayslipRecord) => row.id,
+    enableRowSelection: true,
+    onRowSelectionChange: setRowSelection,
     state: {
       sorting,
+      pagination,
       columnVisibility: colVisibility,
+      rowSelection,
     },
-    onSortingChange: setSorting,
+    onSortingChange,
     getCoreRowModel: createCoreRowModel(),
     getSortedRowModel: createSortedRowModel(),
+    getPaginationRowModel: createPaginationRowModel(),
   });
 
-  const clearFilters = () => {
-    setQuery("");
-    setStatusFilter("all");
-  };
+  const clearFilters = resetFilters;
 
-  const hasActiveFilter = Boolean(query || statusFilter !== "all");
+  const hasActiveFilter = Boolean(query || statusFilter || fromDate || toDate);
 
   const totalGross = useMemo(() => {
-    return filteredRows.reduce((sum, p) => sum + (p.grossAmountMinor ?? 0), 0);
+    return filteredRows.filter((p) => p.documentStatus !== "void").reduce((sum, p) => sum + (p.grossAmountMinor ?? 0), 0);
   }, [filteredRows]);
 
   const totalDeductions = useMemo(() => {
-    return filteredRows.reduce((sum, p) => sum + (p.deductionsMinor ?? 0), 0);
+    return filteredRows.filter((p) => p.documentStatus !== "void").reduce((sum, p) => sum + (p.deductionsMinor ?? 0), 0);
   }, [filteredRows]);
 
   const totalNet = useMemo(() => {
-    return filteredRows.reduce((sum, p) => sum + (p.netAmountMinor ?? 0), 0);
+    return filteredRows.filter((p) => p.documentStatus !== "void").reduce((sum, p) => sum + (p.netAmountMinor ?? 0), 0);
   }, [filteredRows]);
 
   return (
@@ -259,71 +270,98 @@ export function PayslipTable({
       <ListToolbar>
         <SearchInput
           value={query}
-          onChange={setQuery}
+          onChange={(val) => setFilter("q", val)}
           placeholder="Search payslip #, employee, period..."
           ariaLabel="Search payslips"
         />
+        <DateRangeFilter
+          fromDate={fromDate}
+          toDate={toDate}
+          onFromChange={(val) => setFilter("from", val)}
+          onToChange={(val) => setFilter("to", val)}
+          fromAriaLabel="Payslip date from"
+          toAriaLabel="Payslip date to"
+        />
         <ToolbarSelect
           value={statusFilter}
-          onChange={setStatusFilter}
+          onChange={(val) => setFilter("status", val)}
           ariaLabel="Filter by status"
           options={[
-            { value: "all", label: "All Statuses" },
-            { value: "posted", label: "Posted Only" },
-            { value: "draft", label: "Draft Only" },
-            { value: "void", label: "Void Only" },
+            { value: "", label: "All statuses" },
+            { value: "posted", label: "Posted" },
+            { value: "draft", label: "Draft" },
+            { value: "void", label: "Void" },
           ]}
         />
         <div className="ml-auto flex items-center gap-1.5 shrink-0">
+          <ExportCsvButton
+            size="sm"
+            filename={`payslips-${getBusinessTodayIso()}.csv`}
+            data={filteredRows}
+            columns={exportColumns}
+          />
           <DensityToggle businessId={businessId} />
           {dropdown}
-          <Button
-            variant="secondary"
-            onClick={onOpenPayRun}
-            className="h-9"
-          >
-            <Play className="size-3.5 mr-1.5 text-primary" /> Generate Pay Run
-          </Button>
-          <Button permission="create" asChild className="h-9">
-            <Link href={`/b/${businessId}/payroll/payslips/new`}>
-              <Plus className="size-4 mr-1.5" /> New Payslip
-            </Link>
-          </Button>
         </div>
       </ListToolbar>
 
       {hasActiveFilter && (
         <ActiveFiltersRow onClearAll={clearFilters}>
-          {statusFilter !== "all" && (
-            <FilterChip onRemove={() => setStatusFilter("all")}>
+          {fromDate && <FilterChip onRemove={() => setFilter("from", "")}>From: {formatDate(fromDate)}</FilterChip>}
+          {toDate && <FilterChip onRemove={() => setFilter("to", "")}>To: {formatDate(toDate)}</FilterChip>}
+          {statusFilter && (
+            <FilterChip onRemove={() => setFilter("status", "")}>
               Status: {statusFilter.charAt(0).toUpperCase() + statusFilter.slice(1)}
             </FilterChip>
           )}
-          {query && <FilterChip onRemove={() => setQuery("")}>Search: {query}</FilterChip>}
+          {query && <FilterChip onRemove={() => setFilter("q", "")}>Search: {query}</FilterChip>}
         </ActiveFiltersRow>
       )}
 
-      <DataTable
-        table={table}
-        density={density}
-        minWidth="min-w-[850px]"
-        noResultsMessage="No payslips match these filters"
-        noResultsSubtext="Create your first payslip or click 'Generate Pay Run'."
-        onClearFilters={clearFilters}
-      />
-
-      {filteredRows.length > 0 && (
-        <TableTotalsBar
-          filteredCount={filteredRows.length}
-          totalCount={payslips.length}
-          itemLabel="payslips"
-          metrics={[
-            { label: "Total Gross", value: formatMoney(totalGross, currency) },
-            { label: "Total Deductions", value: totalDeductions > 0 ? `-${formatMoney(totalDeductions, currency)}` : `0.00 ${currency}` },
-            { label: "Net Payable", value: formatMoney(totalNet, currency), tone: "primary" },
-          ]}
+      <ListTableCard>
+        <DataTable
+          table={table}
+          density={density}
+          framed={false}
+          minWidth="min-w-[850px]"
+          noResultsMessage="No payslips match these filters"
+          noResultsSubtext="Create your first payslip or click 'Generate Pay Run'."
+          onClearFilters={clearFilters}
+          getRowHref={(row: PayslipRecord) => `/b/${businessId}/payroll/payslips/${row.id}`}
         />
-      )}
+
+        {filteredRows.length > 0 && (
+          <TableTotalsBar
+            filteredCount={filteredRows.length}
+            totalCount={payslips.length}
+            itemLabel="payslips"
+            metrics={[
+              { label: "Total Gross", value: formatMoney(totalGross, currency) },
+              { label: "Total Deductions", value: totalDeductions > 0 ? `-${formatMoney(totalDeductions, currency)}` : formatMoney(0, currency) },
+              { label: "Net Payable", value: formatMoney(totalNet, currency), tone: "primary" },
+            ]}
+          />
+        )}
+        <ClientListPagination
+          info={paginationInfo}
+          onPageChange={setPage}
+          onPageSizeChange={setPageSize}
+        />
+      </ListTableCard>
+      <BatchDocumentActions
+        selected={filteredRows.filter((row) => rowSelection[row.id])}
+        totalCount={filteredRows.length}
+        noun={{ one: "payslip", many: "payslips" }}
+        statusOf={(row) => row.documentStatus}
+        onClear={() => setRowSelection({})}
+        onSelectAll={() => table.toggleAllRowsSelected(true)}
+        exportConfig={{ filename: "payslips", columns: exportColumns }}
+        post={{ label: "Post drafts", action: (ids) => batchPostPayslipsAction(businessId, ids) }}
+        voidAction={{
+          action: (ids) => batchVoidPayslipsAction(businessId, ids),
+          description: "Each posted payslip's journal is reversed. Payslips already included in a paid WPS run should be corrected with a new payslip instead.",
+        }}
+      />
     </>
   );
 }

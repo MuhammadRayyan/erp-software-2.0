@@ -1,7 +1,8 @@
 import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 import { cookies } from "next/headers";
-import { Toaster } from "sonner";
+import { ThemedToaster } from "@/components/ui/themed-toaster";
+import { NuqsAdapter } from "nuqs/adapters/next/app";
 import { ThemeProvider } from "@/core/theme/theme-provider";
 import { getCurrentSession } from "@/core/auth/session";
 import { getSystemDb } from "@/core/db/system";
@@ -78,10 +79,12 @@ export default async function RootLayout({ children }: Readonly<{ children: Reac
         <link rel="stylesheet" href="/fonts/fonts.css" />
       </head>
       <body style={{ fontFamily }}>
-        <ThemeProvider>
-          {children}
-          <Toaster richColors closeButton position="bottom-right" />
-        </ThemeProvider>
+        <NuqsAdapter>
+          <ThemeProvider>
+            {children}
+            <ThemedToaster />
+          </ThemeProvider>
+        </NuqsAdapter>
       </body>
     </html>
   );

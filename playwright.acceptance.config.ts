@@ -3,7 +3,7 @@ import hardening from "./playwright.hardening.config";
 
 export default defineConfig({
   ...hardening,
-  testMatch: ["hardening.spec.ts", "acceptance.spec.ts"],
+  testMatch: ["hardening.spec.ts", "acceptance.spec.ts", "pillars.spec.ts"],
   timeout: 90_000,
   use: { ...hardening.use, actionTimeout: 20_000 },
   outputDir: "test-results/acceptance/browser",

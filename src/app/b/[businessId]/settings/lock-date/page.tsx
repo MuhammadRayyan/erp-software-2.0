@@ -17,9 +17,13 @@ export default async function FinancialLockDatePage({
 
   if (access.membership.role !== "administrator") {
     return (
-      <div className="page-container">
+      <SettingsShell
+        businessId={businessId}
+        title="Financial Lock Date"
+        description="Close accounting periods to prevent unauthorized or accidental modifications to finalized books."
+      >
         <p className="text-muted-foreground text-sm">Administrator access is required to modify financial lock dates.</p>
-      </div>
+      </SettingsShell>
     );
   }
 

@@ -1,20 +1,28 @@
 import { assertActiveUser } from "@/core/auth/active-user";
 import { assertBusinessAdministrator } from "@/core/permissions/mutation-permissions";
 import { createHash, randomUUID } from "node:crypto";
-import { mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import { createReadStream, existsSync, mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import Database from "better-sqlite3";
 import { eq } from "drizzle-orm";
 import JSZip from "jszip";
 import { z } from "zod";
+import { collectStreamToBuffer, createStreamingZipStream } from "@/lib/streaming-zip";
 import { closeBusinessConnection, getBusinessDb, openBusinessDatabase } from "@/core/db/business";
 import { detectAndValidateBusinessBaseline } from "@/core/db/migrations/business-baseline";
 import { sqliteTableExists, validateSqliteSchema } from "@/core/db/migrations/schema-validation";
 import { getBusinessPaths } from "@/core/db/paths";
+import { enforceReferenceSchemaObjects } from "@/core/db/schema-objects";
 import { businesses, memberships } from "@/core/db/system-schema";
 import { getSystemDb } from "@/core/db/system";
 import { getBusinessForUser } from "./business-service";
+import {
+  BACKUP_ZIP_LIMITS,
+  assertZipWithinDeclaredLimits,
+  createZipBudget,
+  readZipEntryLimited,
+} from "./zip-limits";
 
 const legacyManifestSchema = z.object({
   formatVersion: z.literal(1),
@@ -50,35 +58,76 @@ function checksum(data: Buffer | Uint8Array) {
   return createHash("sha256").update(data).digest("hex");
 }
 
-function addAttachments(zip: JSZip, root: string, current = root) {
-  for (const entry of readdirSync(current, { withFileTypes: true })) {
-    const fullPath = path.join(current, entry.name);
-    if (entry.isDirectory()) addAttachments(zip, root, fullPath);
-    else if (entry.isFile()) zip.file(`attachments/${path.relative(root, fullPath).replaceAll("\\", "/")}`, readFileSync(fullPath));
-  }
+function checksumFile(filePath: string): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const hash = createHash("sha256");
+    const stream = createReadStream(filePath);
+    stream.on("data", (chunk) => hash.update(chunk));
+    stream.once("end", () => resolve(hash.digest("hex")));
+    stream.once("error", reject);
+  });
 }
 
-export async function exportBusinessBackup(businessId: string, userId: string) {
+function collectAttachmentFiles(
+  root: string,
+  current = root,
+  entries: Array<{ fullPath: string; archivePath: string }> = [],
+) {
+  if (!existsSync(current)) return entries;
+  for (const entry of readdirSync(current, { withFileTypes: true })) {
+    const fullPath = path.join(current, entry.name);
+    if (entry.isDirectory()) collectAttachmentFiles(root, fullPath, entries);
+    else if (entry.isFile()) {
+      entries.push({
+        fullPath,
+        archivePath: `attachments/${path.relative(root, fullPath).replaceAll("\\", "/")}`,
+      });
+    }
+  }
+  return entries;
+}
+
+/**
+ * Build a true streaming backup archive (`Web ReadableStream<Uint8Array>`) using
+ * `yazl` so `business.sqlite` and attachment files stream straight from disk
+ * rather than buffering duplicate copies in Node heap memory.
+ */
+export async function createBusinessBackupStream(
+  businessId: string,
+  userId: string,
+  signal?: AbortSignal,
+): Promise<{ stream: ReadableStream<Uint8Array>; filename: string }> {
   assertBusinessAdministrator(businessId, userId);
   const access = getBusinessForUser(businessId, userId);
   if (!access || access.membership.role !== "administrator") throw new Error("BUSINESS_ACCESS_DENIED");
   const context = getBusinessDb(businessId, userId);
   const temporaryDatabase = path.join(context.paths.directory, `.backup-${randomUUID()}.sqlite`);
+
   try {
     await context.sqlite.backup(temporaryDatabase);
-    const database = readFileSync(temporaryDatabase);
-    const currencyConfiguration = context.sqlite.prepare(`
-      SELECT code, name, symbol, minor_unit, is_base, is_active FROM currencies ORDER BY code
-    `).all() as Array<{
-      code: string; name: string; symbol: string | null; minor_unit: number;
-      is_base: number; is_active: number;
-    }>;
+    const [databaseSha256, currencyConfiguration, attachmentFiles] = await Promise.all([
+      checksumFile(temporaryDatabase),
+      Promise.resolve(
+        context.sqlite
+          .prepare(`SELECT code, name, symbol, minor_unit, is_base, is_active FROM currencies ORDER BY code`)
+          .all() as Array<{
+          code: string;
+          name: string;
+          symbol: string | null;
+          minor_unit: number;
+          is_base: number;
+          is_active: number;
+        }>,
+      ),
+      Promise.resolve(collectAttachmentFiles(context.paths.attachments)),
+    ]);
+
     const manifest = {
       formatVersion: 2 as const,
       applicationVersion: "0.1.0",
       originalBusinessName: access.business.name,
       exportedAt: new Date().toISOString(),
-      databaseSha256: checksum(database),
+      databaseSha256,
       country: access.business.country,
       baseCurrencyCode: access.business.currency,
       financialYearStartMonth: access.business.financialYearStartMonth,
@@ -91,15 +140,36 @@ export async function exportBusinessBackup(businessId: string, userId: string) {
         isActive: Boolean(currency.is_active),
       })),
     };
-    const zip = new JSZip();
-    zip.file("manifest.json", JSON.stringify(manifest, null, 2));
-    zip.file("business.sqlite", database);
-    addAttachments(zip, context.paths.attachments);
-    zip.folder("attachments");
-    return zip.generateAsync({ type: "nodebuffer", compression: "DEFLATE", compressionOptions: { level: 6 } });
-  } finally {
+    const manifestBuffer = Buffer.from(JSON.stringify(manifest, null, 2), "utf8");
+    const filename = `${access.business.name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "business"}.erpbackup`;
+
+    const cleanup = () => {
+      rmSync(temporaryDatabase, { force: true });
+    };
+
+    const stream = createStreamingZipStream({
+      signal,
+      onCleanup: cleanup,
+      populate: (zip) => {
+        zip.addBuffer(manifestBuffer, "manifest.json", { compress: true, compressionLevel: 6 });
+        zip.addFile(temporaryDatabase, "business.sqlite", { compress: true, compressionLevel: 6 });
+        zip.addEmptyDirectory("attachments");
+        for (const attachment of attachmentFiles) {
+          zip.addFile(attachment.fullPath, attachment.archivePath, { compress: true, compressionLevel: 6 });
+        }
+      },
+    });
+
+    return { stream, filename };
+  } catch (err) {
     rmSync(temporaryDatabase, { force: true });
+    throw err;
   }
+}
+
+export async function exportBusinessBackup(businessId: string, userId: string) {
+  const { stream } = await createBusinessBackupStream(businessId, userId);
+  return collectStreamToBuffer(stream);
 }
 
 export async function importBusinessBackup(buffer: ArrayBuffer | Buffer, userId: string) {
@@ -109,12 +179,20 @@ export async function importBusinessBackup(buffer: ArrayBuffer | Buffer, userId:
     throw new Error("Backup file exceeds maximum allowed size of 50 MB.");
   }
 
-  const zip = await JSZip.loadAsync(buffer, { checkCRC32: true });
+  // Parse only the central directory; entries are inflated below through
+  // size-limited, CRC-checked streams so a decompression bomb cannot exhaust
+  // memory, disk, or CPU.
+  const zip = await JSZip.loadAsync(buffer);
+  assertZipWithinDeclaredLimits(zip);
+  const budget = createZipBudget();
   const manifestFile = zip.file("manifest.json");
   const databaseFile = zip.file("business.sqlite");
   if (!manifestFile || !databaseFile) throw new Error("Backup must contain manifest.json and business.sqlite");
-  const manifest = manifestSchema.parse(JSON.parse(await manifestFile.async("string")));
-  const database = await databaseFile.async("nodebuffer");
+  const manifestBuffer = await readZipEntryLimited(manifestFile, BACKUP_ZIP_LIMITS.maxManifestBytes);
+  budget.consume(manifestBuffer.length);
+  const manifest = manifestSchema.parse(JSON.parse(manifestBuffer.toString("utf8")));
+  const database = await readZipEntryLimited(databaseFile, BACKUP_ZIP_LIMITS.maxDatabaseBytes);
+  budget.consume(database.length);
   if (checksum(database) !== manifest.databaseSha256) throw new Error("Backup database checksum does not match its manifest");
 
   // Validate SQLite file header: SQLite format 3\0 (first 16 bytes)
@@ -163,6 +241,7 @@ export async function importBusinessBackup(buffer: ArrayBuffer | Buffer, userId:
 
   try {
     const context = openBusinessDatabase(directoryKey, { create: true });
+    enforceReferenceSchemaObjects(context.sqlite);
     context.sqlite.prepare("SELECT 1 FROM customers LIMIT 1").all();
     if (manifest.formatVersion === 2) {
       const restoredBase = context.sqlite.prepare(`
@@ -196,7 +275,12 @@ export async function importBusinessBackup(buffer: ArrayBuffer | Buffer, userId:
         throw new Error("Backup attachment escaped its directory");
       }
       mkdirSync(path.dirname(destination), { recursive: true });
-      writeFileSync(destination, await entry.async("nodebuffer"));
+      const attachment = await readZipEntryLimited(
+        entry,
+        Math.min(BACKUP_ZIP_LIMITS.maxAttachmentBytes, Math.max(0, budget.remaining())),
+      );
+      budget.consume(attachment.length);
+      writeFileSync(destination, attachment);
     }
     getSystemDb().transaction((tx) => {
       tx.insert(businesses)

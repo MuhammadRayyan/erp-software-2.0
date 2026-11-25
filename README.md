@@ -1,62 +1,56 @@
 # UAE Manager
 
-A Manager.io-inspired accounting/ERP application: one Next.js modular monolith with an independent SQLite database for each business.
+Multi-tenant ERP & UAE VAT/Payroll accounting monolith built with Next.js 16 (App Router), React 19, TypeScript, Drizzle ORM, Better Auth, Tailwind CSS, and isolated per-business SQLite WAL databases.
 
-Package version **2.7.0**. Verified application release: `252093a78db7df9afd9810e96344c1bd237829a9`, 29 October 2026. The owner is testing with a few businesses and **5–10 users**, keeping the repository public and deferring additional hardening.
+## Documentation Map
 
-## Documentation
+Active living documentation follows a streamlined 5-document hierarchy:
 
-| File | Purpose |
-|---|---|
-| [Current state](docs/CURRENT_STATE.md) | Implemented behavior, release and limits |
-| [System dossier](SYSTEM_DOSSIER.md) | Architecture and operational specification |
-| [Deployment](docs/DEPLOYMENT.md) | Remote work, automated releases and recovery |
-| [Next steps](docs/NEXT_STEPS.md) | Testing checklist and deferred decisions |
-| [Operations verification](docs/history/TESTING_PHASE_OPERATIONS_2026-10-26.md) | Actual server/OCI/Sentry observations and access |
-| [Hardening outcome](docs/history/HARDENING_OUTCOME_2026-10-26.md) | Implemented fixes, tests and rollout evidence |
-| [Theme](docs/THEME.md) | Shared UI tokens and layout rules |
-| [Flow verification and cleanup](docs/history/FLOW_VERIFICATION_AND_CLEANUP_2026-10-26.md) | Current acceptance results, isolation and retained/archived files |
-| [Changelog](docs/CHANGELOG.md) | Feature/release history |
+| Document | Scope |
+| :--- | :--- |
+| **README** ([README.md](README.md)) | Quickstart, local scripts, test suites, and repository rules |
+| **Architecture** ([docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)) | System topology, SQLite schemas/PRAGMAs, security/CSP, streaming ZIP/PDF engines, and domain test structure |
+| **Design System** ([docs/DESIGN_SYSTEM.md](docs/DESIGN_SYSTEM.md)) | CSS tokens, App Shell, `Ctrl/Cmd+K` Command Palette, Radix primitives, 3 table paradigms, and document/settlement UX |
+| **Deployment** ([docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)) | CI release gates, ARM64 Docker image, Caddy, OCI/Sentry read-only diagnostics, backups, recovery, and closed-UAT scope |
+| **Changelog** ([docs/CHANGELOG.md](docs/CHANGELOG.md)) | Chronological log across modernization sprints and feature waves |
 
-Historical worklogs, branch notes and the 25 October review describe earlier releases. Follow the current state and deployment guide for operational commands. A historical backlog is not authorization to execute it.
+Superseded point-in-time reviews, specs, and sprint planning artifacts are preserved in [docs/history/](docs/history/README.md).
 
-## Development
+## Requirements & Local Setup
 
-Use **Node 22** (`.nvmrc`) and **npm 10.9.4** with `package-lock.json`, matching CI and Docker. Historical Bun-only/Node 24 instructions are superseded.
+- **Runtime:** Node `22` (see [.nvmrc](.nvmrc)) and npm with locked dependencies (`package-lock.json`).
+- **Bootstrap:**
+  ```bash
+  npm ci
+  cp .env.example .env
+  npm run db:migrate
+  npm run db:bootstrap
+  npm run dev
+  ```
+- Open `http://localhost:3000`. Customer/workspace SQLite databases and attachments live under `data/`.
 
-```powershell
-npm ci --legacy-peer-deps
-Copy-Item .env.example .env
-# Configure the local .env; never commit it.
-npm run db:bootstrap
-npm run dev
-```
+## Verification & Test Commands
 
-Bootstrap migrates/seeds disposable local data. Never seed production or use customer databases as test fixtures. Development accounts are `admin@demo.local` and `standard@demo.local`, password `demo12345`; these are not production credentials.
+Automated service/unit tests run in isolated temporary directories via [scripts/test-isolation.mjs](scripts/test-isolation.mjs) and never touch local `data/`.
 
-```text
-npm run typecheck
-npm run lint
-npm test
-npm run check:permissions
-npm run db:check
-npm run test:hardening
-npm run test:e2e
-```
+| Command | Purpose |
+| :--- | :--- |
+| `npm test` | Full Node domain suite (`tests/{unit,accounting,platform,integration}/**/*.test.ts`) |
+| `npm run test:unit` | Pure math, FIFO allocation, grid layout, UI helpers, and CSP/config checks |
+| `npm run test:accounting` | Double-entry GL, FX, VAT/FAF, payroll/WPS, PDC, banking rules, and reports |
+| `npm run test:platform` | Auth, RBAC, multi-tenant quotas, approvals, activity logs, backups, and PDF pool |
+| `npm run test:integration` | Multi-module commercial lifecycles, audits, and Manager.io migration |
+| `npm run test:hardening` | Targeted production hardening & recovery suite |
+| `npm run test:e2e` | Isolated Playwright acceptance suite (`tests/e2e/acceptance.spec.ts` & `pillars.spec.ts`) |
+| `npm run typecheck` | Generate `.next` route types and check `tsconfig.json` |
+| `npm run typecheck:validate` | Isolated validation typecheck (`tsconfig.validate.json` against `.next-validate`) |
+| `npm run lint` | ESLint across source and test trees |
+| `npm run check:permissions` | Static verification that all 159 business command functions enforce RBAC guards |
+| `npx tsx scripts/verify-schema-sync.ts` | Verify System and Business Drizzle schemas match SQLite tables & foreign keys |
+| `NEXT_DIST_DIR=.next-validate npm run build` | Production validation build without overwriting `.next` or mutating `tsconfig.json` |
 
-`npm test` now preloads `scripts/test-isolation.mjs`, giving each test process a separate temporary database root, including older suites that previously defaulted to local `data/`. The Manager.io import suite still references real backup fixtures and was excluded from the synthetic acceptance round.
+## Repository Rules
 
-`npm run test:e2e` now defaults to the isolated acceptance configuration: 11 browser scenarios, fresh synthetic businesses and in-memory role sessions. It requires the `.next-validate` production build; use the workflow's build setup before running it. The workflow uses this complete suite for the source gate; `npm run test:browser:hardening` remains a five-scenario focused check. Older browser specs are retained as reference but are not selected by the default configuration. Their generated screenshots now go under ignored `test-results/visual/`.
-
-CI sets `NEXT_PHASE=phase-production-build`, allowing builds without production secrets. Production startup requires strong runtime authentication/setup configuration. Generated reports and local archives stay ignored. Historical logs now live in [docs/history](docs/history/README.md).
-
-## Releases and repository rules
-
-Create a short branch and PR to protected `main`. Pass **Verify source and financial regressions** and **Verify ARM64 production image**. Merge repeats verification, publishes the tested image to GHCR and deploys its immutable digest. The VM does not build code or reset a checkout. Deployment serializes migrations, verifies snapshots/restoration and tenant readiness, checks HTTPS/revision, and retains the previous release. A single instance has a maintenance interval; failed builds are blocked, not guaranteed never to occur.
-
-- Read `AGENTS.md` and relevant installed Next.js documentation before framework changes.
-- Preserve system SQLite plus separate business databases/attachments on local storage.
-- Enforce permissions at entry points and domain services. Use shared checked money helpers and explicit migrations; never `drizzle-kit push` on real data.
-- Follow shared UI rules; main transaction create/edit flows use full pages.
-- Keep secrets, operational credentials and new business backups out of Git/image contexts. Ignore rules do not erase the existing tracked Manager.io backup; cleanup remains owner-deferred.
-- Documentation changes do not authorize deployment, reboot, notifications or deferred infrastructure work.
+1. Never commit secrets (`.env`, private keys, cookies) or production/customer SQLite snapshots.
+2. Run migrations or schema checks against test fixtures rather than live `data/` unless performing an explicit maintenance step.
+3. Prefer extending existing module boundaries under `src/core/`, `src/modules/`, `src/components/`, and domain folders under `tests/` (`unit/`, `accounting/`, `platform/`, `integration/`, `e2e/`).

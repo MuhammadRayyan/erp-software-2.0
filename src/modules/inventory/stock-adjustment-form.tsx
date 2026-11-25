@@ -5,8 +5,9 @@ import Link from "next/link";
 import { useState } from "react";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { LoaderCircle } from "lucide-react";
-import { useForm, useWatch } from "react-hook-form";
+import { Controller, useForm, useWatch } from "react-hook-form";
 import { Button } from "@/components/ui/button";
+import { Combobox } from "@/components/ui/combobox";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
@@ -17,6 +18,9 @@ import {
 } from "./stock-adjustment-input";
 import type { InventoryDocumentStatus } from "./inventory-document";
 import { SelectNative } from "@/components/ui/select-native";
+import { useUnsavedChanges } from "@/hooks/use-unsaved-changes";
+import { FieldError } from "@/components/ui/field-error";
+import { fieldErrorProps, fieldErrorId, applyServerFieldErrors, focusFirstInvalidField } from "@/lib/form-errors";
 
 type Item = {
   id: string;
@@ -56,9 +60,11 @@ export function StockAdjustmentForm({
     register,
     handleSubmit,
     setError,
+    setValue,
     control,
-    formState: { errors, isSubmitting },
+    formState: { errors, isSubmitting, isDirty, isSubmitSuccessful },
   } = form;
+  useUnsavedChanges(isDirty && !isSubmitSuccessful);
   const reason = useWatch({ control, name: "reason" });
 
   async function save(values: StockAdjustmentInput, intent: "draft" | "post") {
@@ -70,9 +76,7 @@ export function StockAdjustmentForm({
       intent,
     );
     if (result.fieldErrors) {
-      for (const [field, messages] of Object.entries(result.fieldErrors)) {
-        setError(field as keyof StockAdjustmentInput, { message: messages[0] });
-      }
+      applyServerFieldErrors(setError, result.fieldErrors);
     }
     if (result.error) setServerError(result.error);
   }
@@ -91,29 +95,54 @@ export function StockAdjustmentForm({
         <div className="mt-5 grid gap-5 md:grid-cols-3">
           <div className="space-y-1.5">
             <Label htmlFor="date">Date</Label>
-            <Input id="date" type="date" {...register("date")} />
+            <Input id="date" type="date" {...register("date")} {...fieldErrorProps("date", errors.date)} />
+            <FieldError name="date" message={errors.date?.message} />
           </div>
           <div className="space-y-1.5">
             <Label htmlFor="locationId">Location</Label>
-            <SelectNative id="locationId"  {...register("locationId")}>
-              {locations.map((location) => (
-                <option key={location.id} value={location.id}>
-                  {location.code} — {location.name}
-                </option>
-              ))}
-            </SelectNative>
+            <Controller
+              control={control}
+              name="locationId"
+              render={({ field }) => (
+                <Combobox ref={field.ref}
+                  id="locationId"
+                  ariaInvalid={!!errors.locationId} ariaDescribedBy={errors.locationId ? fieldErrorId("locationId") : undefined}
+                  options={locations.map((location) => ({
+                    value: location.id,
+                    label: `${location.code} — ${location.name}`,
+                  }))}
+                  value={field.value ?? ""}
+                  onValueChange={field.onChange}
+                  placeholder="Choose location…"
+                  searchPlaceholder="Search locations…"
+                  emptyText="No locations found."
+                />
+              )}
+            />
+            <FieldError name="locationId" message={errors.locationId?.message} />
           </div>
           <div className="space-y-1.5">
             <Label htmlFor="itemId">Inventory Item</Label>
-            <SelectNative id="itemId"  {...register("itemId")}>
-              <option value="">Choose item…</option>
-              {items.map((item) => (
-                <option key={item.id} value={item.id}>
-                  {item.sku ? `${item.sku} — ` : ""}
-                  {item.name}
-                </option>
-              ))}
-            </SelectNative>
+            <Controller
+              control={control}
+              name="itemId"
+              render={({ field }) => (
+                <Combobox ref={field.ref}
+                  id="itemId"
+                  ariaInvalid={!!errors.itemId} ariaDescribedBy={errors.itemId ? fieldErrorId("itemId") : undefined}
+                  options={items.map((item) => ({
+                    value: item.id,
+                    label: `${item.sku ? `${item.sku} — ` : ""}${item.name}`,
+                  }))}
+                  value={field.value ?? ""}
+                  onValueChange={field.onChange}
+                  placeholder="Choose item…"
+                  searchPlaceholder="Search inventory items…"
+                  emptyText="No items found."
+                />
+              )}
+            />
+            <FieldError name="itemId" message={errors.itemId?.message} />
           </div>
           <div className="space-y-1.5">
             <Label htmlFor="quantityChange">Quantity change</Label>
@@ -122,7 +151,7 @@ export function StockAdjustmentForm({
               inputMode="decimal"
               placeholder="+5 or -2"
               {...register("quantityChange")}
-              aria-invalid={!!errors.quantityChange}
+              {...fieldErrorProps("quantityChange", errors.quantityChange)}
             />
             {errors.quantityChange && (
               <p className="field-error">{errors.quantityChange.message}</p>
@@ -130,45 +159,65 @@ export function StockAdjustmentForm({
           </div>
           <div className="space-y-1.5">
             <Label htmlFor="reason">Reason</Label>
-            <SelectNative id="reason"  {...register("reason")}>
+            <SelectNative
+              id="reason"
+              {...register("reason", {
+                onChange: (event) => {
+                  if (event.target.value !== "Opening Balance") {
+                    setValue("unitCost", "");
+                  }
+                },
+              })}
+              {...fieldErrorProps("reason", errors.reason)}
+            >
               <option value="Stock count correction">Stock count correction</option>
               <option value="Damaged">Damaged</option>
               <option value="Opening Balance">Opening Balance</option>
               <option value="Other">Other</option>
             </SelectNative>
+            <FieldError name="reason" message={errors.reason?.message} />
           </div>
-          <div className="space-y-1.5">
-            <Label htmlFor="unitCost">
-              Unit cost{" "}
-              {reason !== "Opening Balance" && (
-                <span className="font-normal text-muted-foreground">(opening only)</span>
-              )}
-            </Label>
-            <Input id="unitCost" inputMode="decimal" {...register("unitCost")} />
-            {reason === "Opening Balance" && (
+          {reason === "Opening Balance" && (
+            <div className="space-y-1.5">
+              <Label htmlFor="unitCost">Unit cost</Label>
+              <Input id="unitCost" inputMode="decimal" {...register("unitCost")} {...fieldErrorProps("unitCost", errors.unitCost)} />
+              <FieldError name="unitCost" message={errors.unitCost?.message} />
               <p className="text-xs text-muted-foreground">
                 Required for Opening Balance. Normal adjustments use current average cost.
               </p>
-            )}
-          </div>
+            </div>
+          )}
           <div className="space-y-1.5">
             <Label htmlFor="projectId">
               Project <span className="font-normal text-muted-foreground">(optional)</span>
             </Label>
-            <SelectNative id="projectId"  {...register("projectId")}>
-              <option value="">No project</option>
-              {projects.map((project) => (
-                <option key={project.id} value={project.id}>
-                  {project.code} — {project.name}
-                </option>
-              ))}
-            </SelectNative>
+            <Controller
+              control={control}
+              name="projectId"
+              render={({ field }) => (
+                <Combobox ref={field.ref}
+                  id="projectId"
+                  options={projects.map((project) => ({
+                    value: project.id,
+                    label: `${project.code} — ${project.name}`,
+                  }))}
+                  value={field.value ?? ""}
+                  onValueChange={field.onChange}
+                  allowClear
+                  clearLabel="No project"
+                  placeholder="No project"
+                  searchPlaceholder="Search projects…"
+                  emptyText="No projects found."
+                />
+              )}
+            />
           </div>
           <div className="space-y-1.5 md:col-span-2">
             <Label htmlFor="notes">
               Notes <span className="font-normal text-muted-foreground">(optional)</span>
             </Label>
-            <Textarea id="notes" rows={2} placeholder="Reason for inventory adjustment / discrepancy notes..." {...register("notes")} />
+            <Textarea id="notes" rows={2} placeholder="Reason for inventory adjustment / discrepancy notes..." {...register("notes")} {...fieldErrorProps("notes", errors.notes)} />
+            <FieldError name="notes" message={errors.notes?.message} />
           </div>
         </div>
       </section>
@@ -189,7 +238,7 @@ export function StockAdjustmentForm({
           <Button permission={["save", "post"]}
             type="button"
             disabled={isSubmitting}
-            onClick={handleSubmit((values) => save(values, "post"))}
+            onClick={handleSubmit((values) => save(values, "post"), focusFirstInvalidField)}
           >
             {isSubmitting && <LoaderCircle className="size-4 animate-spin" />}
             Update Posted Adjustment
@@ -200,14 +249,14 @@ export function StockAdjustmentForm({
               type="button"
               variant="secondary"
               disabled={isSubmitting}
-              onClick={handleSubmit((values) => save(values, "draft"))}
+              onClick={handleSubmit((values) => save(values, "draft"), focusFirstInvalidField)}
             >
               Save Draft
             </Button>
             <Button permission={["save", "post"]}
               type="button"
               disabled={isSubmitting}
-              onClick={handleSubmit((values) => save(values, "post"))}
+              onClick={handleSubmit((values) => save(values, "post"), focusFirstInvalidField)}
             >
               {isSubmitting && <LoaderCircle className="size-4 animate-spin" />}
               Post Adjustment

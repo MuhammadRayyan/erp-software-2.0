@@ -18,6 +18,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
+import { formatDateTime } from "@/core/format";
 import type { BusinessEmailSettings } from "@/modules/email/email-types";
 import {
   saveEmailSettingsAction,
@@ -205,7 +206,7 @@ export function EmailSettingsClient({
             )}
             {settings.lastTestedAt && (
               <span className="text-xs text-muted-foreground">
-                Last checked: {new Date(settings.lastTestedAt).toLocaleString()}
+                Last checked: {formatDateTime(settings.lastTestedAt)}
               </span>
             )}
           </div>

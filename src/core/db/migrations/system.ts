@@ -183,4 +183,14 @@ export const systemMigrations = [
       `);
     },
   },
+  {
+    version: 7,
+    name: "membership_approval_controls",
+    up(sqlite) {
+      const cols = (sqlite.prepare(`PRAGMA table_info("business_memberships")`).all() as { name: string }[]).map((c) => c.name);
+      if (!cols.includes("requires_approval")) {
+        sqlite.exec(`ALTER TABLE "business_memberships" ADD COLUMN "requires_approval" INTEGER NOT NULL DEFAULT 0;`);
+      }
+    },
+  },
 ] satisfies readonly SqliteMigration[];

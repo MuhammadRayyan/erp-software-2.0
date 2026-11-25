@@ -15,7 +15,16 @@ export default async function DocumentTemplatesPage({
   const { user, access } = await requireModule(businessId, "settings");
   
   if (access.membership.role !== "administrator") {
-    return <div className="page-container">Administrator access is required.</div>;
+    return (
+      <SettingsShell
+        businessId={businessId}
+        title="Document Templates"
+        description="Customize the appearance of your document PDFs."
+        maxWidth="max-w-7xl"
+      >
+        <p className="text-muted-foreground text-sm">Administrator access is required.</p>
+      </SettingsShell>
+    );
   }
   
   const search = await searchParams;

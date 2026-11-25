@@ -1,8 +1,8 @@
 "use client";
 
-import { Input } from "@/components/ui/input";
+import { useEffect, useMemo, useRef } from "react";
+import { Combobox, type ComboboxOption } from "@/components/ui/combobox";
 import { Label } from "@/components/ui/label";
-import { SelectNative } from "@/components/ui/select-native";
 
 export type DocumentCurrencyOption = {
   code: string;
@@ -19,6 +19,26 @@ export type DocumentRateOption = {
   sourceReference: string | null;
 };
 
+/** Pick the best stored FX rate for a currency on or before `relevantDate`, preferring CBUAE over Manual. */
+export function pickAutoExchangeRate(
+  rates: readonly DocumentRateOption[],
+  currencyCode: string,
+  relevantDate: string,
+): DocumentRateOption | undefined {
+  const matching = rates.filter((rate) => rate.currencyCode === currencyCode);
+  if (matching.length === 0) return undefined;
+
+  const sorted = [...matching].sort((a, b) => {
+    const aOnOrBefore = relevantDate && a.rateDate <= relevantDate ? 1 : 0;
+    const bOnOrBefore = relevantDate && b.rateDate <= relevantDate ? 1 : 0;
+    if (aOnOrBefore !== bOnOrBefore) return bOnOrBefore - aOnOrBefore;
+    if (a.rateDate !== b.rateDate) return b.rateDate.localeCompare(a.rateDate);
+    if (a.source !== b.source) return a.source === "CBUAE" ? -1 : 1;
+    return 0;
+  });
+
+  return sorted[0];
+}
 
 export function DocumentCurrencyFields({
   baseCurrencyCode,
@@ -46,10 +66,56 @@ export function DocumentCurrencyFields({
   onChange: (field: "currencyCode" | "exchangeRateToBase" | "exchangeRateDate" | "exchangeRateSource", value: string) => void;
 }) {
   const foreign = currencyCode !== baseCurrencyCode;
-  const availableRates = rates.filter((rate) => rate.currencyCode === currencyCode);
-  const selectedRate = availableRates.find((rate) => rate.rateToBase === exchangeRateToBase && rate.rateDate === exchangeRateDate && rate.source === exchangeRateSource);
+  const prevRelevantDateRef = useRef(relevantDate);
+
+  const matchedRate = useMemo(
+    () => (foreign ? pickAutoExchangeRate(rates, currencyCode, relevantDate) : undefined),
+    [foreign, rates, currencyCode, relevantDate],
+  );
+
+  // Sync hidden rate fields when the document date changes on an unlocked foreign document,
+  // or when a foreign currency has no snapshot selected yet.
+  useEffect(() => {
+    const dateChanged = prevRelevantDateRef.current !== relevantDate;
+    prevRelevantDateRef.current = relevantDate;
+    if (disabled || !foreign) return;
+    if (!dateChanged && exchangeRateToBase) return;
+
+    if (matchedRate) {
+      if (exchangeRateToBase !== matchedRate.rateToBase) {
+        onChange("exchangeRateToBase", matchedRate.rateToBase);
+      }
+      if (exchangeRateDate !== matchedRate.rateDate) {
+        onChange("exchangeRateDate", matchedRate.rateDate);
+      }
+      if (exchangeRateSource !== matchedRate.source) {
+        onChange("exchangeRateSource", matchedRate.source);
+      }
+    }
+  }, [
+    disabled,
+    foreign,
+    relevantDate,
+    matchedRate,
+    exchangeRateToBase,
+    exchangeRateDate,
+    exchangeRateSource,
+    onChange,
+  ]);
+
+  const currencyOptions = useMemo<ComboboxOption[]>(
+    () =>
+      currencies.map((currency) => ({
+        value: currency.code,
+        label: `${currency.code} — ${currency.name}`,
+        badge: currency.code === baseCurrencyCode ? "Base" : undefined,
+        keywords: [currency.code, currency.name],
+      })),
+    [currencies, baseCurrencyCode],
+  );
 
   function selectCurrency(code: string) {
+    if (!code) return;
     onChange("currencyCode", code);
     if (code === baseCurrencyCode) {
       onChange("exchangeRateToBase", "1");
@@ -57,27 +123,39 @@ export function DocumentCurrencyFields({
       onChange("exchangeRateSource", "Base");
       return;
     }
-    onChange("exchangeRateToBase", "");
-    onChange("exchangeRateDate", "");
-    onChange("exchangeRateSource", "");
+    const picked = pickAutoExchangeRate(rates, code, relevantDate);
+    if (picked) {
+      onChange("exchangeRateToBase", picked.rateToBase);
+      onChange("exchangeRateDate", picked.rateDate);
+      onChange("exchangeRateSource", picked.source);
+    } else {
+      onChange("exchangeRateToBase", "");
+      onChange("exchangeRateDate", "");
+      onChange("exchangeRateSource", "");
+    }
   }
 
-  function selectRate(rateId: string) {
-    const rate = availableRates.find((entry) => entry.id === rateId);
-    if (!rate) return;
-    onChange("exchangeRateToBase", rate.rateToBase);
-    onChange("exchangeRateDate", rate.rateDate);
-    onChange("exchangeRateSource", rate.source);
-  }
-
-  return <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-    <div className="space-y-1.5"><Label htmlFor="currencyCode">Currency</Label><SelectNative id="currencyCode"  value={currencyCode} disabled={disabled || lockCurrency} onChange={(event) => selectCurrency(event.target.value)}>{currencies.map((currency) => <option key={currency.code} value={currency.code}>{currency.code} — {currency.name}</option>)}</SelectNative></div>
-    {foreign ? <>
-      <div className="space-y-1.5 sm:col-span-1 lg:col-span-2"><Label htmlFor="storedExchangeRate">Stored exchange rate</Label><SelectNative id="storedExchangeRate"  value={selectedRate?.id ?? ""} disabled={disabled} onChange={(event) => selectRate(event.target.value)}><option value="">Choose an explicit stored rate…</option>{availableRates.map((rate) => <option key={rate.id} value={rate.id}>{rate.rateDate} · 1 {currencyCode} = {rate.rateToBase} {baseCurrencyCode} · {rate.source}</option>)}</SelectNative>{availableRates.length === 0 && <p className="text-xs text-danger">No stored rate exists for {currencyCode}. Add one in Settings → Currencies & exchange rates.</p>}</div>
-      <div className="space-y-1.5"><Label>Snapshot</Label><div className="min-h-9 rounded-[6px] border border-border bg-surface-muted px-2.5 py-2 text-xs tabular-nums">{exchangeRateToBase ? `${exchangeRateDate} · ${exchangeRateSource} · ${exchangeRateToBase}` : "Not selected"}</div></div>
-    </> : <div className="space-y-1.5 sm:col-span-1 lg:col-span-3"><Label>Exchange rate</Label><Input value={`1 ${baseCurrencyCode} = 1 ${baseCurrencyCode}`} disabled /></div>}
-    <input type="hidden" name="exchangeRateToBase" value={exchangeRateToBase} readOnly />
-    <input type="hidden" name="exchangeRateDate" value={exchangeRateDate} readOnly />
-    <input type="hidden" name="exchangeRateSource" value={exchangeRateSource} readOnly />
-  </div>;
+  return (
+    <div className="space-y-1.5">
+      <Label htmlFor="currencyCode">Currency</Label>
+      <Combobox
+        id="currencyCode"
+        ariaLabel="Currency"
+        options={currencyOptions}
+        value={currencyCode}
+        disabled={disabled || lockCurrency}
+        onValueChange={selectCurrency}
+        placeholder="Select currency"
+        searchPlaceholder="Search currency..."
+      />
+      {foreign && !matchedRate && (
+        <p className="text-xs text-danger">
+          No stored FX rate for {currencyCode}. Configure in Settings → Currencies.
+        </p>
+      )}
+      <input type="hidden" name="exchangeRateToBase" value={exchangeRateToBase} readOnly />
+      <input type="hidden" name="exchangeRateDate" value={exchangeRateDate} readOnly />
+      <input type="hidden" name="exchangeRateSource" value={exchangeRateSource} readOnly />
+    </div>
+  );
 }

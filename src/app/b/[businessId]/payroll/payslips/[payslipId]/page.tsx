@@ -1,10 +1,9 @@
 import { notFound } from "next/navigation";
-import Link from "next/link";
-import { ArrowLeft } from "lucide-react";
 import { requireModule } from "@/core/permissions/require-module";
-import { formatMoney } from "@/core/format";
+import { formatDate, formatMoney } from "@/core/format";
 import { getPayslipWithLines } from "@/modules/payroll/services/payroll-service";
 import { getBusinessProfile } from "@/modules/business-profile/business-profile-service";
+import { Breadcrumbs } from "@/components/breadcrumbs";
 import { PayslipActionsBar } from "./payslip-actions-bar";
 
 export const metadata = {
@@ -31,15 +30,14 @@ export default async function PayslipDetailPage({
 
   return (
     <div className="page-container space-y-6 max-w-4xl">
-      {/* Navigation / Back link */}
-      <div className="print:hidden">
-        <Link
-          href={`/b/${businessId}/payroll/payslips`}
-          className="inline-flex items-center text-sm text-muted-foreground hover:text-foreground transition-colors"
-        >
-          <ArrowLeft className="size-4 mr-1.5" /> Back to Payslips
-        </Link>
-      </div>
+      <Breadcrumbs
+        businessId={businessId}
+        items={[
+          { label: "Payroll", href: `/b/${businessId}/payroll/employees` },
+          { label: "Payslips", href: `/b/${businessId}/payroll/payslips` },
+          { label: payslip.payslipNumber },
+        ]}
+      />
 
       {/* Top action bar */}
       <PayslipActionsBar
@@ -74,7 +72,7 @@ export default async function PayslipDetailPage({
               {payslip.payslipNumber}
             </div>
             <div className="text-xs text-muted-foreground mt-0.5">
-              Issue Date: {payslip.date}
+              Issue Date: {formatDate(payslip.date)}
             </div>
             {payslip.periodDescription && (
               <div className="text-xs font-medium text-foreground mt-0.5">

@@ -17,9 +17,11 @@ export const businessProfileInputSchema = z.object({
   country: z.string().trim().max(100).optional().default("United Arab Emirates"),
   countryCode: z.string().trim().max(10).optional().default("AE"),
   logoUrl: z.string().trim().max(2000).optional().default(""),
+  molEstablishmentId: z.string().trim().max(30).optional().default(""),
+  wpsBankRoutingCode: z.string().trim().max(20).optional().default(""),
 });
 
-export type BusinessProfileInput = z.infer<typeof businessProfileInputSchema>;
+export type BusinessProfileInput = z.input<typeof businessProfileInputSchema>;
 
 export const localizationInputSchema = z.object({
   dateFormat: z.enum(["DD/MM/YYYY", "YYYY-MM-DD", "MM/DD/YYYY", "DD MMM YYYY"]).default("DD/MM/YYYY"),

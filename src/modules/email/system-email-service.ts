@@ -363,3 +363,92 @@ ${actionUrl}
     return { success: false, error: err instanceof Error ? err.message : String(err), actionUrl };
   }
 }
+
+export async function sendApprovalRequestedEmail(options: {
+  businessId: string;
+  businessName: string;
+  recipientEmail: string;
+  recipientName: string;
+  requesterName: string;
+  documentLabel: string;
+  entityNumber: string;
+  amountFormatted: string;
+  actionPath: string;
+}): Promise<SendSystemEmailResult> {
+  const { driver, senderName, senderEmail } = resolveEmailTransport(options.businessId);
+  const actionUrl = `${getAppBaseUrl()}${options.actionPath}`;
+  const from = { name: senderName, email: senderEmail };
+  const to = [{ name: options.recipientName, email: options.recipientEmail }];
+  const subject = `[${options.businessName}] Approval required: ${options.documentLabel} ${options.entityNumber}`;
+
+  const bodyHtml = `
+    <div style="font-family: sans-serif; color: #0f172a; max-width: 560px; margin: 0 auto; padding: 24px; border: 1px solid #e2e8f0; border-radius: 10px;">
+      <h2 style="margin: 0 0 12px; font-size: 18px;">Approval Required: ${options.documentLabel} ${options.entityNumber}</h2>
+      <p style="margin: 0 0 16px; font-size: 14px; color: #475569;">
+        Hello ${options.recipientName}, <strong>${options.requesterName}</strong> submitted <strong>${options.documentLabel} ${options.entityNumber}</strong> (${options.amountFormatted}) in <strong>${options.businessName}</strong> for your review.
+      </p>
+      <a href="${actionUrl}" style="display: inline-block; background-color: #0f172a; color: #ffffff; padding: 10px 20px; font-size: 14px; font-weight: 600; text-decoration: none; border-radius: 6px;">
+        Review in Approval Queue
+      </a>
+    </div>
+  `;
+  const bodyText = `Hello ${options.recipientName},\n\n${options.requesterName} submitted ${options.documentLabel} ${options.entityNumber} (${options.amountFormatted}) in ${options.businessName} for approval.\n\nReview at: ${actionUrl}`;
+
+  try {
+    const result = await driver.send({ from, to, subject, bodyHtml, bodyText });
+    return {
+      success: result.ok,
+      messageId: result.ok ? result.messageId : undefined,
+      error: !result.ok ? result.error : undefined,
+      actionUrl,
+    };
+  } catch (err) {
+    return { success: false, error: err instanceof Error ? err.message : String(err), actionUrl };
+  }
+}
+
+export async function sendApprovalDecisionEmail(options: {
+  businessId: string;
+  businessName: string;
+  recipientEmail: string;
+  recipientName: string;
+  deciderName: string;
+  decision: "approved" | "rejected";
+  documentLabel: string;
+  entityNumber: string;
+  note?: string | null;
+  actionPath: string;
+}): Promise<SendSystemEmailResult> {
+  const { driver, senderName, senderEmail } = resolveEmailTransport(options.businessId);
+  const actionUrl = `${getAppBaseUrl()}${options.actionPath}`;
+  const from = { name: senderName, email: senderEmail };
+  const to = [{ name: options.recipientName, email: options.recipientEmail }];
+  const verb = options.decision === "approved" ? "Approved" : "Returned to Draft";
+  const subject = `[${options.businessName}] ${verb}: ${options.documentLabel} ${options.entityNumber}`;
+
+  const bodyHtml = `
+    <div style="font-family: sans-serif; color: #0f172a; max-width: 560px; margin: 0 auto; padding: 24px; border: 1px solid #e2e8f0; border-radius: 10px;">
+      <h2 style="margin: 0 0 12px; font-size: 18px;">${verb}: ${options.documentLabel} ${options.entityNumber}</h2>
+      <p style="margin: 0 0 16px; font-size: 14px; color: #475569;">
+        Hello ${options.recipientName}, <strong>${options.deciderName}</strong> ${options.decision === "approved" ? "approved and finalized" : "rejected and returned to draft"} your <strong>${options.documentLabel} ${options.entityNumber}</strong> in <strong>${options.businessName}</strong>.
+      </p>
+      ${options.note ? `<p style="margin: 0 0 16px; font-size: 13px; color: #334155; background: #f8fafc; padding: 10px 12px; border-radius: 6px;">Note: ${options.note}</p>` : ""}
+      <a href="${actionUrl}" style="display: inline-block; background-color: #0f172a; color: #ffffff; padding: 10px 20px; font-size: 14px; font-weight: 600; text-decoration: none; border-radius: 6px;">
+        View Document
+      </a>
+    </div>
+  `;
+  const bodyText = `Hello ${options.recipientName},\n\n${options.deciderName} ${options.decision === "approved" ? "approved" : "rejected"} ${options.documentLabel} ${options.entityNumber}.${options.note ? ` Note: ${options.note}` : ""}\n\nOpen: ${actionUrl}`;
+
+  try {
+    const result = await driver.send({ from, to, subject, bodyHtml, bodyText });
+    return {
+      success: result.ok,
+      messageId: result.ok ? result.messageId : undefined,
+      error: !result.ok ? result.error : undefined,
+      actionUrl,
+    };
+  } catch (err) {
+    return { success: false, error: err instanceof Error ? err.message : String(err), actionUrl };
+  }
+}

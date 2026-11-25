@@ -1,4 +1,5 @@
 import { Breadcrumbs } from "@/components/breadcrumbs";
+import { NoticeToast } from "@/components/notice-toast";
 import { requireModule } from "@/core/permissions/require-module";
 import { quantityMicrosToInput } from "@/modules/accounting/calculations/money";
 import { getExpenseAccountOptions } from "@/modules/accounting/services/account-service";
@@ -14,13 +15,14 @@ import { minorToCurrencyInput } from "@/modules/currency/conversion";
 import { getCurrencySettings } from "@/modules/currency/exchange-rate";
 import { getAllSuppliersUnallocatedPrepayments } from "@/modules/supplier-payments/supplier-payment-service";
 import { getFormDefaults } from "@/modules/form-defaults/form-defaults-service";
+import { listCustomFieldDefinitions } from "@/modules/custom-fields/custom-field-service";
 
 export default async function NewPurchaseInvoicePage({
   params,
   searchParams,
 }: {
   params: Promise<{ businessId: string }>;
-  searchParams: Promise<{ supplierId?: string; orderId?: string; quoteId?: string; projectId?: string }>;
+  searchParams: Promise<{ supplierId?: string; orderId?: string; quoteId?: string; projectId?: string; notice?: string; fresh?: string }>;
 }) {
   const { businessId } = await params;
   const query = await searchParams;
@@ -38,6 +40,7 @@ export default async function NewPurchaseInvoicePage({
   const items = listInventoryItemOptions(businessId, user.id);
   const currencySettings = getCurrencySettings(businessId, user.id);
   const availableSupplierPrepayments = getAllSuppliersUnallocatedPrepayments(businessId, user.id);
+  const lineCustomFields = listCustomFieldDefinitions(businessId, user.id, "purchase_invoice_line").map(({ id, name, fieldType, selectOptions, isRequired }) => ({ id, name, fieldType, selectOptions, isRequired }));
 
   const sourceOrder = query.orderId ? getPurchaseOrder(businessId, user.id, query.orderId) : null;
   const sourceQuote = query.quoteId ? getPurchaseQuote(businessId, user.id, query.quoteId) : null;
@@ -120,12 +123,15 @@ export default async function NewPurchaseInvoicePage({
         ]}
       />
       <div className="mb-7">
+        <NoticeToast key={query.fresh ?? query.notice} message={query.notice} />
         <h1 className="page-title">New Purchase Invoice</h1>
         <p className="page-description">Save a non-posting draft or post the journal and VAT tax detail atomically.</p>
       </div>
       <PurchaseInvoiceForm
+        key={query.fresh ?? "new"}
         businessId={businessId}
-        suppliers={suppliers.map(({ id, name, defaultCurrencyCode }) => ({ id, name, defaultCurrencyCode }))}
+        isPrefilled={Boolean(query.quoteId || query.orderId || query.supplierId || query.projectId)}
+        suppliers={suppliers.map(({ id, name, defaultCurrencyCode, paymentTermsDays }) => ({ id, name, defaultCurrencyCode, paymentTermsDays }))}
         expenseAccounts={accounts.map(({ id, name }) => ({ id, name }))}
         taxCodes={taxes.map(({ id, name, rateBasisPoints, vatCategory }) => ({
           id,
@@ -188,6 +194,7 @@ export default async function NewPurchaseInvoicePage({
           lines,
         }}
         availableSupplierPrepayments={availableSupplierPrepayments}
+        lineCustomFields={lineCustomFields}
       />
     </div>
   );

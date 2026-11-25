@@ -45,27 +45,54 @@ function BusinessMenu({ business }: { business: BusinessCard }) {
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [archiveOpen, setArchiveOpen] = useState(false);
   const [name, setName] = useState(business.name);
+  const [pendingAction, setPendingAction] = useState<"rename" | "archive" | "delete" | null>(null);
   const admin = business.role === "administrator";
+  if (!admin) return null;
 
-  async function rename() {
-    const result = await renameBusinessAction(business.id, name);
-    if (result.error) return toast.error(result.error);
-    setRenameOpen(false);
-    toast.success("Business renamed.");
+  async function rename(e?: React.FormEvent) {
+    e?.preventDefault();
+    if (!name.trim() || pendingAction) return;
+    setPendingAction("rename");
+    try {
+      const result = await renameBusinessAction(business.id, name.trim());
+      if (result.error) return toast.error(result.error);
+      setRenameOpen(false);
+      toast.success("Business renamed.");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Could not rename business.");
+    } finally {
+      setPendingAction(null);
+    }
   }
 
   async function archive() {
-    const result = await archiveBusinessAction(business.id);
-    if (result.error) return toast.error(result.error);
-    setArchiveOpen(false);
-    toast.success("Business archived.");
+    if (pendingAction) return;
+    setPendingAction("archive");
+    try {
+      const result = await archiveBusinessAction(business.id);
+      if (result.error) return toast.error(result.error);
+      setArchiveOpen(false);
+      toast.success("Business archived.");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Could not archive business.");
+    } finally {
+      setPendingAction(null);
+    }
   }
 
   async function remove() {
-    const result = await deleteBusinessAction(business.id);
-    if (result.error) return toast.error(result.error);
-    setDeleteOpen(false);
-    toast.success("Business and its local files were deleted.");
+    if (pendingAction) return;
+    setPendingAction("delete");
+    try {
+      const result = await deleteBusinessAction(business.id);
+      if (result.error) return toast.error(result.error);
+      setDeleteOpen(false);
+      toast.success("Business and its local files were deleted.");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Could not delete business.");
+    } finally {
+      setPendingAction(null);
+    }
   }
 
   return (
@@ -77,26 +104,24 @@ function BusinessMenu({ business }: { business: BusinessCard }) {
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end">
-          <DropdownMenuItem disabled={!admin} onSelect={() => setRenameOpen(true)}>
+          <DropdownMenuItem
+            onSelect={() => {
+              setName(business.name);
+              setRenameOpen(true);
+            }}
+          >
             <Pencil className="size-4" /> Rename
           </DropdownMenuItem>
-          {admin ? (
-            <DropdownMenuItem asChild>
-              <a href={`/api/businesses/${business.id}/backup`}>
-                <Download className="size-4" /> Backup
-              </a>
-            </DropdownMenuItem>
-          ) : (
-            <DropdownMenuItem disabled title="Administrator access is required">
+          <DropdownMenuItem asChild>
+            <a href={`/api/businesses/${business.id}/backup`}>
               <Download className="size-4" /> Backup
-            </DropdownMenuItem>
-          )}
+            </a>
+          </DropdownMenuItem>
           <DropdownMenuSeparator />
-          <DropdownMenuItem disabled={!admin} onSelect={() => setArchiveOpen(true)}>
+          <DropdownMenuItem onSelect={() => setArchiveOpen(true)}>
             <Archive className="size-4" /> Archive
           </DropdownMenuItem>
           <DropdownMenuItem
-            disabled={!admin}
             className="text-danger focus:text-danger"
             onSelect={() => setDeleteOpen(true)}
           >
@@ -105,26 +130,49 @@ function BusinessMenu({ business }: { business: BusinessCard }) {
         </DropdownMenuContent>
       </DropdownMenu>
 
-      <DialogRoot open={renameOpen} onOpenChange={setRenameOpen}>
+      <DialogRoot
+        open={renameOpen}
+        onOpenChange={(open) => {
+          if (!pendingAction) {
+            if (open) setName(business.name);
+            setRenameOpen(open);
+          }
+        }}
+      >
         <DialogContent>
           <DialogTitle>Rename business</DialogTitle>
           <DialogDescription>
             This changes the display name only. Its isolated database identity stays the same.
           </DialogDescription>
-          <div className="mt-5 space-y-1.5">
-            <Label htmlFor={`rename-${business.id}`}>Business name</Label>
-            <Input id={`rename-${business.id}`} value={name} onChange={(event) => setName(event.target.value)} />
-          </div>
-          <div className="mt-5 flex justify-end gap-2">
-            <Button variant="ghost" onClick={() => setRenameOpen(false)}>
-              Cancel
-            </Button>
-            <Button onClick={rename}>Save name</Button>
-          </div>
+          <form onSubmit={rename}>
+            <div className="mt-5 space-y-1.5">
+              <Label htmlFor={`rename-${business.id}`}>Business name</Label>
+              <Input
+                id={`rename-${business.id}`}
+                value={name}
+                disabled={pendingAction === "rename"}
+                onChange={(event) => setName(event.target.value)}
+                required
+              />
+            </div>
+            <div className="mt-5 flex justify-end gap-2">
+              <Button type="button" variant="ghost" disabled={pendingAction === "rename"} onClick={() => setRenameOpen(false)}>
+                Cancel
+              </Button>
+              <Button type="submit" loading={pendingAction === "rename"} disabled={!name.trim()}>
+                Save name
+              </Button>
+            </div>
+          </form>
         </DialogContent>
       </DialogRoot>
 
-      <DialogRoot open={archiveOpen} onOpenChange={setArchiveOpen}>
+      <DialogRoot
+        open={archiveOpen}
+        onOpenChange={(open) => {
+          if (!pendingAction) setArchiveOpen(open);
+        }}
+      >
         <DialogContent>
           <DialogTitle>Archive {business.name}?</DialogTitle>
           <DialogDescription>
@@ -132,17 +180,22 @@ function BusinessMenu({ business }: { business: BusinessCard }) {
             a backup copy if you need it back.
           </DialogDescription>
           <div className="mt-5 flex justify-end gap-2">
-            <Button variant="secondary" onClick={() => setArchiveOpen(false)}>
+            <Button variant="secondary" disabled={pendingAction === "archive"} onClick={() => setArchiveOpen(false)}>
               Cancel
             </Button>
-            <Button onClick={archive}>
+            <Button onClick={archive} loading={pendingAction === "archive"}>
               <Archive className="size-4" /> Archive business
             </Button>
           </div>
         </DialogContent>
       </DialogRoot>
 
-      <DialogRoot open={deleteOpen} onOpenChange={setDeleteOpen}>
+      <DialogRoot
+        open={deleteOpen}
+        onOpenChange={(open) => {
+          if (!pendingAction) setDeleteOpen(open);
+        }}
+      >
         <DialogContent>
           <DialogTitle>Delete {business.name}?</DialogTitle>
           <DialogDescription>
@@ -150,10 +203,10 @@ function BusinessMenu({ business }: { business: BusinessCard }) {
             you may need it again.
           </DialogDescription>
           <div className="mt-5 flex justify-end gap-2">
-            <Button variant="secondary" onClick={() => setDeleteOpen(false)}>
+            <Button variant="secondary" disabled={pendingAction === "delete"} onClick={() => setDeleteOpen(false)}>
               Cancel
             </Button>
-            <Button variant="danger" onClick={remove}>
+            <Button variant="danger" onClick={remove} loading={pendingAction === "delete"}>
               Delete business
             </Button>
           </div>
@@ -210,7 +263,7 @@ export function BusinessList({ businesses }: { businesses: BusinessCard[] }) {
               className="group relative flex items-center justify-between gap-3 rounded-lg border border-border bg-surface-raised px-4 py-3 transition-colors hover:border-border-strong hover:bg-surface-muted/30"
             >
               <Link
-                href={`/b/${business.id}/overview`}
+                href={`/b/${business.id}`}
                 className="absolute inset-0 z-[1] rounded-lg"
                 tabIndex={-1}
                 aria-label={`Open ${business.name}`}
@@ -232,7 +285,7 @@ export function BusinessList({ businesses }: { businesses: BusinessCard[] }) {
 
               <div className="relative z-[2] flex items-center gap-1.5 shrink-0">
                 <Button asChild variant="secondary" size="sm" className="h-8 gap-1.5 font-medium">
-                  <Link href={`/b/${business.id}/overview`}>
+                  <Link href={`/b/${business.id}`}>
                     Open <ArrowRight className="size-3.5" />
                   </Link>
                 </Button>

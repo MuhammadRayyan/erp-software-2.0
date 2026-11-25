@@ -21,40 +21,49 @@ export function broadcastLiveRefresh() {
   }
 }
 
-export function useLiveRefresh(options?: { intervalMs?: number; refreshOnMount?: boolean }) {
+export function useLiveRefresh(options?: {
+  intervalMs?: number;
+  refreshOnMount?: boolean;
+  minStaleMs?: number;
+}) {
   const router = useRouter();
-  const { intervalMs = 6000, refreshOnMount = true } = options ?? {};
+  const { intervalMs = 0, refreshOnMount = true, minStaleMs = 60_000 } = options ?? {};
   const lastRefreshRef = useRef<number>(0);
 
   useEffect(() => {
-    const triggerRefresh = () => {
+    if (!refreshOnMount && lastRefreshRef.current === 0) {
+      lastRefreshRef.current = Date.now();
+    }
+    const triggerRefresh = (force = false) => {
       const now = Date.now();
       // Throttle rapid consecutive events within 1 second
       if (lastRefreshRef.current > 0 && now - lastRefreshRef.current < 1000) return;
+      // Passive focus/visibility/pageshow triggers only refresh when the view has aged past minStaleMs
+      if (!force && lastRefreshRef.current > 0 && now - lastRefreshRef.current < minStaleMs) return;
       lastRefreshRef.current = now;
       router.refresh();
     };
 
     if (refreshOnMount) {
-      triggerRefresh();
+      triggerRefresh(true);
     }
 
     const onFocus = () => {
-      triggerRefresh();
+      triggerRefresh(false);
     };
 
     const onVisibilityChange = () => {
       if (document.visibilityState === "visible") {
-        triggerRefresh();
+        triggerRefresh(false);
       }
     };
 
     const onPageShow = () => {
-      triggerRefresh();
+      triggerRefresh(false);
     };
 
     const onPopState = () => {
-      triggerRefresh();
+      triggerRefresh(true);
     };
 
     window.addEventListener("focus", onFocus);
@@ -67,7 +76,7 @@ export function useLiveRefresh(options?: { intervalMs?: number; refreshOnMount?:
       if (typeof BroadcastChannel !== "undefined") {
         channel = new BroadcastChannel(LIVE_REFRESH_CHANNEL);
         channel.onmessage = () => {
-          triggerRefresh();
+          triggerRefresh(true);
         };
       }
     } catch {
@@ -78,7 +87,7 @@ export function useLiveRefresh(options?: { intervalMs?: number; refreshOnMount?:
     if (intervalMs > 0) {
       intervalId = setInterval(() => {
         if (document.visibilityState === "visible") {
-          triggerRefresh();
+          triggerRefresh(true);
         }
       }, intervalMs);
     }
@@ -93,5 +102,5 @@ export function useLiveRefresh(options?: { intervalMs?: number; refreshOnMount?:
       }
       if (intervalId) clearInterval(intervalId);
     };
-  }, [router, intervalMs, refreshOnMount]);
+  }, [router, intervalMs, refreshOnMount, minStaleMs]);
 }

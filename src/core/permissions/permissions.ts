@@ -64,13 +64,15 @@ export const getBusinessAccess = cache((businessId: string, userId: string) => {
     const modules = isAdmin
       ? [...moduleKeys]
       : parseModules(effectiveRole, row.membership.modulesJson);
+    const requiresApproval = !isAdmin && Boolean(row.membership.requiresApproval);
 
     return {
       ...row,
       user,
-      membership: isAdmin ? { ...row.membership, role: "administrator" as const } : row.membership,
+      membership: isAdmin ? { ...row.membership, role: "administrator" as const, requiresApproval: false } : row.membership,
       isSuperAdmin: isSuper,
       isOwner,
+      requiresApproval,
       modules,
       capabilities,
     };
@@ -93,10 +95,12 @@ export const getBusinessAccess = cache((businessId: string, userId: string) => {
           userId,
           role: "administrator" as const,
           modulesJson: JSON.stringify([...moduleKeys]),
+          requiresApproval: false,
           createdAt: business.createdAt,
         },
         isSuperAdmin: true,
         isOwner: business.ownerUserId === userId,
+        requiresApproval: false,
         modules: [...moduleKeys],
         capabilities: getFullCapabilities(),
       };

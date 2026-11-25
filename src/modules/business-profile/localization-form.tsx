@@ -1,11 +1,13 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Calendar, Clock, DollarSign, LoaderCircle } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
+import { Combobox } from "@/components/ui/combobox";
 import { Label } from "@/components/ui/label";
 import { FormError } from "@/components/form-error";
+import { useUnsavedChanges } from "@/hooks/use-unsaved-changes";
 import { updateLocalizationAction } from "./actions";
 import type { LocalizationInput } from "./business-profile-input";
 import type { ResolvedBusinessProfile } from "./business-profile-service";
@@ -31,14 +33,28 @@ export function LocalizationForm({
   initial: ResolvedBusinessProfile;
   isAdmin: boolean;
 }) {
-  const [values, setValues] = useState<LocalizationInput>({
-    dateFormat: initial.dateFormat,
-    timeFormat: initial.timeFormat,
-    financialYearStartMonth: initial.financialYearStartMonth,
-  });
+  const baseline = useMemo<LocalizationInput>(
+    () => ({
+      dateFormat: initial.dateFormat,
+      timeFormat: initial.timeFormat,
+      financialYearStartMonth: initial.financialYearStartMonth,
+    }),
+    [initial.dateFormat, initial.timeFormat, initial.financialYearStartMonth],
+  );
+  const [values, setValues] = useState<LocalizationInput>(baseline);
 
   const [serverError, setServerError] = useState("");
   const [pending, setPending] = useState(false);
+
+  useEffect(() => {
+    setValues(baseline);
+  }, [baseline]);
+
+  const isDirty =
+    values.dateFormat !== baseline.dateFormat ||
+    values.timeFormat !== baseline.timeFormat ||
+    values.financialYearStartMonth !== baseline.financialYearStartMonth;
+  useUnsavedChanges(isDirty && isAdmin);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -60,6 +76,11 @@ export function LocalizationForm({
 
   return (
     <form onSubmit={handleSubmit} className="space-y-8 max-w-4xl">
+      {!isAdmin && (
+        <div className="rounded-md border border-info/25 bg-info/10 px-3 py-2 text-sm">
+          Only a business Administrator can change regional and localization settings.
+        </div>
+      )}
       {/* Date Format Selection */}
       <section className="rounded-lg border border-border bg-surface-raised p-6 shadow-xs space-y-4">
         <div className="flex items-center gap-2 border-b border-border pb-3">
@@ -153,29 +174,26 @@ export function LocalizationForm({
         <div className="grid gap-4 sm:grid-cols-2">
           <div className="space-y-1.5">
             <Label htmlFor="fiscalStart">Fiscal Year Start Month</Label>
-            <select
+            <Combobox
               id="fiscalStart"
-              value={values.financialYearStartMonth}
-              onChange={(e) => setValues({ ...values, financialYearStartMonth: Number(e.target.value) })}
+              ariaLabel="Fiscal Year Start Month"
+              searchable={false}
               disabled={!isAdmin}
-              className="w-full h-10 rounded-md border border-border bg-surface px-3 py-2 text-sm text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-            >
-              {MONTH_NAMES.map((name, idx) => (
-                <option key={name} value={idx + 1}>
-                  {name} (Month {idx + 1})
-                </option>
-              ))}
-            </select>
-            <p className="text-xs text-muted-foreground">
-              Used for financial statements, period comparison, and annual Profit & Loss calculations.
-            </p>
+              value={String(values.financialYearStartMonth)}
+              onValueChange={(next) =>
+                setValues({ ...values, financialYearStartMonth: Number(next) || 1 })
+              }
+              options={MONTH_NAMES.map((name, idx) => ({
+                value: String(idx + 1),
+                label: `${name} (Month ${idx + 1})`,
+              }))}
+            />
           </div>
-
-          <div className="rounded-md border border-border bg-surface-muted/50 p-4 space-y-1">
-            <span className="text-xs font-semibold text-foreground">Base Currency Notice</span>
-            <p className="text-xs text-muted-foreground">
-              The base accounting currency is <strong>{initial.baseCurrency}</strong>. Base currency changes are handled under Currencies & Exchange Rates.
-            </p>
+          <div className="space-y-1.5">
+            <Label>Base Currency</Label>
+            <div className="flex h-10 items-center rounded-md border border-border bg-surface-muted/50 px-3 text-sm font-medium text-foreground">
+              {initial.baseCurrency}
+            </div>
           </div>
         </div>
       </section>
@@ -184,7 +202,7 @@ export function LocalizationForm({
 
       {isAdmin && (
         <div className="flex justify-end gap-3 pt-2">
-          <Button permission={"save"} type="submit" disabled={pending}>
+          <Button permission="edit" type="submit" disabled={pending}>
             {pending && <LoaderCircle className="size-4 animate-spin mr-1.5" />}
             Save Localization Settings
           </Button>

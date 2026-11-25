@@ -2,18 +2,27 @@
 import { FormError } from "@/components/form-error";
 
 import Link from "next/link";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { LoaderCircle } from "lucide-react";
-import { useForm, useWatch } from "react-hook-form";
+import { Controller, useForm, useWatch } from "react-hook-form";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { SelectNative } from "@/components/ui/select-native";
 import { Textarea } from "@/components/ui/textarea";
 import { CustomFieldInputs, type CustomFieldInputDefinition } from "@/modules/custom-fields/custom-field-inputs";
-import { firstMissingRequiredCustomField } from "@/modules/custom-fields/custom-field-display";
+import {
+  buildInitialCustomFieldValues,
+  firstMissingRequiredCustomField,
+  haveCustomFieldValuesChanged,
+} from "@/modules/custom-fields/custom-field-display";
+import { useUnsavedChanges } from "@/hooks/use-unsaved-changes";
 import { createCustomerAction, updateCustomerAction } from "./actions";
 import { customerInputSchema, type CustomerInput } from "./customer-input";
+import { FieldError } from "@/components/ui/field-error";
+import { fieldErrorProps, applyServerFieldErrors, focusFirstInvalidField } from "@/lib/form-errors";
 
 type Values = CustomerInput;
 
@@ -39,10 +48,13 @@ export function CustomerForm({
     setError,
     control,
     setValue,
-    formState: { errors, isSubmitting },
+    formState: { errors, isSubmitting, isDirty, isSubmitSuccessful },
   } = useForm<Values>({
     resolver: zodResolver(customerInputSchema),
-    mode: "onTouched",
+    // Validate on submit, then live as the user corrects fields. Blur validation
+    // inserted error text that shifted the Save button mid-click.
+    mode: "onSubmit",
+    reValidateMode: "onChange",
     defaultValues: initial ?? {
       name: "",
       email: "",
@@ -74,14 +86,13 @@ export function CustomerForm({
 
   const billingAddress = useWatch({ control, name: "billingAddress" });
 
-  const [customValues, setCustomValues] = useState<Record<string, string>>(() => {
-    const initialCustomValues: Record<string, string> = {};
-    for (const definition of customFields) {
-      initialCustomValues[definition.id] =
-        customFieldValues?.[definition.id] ?? (definition.fieldType === "checkbox" ? "false" : "");
-    }
-    return initialCustomValues;
-  });
+  const initialCustomValues = useMemo(
+    () => buildInitialCustomFieldValues(customFields, customFieldValues),
+    [customFields, customFieldValues],
+  );
+  const [customValues, setCustomValues] = useState<Record<string, string>>(initialCustomValues);
+  const customDirty = haveCustomFieldValuesChanged(initialCustomValues, customValues);
+  useUnsavedChanges((isDirty || customDirty) && !isSubmitSuccessful);
 
   useEffect(() => {
     if (sameAsBilling) {
@@ -100,9 +111,7 @@ export function CustomerForm({
       ? await updateCustomerAction(businessId, customerId, values, customValues)
       : await createCustomerAction(businessId, values, customValues);
     if (result.fieldErrors) {
-      for (const [field, messages] of Object.entries(result.fieldErrors)) {
-        setError(field as keyof Values, { message: messages[0] });
-      }
+      applyServerFieldErrors(setError, result.fieldErrors);
     }
     if (result.error) setServerError(result.error);
   }
@@ -110,32 +119,31 @@ export function CustomerForm({
   const cancelHref = customerId ? `/b/${businessId}/customers/${customerId}` : `/b/${businessId}/customers`;
 
   return (
-    <form onSubmit={handleSubmit(submit)} className="space-y-7 max-w-4xl" noValidate>
+    <form onSubmit={handleSubmit(submit, focusFirstInvalidField)} className="space-y-7 max-w-4xl" noValidate>
       {serverError && <FormError message={serverError} />}
 
       {/* Primary Section: Contact & Billing Information */}
       <section className="border-b border-border pb-7">
         <h2 className="text-base font-semibold">Primary details</h2>
-        <p className="mt-1 text-sm text-muted-foreground">Basic contact information and billing address for invoices and receipts.</p>
         <div className="mt-5 grid gap-5 sm:grid-cols-2">
           <div className="space-y-1.5 sm:col-span-2">
             <Label htmlFor="name">
               Customer name <span className="text-destructive">*</span>
             </Label>
-            <Input id="name" autoFocus placeholder="e.g. Al Futtaim Trading LLC" {...register("name")} aria-invalid={!!errors.name} />
-            {errors.name && <p className="field-error">{errors.name.message}</p>}
+            <Input id="name" autoFocus placeholder="e.g. Al Futtaim Trading LLC" {...register("name")} {...fieldErrorProps("name", errors.name)} />
+            <FieldError name="name" message={errors.name?.message} />
           </div>
 
           <div className="space-y-1.5">
             <Label htmlFor="email">Email <span className="font-normal text-muted-foreground">(optional)</span></Label>
-            <Input id="email" type="email" placeholder="e.g. accounts@client.ae" {...register("email")} aria-invalid={!!errors.email} />
-            {errors.email && <p className="field-error">{errors.email.message}</p>}
+            <Input id="email" type="email" placeholder="e.g. accounts@client.ae" {...register("email")} {...fieldErrorProps("email", errors.email)} />
+            <FieldError name="email" message={errors.email?.message} />
           </div>
 
           <div className="space-y-1.5">
             <Label htmlFor="phone">Phone <span className="font-normal text-muted-foreground">(optional)</span></Label>
-            <Input id="phone" type="tel" placeholder="e.g. +971 4 123 4567" {...register("phone")} aria-invalid={!!errors.phone} />
-            {errors.phone && <p className="field-error">{errors.phone.message}</p>}
+            <Input id="phone" type="tel" placeholder="e.g. +971 4 123 4567" {...register("phone")} {...fieldErrorProps("phone", errors.phone)} />
+            <FieldError name="phone" message={errors.phone?.message} />
           </div>
 
           <div className="space-y-1.5 sm:col-span-2">
@@ -145,37 +153,17 @@ export function CustomerForm({
               rows={3}
               placeholder="Building, street, area, city, P.O. Box..."
               {...register("billingAddress")}
-              aria-invalid={!!errors.billingAddress}
+              {...fieldErrorProps("billingAddress", errors.billingAddress)}
             />
-            {errors.billingAddress && <p className="field-error">{errors.billingAddress.message}</p>}
-
-            {/* Mini currency selector positioned cleanly right below billing address */}
-            <div className="mt-2.5 flex flex-wrap items-center gap-2 pt-1 text-xs">
-              <Label htmlFor="defaultCurrencyCode" className="text-xs font-medium text-muted-foreground">
-                Document Currency:
-              </Label>
-              <select
-                id="defaultCurrencyCode"
-                className="h-8 rounded-md border border-border-strong bg-surface-raised px-2.5 text-xs font-semibold text-foreground outline-none transition-colors hover:border-primary focus:border-primary focus:ring-1 focus:ring-ring"
-                {...register("defaultCurrencyCode")}
-              >
-                {currencies.map((currency) => (
-                  <option key={currency.code} value={currency.code}>
-                    {currency.code} — {currency.name}
-                  </option>
-                ))}
-              </select>
-              <span className="text-[11px] text-muted-foreground">Default currency applied to new sales documents</span>
-            </div>
+            <FieldError name="billingAddress" message={errors.billingAddress?.message} />
           </div>
 
           <div className="space-y-1.5 sm:col-span-2">
-            <label className="flex items-center gap-2 text-sm font-medium leading-none cursor-pointer">
-              <input
-                type="checkbox"
-                className="size-4 rounded-[4px] border-border-strong accent-primary cursor-pointer"
+            <label className="flex items-center gap-2 text-sm font-medium leading-none cursor-pointer select-none">
+              <Checkbox
                 checked={sameAsBilling}
-                onChange={(e) => setSameAsBilling(e.target.checked)}
+                onCheckedChange={(checked) => setSameAsBilling(Boolean(checked))}
+                aria-label="Delivery address same as billing address"
               />
               Delivery address same as billing address
             </label>
@@ -189,9 +177,9 @@ export function CustomerForm({
                 rows={3}
                 placeholder="Warehouse or delivery destination..."
                 {...register("deliveryAddress")}
-                aria-invalid={!!errors.deliveryAddress}
+                {...fieldErrorProps("deliveryAddress", errors.deliveryAddress)}
               />
-              {errors.deliveryAddress && <p className="field-error">{errors.deliveryAddress.message}</p>}
+              <FieldError name="deliveryAddress" message={errors.deliveryAddress?.message} />
             </div>
           )}
         </div>
@@ -200,7 +188,6 @@ export function CustomerForm({
       {/* Additional Options Section */}
       <section className="border-b border-border pb-7">
         <h2 className="text-base font-semibold">Additional options</h2>
-        <p className="mt-1 text-sm text-muted-foreground">Optional commercial terms, tax registration, and customer status.</p>
         <div className="mt-5 grid gap-5 sm:grid-cols-2">
           <div className="space-y-1.5">
             <Label htmlFor="taxReference">TRN <span className="font-normal text-muted-foreground">(optional)</span></Label>
@@ -208,9 +195,23 @@ export function CustomerForm({
               id="taxReference"
               placeholder="e.g. 100xxxxxxxxxxxx"
               {...register("taxReference")}
-              aria-invalid={!!errors.taxReference}
+              {...fieldErrorProps("taxReference", errors.taxReference)}
             />
-            {errors.taxReference && <p className="field-error">{errors.taxReference.message}</p>}
+            <FieldError name="taxReference" message={errors.taxReference?.message} />
+          </div>
+
+          <div className="space-y-1.5">
+            <Label htmlFor="defaultCurrencyCode">Document Currency</Label>
+            <SelectNative
+              id="defaultCurrencyCode"
+              {...register("defaultCurrencyCode")}
+            >
+              {currencies.map((currency) => (
+                <option key={currency.code} value={currency.code}>
+                  {currency.code} — {currency.name}
+                </option>
+              ))}
+            </SelectNative>
           </div>
 
           <div className="space-y-1.5">
@@ -222,9 +223,9 @@ export function CustomerForm({
               max="365"
               placeholder="0 (Due on receipt)"
               {...register("paymentTermsDays")}
-              aria-invalid={!!errors.paymentTermsDays}
+              {...fieldErrorProps("paymentTermsDays", errors.paymentTermsDays)}
             />
-            {errors.paymentTermsDays && <p className="field-error">{errors.paymentTermsDays.message}</p>}
+            <FieldError name="paymentTermsDays" message={errors.paymentTermsDays?.message} />
           </div>
 
           <div className="space-y-1.5">
@@ -235,21 +236,26 @@ export function CustomerForm({
               min="0"
               placeholder="No limit"
               {...register("creditLimitMinor")}
-              aria-invalid={!!errors.creditLimitMinor}
+              {...fieldErrorProps("creditLimitMinor", errors.creditLimitMinor)}
             />
-            {errors.creditLimitMinor && <p className="field-error">{errors.creditLimitMinor.message}</p>}
+            <FieldError name="creditLimitMinor" message={errors.creditLimitMinor?.message} />
           </div>
 
           <div className="space-y-1.5 sm:col-span-2 pt-2">
-            <label className="flex items-center gap-2 text-sm font-medium leading-none cursor-pointer">
-              <input
-                type="checkbox"
-                className="size-4 rounded-[4px] border-border-strong accent-primary cursor-pointer"
-                {...register("isActive")}
+            <label className="flex items-center gap-2 text-sm font-medium leading-none cursor-pointer select-none">
+              <Controller
+                control={control}
+                name="isActive"
+                render={({ field }) => (
+                  <Checkbox
+                    checked={Boolean(field.value)}
+                    onCheckedChange={(checked) => field.onChange(Boolean(checked))}
+                    aria-label="Active customer"
+                  />
+                )}
               />
               Active customer
             </label>
-            <p className="text-[13px] text-muted-foreground ml-6">Inactive customers are hidden from standard lists and cannot be used for new invoices.</p>
           </div>
         </div>
       </section>
@@ -258,7 +264,6 @@ export function CustomerForm({
       {customFields.length > 0 && (
         <section className="border-b border-border pb-7">
           <h2 className="text-base font-semibold">Custom Fields</h2>
-          <p className="mt-1 text-sm text-muted-foreground">Fields defined in Settings → Custom Fields.</p>
           <CustomFieldInputs
             definitions={customFields}
             values={customValues}

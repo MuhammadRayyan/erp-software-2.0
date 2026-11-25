@@ -1,4 +1,5 @@
 import { mkdirSync } from "node:fs";
+import { cache } from "react";
 import Database from "better-sqlite3";
 import { and, eq } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/better-sqlite3";
@@ -6,12 +7,15 @@ import { businesses, memberships, users } from "./system-schema";
 import { getBusinessPaths } from "./paths";
 import { getSystemDb } from "./system";
 import { migrateBusinessDatabase } from "./business-migrations";
+import { applyStandardSqlitePragmas, checkpointAndOptimizeSqlite } from "./pragmas";
 import { moduleKeys } from "@/core/permissions/module-access";
 import * as schema from "./business-schema";
 import { businessMigrations } from "./business-migrations";
 import { readMigrationState } from "./migrations/runner";
+import { installStatementCache, type StatementCacheStats } from "./statement-cache";
+import { RETIRED_CONNECTION_CLOSE_DELAY_MS, STATEMENT_CHURN_RECYCLE_THRESHOLD } from "./connection-limits";
 
-const MAX_CONNECTIONS = 50;
+const MAX_CONNECTIONS = 12;
 const IDLE_TIMEOUT_MS = 5 * 60 * 1000;  // 5 minutes
 // Never evict a connection that was used this recently: a request may hold
 // the handle across an await boundary, and closing it would crash that
@@ -24,6 +28,7 @@ type Connection = {
   paths: ReturnType<typeof getBusinessPaths>;
   lastUsed: number;
   idleTimer: ReturnType<typeof setTimeout> | null;
+  statementStats: StatementCacheStats;
 };
 
 const connections = new Map<string, Connection>();
@@ -32,13 +37,33 @@ function closeConnection(directoryKey: string) {
   const conn = connections.get(directoryKey);
   if (!conn) return;
   if (conn.idleTimer) clearTimeout(conn.idleTimer);
-  try {
-    conn.sqlite.pragma("wal_checkpoint(PASSIVE)");
-  } catch {
-    // Ignore checkpoint error if database is busy during passive checkpoint
-  }
+  checkpointAndOptimizeSqlite(conn.sqlite);
   conn.sqlite.close();
   connections.delete(directoryKey);
+}
+
+/**
+ * Replaces a connection whose statement churn has retained too much native
+ * memory. The retired handle closes after a grace period so requests still
+ * holding it across an await keep working.
+ */
+function retireIfChurned(directoryKey: string) {
+  const conn = connections.get(directoryKey);
+  if (!conn || conn.statementStats.misses < STATEMENT_CHURN_RECYCLE_THRESHOLD) return;
+  if (conn.sqlite.inTransaction) return;
+  if (conn.idleTimer) clearTimeout(conn.idleTimer);
+  connections.delete(directoryKey);
+  const timer = setTimeout(() => {
+    try {
+      if (conn.sqlite.open) {
+        checkpointAndOptimizeSqlite(conn.sqlite);
+        conn.sqlite.close();
+      }
+    } catch {
+      // Closing a retired handle is best-effort.
+    }
+  }, RETIRED_CONNECTION_CLOSE_DELAY_MS);
+  timer.unref?.();
 }
 
 function scheduleIdleClose(directoryKey: string) {
@@ -72,6 +97,7 @@ function evictIfNeeded() {
 }
 
 export function openBusinessDatabase(directoryKey: string, options: { create?: boolean } = {}) {
+  retireIfChurned(directoryKey);
   let conn = connections.get(directoryKey);
   if (!conn) {
     evictIfNeeded();
@@ -80,15 +106,13 @@ export function openBusinessDatabase(directoryKey: string, options: { create?: b
     const external = process.env.ERP_MIGRATION_MODE === "external" && !options.create;
     const sqlite = new Database(paths.database, { timeout: 5000, fileMustExist: external });
     try {
-    sqlite.pragma("journal_mode = WAL");
-    sqlite.pragma("busy_timeout = 5000");
-    sqlite.pragma("synchronous = FULL");
-    sqlite.pragma("foreign_keys = ON");
+    applyStandardSqlitePragmas(sqlite);
     if (external) {
       if (!readMigrationState(sqlite, businessMigrations, `business database ${directoryKey}`).current) throw new Error("Business migrations are pending.");
     } else migrateBusinessDatabase(sqlite, `business database ${directoryKey}`);
+    const statementStats = installStatementCache(sqlite);
     const db = drizzle(sqlite, { schema });
-    conn = { sqlite, db, paths, lastUsed: Date.now(), idleTimer: null };
+    conn = { sqlite, db, paths, lastUsed: Date.now(), idleTimer: null, statementStats };
     connections.set(directoryKey, conn);
     } catch (error) {
       sqlite.close();
@@ -100,7 +124,7 @@ export function openBusinessDatabase(directoryKey: string, options: { create?: b
   return { sqlite: conn.sqlite, db: conn.db, paths: conn.paths };
 }
 
-export function getBusinessDb(businessId: string, userId?: string) {
+const resolveBusinessDbAccess = cache((businessId: string, userId?: string) => {
   if (userId) {
     const row = getSystemDb()
       .select({ business: businesses, membership: memberships })
@@ -125,7 +149,7 @@ export function getBusinessDb(businessId: string, userId?: string) {
           .get();
         if (b) {
           return {
-            ...openBusinessDatabase(b.directoryKey),
+            directoryKey: b.directoryKey,
             business: b,
             membership: {
               id: `super-admin-${userId}-${businessId}`,
@@ -146,8 +170,8 @@ export function getBusinessDb(businessId: string, userId?: string) {
     }
 
     return {
-      ...openBusinessDatabase(row.business.directoryKey),
-      ...row,
+      directoryKey: row.business.directoryKey,
+      business: row.business,
       membership: isSuper
         ? {
             ...row.membership,
@@ -165,7 +189,16 @@ export function getBusinessDb(businessId: string, userId?: string) {
     .get();
 
   if (!b) throw new Error("BUSINESS_NOT_FOUND");
-  return { ...openBusinessDatabase(b.directoryKey), business: b, membership: null as any };
+  return { directoryKey: b.directoryKey, business: b, membership: null as any };
+});
+
+export function getBusinessDb(businessId: string, userId?: string) {
+  const resolved = resolveBusinessDbAccess(businessId, userId);
+  return {
+    ...openBusinessDatabase(resolved.directoryKey),
+    business: resolved.business,
+    membership: resolved.membership,
+  };
 }
 
 export function closeBusinessConnection(directoryKey: string) {
@@ -177,4 +210,9 @@ export function closeAllBusinessConnections() {
   for (const key of [...connections.keys()]) {
     closeConnection(key);
   }
+}
+
+export function runImmediateTransaction<T>(sqlite: Database.Database, fn: () => T): T {
+  const tx = sqlite.transaction(fn);
+  return sqlite.inTransaction ? tx() : tx.immediate();
 }

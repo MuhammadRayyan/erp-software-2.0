@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { requireApiAuth } from "@/core/auth/api-auth";
+import { formatMajorMoney } from "@/core/format";
 import { renderDocumentPdf } from "@/modules/document-templates/template-registry";
 import { getBusinessProfile } from "@/modules/business-profile/business-profile-service";
 import { templateSettingsSchema } from "@/modules/document-templates/template-settings";
@@ -7,7 +8,12 @@ import type { DocumentTemplateData } from "@/modules/document-templates/types";
 
 export const runtime = "nodejs";
 
-function getSampleData(documentType: string, businessName: string, profile: ReturnType<typeof getBusinessProfile>): DocumentTemplateData & { invoiceTitle: string; customerLabel: string } {
+function getSampleData(
+  documentType: string,
+  businessName: string,
+  profile: ReturnType<typeof getBusinessProfile>,
+  currency = "AED",
+): DocumentTemplateData & { invoiceTitle: string; customerLabel: string } {
   const titleMap: Record<string, string> = {
     "sales-invoice": "INVOICE",
     "sales-quote": "SALES QUOTE",
@@ -75,13 +81,13 @@ function getSampleData(documentType: string, businessName: string, profile: Retu
     customerTrn: "100987654300003",
     customerEmail: "accounts@apexglobal.example",
     lines: [
-      { description: "Cloud ERP Implementation & Architecture Setup", quantity: "1", unitPrice: "AED 12,500.00", amount: "AED 12,500.00", discount: "5%", tax: "AED 593.75" },
-      { description: "Financial Chart of Accounts & UAE VAT Configuration", quantity: "1", unitPrice: "AED 4,200.00", amount: "AED 4,200.00", tax: "AED 210.00" },
-      { description: "Dedicated Systems Engineering & Workflow Training", quantity: "15 hrs", unitPrice: "AED 350.00", amount: "AED 5,250.00", tax: "AED 262.50" },
+      { description: "Cloud ERP Implementation & Architecture Setup", quantity: "1", unitPrice: formatMajorMoney("12500", currency), amount: formatMajorMoney("12500", currency), discount: "5%", tax: formatMajorMoney("593.75", currency) },
+      { description: "Financial Chart of Accounts & UAE VAT Configuration", quantity: "1", unitPrice: formatMajorMoney("4200", currency), amount: formatMajorMoney("4200", currency), tax: formatMajorMoney("210", currency) },
+      { description: "Dedicated Systems Engineering & Workflow Training", quantity: "15 hrs", unitPrice: formatMajorMoney("350", currency), amount: formatMajorMoney("5250", currency), tax: formatMajorMoney("262.5", currency) },
     ],
-    subtotal: "AED 21,325.00",
-    tax: "AED 1,066.25",
-    total: "AED 22,391.25",
+    subtotal: formatMajorMoney("21325", currency),
+    tax: formatMajorMoney("1066.25", currency),
+    total: formatMajorMoney("22391.25", currency),
     notes: "Thank you for your business. Prompt settlement is highly valued.",
     terms: "Payment is due within 30 days. Wire transfers should quote DOC-2026-0042 as reference.",
   };
@@ -93,13 +99,13 @@ export async function GET(
 ) {
   try {
     const { businessId } = await params;
-    const { session, access, error: authError } = await requireApiAuth(request, { businessId, module: "settings" });
+    const { session, access, error: authError } = await requireApiAuth(request, { businessId, module: "settings", requireAdmin: true });
     if (authError || !session || !access) return authError;
 
     const url = new URL(request.url);
     const documentType = url.searchParams.get("type") || "sales-invoice";
     const profile = getBusinessProfile(businessId, session.user.id);
-    const sampleData = getSampleData(documentType, access.business.name, profile);
+    const sampleData = getSampleData(documentType, access.business.name, profile, access.business.currency);
 
     const pdfBuffer = await renderDocumentPdf(businessId, session.user.id, documentType, sampleData);
 
@@ -124,7 +130,7 @@ export async function POST(
 ) {
   try {
     const { businessId } = await params;
-    const { session, access, error: authError } = await requireApiAuth(request, { businessId, module: "settings" });
+    const { session, access, error: authError } = await requireApiAuth(request, { businessId, module: "settings", requireAdmin: true });
     if (authError || !session || !access) return authError;
 
     const body = await request.json();
@@ -132,7 +138,7 @@ export async function POST(
     const parsedSettings = body.settings ? templateSettingsSchema.parse(body.settings) : undefined;
 
     const profile = getBusinessProfile(businessId, session.user.id);
-    const sampleData = getSampleData(documentType, access.business.name, profile);
+    const sampleData = getSampleData(documentType, access.business.name, profile, access.business.currency);
 
     const pdfBuffer = await renderDocumentPdf(businessId, session.user.id, documentType, sampleData, parsedSettings);
 

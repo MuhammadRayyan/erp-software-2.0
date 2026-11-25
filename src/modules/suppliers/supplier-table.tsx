@@ -1,25 +1,38 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, useTransition, type ReactNode } from "react";
+import type { RowSelectionState } from "@tanstack/react-table";
+import { BatchDocumentActions } from "@/components/batch/batch-document-actions";
+import { BatchActiveButtons } from "@/components/batch/batch-active-buttons";
+import { selectionColumn } from "@/components/batch/selection-column";
+import { batchSetSuppliersActiveAction } from "./actions";
 import Link from "next/link";
-import { Filter, ChevronRight, MoreHorizontal, Eye, FileEdit, FileText, ShoppingCart, BookOpenText } from "lucide-react";
-import { 
+import { debounce, useQueryStates } from "nuqs";
+import { MoreHorizontal, FileEdit, FileText, ShoppingCart, BookOpenText } from "lucide-react";
+import { useActionPermission } from "@/components/permissions-provider";
+import {
   useLegacyTable as useTable,
   getCoreRowModel as createCoreRowModel,
-  getSortedRowModel as createSortedRowModel
 } from "@tanstack/react-table/legacy";
-import { type SortingState } from "@tanstack/react-table";
 import { Badge } from "@/components/ui/badge";
 import { type ColumnVisibility } from "@/components/use-column-visibility";
 import { useColumns } from "@/components/columns-dropdown";
-import { ListToolbar, SearchInput, ActiveFiltersRow, FilterChip } from "@/components/list-toolbar";
+import { ListToolbar, SearchInput, ToolbarSelect, ActiveFiltersRow, FilterChip } from "@/components/list-toolbar";
 import { Button } from "@/components/ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
-import { DataTable } from "@/components/ui/data-table";
+import { DataTable, ListTableCard } from "@/components/ui/data-table";
 import { formatCustomFieldValue, type CustomFieldColumn } from "@/modules/custom-fields/custom-field-display";
-import { formatMoney } from "@/core/format";
+import { formatMoney, minorToDecimalString } from "@/core/format";
 import { DensityToggle } from "@/components/density-toggle";
+import { ExportCsvButton } from "@/components/export-csv-button";
 import { useTableDensity } from "@/components/use-table-density";
+import { TableTotalsBar } from "@/components/table-totals-bar";
+import type { SupplierListSummary } from "./supplier-service";
+import {
+  directoryListParsers,
+  resolveNextSortFromUpdater,
+  toSortingState,
+} from "@/lib/list-query-params";
 
 type SupplierRow = {
   id: string; name: string; email: string | null; is_active: number;
@@ -32,22 +45,38 @@ export function SupplierTable({
   businessId,
   currency,
   suppliers,
+  summary,
   customFields = [],
   customValues = {},
   serverSnapshot,
+  footer,
 }: {
   businessId: string;
   currency: string;
   suppliers: SupplierRow[];
+  summary: SupplierListSummary;
   customFields?: CustomFieldColumn[];
   customValues?: Record<string, Record<string, string>>;
   serverSnapshot?: ColumnVisibility;
+  footer?: ReactNode;
 }) {
   const { density } = useTableDensity(businessId);
+  const canCreatePerm = useActionPermission("create");
 
-  const [query, setQuery] = useState("");
-  const [activeOnly, setActiveOnly] = useState(false);
-  const [sorting, setSorting] = useState<SortingState>([]);
+  const [, startTransition] = useTransition();
+  const [urlState, setUrlState] = useQueryStates(directoryListParsers, {
+    shallow: false,
+    history: "replace",
+    scroll: false,
+    startTransition,
+  });
+
+  const query = urlState.q;
+  const statusFilter = urlState.status;
+  const sorting = useMemo(
+    () => toSortingState(urlState.sort, urlState.dir),
+    [urlState.sort, urlState.dir],
+  );
 
   // Memoized so the shared visibility hook sees a stable defaults reference.
   const initialColumns = useMemo(
@@ -76,12 +105,19 @@ export function SupplierTable({
     labels,
   });
 
-  const rows = useMemo(() => {
-    return suppliers.filter((supplier) => {
-      const matches = `${supplier.name} ${supplier.email ?? ""}`.toLowerCase().includes(query.trim().toLowerCase());
-      return matches && (!activeOnly || supplier.is_active === 1);
-    });
-  }, [activeOnly, query, suppliers]);
+  const rows = suppliers;
+
+  const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
+  const exportColumns = useMemo(() => [
+              { header: "Name", accessorKey: "name" },
+              { header: "Email", accessorFn: (r: SupplierRow) => r.email ?? "" },
+              {
+                header: "Outstanding",
+                accessorFn: (r: SupplierRow) =>
+                  minorToDecimalString(Math.max(0, r.total_purchased_minor - r.total_paid_minor), currency),
+              },
+              { header: "Status", accessorFn: (r: SupplierRow) => (r.is_active ? "Active" : "Inactive") },
+            ], [currency]);
 
   const columns: any[] = useMemo(
     () => [
@@ -130,6 +166,7 @@ export function SupplierTable({
         id: field.id,
         accessorFn: (row: any) => customValues[row.id]?.[field.id],
         header: field.name,
+        enableSorting: false,
         cell: ({ row }: any) => (
           <span className="text-muted-foreground">
             {formatCustomFieldValue(field.fieldType, customValues[row.original.id]?.[field.id])}
@@ -139,8 +176,9 @@ export function SupplierTable({
       {
         id: "actions",
         header: () => <span className="sr-only">Actions</span>,
-        meta: { className: "w-16 text-right" },
+        meta: { className: "w-12 text-right" },
         enableSorting: false,
+        enableHiding: false,
         cell: ({ row }: any) => {
           const sup = row.original;
           return (
@@ -152,11 +190,6 @@ export function SupplierTable({
                   </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end" className="w-48">
-                  <DropdownMenuItem asChild>
-                    <Link href={`/b/${businessId}/suppliers/${sup.id}`}>
-                      <Eye className="size-4 text-muted-foreground" /> View Profile
-                    </Link>
-                  </DropdownMenuItem>
                   <DropdownMenuItem permission="edit" asChild>
                     <Link href={`/b/${businessId}/suppliers/${sup.id}/edit`}>
                       <FileEdit className="size-4 text-muted-foreground" /> Edit Supplier
@@ -167,7 +200,7 @@ export function SupplierTable({
                       <BookOpenText className="size-4 text-muted-foreground" /> Statement
                     </Link>
                   </DropdownMenuItem>
-                  <DropdownMenuSeparator />
+                  {canCreatePerm && <DropdownMenuSeparator />}
                   <DropdownMenuItem permission="create" asChild>
                     <Link href={`/b/${businessId}/purchases/invoices/new?supplierId=${sup.id}`}>
                       <FileText className="size-4 text-muted-foreground" /> New Bill
@@ -180,73 +213,128 @@ export function SupplierTable({
                   </DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>
-              <Button asChild variant="ghost" size="icon" className="size-7 text-muted-foreground opacity-50 transition-opacity md:opacity-0 md:group-hover:opacity-100">
-                <Link href={`/b/${businessId}/suppliers/${sup.id}`} aria-label={`Open ${sup.name}`}>
-                  <ChevronRight className="size-4" />
-                </Link>
-              </Button>
             </div>
           );
         },
       },
     ],
-    [businessId, currency, customFields, customValues],
+    [businessId, canCreatePerm, currency, customFields, customValues],
   );
+
+  const tableColumns = useMemo(() => [selectionColumn<SupplierRow>((row) => row.name), ...columns], [columns]);
 
   const table = useTable({
     data: rows,
-    columns,
+    columns: tableColumns,
+    manualSorting: true,
+    getRowId: (row: SupplierRow) => row.id,
+    enableRowSelection: true,
+    onRowSelectionChange: setRowSelection,
     state: {
       sorting,
       columnVisibility: colVisibility,
+      rowSelection,
     },
-    onSortingChange: setSorting,
+    onSortingChange: (updater) => {
+      const next = resolveNextSortFromUpdater(updater, urlState.sort, urlState.dir, "asc");
+      void setUrlState({ sort: next.sort, dir: next.dir, page: 1 });
+    },
     getCoreRowModel: createCoreRowModel(),
-    getSortedRowModel: createSortedRowModel(),
   });
 
   const clearFilters = () => {
-    setQuery("");
-    setActiveOnly(false);
+    void setUrlState({ q: "", status: "", page: 1 });
   };
-  const hasActiveFilter = Boolean(query || activeOnly);
+  const hasActiveFilter = Boolean(query || statusFilter);
 
   return (
     <>
       <ListToolbar>
-        <SearchInput value={query} onChange={setQuery} placeholder="Search suppliers…" ariaLabel="Search suppliers" />
-        <Button
-          type="button"
-          variant={activeOnly ? "primary" : "secondary"}
-          size="sm"
-          className="h-9 gap-1.5 text-xs font-medium"
-          onClick={() => setActiveOnly((value) => !value)}
-        >
-          <Filter className="size-3.5" /> Active only
-        </Button>
+        <SearchInput
+          value={query}
+          onChange={(value) => {
+            void setUrlState({ q: value, page: 1 }, { limitUrlUpdates: value ? debounce(250) : undefined });
+          }}
+          placeholder="Search suppliers…"
+          ariaLabel="Search suppliers"
+        />
+        <ToolbarSelect
+          value={statusFilter}
+          onChange={(value) => void setUrlState({ status: value, page: 1 })}
+          ariaLabel="Filter by status"
+          options={[
+            { value: "", label: "All statuses" },
+            { value: "active", label: "Active only" },
+            { value: "inactive", label: "Inactive only" },
+          ]}
+        />
         <div className="ml-auto flex items-center gap-1.5 shrink-0">
+          <ExportCsvButton
+            size="sm"
+            filename="suppliers"
+            data={suppliers}
+            totalCount={summary.filteredTotal}
+            columns={exportColumns}
+          />
           <DensityToggle businessId={businessId} />
           {dropdown}
         </div>
       </ListToolbar>
       {hasActiveFilter && (
         <ActiveFiltersRow onClearAll={clearFilters}>
-          {activeOnly && (
-            <FilterChip onRemove={() => setActiveOnly(false)}>
-              Status: Active only
+          {statusFilter && (
+            <FilterChip onRemove={() => void setUrlState({ status: "", page: 1 })}>
+              Status: {statusFilter === "inactive" ? "Inactive only" : "Active only"}
             </FilterChip>
           )}
-          {query && <FilterChip onRemove={() => setQuery("")}>Search: {query}</FilterChip>}
+          {query && <FilterChip onRemove={() => void setUrlState({ q: "", page: 1 })}>Search: {query}</FilterChip>}
         </ActiveFiltersRow>
       )}
-      <DataTable
-        table={table}
-        density={density}
-        minWidth="min-w-[720px]"
-        noResultsMessage="No suppliers match these filters"
-        noResultsSubtext="Clear the search or active-status filter."
-        onClearFilters={clearFilters}
-      />
+      <ListTableCard>
+        <DataTable
+          table={table}
+          density={density}
+          framed={false}
+          minWidth="min-w-[720px]"
+          getRowHref={(s: SupplierRow) => `/b/${businessId}/suppliers/${s.id}`}
+          noResultsMessage="No suppliers match these filters"
+          noResultsSubtext="Clear the search or active-status filter."
+          onClearFilters={clearFilters}
+        />
+        {summary.filteredTotal > 0 && (
+          <TableTotalsBar
+            filteredCount={summary.filteredTotal}
+            totalCount={summary.unfilteredTotal}
+            itemLabel="suppliers"
+            metrics={[
+              { label: "Active", value: String(summary.activeCount), tone: "primary" },
+              {
+                label: "Total Outstanding",
+                value: formatMoney(summary.totalOutstandingMinor, currency),
+                tone: summary.totalOutstandingMinor > 0 ? "danger" : "default",
+              },
+            ]}
+          />
+        )}
+        {footer}
+      </ListTableCard>
+      <BatchDocumentActions
+        selected={rows.filter((row) => rowSelection[row.id])}
+        totalCount={rows.length}
+        noun={{ one: "supplier", many: "suppliers" }}
+        statusOf={(row) => (Boolean(row.is_active) ? "active" : "inactive")}
+        onClear={() => setRowSelection({})}
+        onSelectAll={() => table.toggleAllRowsSelected(true)}
+        exportConfig={{ filename: "suppliers", columns: exportColumns }}
+      >
+        <BatchActiveButtons
+          selected={rows.filter((row) => rowSelection[row.id])}
+          isActive={(row) => Boolean(row.is_active)}
+          noun={{ one: "supplier", many: "suppliers" }}
+          setActive={(ids, value) => batchSetSuppliersActiveAction(businessId, ids, value)}
+          onDone={() => setRowSelection({})}
+        />
+      </BatchDocumentActions>
     </>
   );
 }

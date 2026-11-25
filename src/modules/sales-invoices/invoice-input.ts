@@ -6,7 +6,7 @@ import {
   moneySchema,
   projectIdField,
   quantitySchema,
-amountsIncludeTaxSchema, discountTypeSchema, discountValueSchema } from "@/core/validation/document-schemas";
+amountsIncludeTaxSchema, discountTypeSchema, discountValueSchema, lineCustomFieldsSchema } from "@/core/validation/document-schemas";
 
 export const invoiceLineSchema = z.object({
   itemId: itemIdField,
@@ -18,6 +18,7 @@ export const invoiceLineSchema = z.object({
   salesAccountId: z.string().min(1, "Choose a sales account"),
   taxCodeId: z.string().min(1, "Choose a tax code"),
   projectId: projectIdField,
+  customFields: lineCustomFieldsSchema,
 });
 
 export const invoiceInputSchema = z.object({

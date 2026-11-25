@@ -1,21 +1,25 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo } from "react";
 import Link from "next/link";
-import { ChevronRight, MoreHorizontal, Eye, FileEdit, Download, FileText, PackagePlus } from "lucide-react";
+import { MoreHorizontal, FileEdit, Download, FileText, PackagePlus } from "lucide-react";
+import { useActionPermission } from "@/components/permissions-provider";
 import { 
   useLegacyTable as useTable,
   getCoreRowModel as createCoreRowModel,
+  getPaginationRowModel as createPaginationRowModel,
   getSortedRowModel as createSortedRowModel
 } from "@tanstack/react-table/legacy";
-import { type SortingState } from "@tanstack/react-table";
 import { StatusBadge, statusLabel } from "@/components/status-badge";
 import { ListToolbar, SearchInput, ToolbarSelect, DateRangeFilter, ActiveFiltersRow, FilterChip } from "@/components/list-toolbar";
 import { Button } from "@/components/ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { useColumns } from "@/components/columns-dropdown";
-import { DataTable } from "@/components/ui/data-table";
-import { formatDate, formatMoney } from "@/core/format";
+import { DataTable, ListTableCard } from "@/components/ui/data-table";
+import { ClientListPagination } from "@/components/list-pagination";
+import { ExportCsvButton } from "@/components/export-csv-button";
+import { useUrlListState } from "@/hooks/use-url-list-state";
+import { formatDate, formatMoney, minorToDecimalString, getBusinessTodayIso } from "@/core/format";
 import type { PurchaseOrderStatus } from "./purchase-order-service";
 import { DensityToggle } from "@/components/density-toggle";
 import { useTableDensity } from "@/components/use-table-density";
@@ -53,14 +57,26 @@ export function PurchaseOrderTable({
   serverSnapshot?: import("@/components/use-column-visibility").ColumnVisibility;
 }) {
   const { density } = useTableDensity(businessId);
+  const canEditPerm = useActionPermission("edit");
+  const canExportPerm = useActionPermission("export");
+  const canCreatePerm = useActionPermission("create");
+  const canCreateInventoryPerm = useActionPermission("create", "inventory");
 
-  const [query, setQuery] = useState("");
-  const [status, setStatus] = useState("");
-  const [supplierId, setSupplierId] = useState("");
-  const [projectId, setProjectId] = useState("");
-  const [fromDate, setFromDate] = useState("");
-  const [toDate, setToDate] = useState("");
-  const [sorting, setSorting] = useState<SortingState>([]);
+  const {
+    query,
+    status,
+    supplierId,
+    projectId,
+    fromDate,
+    toDate,
+    sorting,
+    setFilter,
+    setPage,
+    setPageSize,
+    onSortingChange,
+    resetFilters,
+    buildPagination,
+  } = useUrlListState();
 
   const supplierOptions = useMemo(
     () => Array.from(new Map(orders.map((order) => [order.supplier_id, order.supplier_name])).entries()).sort((a, b) => a[1].localeCompare(b[1])),
@@ -141,12 +157,19 @@ export function PurchaseOrderTable({
       {
         id: "actions",
         header: () => <span className="sr-only">Actions</span>,
-        meta: { className: "w-16 text-right" },
+        meta: { className: "w-12 text-right" },
         enableSorting: false,
         cell: ({ row }: any) => {
           const order = row.original;
-          const canEdit = order.status !== "closed" && order.status !== "cancelled" && order.status !== "superseded";
+          const canEdit =
+            order.status !== "closed" &&
+            order.status !== "cancelled" &&
+            order.status !== "superseded" &&
+            order.status !== "pending_approval";
           const canBill = order.status === "issued";
+          const hasUpper = (canEdit && canEditPerm) || canExportPerm;
+          const hasLower = canBill && (canCreatePerm || canCreateInventoryPerm);
+          if (!hasUpper && !hasLower) return null;
           return (
             <div className="flex items-center justify-end gap-1">
               <DropdownMenu>
@@ -156,11 +179,6 @@ export function PurchaseOrderTable({
                   </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end" className="w-52">
-                  <DropdownMenuItem asChild>
-                    <Link href={`/b/${order.businessId}/purchases/orders/${order.id}`}>
-                      <Eye className="size-4 text-muted-foreground" /> View Order
-                    </Link>
-                  </DropdownMenuItem>
                   {canEdit && (
                     <DropdownMenuItem permission="edit" asChild>
                       <Link href={`/b/${order.businessId}/purchases/orders/${order.id}/edit`}>
@@ -175,13 +193,13 @@ export function PurchaseOrderTable({
                   </DropdownMenuItem>
                   {canBill && (
                     <>
-                      <DropdownMenuSeparator />
+                      {hasUpper && hasLower && <DropdownMenuSeparator />}
                       <DropdownMenuItem permission="create" asChild>
                         <Link href={`/b/${order.businessId}/purchases/invoices/new?orderId=${order.id}`}>
                           <FileText className="size-4 text-muted-foreground" /> Bill Purchase Order
                         </Link>
                       </DropdownMenuItem>
-                      <DropdownMenuItem permission="create" asChild>
+                      <DropdownMenuItem permission="create" permissionModule="inventory" asChild>
                         <Link href={`/b/${order.businessId}/purchases/goods-receipts/new?orderId=${order.id}`}>
                           <PackagePlus className="size-4 text-muted-foreground" /> Receive Goods
                         </Link>
@@ -190,32 +208,31 @@ export function PurchaseOrderTable({
                   )}
                 </DropdownMenuContent>
               </DropdownMenu>
-              <Button asChild variant="ghost" size="icon" className="size-7 text-muted-foreground opacity-50 transition-opacity md:opacity-0 md:group-hover:opacity-100">
-                <Link href={`/b/${order.businessId}/purchases/orders/${order.id}`} aria-label={`Open ${order.order_number}`}>
-                  <ChevronRight className="size-4" />
-                </Link>
-              </Button>
             </div>
           );
         },
       },
     ],
-    [],
+    [canCreatePerm, canCreateInventoryPerm, canEditPerm, canExportPerm],
   );
+
+  const { pagination, paginationInfo } = buildPagination(rows.length);
 
   const table = useTable({
     data: rows,
     columns,
     state: {
       sorting,
+      pagination,
       columnVisibility: colVisibility,
     },
-    onSortingChange: setSorting,
+    onSortingChange,
     getCoreRowModel: createCoreRowModel(),
     getSortedRowModel: createSortedRowModel(),
+    getPaginationRowModel: createPaginationRowModel(),
   });
 
-  const clearFilters = () => { setQuery(""); setStatus(""); setSupplierId(""); setProjectId(""); setFromDate(""); setToDate(""); };
+  const clearFilters = resetFilters;
   const hasActiveFilter = Boolean(supplierId || projectId || fromDate || toDate || status || query);
 
   const totalPOValueStr = useMemo(() => {
@@ -235,52 +252,75 @@ export function PurchaseOrderTable({
 
   return <>
     <ListToolbar>
-      <SearchInput value={query} onChange={setQuery} placeholder="Search purchase orders…" ariaLabel="Search purchase orders" />
-      <ToolbarSelect value={supplierId} onChange={setSupplierId} ariaLabel="Filter by supplier" className="min-w-36 max-w-52" options={[{ value: "", label: "All suppliers" }, ...supplierOptions.map(([id, name]) => ({ value: id, label: name }))]} />
-      <ToolbarSelect value={projectId} onChange={setProjectId} ariaLabel="Filter by project" className="min-w-36 max-w-52" options={[{ value: "", label: "All projects" }, ...projectOptions.map(([id, name]) => ({ value: id, label: name }))]} />
+      <SearchInput value={query} onChange={(val) => setFilter("q", val)} placeholder="Search purchase orders…" ariaLabel="Search purchase orders" />
+      <ToolbarSelect value={supplierId} onChange={(val) => setFilter("supplierId", val)} ariaLabel="Filter by supplier" className="min-w-36 max-w-52" options={[{ value: "", label: "All suppliers" }, ...supplierOptions.map(([id, name]) => ({ value: id, label: name }))]} />
+      <ToolbarSelect value={projectId} onChange={(val) => setFilter("projectId", val)} ariaLabel="Filter by project" className="min-w-36 max-w-52" options={[{ value: "", label: "All projects" }, ...projectOptions.map(([id, name]) => ({ value: id, label: name }))]} />
       <DateRangeFilter
         fromDate={fromDate}
         toDate={toDate}
-        onFromChange={setFromDate}
-        onToChange={setToDate}
+        onFromChange={(val) => setFilter("from", val)}
+        onToChange={(val) => setFilter("to", val)}
         fromAriaLabel="Order date from"
         toAriaLabel="Order date to"
       />
-      <ToolbarSelect value={status} onChange={setStatus} ariaLabel="Filter by status" options={[{ value: "", label: "All statuses" }, { value: "draft", label: "Draft" }, { value: "issued", label: "Issued" }, { value: "closed", label: "Closed" }, { value: "cancelled", label: "Cancelled" }]} />
+      <ToolbarSelect value={status} onChange={(val) => setFilter("status", val)} ariaLabel="Filter by status" options={[{ value: "", label: "All statuses" }, { value: "draft", label: "Draft" }, { value: "pending_approval", label: "Pending Approval" }, { value: "issued", label: "Issued" }, { value: "closed", label: "Closed" }, { value: "cancelled", label: "Cancelled" }]} />
       <div className="ml-auto flex items-center gap-1.5 shrink-0">
+        <ExportCsvButton
+          size="sm"
+          filename={`purchase-orders-${getBusinessTodayIso()}.csv`}
+          data={rows}
+          columns={[
+            { header: "Order Number", accessorKey: "order_number" },
+            { header: "Supplier", accessorKey: "supplier_name" },
+            { header: "Date", accessorKey: "date" },
+            { header: "Expected Date", accessorKey: "expected_date" },
+            { header: "Currency", accessorKey: "currency_code" },
+            { header: "Total", accessorFn: (r: any) => minorToDecimalString(r.total_minor, r.currency_code, r.currency_minor_unit) },
+            { header: "Status", accessorKey: "status" },
+          ]}
+        />
         <DensityToggle businessId={businessId} />
         {dropdown}
       </div>
     </ListToolbar>
     {hasActiveFilter && (
       <ActiveFiltersRow onClearAll={clearFilters}>
-        {supplierId && <FilterChip onRemove={() => setSupplierId("")}>Supplier: {supplierOptions.find(([id]) => id === supplierId)?.[1]}</FilterChip>}
-        {projectId && <FilterChip onRemove={() => setProjectId("")}>Project: {projectOptions.find(([id]) => id === projectId)?.[1]}</FilterChip>}
-        {fromDate && <FilterChip onRemove={() => setFromDate("")}>From: {formatDate(fromDate)}</FilterChip>}
-        {toDate && <FilterChip onRemove={() => setToDate("")}>To: {formatDate(toDate)}</FilterChip>}
-        {status && <FilterChip onRemove={() => setStatus("")}>Status: {statusLabel(status)}</FilterChip>}
-        {query && <FilterChip onRemove={() => setQuery("")}>Search: {query}</FilterChip>}
+        {supplierId && <FilterChip onRemove={() => setFilter("supplierId", "")}>Supplier: {supplierOptions.find(([id]) => id === supplierId)?.[1]}</FilterChip>}
+        {projectId && <FilterChip onRemove={() => setFilter("projectId", "")}>Project: {projectOptions.find(([id]) => id === projectId)?.[1]}</FilterChip>}
+        {fromDate && <FilterChip onRemove={() => setFilter("from", "")}>From: {formatDate(fromDate)}</FilterChip>}
+        {toDate && <FilterChip onRemove={() => setFilter("to", "")}>To: {formatDate(toDate)}</FilterChip>}
+        {status && <FilterChip onRemove={() => setFilter("status", "")}>Status: {statusLabel(status)}</FilterChip>}
+        {query && <FilterChip onRemove={() => setFilter("q", "")}>Search: {query}</FilterChip>}
       </ActiveFiltersRow>
     )}
 
-    <DataTable 
-      table={table}
-      density={density}
-      minWidth="min-w-[780px]" 
-      noResultsMessage="No purchase orders match" 
-      onClearFilters={clearFilters}
-    />
-
-    {rows.length > 0 && (
-      <TableTotalsBar
-        filteredCount={rows.length}
-        totalCount={orders.length}
-        itemLabel="orders"
-        metrics={[
-          { label: "Total PO Value", value: totalPOValueStr, tone: "primary" },
-          { label: "Active Orders", value: `${activeCount} orders` },
-        ]}
+    <ListTableCard>
+      <DataTable 
+        table={table}
+        density={density}
+        framed={false}
+        minWidth="min-w-[780px]" 
+        noResultsMessage="No purchase orders match" 
+        onClearFilters={clearFilters}
+        getRowHref={(row: Row) => `/b/${row.businessId}/purchases/orders/${row.id}`}
       />
-    )}
+
+      {rows.length > 0 && (
+        <TableTotalsBar
+          filteredCount={rows.length}
+          totalCount={orders.length}
+          itemLabel="orders"
+          metrics={[
+            { label: "Total PO Value", value: totalPOValueStr, tone: "primary" },
+            { label: "Active Orders", value: `${activeCount} orders` },
+          ]}
+        />
+      )}
+      <ClientListPagination
+        info={paginationInfo}
+        onPageChange={setPage}
+        onPageSizeChange={setPageSize}
+      />
+    </ListTableCard>
   </>;
 }

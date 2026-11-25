@@ -11,8 +11,8 @@ import { saveBankTransaction, voidBankTransaction } from "./bank-transaction-ser
 import { bankTransferInputSchema } from "./bank-transfer-input";
 import { createBankTransfer, voidBankTransfer } from "./bank-transfer-service";
 import { csvMappingSchema } from "./csv-import";
-import { confirmStatementMatch, ignoreStatementLine, resetStatementLine } from "./matching-service";
-import type { MatchSourceType } from "./matching-types";
+import { confirmStatementMatch, confirmStatementMatches, ignoreStatementLine, resetStatementLine } from "./matching-service";
+import type { MatchSourceRef, MatchSourceType } from "./matching-types";
 import { completeReconciliation, startReconciliation } from "./reconciliation-service";
 import { reconciliationInputSchema } from "./reconciliation-input";
 import { importBankStatement } from "./statement-service";
@@ -102,6 +102,25 @@ export async function matchStatementLineAction(
   } catch (error) { return { error: message(error, "The match could not be confirmed.") }; }
 }
 
+const matchSourcesSchema = z.array(z.object({
+  sourceType: z.enum(["receipt", "supplier_payment", "bank_transaction", "bank_transfer"]),
+  sourceId: z.string().min(1),
+})).min(1).max(100);
+
+/** Matches one statement line to one or more book entries (reconciliation workspace). */
+export async function matchStatementLineToManyAction(
+  businessId: string, accountId: string, lineId: string, sources: MatchSourceRef[],
+) {
+  const { user } = await requirePermission(businessId, "banking", "edit");
+  const parsed = matchSourcesSchema.safeParse(sources);
+  if (!parsed.success) return { error: "Select the transactions to match." };
+  try {
+    confirmStatementMatches(businessId, user.id, lineId, parsed.data);
+    revalidatePath(`/b/${businessId}/banking/accounts/${accountId}`, "layout");
+    return {};
+  } catch (error) { return { error: message(error, "The match could not be confirmed.") }; }
+}
+
 export async function ignoreStatementLineAction(businessId: string, accountId: string, lineId: string) {
   const { user } = await requirePermission(businessId, "banking", "edit");
   try { ignoreStatementLine(businessId, user.id, lineId); revalidatePath(`/b/${businessId}/banking/accounts/${accountId}`); return {}; }
@@ -140,15 +159,15 @@ export async function saveBankRuleAction(
   ruleId: string | null,
   input: unknown,
 ): Promise<BankingActionResult & { id?: string }> {
-  const { user } = await requirePermission(businessId, "settings", "edit");
-  const parsed = bankRuleInputSchema.safeParse(input);
-  if (!parsed.success) {
-    return {
-      error: "Please check the bank rule form fields.",
-      fieldErrors: z.flattenError(parsed.error).fieldErrors as Record<string, string[]>,
-    };
-  }
   try {
+    const { user } = await requirePermission(businessId, "settings", "edit");
+    const parsed = bankRuleInputSchema.safeParse(input);
+    if (!parsed.success) {
+      return {
+        error: "Please check the bank rule form fields.",
+        fieldErrors: z.flattenError(parsed.error).fieldErrors as Record<string, string[]>,
+      };
+    }
     if (ruleId) {
       updateBankRule(businessId, user.id, ruleId, parsed.data);
       revalidatePath(`/b/${businessId}/settings/bank-rules`);
@@ -169,8 +188,8 @@ export async function deleteBankRuleAction(
   businessId: string,
   ruleId: string,
 ): Promise<BankingActionResult> {
-  const { user } = await requirePermission(businessId, "settings", "edit");
   try {
+    const { user } = await requirePermission(businessId, "settings", "edit");
     deleteBankRule(businessId, user.id, ruleId);
     revalidatePath(`/b/${businessId}/settings/bank-rules`);
     revalidatePath(`/b/${businessId}/banking`);
@@ -185,8 +204,8 @@ export async function toggleBankRuleActiveAction(
   ruleId: string,
   isActive: boolean,
 ): Promise<BankingActionResult> {
-  const { user } = await requirePermission(businessId, "settings", "edit");
   try {
+    const { user } = await requirePermission(businessId, "settings", "edit");
     toggleBankRuleActive(businessId, user.id, ruleId, isActive);
     revalidatePath(`/b/${businessId}/settings/bank-rules`);
     revalidatePath(`/b/${businessId}/banking`);

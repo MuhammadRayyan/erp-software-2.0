@@ -4,17 +4,17 @@ The supported production path is a pull request to `main`, required verification
 
 ## Everyday remote work
 
-Current scope: a few businesses and 5–10 users in closed testing. The owner is keeping the repository public and deferring additional hardening/maintenance automation. Existing release gates remain enabled. See [NEXT_STEPS.md](NEXT_STEPS.md) for testing and deferred decisions; this runbook does not authorize a reboot or new infrastructure by itself.
+Current scope: a few businesses and 5–10 users in closed testing. The owner is keeping the repository public and deferring additional hardening/maintenance automation. Existing release gates remain enabled. This runbook does not authorize a host reboot or new infrastructure by itself.
 
 1. Create a short branch from current `main`, make the change, and open a pull request.
-2. The **Verify source and financial regressions** check validates the workflow and deployment failure recovery, performs a locked install, typechecks, lints, tests, audits production dependencies, builds production, and runs isolated browser scenarios.
+2. The **Verify source and financial regressions** check validates the workflow and deployment failure recovery, performs a locked install, typechecks (with isolated `.next-validate` validation via `tsconfig.validate.json`), lints, tests (`npm test` across `tests/{unit,accounting,platform,integration}/` + `npm run test:hardening`), audits production dependencies, builds production (with production CSP omitting `'unsafe-eval'`), and runs isolated browser scenarios from `tests/e2e/`.
 3. **Verify ARM64 production image** builds the actual Linux ARM64 image and exercises its runtime validation, migrations, checks, readiness, login route, non-root user, and secret-file exclusions. A deliberately interrupted synthetic process leaves committed system/tenant WAL files; CI snapshots the read-only source, checksums the backup, confirms committed rows/attachments survived, and rehearses restoration/migration.
 4. Merge only after both required checks pass. A push to `main` repeats verification, publishes the tested image to GHCR, then deploys its exact digest. The image carries the Git revision in its labels and health response.
 5. Deployment is serialized by GitHub concurrency and a host `flock`. It pulls before maintenance, retains the prior image/assets, stops and drains the app, snapshots data, verifies checksums, rehearses restore/migration on a copy, migrates production, starts the release, and verifies every registered tenant plus public HTTPS/revision.
 
 The `production` GitHub environment must allow only protected branches. Protect `main` with the two check names above, strict up-to-date checks, required pull requests, no force pushes/deletion, and resolved conversations. A single-maintainer repository can require PRs with zero additional approvals; a second reviewer can be required when collaborators are available.
 
-The acceptance/cleanup follow-up expands the source job's browser command to `npm run test:e2e`: eleven isolated scenarios covering business/action boundaries, sales/purchase settlement flows, payroll, PDFs and keyboard/mobile behavior. Failure evidence is collected from `test-results/acceptance`. The smaller `test:browser:hardening` command remains available for focused checks. Historical release results describe their original five browser scenarios; each new release must pass the expanded gate before promotion.
+`npm run test:e2e` runs the isolated Playwright acceptance configuration under `tests/e2e/` covering business/action boundaries, sales/purchase settlement flows, payroll, PDFs, keyboard/mobile behavior, comparative/drill-down reporting, UAE regulatory workflows (WPS, PDC, FTA FAF/TRN), and Maker-Checker approvals. Failure evidence is collected from `test-results/acceptance`. `test:browser:hardening` and Sprint 2/3 browser suites (`playwright.sprint2.config.ts`, `playwright.sprint3.config.ts`) remain available for focused checks. Each new release must pass the full source + image gates before promotion.
 
 The workflow uses the existing `SERVER_HOST`, `SERVER_USER`, and `SSH_PRIVATE_KEY` secrets. `SERVER_KNOWN_HOSTS` is a repository variable containing the verified public SSH host key entry, not a key obtained blindly during deployment. Third-party Actions and base images are pinned; Dependabot proposes updates.
 
@@ -24,16 +24,16 @@ The image test also invokes the application's actual HTML-template PDF renderer 
 
 Builds can fail. The guarantee provided by the workflow is that an unverified build is not promoted, and a deployment failure is reported as a failure. A single application instance has a short maintenance interval; measure it rather than claiming zero downtime.
 
-## Operational access — verified 26 October 2026
+## Operational access — verified 11 November 2026
 
 GitHub and verified SSH access work. The owner workstation also has separately approved read-only Oracle/Sentry API credentials; they are independent of the deployment secrets above. Check existing private configuration before asking for another login or creating another credential. Other workstations need their own authorized access.
 
-- **OCI:** named profile `ERP_OPERATIONS` in `~/.oci/config`; API-only user `erp-operations-api`, group/policy `erp-operations-readonly`. The key/user are ACTIVE. Console login, auth tokens, customer secret keys, database/OAuth2/SMTP credentials are disabled. Infrastructure/monitoring reads and IAM metadata inspection are granted across the tenancy; ordinary self-service management of this user's own keys still applies. Thirteen actual local read-only checks passed with zero failures.
-- **Local OCI usage:** `~/.oci/ERP_API_SETUP.md` contains usage/revocation instructions; `~/.oci/ERP_API_VERIFICATION.json` contains dated results. The isolated CLI is `~/.oci/cli/Scripts/oci.exe`. On this Windows workstation, `~/.oci/oci.ps1` supplies compatible process-only module paths for the CLI's Windows ACL check. Use `--profile ERP_OPERATIONS`; no DEFAULT profile was created.
+- **OCI:** named profile `ERP_OPERATIONS` in `~/.oci/config`; API-only user `erp-operations-api`, group/policy `erp-operations-readonly`. The key/user are ACTIVE. Console login, auth tokens, customer secret keys, database/OAuth2/SMTP credentials are disabled. Infrastructure/monitoring reads and IAM metadata inspection are granted across the tenancy; ordinary self-service management of this user's own keys still applies. Fourteen actual local read-only checks passed with zero failures (`~/.oci/verify_erp_operations.py`).
+- **Local OCI usage:** `~/.oci/ERP_API_SETUP.md` contains usage/revocation instructions; `~/.oci/ERP_API_VERIFICATION.json` contains dated results. Use `--profile ERP_OPERATIONS`; no DEFAULT profile was created.
 - **Sentry:** private `~/.sentryclirc`, project `personal-bv0 / erp-20`, scopes `alerts:read`, `event:read`, `org:read`, `project:read`. Project/historical events and existing monitors/email workflow were verified. Current-release ingestion/association, source-map upload and notification delivery remain unproven. The DSN is not a management token, and the read-only token is not a CI write credential.
-- Private keys/tokens remain outside Git and have restricted Windows ACLs. Never copy them into a report, workflow, image or production environment merely to run operational checks. Do not widen permissions to resolve a read error without identifying the missing operation first.
+- Private keys/tokens remain outside Git and have restricted permissions. Never copy them into a report, workflow, image or production environment merely to run operational checks. Do not widen permissions to resolve a read error without identifying the missing operation first.
 
-The verified VM is A1 Flex ARM64, 2 OCPUs/12 GB RAM, with a 100 GB boot volume at 10 VPUs/GB. No boot-volume backup policy/backups, VNIC NSGs or root alarms were returned by the scoped checks. These are separate from local application deployment snapshots. Trial credit was observed; settled billing/free-tier eligibility remains unestablished. See [dated operations evidence](history/TESTING_PHASE_OPERATIONS_2026-10-26.md) for limits and the pending reboot.
+The verified production VM (`modern-erp`, `193.123.65.48`) is A1 Flex ARM64, 1 OCPU/6 GB RAM, with a 100 GB boot volume at 10 VPUs/GB (paired in the same `me-dubai-1` tenancy with `remote-dev-desktop` at 3 OCPUs/18 GB RAM and 80 GB boot volume). No boot-volume backup policy/backups, VNIC NSGs or root alarms were returned by the scoped checks. These are separate from local application deployment snapshots. Trial credit was observed; settled billing/free-tier eligibility remains unestablished. Kernel `7.0.0-1013-oracle` (`aarch64`) is active (`REBOOT_REQUIRED=no`). See [dated operations evidence](history/TESTING_PHASE_OPERATIONS_2026-10-26.md) for historical context.
 
 ## Runtime secrets
 
@@ -82,3 +82,14 @@ For an emergency rebuild of the latest main release, dispatch `deploy.yml` on `m
 - Visibility changes do not retract historical downloads, clones, or public forks. Ignore rules stop future accidental additions; they do not untrack or erase an already committed backup. [GitHub visibility effects](https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-features/managing-repository-settings/setting-repository-visibility)
 
 Repository visibility is an owner decision and is not changed by this implementation.
+
+## Closed UAT scope & deferred operations
+
+Closed user acceptance testing targets disposable synthetic businesses with both Administrator and restricted roles (never run destructive scenarios in customer businesses):
+
+- **Core UAT pass flows**: assigned business/module access boundaries, Sales (`Quote -> Order -> Invoice -> Receipt/Credit`), Purchases (`Quote -> Order -> Bill -> Payment/Debit Note`), Inventory/Projects parity, Payroll draft/post/void cycles, PDF generation & responsive/keyboard UX, and synthetic business backup export/import verification.
+- **Observed VM maintenance items**:
+  - **OCI billing**: Trial credit was observed during operational checks; confirm billing/Always Free entitlement before trial expiration.
+  - **Sentry delivery**: Historical events and monitors were read-only verified; current-release event ingestion, source maps, and notification delivery remain unverified until explicitly tested.
+  - **Docker disk retention**: `193.123.65.48` reported `~18.3 GB` reclaimable historical images and `~3.2 GB` build cache across `14` retained releases; schedule controlled image/cache pruning (`docker image prune -a --filter "until=168h"`) in a maintenance window.
+- **Owner-deferred backlog** (not automated by this repository): scheduled offsite backups / retention / backup-age alerts / replacement-host restore drill (leaving proposed 15-minute RPO / 1-hour RTO unverified), production SMTP setup, large/untrusted import staging, immutable financial audit controls, narrower deployment SSH identity, load testing, and historical Git cleanup of `manager_backup_file.manager`. See archived planning notes in [docs/history/NEXT_STEPS.md](history/NEXT_STEPS.md) and [docs/history/IMPROVEMENT_ROADMAP.md](history/IMPROVEMENT_ROADMAP.md).

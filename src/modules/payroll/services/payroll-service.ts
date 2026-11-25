@@ -5,6 +5,7 @@ import { allocateNumber } from "@/modules/accounting/services/numbering-service"
 import { postTransaction, reverseTransaction } from "@/modules/accounting/services/posting-service";
 import { assertDateNotLocked } from "@/modules/accounting/services/financial-lock-service";
 import { addMinor } from "@/modules/accounting/calculations/money";
+import { getBusinessTodayIso } from "@/core/format";
 
 export interface EmployeeInput {
   id?: string;
@@ -20,6 +21,10 @@ export interface EmployeeInput {
   housingAllowanceMinor?: number | null;
   transportAllowanceMinor?: number | null;
   otherAllowancesMinor?: number | null;
+  molPersonId?: string | null;
+  bankRoutingCode?: string | null;
+  iban?: string | null;
+  wpsEnabled?: boolean;
   isActive?: boolean;
 }
 
@@ -37,6 +42,10 @@ export interface EmployeeRecord {
   housingAllowanceMinor: number | null;
   transportAllowanceMinor: number | null;
   otherAllowancesMinor: number | null;
+  molPersonId: string | null;
+  bankRoutingCode: string | null;
+  iban: string | null;
+  wpsEnabled: boolean;
   isActive: boolean;
   createdAt: string;
   updatedAt: string;
@@ -139,6 +148,10 @@ export function listEmployees(
       housing_allowance_minor AS housingAllowanceMinor,
       transport_allowance_minor AS transportAllowanceMinor,
       other_allowances_minor AS otherAllowancesMinor,
+      mol_person_id AS molPersonId,
+      bank_routing_code AS bankRoutingCode,
+      iban AS iban,
+      wps_enabled AS wpsEnabled,
       is_active AS isActive,
       created_at AS createdAt,
       updated_at AS updatedAt
@@ -175,6 +188,10 @@ export function listEmployees(
     housingAllowanceMinor: r.housingAllowanceMinor !== null ? Number(r.housingAllowanceMinor) : null,
     transportAllowanceMinor: r.transportAllowanceMinor !== null ? Number(r.transportAllowanceMinor) : null,
     otherAllowancesMinor: r.otherAllowancesMinor !== null ? Number(r.otherAllowancesMinor) : null,
+    molPersonId: r.molPersonId ? String(r.molPersonId) : null,
+    bankRoutingCode: r.bankRoutingCode ? String(r.bankRoutingCode) : null,
+    iban: r.iban ? String(r.iban) : null,
+    wpsEnabled: Boolean(r.wpsEnabled ?? 1),
     isActive: Boolean(r.isActive),
     createdAt: String(r.createdAt),
     updatedAt: String(r.updatedAt),
@@ -196,6 +213,10 @@ export function getEmployee(
         housing_allowance_minor AS housingAllowanceMinor,
         transport_allowance_minor AS transportAllowanceMinor,
         other_allowances_minor AS otherAllowancesMinor,
+        mol_person_id AS molPersonId,
+        bank_routing_code AS bankRoutingCode,
+        iban AS iban,
+        wps_enabled AS wpsEnabled,
         is_active AS isActive,
         created_at AS createdAt,
         updated_at AS updatedAt
@@ -220,6 +241,10 @@ export function getEmployee(
     housingAllowanceMinor: row.housingAllowanceMinor !== null ? Number(row.housingAllowanceMinor) : null,
     transportAllowanceMinor: row.transportAllowanceMinor !== null ? Number(row.transportAllowanceMinor) : null,
     otherAllowancesMinor: row.otherAllowancesMinor !== null ? Number(row.otherAllowancesMinor) : null,
+    molPersonId: row.molPersonId ? String(row.molPersonId) : null,
+    bankRoutingCode: row.bankRoutingCode ? String(row.bankRoutingCode) : null,
+    iban: row.iban ? String(row.iban) : null,
+    wpsEnabled: Boolean(row.wpsEnabled ?? 1),
     isActive: Boolean(row.isActive),
     createdAt: String(row.createdAt),
     updatedAt: String(row.updatedAt),
@@ -248,6 +273,7 @@ export function saveEmployee(
           designation = ?, department = ?, joining_date = ?,
           basic_salary_minor = ?, housing_allowance_minor = ?,
           transport_allowance_minor = ?, other_allowances_minor = ?,
+          mol_person_id = ?, bank_routing_code = ?, iban = ?, wps_enabled = ?,
           is_active = ?, updated_at = ?
         WHERE id = ?
       `)
@@ -264,6 +290,10 @@ export function saveEmployee(
         input.housingAllowanceMinor !== undefined ? input.housingAllowanceMinor : null,
         input.transportAllowanceMinor !== undefined ? input.transportAllowanceMinor : null,
         input.otherAllowancesMinor !== undefined ? input.otherAllowancesMinor : null,
+        input.molPersonId || null,
+        input.bankRoutingCode || null,
+        input.iban || null,
+        input.wpsEnabled !== undefined ? (input.wpsEnabled ? 1 : 0) : 1,
         input.isActive !== undefined ? (input.isActive ? 1 : 0) : 1,
         now,
         id
@@ -274,9 +304,10 @@ export function saveEmployee(
         INSERT INTO employees (
           id, name, code, email, phone, address, designation, department,
           joining_date, basic_salary_minor, housing_allowance_minor,
-          transport_allowance_minor, other_allowances_minor, is_active,
+          transport_allowance_minor, other_allowances_minor,
+          mol_person_id, bank_routing_code, iban, wps_enabled, is_active,
           created_at, updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `)
       .run(
         id,
@@ -292,6 +323,10 @@ export function saveEmployee(
         input.housingAllowanceMinor !== undefined ? input.housingAllowanceMinor : null,
         input.transportAllowanceMinor !== undefined ? input.transportAllowanceMinor : null,
         input.otherAllowancesMinor !== undefined ? input.otherAllowancesMinor : null,
+        input.molPersonId || null,
+        input.bankRoutingCode || null,
+        input.iban || null,
+        input.wpsEnabled !== undefined ? (input.wpsEnabled ? 1 : 0) : 1,
         input.isActive !== undefined ? (input.isActive ? 1 : 0) : 1,
         now,
         now
@@ -578,6 +613,10 @@ export function getPayslipWithLines(
     housingAllowanceMinor: null,
     transportAllowanceMinor: null,
     otherAllowancesMinor: null,
+    molPersonId: null,
+    bankRoutingCode: null,
+    iban: null,
+    wpsEnabled: true,
     isActive: true,
     createdAt: String(pRow.createdAt),
     updatedAt: String(pRow.updatedAt),
@@ -792,12 +831,14 @@ function resolvePayrollPayableAccountId(sqlite: any): string {
   `).get() as { id: string } | undefined;
   if (byName) return byName.id;
 
-  const anyLiability = sqlite.prepare(`
-    SELECT id FROM accounts WHERE type = 'liability' ORDER BY is_system DESC, created_at ASC LIMIT 1
-  `).get() as { id: string } | undefined;
-  if (anyLiability) return anyLiability.id;
-
-  throw new Error("No liability account found for Payroll Payable in Chart of Accounts.");
+  // Never fall back to an arbitrary liability (it could be VAT Payable or
+  // AP). Create the dedicated Payroll Payable account instead.
+  const now = new Date().toISOString();
+  sqlite.prepare(`
+    INSERT OR IGNORE INTO accounts (id, name, type, subtype, is_system, is_active, created_at, updated_at)
+    VALUES ('acct-payroll-payable-2200', 'Payroll Payable', 'liability', 'current_liability', 1, 1, ?, ?)
+  `).run(now, now);
+  return "acct-payroll-payable-2200";
 }
 
 function postInternalPayslip(
@@ -918,7 +959,7 @@ export function voidPayslip(
     }
 
     assertDateNotLocked(context.sqlite, record.payslip.date, "Payslip");
-    assertDateNotLocked(context.sqlite, now.slice(0, 10), "Payslip void");
+    assertDateNotLocked(context.sqlite, getBusinessTodayIso(), "Payslip void");
 
     if (record.payslip.documentStatus === "posted") {
       reverseTransaction(context.sqlite, {
@@ -926,7 +967,7 @@ export function voidPayslip(
         originalSourceId: payslipId,
         reversalSourceType: "payslip_void",
         reversalSourceId: payslipId,
-        date: now.slice(0, 10),
+        date: getBusinessTodayIso(),
         description: `Reverse Payslip ${record.payslip.payslipNumber} (${record.employee.name})`,
       });
     }

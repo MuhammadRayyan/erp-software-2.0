@@ -73,7 +73,7 @@ export function ToolbarSelect({
       onChange={(event) => onChange(event.target.value)}
       aria-label={ariaLabel}
       className={cn(
-        "w-auto px-3 text-xs sm:text-sm transition-all",
+        "w-auto text-xs sm:text-sm transition-all",
         isFiltered && "border-primary/50 bg-primary/5 font-medium text-primary",
         className
       )}
@@ -118,7 +118,7 @@ export function DateRangeFilter({
   return (
     <div
       className={cn(
-        "inline-flex h-9 items-center gap-1.5 rounded-[6px] border border-border-strong bg-surface-raised px-2.5 text-xs shadow-[0_1px_1px_rgb(15_23_42/0.03)] focus-within:border-primary focus-within:ring-2 focus-within:ring-ring/25 transition-all",
+        "inline-flex h-9 items-center gap-1.5 rounded-[6px] border border-input bg-surface-raised px-2.5 text-xs shadow-[0_1px_1px_rgb(15_23_42/0.03)] focus-within:border-primary focus-within:ring-2 focus-within:ring-ring/50 transition-all",
         hasValue && "border-primary/50 bg-primary/5 font-medium",
         className
       )}

@@ -1,17 +1,19 @@
 "use client";
 
-import { useMemo } from "react";
 import Link from "next/link";
-import { AlertTriangle, Banknote, CircleDollarSign, LayoutGrid, ReceiptText } from "lucide-react";
-import { useColumnVisibility, type ColumnVisibility } from "@/components/use-column-visibility";
-import { Button } from "@/components/ui/button";
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { AlertTriangle, Banknote, CircleDollarSign, Landmark, ListChecks, ReceiptText, ShieldCheck, Wallet } from "lucide-react";
+import { cn } from "@/lib/cn";
+import { useOverviewCardVisibility } from "./overview-customization";
 
 const cardIcons = {
   sales: CircleDollarSign,
   receivables: ReceiptText,
   overdue: AlertTriangle,
   bank: Banknote,
+  payables: Wallet,
+  vat: Landmark,
+  reconcile: ListChecks,
+  approvals: ShieldCheck,
 } as const;
 
 export type KpiCardIcon = keyof typeof cardIcons;
@@ -20,7 +22,7 @@ export type KpiCardData = {
   id: string;
   icon: KpiCardIcon;
   label: string;
-  /** Pre-formatted money string — values are fetched on the server. */
+  /** Pre-formatted value — computed on the server. */
   value: string;
   note: string;
   /** Qualifier such as "as of today" or the active period label. */
@@ -29,81 +31,64 @@ export type KpiCardData = {
   tooltip?: string;
   /** Optional href to make the card clickable. */
   href?: string;
+  /** Highlights the card when it needs attention (e.g. overdue items). */
+  attention?: boolean;
 };
 
 /**
- * Client wrapper around the overview KPI cards. Card visibility is toggled via
- * the "Cards" dropdown and persisted with the shared column-visibility hook
- * (localStorage key `uaemanager.cols.overview-cards`). When `serverSnapshot`
- * + `businessId` are passed, toggles also sync to the per-account
- * preferences API so card visibility follows the user across devices.
+ * Overview KPI grid. Which cards show is controlled from the overview
+ * "Customize" menu (see `OverviewCustomization`).
  */
-export function KpiCards({ cards, businessId, serverSnapshot }: { cards: KpiCardData[]; businessId?: string; serverSnapshot?: ColumnVisibility }) {
-  // Memoized so the shared visibility hook sees a stable defaults reference.
-  const initialVisibility = useMemo(() => Object.fromEntries(cards.map((card) => [card.id, true])), [cards]);
-  const { visibility, toggle } = useColumnVisibility("overview-cards", initialVisibility, businessId ? { businessId, serverSnapshot } : undefined);
-  const visibleCards = cards.filter((card) => visibility[card.id] !== false);
-  const hiddenCount = cards.length - visibleCards.length;
+export function KpiCards({ cards }: { cards: KpiCardData[] }) {
+  const isVisible = useOverviewCardVisibility();
+  const visibleCards = cards.filter((card) => isVisible(card.id));
+  if (cards.length === 0) return null;
   return (
-    <section aria-label="Business summary" className="mt-4">
-      <div className="mb-3 flex items-center justify-end gap-3">
-        {hiddenCount > 0 && <p className="text-xs text-muted-foreground">{hiddenCount} {hiddenCount === 1 ? "card" : "cards"} hidden</p>}
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button variant="secondary"><LayoutGrid className="size-4" /> Cards</Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end">
-            <DropdownMenuLabel>Show cards</DropdownMenuLabel>
-            {cards.map((card) => (
-              <DropdownMenuItem key={card.id} onSelect={(event) => { event.preventDefault(); toggle(card.id); }}>
-                <span className="w-4">{visibility[card.id] !== false ? "✓" : ""}</span>{card.label}
-              </DropdownMenuItem>
-            ))}
-          </DropdownMenuContent>
-        </DropdownMenu>
-      </div>
+    <section aria-label="Business summary">
       {visibleCards.length === 0 ? (
         <div className="rounded-lg border border-dashed border-border bg-surface p-8 text-center">
-          <p className="text-sm font-medium">No cards visible</p>
-          <p className="mt-1 text-xs text-muted-foreground">Turn cards back on from the Cards menu.</p>
+          <p className="text-sm font-medium">No summary cards visible</p>
+          <p className="mt-1 text-xs text-muted-foreground">Turn cards back on from the Customize menu.</p>
         </div>
       ) : (
         <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-          {visibleCards.map((card) => {
-            const Icon = cardIcons[card.icon];
-            return (
-                            <article key={card.id} title={card.tooltip ?? `${card.label} — ${card.note}${card.caption ? ` · ${card.caption}` : ""}`} className={`rounded-lg border border-border bg-surface-raised p-4 transition-colors hover:border-border-strong ${card.href ? "hover:bg-surface-muted/30" : ""}`}>
-                {card.href ? (
-                  <Link href={card.href} className="block h-full">
-                    <div className="flex items-center justify-between gap-2">
-                      <p className="text-xs font-medium text-muted-foreground">{card.label}</p>
-                      <span className="grid size-6 place-items-center rounded-full bg-surface-muted text-muted-foreground"><Icon className="size-3.5" /></span>
-                    </div>
-                    <p className="money mt-3 text-xl font-semibold tracking-[-0.02em]">{card.value}</p>
-                    <p className="mt-1 text-xs text-muted-foreground">
-                      {card.note}
-                      {card.caption && <span className="text-muted-foreground/75"> · {card.caption}</span>}
-                    </p>
-                  </Link>
-                ) : (
-                  <>
-                    <div className="flex items-center justify-between gap-2">
-                      <p className="text-xs font-medium text-muted-foreground">{card.label}</p>
-                      <span className="grid size-6 place-items-center rounded-full bg-surface-muted text-muted-foreground"><Icon className="size-3.5" /></span>
-                    </div>
-                    <p className="money mt-3 text-xl font-semibold tracking-[-0.02em]">{card.value}</p>
-                    <p className="mt-1 text-xs text-muted-foreground">
-                      {card.note}
-                      {card.caption && <span className="text-muted-foreground/75"> · {card.caption}</span>}
-                    </p>
-                  </>
-                )}
-              </article>
-            );
-          })}
+          {visibleCards.map((card) => <KpiCard key={card.id} card={card} />)}
         </div>
       )}
     </section>
   );
 }
 
+function KpiCard({ card }: { card: KpiCardData }) {
+  const Icon = cardIcons[card.icon];
+  const body = (
+    <>
+      <div className="flex items-center justify-between gap-2">
+        <p className="text-xs font-medium text-muted-foreground">{card.label}</p>
+        <span className={cn(
+          "grid size-6 place-items-center rounded-full",
+          card.attention ? "bg-warning/15 text-warning" : "bg-surface-muted text-muted-foreground",
+        )}>
+          <Icon className="size-3.5" aria-hidden />
+        </span>
+      </div>
+      <p className="money mt-3 text-xl font-semibold tracking-[-0.02em]">{card.value}</p>
+      <p className="mt-1 text-xs text-muted-foreground">
+        {card.note}
+        {card.caption && <span className="text-muted-foreground/75"> · {card.caption}</span>}
+      </p>
+    </>
+  );
+  return (
+    <article
+      title={card.tooltip ?? `${card.label} — ${card.note}${card.caption ? ` · ${card.caption}` : ""}`}
+      className={cn(
+        "rounded-lg border bg-surface-raised p-4 transition-colors hover:border-border-strong",
+        card.attention ? "border-warning/40" : "border-border",
+        card.href && "hover:bg-surface-muted/30",
+      )}
+    >
+      {card.href ? <Link href={card.href} className="block h-full rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">{body}</Link> : body}
+    </article>
+  );
+}

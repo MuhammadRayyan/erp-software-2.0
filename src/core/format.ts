@@ -7,15 +7,53 @@ const knownMinorUnits: Record<string, number> = {
   USD: 2,
   EUR: 2,
   JPY: 0,
+  KRW: 0,
   KWD: 3,
   BHD: 3,
   OMR: 3,
+  JOD: 3,
+  IQD: 3,
+  LYD: 3,
+  TND: 3,
   GBP: 2,
   CAD: 2,
   AUD: 2,
   SAR: 2,
   QAR: 2,
 };
+
+export function getBusinessDateIso(value: string | Date = new Date()): string {
+  const date = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: BUSINESS_TIME_ZONE,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(date);
+}
+
+export function getBusinessTodayIso(): string {
+  return getBusinessDateIso(new Date());
+}
+
+export function getCurrencyMinorUnit(currency = "AED"): number {
+  return knownMinorUnits[currency.toUpperCase()] ?? 2;
+}
+
+export function formatMajorMoney(major?: string | number | null, currency = "AED", minorUnit?: number): string {
+  const resolvedMinorUnit = minorUnit ?? getCurrencyMinorUnit(currency);
+  if (major == null || major === "") {
+    return formatMoney(0, currency, resolvedMinorUnit);
+  }
+  try {
+    const dec = new Decimal(major);
+    const minor = dec.mul(new Decimal(10).pow(resolvedMinorUnit)).round().toNumber();
+    return formatMoney(minor, currency, resolvedMinorUnit);
+  } catch {
+    return String(major);
+  }
+}
 
 export function minorToDecimalString(minor: number = 0, currency = "AED", minorUnit?: number): string {
   const resolvedMinorUnit = minorUnit ?? knownMinorUnits[currency.toUpperCase()] ?? 2;
@@ -26,7 +64,7 @@ export function minorToDecimalString(minor: number = 0, currency = "AED", minorU
 // are reused across hundreds of table cells per page render.
 const moneyFormatterCache = new Map<string, Intl.NumberFormat>();
 
-export function formatMoney(minor?: number | null, currency = "AED", minorUnit = knownMinorUnits[currency] ?? 2) {
+export function formatMoney(minor?: number | null, currency = "AED", minorUnit = knownMinorUnits[currency?.toUpperCase() ?? "AED"] ?? 2) {
   if (minor == null || Number.isNaN(minor)) {
     minor = 0;
   }

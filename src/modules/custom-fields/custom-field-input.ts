@@ -1,10 +1,24 @@
 import { z } from "zod";
 
-export const customFieldEntityTypes = ["customer", "supplier", "sales_invoice", "sales_quote", "sales_order", "purchase_quote", "purchase_order"] as const;
+export const customFieldEntityTypes = [
+  "customer",
+  "supplier",
+  "sales_invoice",
+  "sales_invoice_line",
+  "sales_quote_line",
+  "sales_order_line",
+  "purchase_quote_line",
+  "purchase_order_line",
+  "purchase_invoice_line",
+] as const;
 export const customFieldFieldTypes = ["text", "number", "date", "select", "checkbox"] as const;
 
 export type CustomFieldEntityType = (typeof customFieldEntityTypes)[number];
 export type CustomFieldFieldType = (typeof customFieldFieldTypes)[number];
+
+export function isLineCustomFieldEntityType(entityType: CustomFieldEntityType): boolean {
+  return entityType.endsWith("_line");
+}
 
 const selectOptionSchema = z
   .string()
@@ -21,6 +35,7 @@ export const customFieldDefinitionSchema = z
     position: z.number().int().min(0).optional().default(0),
     isRequired: z.boolean().optional().default(false),
     showInList: z.boolean().optional().default(false),
+    showOnPdf: z.boolean().optional().default(true),
   })
   .superRefine((data, ctx) => {
     if (data.fieldType === "select") {

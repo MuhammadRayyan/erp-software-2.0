@@ -1,19 +1,23 @@
 import Link from "next/link";
-import { ArrowRightLeft, FileUp, MoreHorizontal, Pencil, Plus, Scale } from "lucide-react";
+import { ArrowRightLeft, FileUp, Pencil, Plus, Scale } from "lucide-react";
 import { notFound } from "next/navigation";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { NoticeToast } from "@/components/notice-toast";
 import { formatDate, formatMoney } from "@/core/format";
 import { requireModule } from "@/core/permissions/require-module";
 import { journalSourceHref, journalSourceLabel } from "@/modules/accounting/journal-source";
 import { getBankAccount } from "@/modules/banking/bank-account-service";
+import {
+  BankAccountImportedTable,
+  BankAccountTransactionsTable,
+  type SerializedBankHistoryRow,
+  type SerializedStatementLine,
+} from "@/modules/banking/bank-account-section-tables";
 import { getBankTransactionHistory } from "@/modules/banking/banking-report-service";
 import { suggestMatches } from "@/modules/banking/matching-service";
 import { getSourceHref } from "@/modules/banking/matching-types";
 import { listReconciliations } from "@/modules/banking/reconciliation-service";
-import { StatementLineActions } from "@/modules/banking/statement-line-actions";
 import { listStatementImports, listStatementLines } from "@/modules/banking/statement-service";
 import { listBankRules, findMatchingBankRule } from "@/modules/banking/bank-rule-service";
 import { BatchAutoCategorizeButton } from "@/modules/banking/batch-auto-categorize-button";
@@ -29,18 +33,49 @@ export default async function BankAccountViewPage({ params, searchParams }: {
   const { businessId, accountId } = await params; const query = await searchParams;
   const { user, access } = await requireModule(businessId, "banking");
   const account = getBankAccount(businessId, user.id, accountId); if (!account) notFound();
-  const section: Section = sections.includes(query.section as Section) ? query.section as Section : "transactions";
+  const visibleSections = account.is_cash_account ? (["transactions", "details"] as const) : sections;
+  const section: Section = (visibleSections as readonly string[]).includes(query.section as string) ? (query.section as Section) : "transactions";
   const history = section === "transactions" ? getBankTransactionHistory(businessId, user.id, accountId) : [];
+  const serializedHistory: SerializedBankHistoryRow[] = history.map((row) => ({
+    ...row,
+    sourceLabel: journalSourceLabel(row.source_type),
+    sourceHref: journalSourceHref(businessId, row.source_type, row.source_id),
+  }));
   const statementLines = section === "imported" ? listStatementLines(businessId, user.id, accountId) : [];
   const imports = section === "imported" ? listStatementImports(businessId, user.id, accountId) : [];
-  const candidates = new Map(statementLines.filter((line) => line.match_status === "unmatched").map((line) => [line.id, suggestMatches(businessId, user.id, line.id)]));
+  const serializedLines: SerializedStatementLine[] = statementLines.map((line) => {
+    const matchedRule: { id: string; name: string } | null = null;
+    let candidates: SerializedStatementLine["candidates"] = [];
+    if (line.match_status === "unmatched") {
+      candidates = suggestMatches(businessId, user.id, line.id);
+    }
+    return {
+      id: line.id,
+      transaction_date: line.transaction_date,
+      description: line.description,
+      reference: line.reference,
+      amount_minor: line.amount_minor,
+      match_status: line.match_status,
+      reconciled: line.reconciled,
+      sourceHref:
+        line.matched_source_type && line.matched_source_id
+          ? getSourceHref(businessId, line.matched_source_type, line.matched_source_id)
+          : null,
+      candidates,
+      matchedRule,
+    };
+  });
   const bankRules = section === "imported" ? listBankRules(businessId, user.id, accountId).filter((r) => r.is_active) : [];
-  const lineRules = new Map<string, { id: string; name: string }>();
+  let matchedRuleCount = 0;
   if (section === "imported") {
-    for (const line of statementLines) {
+    for (let i = 0; i < statementLines.length; i += 1) {
+      const line = statementLines[i];
       if (line.match_status === "unmatched") {
         const matched = findMatchingBankRule(bankRules, line);
-        if (matched) lineRules.set(line.id, { id: matched.id, name: matched.name });
+        if (matched) {
+          serializedLines[i].matchedRule = { id: matched.id, name: matched.name };
+          matchedRuleCount += 1;
+        }
       }
     }
   }
@@ -53,13 +88,27 @@ export default async function BankAccountViewPage({ params, searchParams }: {
         { label: account.name },
       ]}
     />
-    <div className="mb-6 flex flex-col justify-between gap-4 lg:flex-row lg:items-start"><div><div className="flex items-center gap-2"><h1 className="page-title">{account.name}</h1><Badge tone={account.is_cash_account ? "neutral" : "info"}>{account.is_cash_account ? "Cash" : "Bank"}</Badge>{!account.is_active && <Badge tone="neutral">Inactive</Badge>}</div><p className="mt-1 text-sm text-muted-foreground">{account.bank_name || account.ledger_name}{account.account_number_masked ? ` · ${account.account_number_masked}` : ""}</p></div><div className="flex flex-wrap gap-2">{!account.is_cash_account && <Button asChild variant="secondary"><Link href={`/b/${businessId}/banking/accounts/${accountId}/import`}><FileUp className="size-4" /> Import Statement</Link></Button>}<Button permission="create" asChild><Link href={`/b/${businessId}/banking/transactions/new?accountId=${accountId}`}><Plus className="size-4" /> New Transaction</Link></Button><Button permission="create" asChild variant="secondary"><Link href={`/b/${businessId}/banking/transfers/new?fromAccountId=${accountId}`}><ArrowRightLeft className="size-4" /> Transfer</Link></Button>{!account.is_cash_account && <Button asChild variant="secondary"><Link href={`/b/${businessId}/banking/accounts/${accountId}/reconcile`}><Scale className="size-4" /> Reconcile</Link></Button>}<DropdownMenu><DropdownMenuTrigger asChild><Button variant="secondary">More <MoreHorizontal className="size-4" /></Button></DropdownMenuTrigger><DropdownMenuContent align="end"><DropdownMenuItem permission="edit" asChild><Link href={`/b/${businessId}/banking/accounts/${accountId}/edit`}><Pencil className="size-4" /> Edit account</Link></DropdownMenuItem></DropdownMenuContent></DropdownMenu></div></div>
-    <div className="mb-6 grid gap-px overflow-hidden rounded-lg border border-border bg-border sm:grid-cols-3"><div className="bg-surface-raised px-4 py-3"><p className="text-xs text-muted-foreground">Book Balance</p><p className="money mt-1 text-lg font-semibold">{formatMoney(account.book_balance_minor, access.business.currency)}</p><p className="mt-1 text-xs text-muted-foreground">Mapped GL</p></div><div className="bg-surface-raised px-4 py-3"><p className="text-xs text-muted-foreground">Statement Balance</p><p className="money mt-1 text-lg font-semibold">{account.statement_balance_minor === null ? "Not reconciled" : formatMoney(account.statement_balance_minor, access.business.currency)}</p><p className="mt-1 text-xs text-muted-foreground">Latest completed reconciliation</p></div><div className="bg-surface-raised px-4 py-3"><p className="text-xs text-muted-foreground">Unmatched Statement Lines</p><p className="tabular mt-1 text-lg font-semibold">{account.is_cash_account ? "—" : account.unreconciled_count}</p><p className="mt-1 text-xs text-muted-foreground">Requires Match, Create, or Ignore</p></div></div>
-    <nav className="mb-4 flex gap-1 overflow-x-auto border-b border-border" aria-label="Bank Account sections">{sections.map((item) => <Link key={item} href={`/b/${businessId}/banking/accounts/${accountId}?section=${item}`} className={`border-b-2 px-3 py-2 text-sm capitalize ${section === item ? "border-primary font-medium text-foreground" : "border-transparent text-muted-foreground hover:text-foreground"}`}>{item}</Link>)}</nav>
-    {section === "transactions" && (history.length ? <div className="data-panel"><table className="data-table min-w-[1050px]"><thead><tr><th>Date</th><th>Type</th><th>Reference</th><th>Description</th><th className="text-right!">Money In</th><th className="text-right!">Money Out</th><th className="text-right!">Balance</th><th>Reconciled</th></tr></thead><tbody>{history.map((row) => { const href = journalSourceHref(businessId, row.source_type, row.source_id); return <tr key={row.journal_entry_id}><td>{formatDate(row.date)}</td><td>{href ? <Link href={href} className="font-medium text-primary hover:underline">{journalSourceLabel(row.source_type)}</Link> : journalSourceLabel(row.source_type)}</td><td className="tabular text-muted-foreground">{row.reference || row.entry_number}</td><td className="max-w-72 truncate">{row.description}</td><td className="money text-right">{row.money_in_minor ? formatMoney(row.money_in_minor, access.business.currency) : "—"}</td><td className="money text-right">{row.money_out_minor ? formatMoney(row.money_out_minor, access.business.currency) : "—"}</td><td className="money text-right font-medium">{formatMoney(row.balance_minor, access.business.currency)}</td><td><Badge tone={row.reconciled ? "success" : "neutral"}>{row.reconciled ? "Reconciled" : "Outstanding"}</Badge></td></tr>; })}</tbody></table></div> : <div className="rounded-lg border border-border bg-surface py-10 text-center"><p className="font-medium">No GL activity for this account</p><p className="mt-1 text-sm text-muted-foreground">Post a Receipt, Supplier Payment, Bank Transaction, or Transfer.</p></div>)}
-    {section === "imported" && <div className="space-y-6"><BatchAutoCategorizeButton businessId={businessId} accountId={accountId} matchesCount={lineRules.size} />{statementLines.length ? <div className="data-panel"><table className="data-table min-w-[1320px]"><thead><tr><th>Date</th><th>Description</th><th>Reference</th><th>Direction</th><th className="text-right!">Amount</th><th>Status</th><th>Review</th></tr></thead><tbody>{statementLines.map((line) => { const href = line.matched_source_type && line.matched_source_id ? getSourceHref(businessId, line.matched_source_type, line.matched_source_id) : null; return <tr key={line.id} className="align-top"><td className="pt-3!">{formatDate(line.transaction_date)}</td><td className="max-w-72 truncate pt-3!">{line.description}</td><td className="pt-3! text-muted-foreground">{line.reference || "—"}</td><td className="pt-3!"><span className="font-medium">{line.amount_minor > 0 ? "Money In" : "Money Out"}</span></td><td className="money pt-3! text-right font-medium">{line.amount_minor > 0 ? "+ " : "− "}{formatMoney(Math.abs(line.amount_minor), access.business.currency)}</td><td className="pt-3!"><Badge tone={line.match_status === "unmatched" ? "warning" : line.match_status === "ignored" ? "neutral" : "success"}>{line.match_status === "created" ? "Created" : line.match_status[0].toUpperCase() + line.match_status.slice(1)}</Badge>{line.reconciled ? <span className="ml-2 text-xs text-success">Reconciled</span> : null}{href && <Link href={href} className="ml-2 text-xs text-primary hover:underline">Open source</Link>}</td><td className="py-2! whitespace-normal"><StatementLineActions businessId={businessId} accountId={accountId} lineId={line.id} status={line.match_status} currency={access.business.currency} candidates={candidates.get(line.id) ?? []} amountMinor={line.amount_minor} transactionDate={line.transaction_date} reference={line.reference} description={line.description} matchedRule={lineRules.get(line.id)} /></td></tr>; })}</tbody></table></div> : <div className="rounded-lg border border-border bg-surface py-10 text-center"><p className="font-medium">No statement lines yet</p><p className="mt-1 text-sm text-muted-foreground">Import a CSV statement to begin matching.</p>{!account.is_cash_account && <Button asChild className="mt-4"><Link href={`/b/${businessId}/banking/accounts/${accountId}/import`}>Import Statement</Link></Button>}</div>}{imports.length > 0 && <section><h2 className="mb-2 text-sm font-semibold">Import history</h2><div className="data-panel"><table className="data-table min-w-[720px]"><thead><tr><th>Imported</th><th>File</th><th className="text-right!">Rows</th><th className="text-right!">New</th><th className="text-right!">Duplicates</th></tr></thead><tbody>{imports.map((item) => <tr key={item.id}><td>{formatDate(item.created_at)}</td><td>{item.file_name}</td><td className="tabular text-right">{item.row_count}</td><td className="tabular text-right">{item.imported_count}</td><td className="tabular text-right">{item.duplicate_count}</td></tr>)}</tbody></table></div></section>}</div>}
-    {section === "reconciliation" && (reconciliations.length ? <div className="data-panel"><table className="data-table min-w-[760px]"><thead><tr><th>Statement Date</th><th className="text-right!">Ending Balance</th><th>Status</th><th className="text-right!">Cleared Items</th><th>Completed</th></tr></thead><tbody>{reconciliations.map((item) => <tr key={item.id}><td><Link href={`/b/${businessId}/banking/accounts/${accountId}/reconcile?reconciliationId=${item.id}`} className="font-medium text-primary hover:underline">{formatDate(item.statement_date)}</Link></td><td className="money text-right">{formatMoney(item.statement_ending_balance_minor, access.business.currency)}</td><td><Badge tone={item.status === "completed" ? "success" : "warning"}>{item.status === "completed" ? "Completed" : "Draft"}</Badge></td><td className="tabular text-right">{item.item_count}</td><td>{item.completed_at ? formatDate(item.completed_at) : "—"}</td></tr>)}</tbody></table></div> : <div className="rounded-lg border border-border bg-surface py-10 text-center"><p className="font-medium">No reconciliations yet</p><p className="mt-1 text-sm text-muted-foreground">Compare the statement ending balance with cleared GL activity.</p>{!account.is_cash_account && <Button asChild className="mt-4"><Link href={`/b/${businessId}/banking/accounts/${accountId}/reconcile`}>Start Reconciliation</Link></Button>}</div>)}
-    {section === "details" && <dl className="grid gap-px overflow-hidden rounded-lg border border-border bg-border sm:grid-cols-2"><div className="bg-surface-raised p-4"><dt className="text-xs text-muted-foreground">Mapped GL Account</dt><dd className="mt-1 font-medium"> · {account.ledger_name}</dd></div><div className="bg-surface-raised p-4"><dt className="text-xs text-muted-foreground">Currency</dt><dd className="mt-1 font-medium">{account.currency_code} · Base currency</dd></div><div className="bg-surface-raised p-4"><dt className="text-xs text-muted-foreground">Internal code</dt><dd className="mt-1">{"—"}</dd></div><div className="bg-surface-raised p-4"><dt className="text-xs text-muted-foreground">Account number</dt><dd className="mt-1">{account.account_number_masked || "—"}</dd></div></dl>}
+    <div className="mb-6 flex flex-col justify-between gap-4 lg:flex-row lg:items-start"><div><div className="flex items-center gap-2"><h1 className="page-title">{account.name}</h1><Badge tone={account.is_cash_account ? "neutral" : "info"}>{account.is_cash_account ? "Cash" : "Bank"}</Badge>{!account.is_active && <Badge tone="neutral">Inactive</Badge>}</div><p className="mt-1 text-sm text-muted-foreground">{account.account_code ? `${account.account_code} · ` : ""}{account.bank_name || account.ledger_name}{account.account_number_masked ? ` · ${account.account_number_masked}` : ""}</p></div><div className="flex flex-wrap gap-2">{!account.is_cash_account && <Button permission="create" asChild variant="secondary"><Link href={`/b/${businessId}/banking/accounts/${accountId}/import`}><FileUp className="size-4" /> Import Statement</Link></Button>}<Button permission="create" asChild><Link href={`/b/${businessId}/banking/transactions/new?accountId=${accountId}`}><Plus className="size-4" /> New Transaction</Link></Button><Button permission="create" asChild variant="secondary"><Link href={`/b/${businessId}/banking/transfers/new?fromAccountId=${accountId}`}><ArrowRightLeft className="size-4" /> Transfer</Link></Button>{!account.is_cash_account && <Button permission="create" asChild variant="secondary"><Link href={`/b/${businessId}/banking/accounts/${accountId}/reconcile`}><Scale className="size-4" /> Reconcile</Link></Button>}<Button permission="edit" asChild variant="secondary"><Link href={`/b/${businessId}/banking/accounts/${accountId}/edit`}><Pencil className="size-4" /> Edit</Link></Button></div></div>
+    <div className={`mb-6 grid gap-px overflow-hidden rounded-lg border border-border bg-border ${account.is_cash_account ? "sm:grid-cols-1" : "sm:grid-cols-3"}`}><div className="bg-surface-raised px-4 py-3"><p className="text-xs text-muted-foreground">Book Balance</p><p className="money mt-1 text-lg font-semibold">{formatMoney(account.book_balance_minor, access.business.currency)}</p><p className="mt-1 text-xs text-muted-foreground">Mapped GL</p></div>{!account.is_cash_account && <><div className="bg-surface-raised px-4 py-3"><p className="text-xs text-muted-foreground">Statement Balance</p><p className="money mt-1 text-lg font-semibold">{account.statement_balance_minor === null ? "Not reconciled" : formatMoney(account.statement_balance_minor, access.business.currency)}</p><p className="mt-1 text-xs text-muted-foreground">Latest completed reconciliation</p></div><div className="bg-surface-raised px-4 py-3"><p className="text-xs text-muted-foreground">Unmatched Statement Lines</p><p className="tabular mt-1 text-lg font-semibold">{account.unreconciled_count}</p><p className="mt-1 text-xs text-muted-foreground">Requires Match, Create, or Ignore</p></div></>}</div>
+    <nav className="mb-4 flex gap-1 overflow-x-auto border-b border-border" aria-label="Bank Account sections">{visibleSections.map((item) => <Link key={item} href={`/b/${businessId}/banking/accounts/${accountId}?section=${item}`} className={`border-b-2 px-3 py-2 text-sm capitalize ${section === item ? "border-primary font-medium text-foreground" : "border-transparent text-muted-foreground hover:text-foreground"}`}>{item}</Link>)}</nav>
+    {section === "transactions" && (
+      <BankAccountTransactionsTable businessId={businessId} currency={access.business.currency} rows={serializedHistory} />
+    )}
+    {section === "imported" && (
+      <div className="space-y-6">
+        <BatchAutoCategorizeButton businessId={businessId} accountId={accountId} matchesCount={matchedRuleCount} />
+        <BankAccountImportedTable
+          businessId={businessId}
+          accountId={accountId}
+          currency={access.business.currency}
+          isCashAccount={Boolean(account.is_cash_account)}
+          lines={serializedLines}
+        />
+        {imports.length > 0 && <section><h2 className="mb-2 text-sm font-semibold">Import history</h2><div className="data-panel"><table className="data-table min-w-[720px]"><thead><tr><th>Imported</th><th>File</th><th className="text-right!">Rows</th><th className="text-right!">New</th><th className="text-right!">Duplicates</th></tr></thead><tbody>{imports.map((item) => <tr key={item.id}><td>{formatDate(item.created_at)}</td><td>{item.file_name}</td><td className="tabular text-right">{item.row_count}</td><td className="tabular text-right">{item.imported_count}</td><td className="tabular text-right">{item.duplicate_count}</td></tr>)}</tbody></table></div></section>}
+      </div>
+    )}
+    {section === "reconciliation" && (reconciliations.length ? <div className="data-panel"><table className="data-table min-w-[760px]"><thead><tr><th>Statement Date</th><th className="text-right!">Ending Balance</th><th>Status</th><th className="text-right!">Cleared Items</th><th>Completed</th></tr></thead><tbody>{reconciliations.map((item) => <tr key={item.id}><td><Link href={`/b/${businessId}/banking/accounts/${accountId}/reconcile?reconciliationId=${item.id}`} className="font-medium text-primary hover:underline">{formatDate(item.statement_date)}</Link></td><td className="money text-right">{formatMoney(item.statement_ending_balance_minor, access.business.currency)}</td><td><Badge tone={item.status === "completed" ? "success" : "warning"}>{item.status === "completed" ? "Completed" : "Draft"}</Badge></td><td className="tabular text-right">{item.item_count}</td><td>{item.completed_at ? formatDate(item.completed_at) : "—"}</td></tr>)}</tbody></table></div> : <div className="rounded-lg border border-border bg-surface py-10 text-center"><p className="font-medium">No reconciliations yet</p><p className="mt-1 text-sm text-muted-foreground">Compare the statement ending balance with cleared GL activity.</p>{!account.is_cash_account && <Button permission="create" asChild className="mt-4"><Link href={`/b/${businessId}/banking/accounts/${accountId}/reconcile`}>Start Reconciliation</Link></Button>}</div>)}
+    {section === "details" && <dl className="grid gap-px overflow-hidden rounded-lg border border-border bg-border sm:grid-cols-2 lg:grid-cols-4"><div className="bg-surface-raised p-4"><dt className="text-xs text-muted-foreground">Account code</dt><dd className="mt-1 font-mono text-sm">{account.account_code || "—"}</dd></div><div className="bg-surface-raised p-4"><dt className="text-xs text-muted-foreground">Mapped GL Account</dt><dd className="mt-1 font-medium">{account.ledger_name}</dd></div><div className="bg-surface-raised p-4"><dt className="text-xs text-muted-foreground">Currency</dt><dd className="mt-1 font-medium">{account.currency_code} · Base currency</dd></div><div className="bg-surface-raised p-4"><dt className="text-xs text-muted-foreground">Account number</dt><dd className="mt-1">{account.account_number_masked || "—"}</dd></div></dl>}
   </div>;
 }
 

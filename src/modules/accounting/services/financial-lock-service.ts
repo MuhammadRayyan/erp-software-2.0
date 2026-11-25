@@ -1,4 +1,4 @@
-import { assertMutationPermission } from "@/core/permissions/mutation-permissions";
+import { assertBusinessAdministrator } from "@/core/permissions/mutation-permissions";
 import { getBusinessDb } from "@/core/db/business";
 import type Database from "better-sqlite3";
 import { recordActivity } from "@/modules/activity-log/activity-log-service";
@@ -12,19 +12,31 @@ export function getFinancialLockDate(businessId: string, userId: string): string
 }
 
 export function setFinancialLockDate(businessId: string, userId: string, lockDate: string | null): void {
-  assertMutationPermission(businessId, userId, "accounting", "post");
+  assertBusinessAdministrator(businessId, userId);
+  const normalized = lockDate?.trim() || null;
+  if (normalized) {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(normalized)) {
+      throw new Error("Financial lock date must be in YYYY-MM-DD format.");
+    }
+    const parsed = new Date(`${normalized}T00:00:00Z`);
+    if (Number.isNaN(parsed.getTime()) || parsed.toISOString().slice(0, 10) !== normalized) {
+      throw new Error("Financial lock date is not a valid calendar date.");
+    }
+  }
   const { sqlite } = getBusinessDb(businessId, userId);
   const now = new Date().toISOString();
   sqlite
     .prepare("UPDATE business_accounting_settings SET financial_lock_date = ?, updated_at = ? WHERE id = 'default'")
-    .run(lockDate || null, now);
+    .run(normalized, now);
 
   recordActivity(businessId, {
     userId,
     action: "settings_changed",
     entityType: "financial_lock",
-    summary: lockDate ? `Updated financial lock date to ${lockDate}` : "Removed financial lock date",
-    details: { financialLockDate: lockDate },
+    entityId: "default",
+    entityNumber: normalized ?? "Unlocked",
+    summary: normalized ? `Updated financial lock date to ${normalized}` : "Removed financial lock date",
+    details: { financialLockDate: normalized },
   });
 }
 

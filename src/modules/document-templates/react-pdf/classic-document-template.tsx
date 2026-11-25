@@ -142,7 +142,14 @@ export function ClassicDocumentTemplate({ data, settings, variant }: { data: Doc
 
             {data.lines.map((line, i) => (
               <View key={i} style={styles.tableRow} wrap={false}>
-                <Text style={[styles.tableCell, { flex: 4, fontSize: fontScale.table }]}>{line.description}</Text>
+                <View style={[styles.tableCell, { flex: 4 }]}>
+                  <Text style={{ fontSize: fontScale.table }}>{line.description}</Text>
+                  {settings.showCustomFields !== false && line.customFields && line.customFields.length > 0 && (
+                    <Text style={{ fontSize: Math.max(6.5, fontScale.table - 1.5), color: colors.muted, marginTop: 1.5 }}>
+                      {line.customFields.map((cf) => `${cf.name}: ${cf.value}`).join("  •  ")}
+                    </Text>
+                  )}
+                </View>
                 {hasProject && <Text style={[styles.tableCell, { flex: 1.5, fontSize: fontScale.table, color: colors.muted }]}>{line.project || "-"}</Text>}
                 <Text style={[styles.tableCell, { flex: 1, textAlign: "right", fontSize: fontScale.table }]}>{line.quantity}</Text>
                 <Text style={[styles.tableCell, { flex: 1.3, textAlign: "right", fontSize: fontScale.table }]}>{line.unitPrice}</Text>

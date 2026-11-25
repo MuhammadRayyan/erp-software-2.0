@@ -20,6 +20,14 @@ export function journalSourceLabel(sourceType: string) {
     bank_transaction_void: "Bank Transaction Void",
     bank_transfer: "Bank Transfer",
     bank_transfer_void: "Bank Transfer Void",
+    payslip: "Payslip",
+    payslip_void: "Payslip Void",
+    goods_receipt: "Goods Receipt",
+    goods_receipt_void: "Goods Receipt Void",
+    pdc_receive: "PDC Received / Issued",
+    pdc_clear: "PDC Cleared",
+    pdc_bounce: "PDC Bounced",
+    pdc_cancel: "PDC Cancelled",
     opening_balance: "Opening Balance",
   };
   return labels[sourceType] ?? sourceType.replaceAll("_", " ");
@@ -38,11 +46,17 @@ export function journalSourceHref(businessId: string, sourceType: string, source
   if (sourceType === "purchase_invoice" || sourceType === "purchase_invoice_void") {
     return `/b/${businessId}/purchases/invoices/${sourceId}`;
   }
+  if (sourceType === "debit_note" || sourceType === "debit_note_void") {
+    return `/b/${businessId}/purchases/debit-notes/${sourceId}`;
+  }
   if (sourceType === "supplier_payment" || sourceType === "supplier_payment_void") {
     return `/b/${businessId}/purchases/payments/${sourceId}`;
   }
   if (sourceType === "delivery_note" || sourceType === "delivery_note_void") {
     return `/b/${businessId}/sales/delivery-notes/${sourceId}`;
+  }
+  if (sourceType === "goods_receipt" || sourceType === "goods_receipt_void") {
+    return `/b/${businessId}/purchases/goods-receipts/${sourceId}`;
   }
   if (sourceType === "stock_adjustment" || sourceType === "stock_adjustment_void") {
     return `/b/${businessId}/inventory/adjustments/${sourceId}`;
@@ -52,6 +66,12 @@ export function journalSourceHref(businessId: string, sourceType: string, source
   }
   if (sourceType === "bank_transfer" || sourceType === "bank_transfer_void") {
     return `/b/${businessId}/banking/transfers/${sourceId}`;
+  }
+  if (sourceType === "payslip" || sourceType === "payslip_void") {
+    return `/b/${businessId}/payroll/payslips/${sourceId}`;
+  }
+  if (sourceType.startsWith("pdc_")) {
+    return `/b/${businessId}/banking/pdcs`;
   }
   return null;
 }

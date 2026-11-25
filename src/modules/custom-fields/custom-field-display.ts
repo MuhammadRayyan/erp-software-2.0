@@ -33,3 +33,35 @@ export function firstMissingRequiredCustomField(
   }
   return null;
 }
+
+/**
+ * Builds the baseline map of custom field values for a form.
+ */
+export function buildInitialCustomFieldValues(
+  definitions: { id: string; fieldType: CustomFieldFieldType }[],
+  storedValues?: Record<string, string>,
+): Record<string, string> {
+  const result: Record<string, string> = {};
+  for (const definition of definitions) {
+    result[definition.id] =
+      storedValues?.[definition.id] ?? (definition.fieldType === "checkbox" ? "false" : "");
+  }
+  return result;
+}
+
+/**
+ * Compares current custom field values against the baseline map so forms track
+ * unsaved edits made outside `react-hook-form`.
+ */
+export function haveCustomFieldValuesChanged(
+  initialValues: Record<string, string>,
+  currentValues: Record<string, string>,
+): boolean {
+  const keys = new Set([...Object.keys(initialValues), ...Object.keys(currentValues)]);
+  for (const key of keys) {
+    if ((initialValues[key] ?? "") !== (currentValues[key] ?? "")) {
+      return true;
+    }
+  }
+  return false;
+}

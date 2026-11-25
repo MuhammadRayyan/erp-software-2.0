@@ -1,25 +1,46 @@
 "use client";
 
+import * as React from "react";
 import * as Dialog from "@radix-ui/react-dialog";
 import { X } from "lucide-react";
 import { cn } from "@/lib/cn";
+
+const DialogPortalContainerContext = React.createContext<HTMLElement | null>(null);
+
+export function useDialogPortalContainer() {
+  return React.useContext(DialogPortalContainerContext);
+}
 
 export const DialogRoot = Dialog.Root;
 export const DialogTrigger = Dialog.Trigger;
 export const DialogClose = Dialog.Close;
 
-export function DialogContent({ className, children, ...props }: React.ComponentProps<typeof Dialog.Content>) {
+export function DialogContent({
+  className,
+  overlayClassName,
+  children,
+  ...props
+}: React.ComponentProps<typeof Dialog.Content> & { overlayClassName?: string }) {
+  const [portalContainer, setPortalContainer] = React.useState<HTMLDivElement | null>(null);
   return (
     <Dialog.Portal>
-      <Dialog.Overlay className="fixed inset-0 z-50 bg-slate-950/45 data-[state=open]:animate-in" />
-      <Dialog.Content
+      <Dialog.Overlay
         className={cn(
-          "fixed top-1/2 left-1/2 z-50 w-[calc(100%-2rem)] max-w-md -translate-x-1/2 -translate-y-1/2 rounded-[10px] border border-border bg-surface-raised p-5 shadow-[0_24px_64px_rgb(15_23_42/0.22)] outline-none",
+          "erp-overlay-animate fixed inset-0 z-50 bg-slate-950/45 backdrop-blur-[1px]",
+          overlayClassName,
+        )}
+      />
+      <Dialog.Content
+        ref={setPortalContainer}
+        className={cn(
+          "erp-dialog-animate fixed top-1/2 left-1/2 z-50 w-[calc(100%-2rem)] max-w-md -translate-x-1/2 -translate-y-1/2 rounded-[10px] border border-border bg-surface-raised p-5 shadow-[0_24px_64px_rgb(15_23_42/0.22)] outline-none",
           className,
         )}
         {...props}
       >
-        {children}
+        <DialogPortalContainerContext.Provider value={portalContainer}>
+          {children}
+        </DialogPortalContainerContext.Provider>
         <Dialog.Close aria-label="Close" className="absolute top-3 right-3 grid size-8 place-items-center rounded-md text-muted-foreground hover:bg-surface-muted focus-visible:ring-2 focus-visible:ring-ring">
           <X className="size-4" />
         </Dialog.Close>

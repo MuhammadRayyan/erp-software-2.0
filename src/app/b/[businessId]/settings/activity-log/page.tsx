@@ -54,6 +54,7 @@ export default async function ActivityLogPage({
       <ActivityLogClient
         businessId={businessId}
         initialData={initialData}
+        initialFilters={filters}
         usersList={usersList}
         initialRetentionSettings={initialRetentionSettings}
         currentUserId={user.id}

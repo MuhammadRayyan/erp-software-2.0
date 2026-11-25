@@ -9,6 +9,7 @@ import {
   createInvoice,
   deleteInvoice,
   duplicateInvoice,
+  getInvoice,
   postInvoice,
   updateInvoice,
   voidInvoice,
@@ -19,7 +20,11 @@ import {
   type BatchActionResult,
 } from "./invoice-service";
 
-export type InvoiceActionResult = { error?: string; fieldErrors?: Record<string, string[]> };
+export type InvoiceActionResult = {
+  error?: string;
+  fieldErrors?: Record<string, string[]>;
+  documentStatus?: "draft" | "pending_approval" | "posted" | "void";
+};
 
 import { formatZodFieldErrors } from "@/lib/zod-errors";
 const customFieldValuesSchema = z.record(z.string(), z.string()).optional();
@@ -30,6 +35,7 @@ export async function createInvoiceAction(
   input: unknown,
   intent: InvoiceSaveIntent,
   customFieldValues?: unknown,
+  afterSave: "view" | "new" | "email" = "view",
 ): Promise<InvoiceActionResult> {
   const { user } = await requireSavePermission(businessId, "sales", undefined, intent);
   const parsed = invoiceInputSchema.safeParse(input);
@@ -44,14 +50,26 @@ export async function createInvoiceAction(
   } catch (error) {
     return { error: error instanceof Error ? error.message : "The invoice could not be saved. Your entries are still here." };
   }
+  const created = getInvoice(businessId, user.id, invoiceId);
+  const status = created?.invoice.documentStatus;
   const notice =
-    intent === "post"
-      ? parsed.data.applyAvailableCredit
-        ? "Invoice posted & advance credit applied"
-        : "Invoice posted"
-      : "Draft saved";
+    status === "pending_approval"
+      ? "Submitted for approval"
+      : status === "posted"
+        ? parsed.data.applyAvailableCredit
+          ? "Invoice posted & advance credit applied"
+          : "Invoice posted"
+        : "Draft saved";
   revalidatePath(`/b/${businessId}/sales/invoices`);
   revalidatePath(`/b/${businessId}/sales/invoices/${invoiceId}`);
+  revalidatePath(`/b/${businessId}/approvals`);
+  revalidatePath(`/b/${businessId}/overview`);
+  if (afterSave === "new") {
+    redirect(`/b/${businessId}/sales/invoices/new?notice=${encodeURIComponent(notice)}&fresh=${Date.now()}`);
+  }
+  if (afterSave === "email" && status === "posted") {
+    redirect(`/b/${businessId}/sales/invoices/${invoiceId}?composeEmail=1&notice=${encodeURIComponent(notice)}`);
+  }
   redirect(`/b/${businessId}/sales/invoices/${invoiceId}?notice=${encodeURIComponent(notice)}`);
 }
 
@@ -74,18 +92,37 @@ export async function updateInvoiceAction(
   } catch (error) {
     return { error: error instanceof Error ? error.message : "The invoice could not be updated. Your entries are still here." };
   }
+  const updated = getInvoice(businessId, user.id, invoiceId);
+  const status = updated?.invoice.documentStatus;
+  const notice =
+    status === "pending_approval"
+      ? "Submitted for approval"
+      : status === "posted"
+        ? "Invoice posting updated"
+        : "Draft updated";
   revalidatePath(`/b/${businessId}/sales/invoices`);
   revalidatePath(`/b/${businessId}/sales/invoices/${invoiceId}`);
-  redirect(`/b/${businessId}/sales/invoices/${invoiceId}?notice=${encodeURIComponent(intent === "post" ? "Invoice posting updated" : "Draft updated")}`);
+  revalidatePath(`/b/${businessId}/approvals`);
+  revalidatePath(`/b/${businessId}/overview`);
+  redirect(`/b/${businessId}/sales/invoices/${invoiceId}?notice=${encodeURIComponent(notice)}`);
 }
 
-export async function postInvoiceAction(businessId: string, invoiceId: string): Promise<InvoiceActionResult> {
+export async function postInvoiceAction(
+  businessId: string,
+  invoiceId: string,
+  intent: "post" | "submit_approval" = "post",
+): Promise<InvoiceActionResult> {
   try {
-    const { user } = await requirePermission(businessId, "sales", "post");
-    postInvoice(businessId, user.id, invoiceId);
+    const { user, access } = await requirePermission(businessId, "sales", "edit");
+    if (intent !== "submit_approval" && !access.requiresApproval) {
+      await requirePermission(businessId, "sales", "post");
+    }
+    const documentStatus = postInvoice(businessId, user.id, invoiceId, intent);
     revalidatePath(`/b/${businessId}/sales/invoices`);
     revalidatePath(`/b/${businessId}/sales/invoices/${invoiceId}`);
-    return {};
+    revalidatePath(`/b/${businessId}/approvals`);
+    revalidatePath(`/b/${businessId}/overview`);
+    return { documentStatus };
   } catch (error) {
     return { error: error instanceof Error ? error.message : "The invoice could not be posted." };
   }
@@ -126,10 +163,19 @@ export async function voidInvoiceAction(businessId: string, invoiceId: string) {
   }
 }
 
-export async function batchPostInvoicesAction(businessId: string, invoiceIds: string[]): Promise<BatchActionResult> {
-  const { user } = await requirePermission(businessId, "sales", "post");
-  const result = batchPostInvoices(businessId, user.id, invoiceIds);
+export async function batchPostInvoicesAction(
+  businessId: string,
+  invoiceIds: string[],
+  intent: "post" | "submit_approval" = "post",
+): Promise<BatchActionResult> {
+  const { user, access } = await requirePermission(businessId, "sales", "edit");
+  if (intent !== "submit_approval" && !access.requiresApproval) {
+    await requirePermission(businessId, "sales", "post");
+  }
+  const result = batchPostInvoices(businessId, user.id, invoiceIds, intent);
   revalidatePath(`/b/${businessId}/sales/invoices`);
+  revalidatePath(`/b/${businessId}/approvals`);
+  revalidatePath(`/b/${businessId}/overview`);
   return result;
 }
 

@@ -9,6 +9,8 @@ import { ProjectLinks } from "@/modules/projects/project-links";
 import { buildDocumentEmailContext, buildDocumentEmailDefaults } from "@/modules/email/email-defaults";
 import { getPurchaseOrder, listPurchaseOrderRevisions } from "@/modules/purchase-orders/purchase-order-service";
 import { PurchaseOrderViewActions } from "@/modules/purchase-orders/purchase-order-view-actions";
+import { getLatestApprovalForEntity } from "@/modules/approvals/approval-service";
+import { DocumentApprovalBanner } from "@/components/approvals/document-approval-banner";
 import { OrderRevisionSwitcher } from "@/modules/purchase-orders/order-revision-switcher";
 import { DocumentFlowStepper, type FlowStep } from "@/components/documents/document-flow-stepper";
 import { Breadcrumbs } from "@/components/breadcrumbs";
@@ -144,6 +146,14 @@ export default async function PurchaseOrderViewPage({
           hasReceivableItems={lines.some((line) => Boolean(line.itemId) && line.remainingMicros > 0)}
           emailDefaults={emailDefaults}
           linkedInvoice={record.relatedInvoices[0] ? { id: record.relatedInvoices[0].id, invoice_number: record.relatedInvoices[0].internal_number } : undefined}
+        />
+      </div>
+      <div className="mb-5">
+        <DocumentApprovalBanner
+          businessId={businessId}
+          currentUserId={user.id}
+          isAdmin={access.membership.role === "administrator"}
+          approval={getLatestApprovalForEntity(businessId, user.id, "purchase_order", order.id)}
         />
       </div>
 

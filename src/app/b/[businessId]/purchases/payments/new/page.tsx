@@ -7,6 +7,8 @@ import { getBankAccountOptions } from "@/modules/accounting/services/account-ser
 import { listPurchaseInvoices } from "@/modules/purchase-invoices/purchase-invoice-service";
 import { SupplierPaymentForm } from "@/modules/supplier-payments/supplier-payment-form";
 import { listActiveSuppliers } from "@/modules/suppliers/supplier-service";
+import { NoticeToast } from "@/components/notice-toast";
+import { getBusinessTodayIso } from "@/core/format";
 
 export default async function NewSupplierPaymentPage({
   params,
@@ -21,6 +23,8 @@ export default async function NewSupplierPaymentPage({
     date?: string;
     reference?: string;
     description?: string;
+    notice?: string;
+    fresh?: string;
   }>;
 }) {
   const { businessId } = await params;
@@ -36,7 +40,7 @@ export default async function NewSupplierPaymentPage({
   const minorUnits = new Map(settings.currencies.map((currency) => [currency.code, currency.minor_unit]));
   const supplierId = selected?.supplier_id ?? query.supplierId ?? "";
   const invoiceId = selected?.id ?? "";
-  const date = new Date().toISOString().slice(0, 10);
+  const date = getBusinessTodayIso();
 
   return (
     <div className="page-container">
@@ -47,12 +51,14 @@ export default async function NewSupplierPaymentPage({
         <ArrowLeft className="size-4" /> {selected?.internal_number ?? "Purchase Invoices"}
       </Link>
       <div className="mb-7">
+        <NoticeToast key={query.fresh ?? query.notice} message={query.notice} />
         <h1 className="page-title">Record Supplier Payment</h1>
         <p className="page-description">
           Allocate payments across multiple open purchase bills, or record an unallocated vendor prepayment deposit.
         </p>
       </div>
       <SupplierPaymentForm
+        key={query.fresh ?? "new"}
         businessId={businessId}
         currency={access.business.currency}
         currencies={settings.currencies

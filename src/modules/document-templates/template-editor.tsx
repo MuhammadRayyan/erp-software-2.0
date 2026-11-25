@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useTransition } from "react";
+import { useState, useEffect, useRef, useTransition } from "react";
 import {
   LoaderCircle,
   Eye,
@@ -25,9 +25,11 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
+import { useConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { SelectNative } from "@/components/ui/select-native";
+import { copyToClipboard } from "@/lib/clipboard";
 import { saveTemplateSettingsAction } from "./actions";
 import { defaultSettings, type TemplateSettings } from "./template-settings";
 
@@ -102,14 +104,25 @@ export function TemplateEditor({
   const [copiedVar, setCopiedVar] = useState<string | null>(null);
   const [zoomHeight, setZoomHeight] = useState<number>(720);
   const [, startTransition] = useTransition();
+  const { ask, dialog: confirmDialog } = useConfirmDialog();
 
   const typeLabel = TYPE_LABELS[documentType] || "Document";
   const previewUrl = `/api/businesses/${businessId}/document-templates/preview-pdf?type=${documentType}${refreshKey ? `&_t=${refreshKey}` : ""}`;
 
+  const blobUrlRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (blobUrlRef.current) {
+        URL.revokeObjectURL(blobUrlRef.current);
+        blobUrlRef.current = null;
+      }
+    };
+  }, []);
+
   // Live debounced auto-preview (350ms debounce)
   useEffect(() => {
     let active = true;
-    let currentObjectUrl: string | null = null;
 
     const timer = setTimeout(async () => {
       setPreviewLoading(true);
@@ -125,11 +138,10 @@ export function TemplateEditor({
         }
         const blob = await response.blob();
         if (!active) return;
-        currentObjectUrl = URL.createObjectURL(blob);
-        setBlobUrl((prev) => {
-          if (prev) URL.revokeObjectURL(prev);
-          return currentObjectUrl;
-        });
+        const nextUrl = URL.createObjectURL(blob);
+        if (blobUrlRef.current) URL.revokeObjectURL(blobUrlRef.current);
+        blobUrlRef.current = nextUrl;
+        setBlobUrl(nextUrl);
       } catch (err: unknown) {
         if (!active) return;
         console.error("PDF Preview fetch error:", err);
@@ -144,9 +156,6 @@ export function TemplateEditor({
     return () => {
       active = false;
       clearTimeout(timer);
-      if (currentObjectUrl) {
-        URL.revokeObjectURL(currentObjectUrl);
-      }
     };
   }, [businessId, documentType, settings, refreshKey]);
 
@@ -184,17 +193,27 @@ export function TemplateEditor({
   }
 
   function handleReset() {
-    if (confirm(`Reset ${typeLabel} template settings to system defaults?`)) {
-      setSettings(defaultSettings);
-      toast.info("Settings reset to defaults. Click 'Save' to apply.");
-    }
+    ask({
+      title: `Reset ${typeLabel} template?`,
+      description: `Reset ${typeLabel} template settings back to system defaults? Unsaved template customizations will be overwritten in the editor.`,
+      confirmLabel: "Reset to defaults",
+      tone: "warning",
+      onConfirm: () => {
+        setSettings(defaultSettings);
+        toast.info("Settings reset to defaults. Click 'Save Template' to apply.");
+      },
+    });
   }
 
-  const copyVariable = (v: string) => {
-    navigator.clipboard.writeText(v);
-    setCopiedVar(v);
-    toast.success(`Copied ${v} to clipboard`);
-    setTimeout(() => setCopiedVar(null), 1800);
+  const copyVariable = async (v: string) => {
+    const ok = await copyToClipboard(v);
+    if (ok) {
+      setCopiedVar(v);
+      toast.success(`Copied ${v} to clipboard`);
+      setTimeout(() => setCopiedVar(null), 1800);
+    } else {
+      toast.error("Failed to copy to clipboard");
+    }
   };
 
   return (
@@ -1561,6 +1580,7 @@ export function TemplateEditor({
           </div>
         </div>
       </div>
+      {confirmDialog}
     </div>
   );
 }

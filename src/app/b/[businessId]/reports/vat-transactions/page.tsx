@@ -17,14 +17,13 @@ import {
 } from "@/modules/tax/uae-vat-config";
 import { getVatDetailFilterOptions, getVatTransactionDetail } from "@/modules/tax/vat-report-service";
 import { SelectNative } from "@/components/ui/select-native";
+import { listSavedReports } from "@/modules/reports/saved-report-service";
+import { SavedReportToolbar } from "@/components/reports/saved-report-toolbar";
+import { journalSourceHref } from "@/modules/accounting/journal-source";
 
 
 function sourceHref(businessId: string, type: string, id: string) {
-  if (type.startsWith("sales_invoice")) return `/b/${businessId}/sales/invoices/${id}`;
-  if (type.startsWith("sales_credit_note")) return `/b/${businessId}/sales/credit-notes/${id}`;
-  if (type.startsWith("purchase_invoice")) return `/b/${businessId}/purchases/invoices/${id}`;
-  if (type.startsWith("bank_transaction")) return `/b/${businessId}/banking/transactions/${id}`;
-  return "#";
+  return journalSourceHref(businessId, type, id) ?? "#";
 }
 
 export default async function VatTransactionsPage({
@@ -39,6 +38,7 @@ export default async function VatTransactionsPage({
   const { user, access } = await requireModule(businessId, "reports");
   const rows = getVatTransactionDetail(businessId, user.id, query);
   const options = getVatDetailFilterOptions(businessId, user.id);
+  const savedViews = listSavedReports(businessId, user.id, "vat_transactions");
   const detailQuery = new URLSearchParams(
     Object.entries(query).filter((entry): entry is [string, string] => Boolean(entry[1])),
   ).toString();
@@ -48,16 +48,26 @@ export default async function VatTransactionsPage({
 
   return <div className="page-container">
     <BackLink href={backHref}>Back</BackLink>
-    <div className="page-header">
+    <div className="page-header flex flex-wrap items-start justify-between gap-4">
       <div>
         <h1 className="page-title">VAT Transaction Detail</h1>
         <p className="page-description">Posted source tax detail with preserved classifications and drill-down totals.</p>
       </div>
-      <Button permission={"export"} asChild variant="secondary" size="sm">
-        <a href={`/api/businesses/${businessId}/tax/vat/export?type=detail&${detailQuery}`}>
-          <Download className="size-4" /> Export CSV
-        </a>
-      </Button>
+      <div className="flex flex-wrap items-center gap-2">
+        <SavedReportToolbar
+          businessId={businessId}
+          reportType="vat_transactions"
+          currentConfig={query}
+          savedViews={savedViews}
+          activeViewId={query.viewId}
+          basePath={`/b/${businessId}/reports/vat-transactions`}
+        />
+        <Button permission={"export"} asChild variant="secondary" size="sm">
+          <a href={`/api/businesses/${businessId}/tax/vat/export?type=detail&${detailQuery}`}>
+            <Download className="size-4" /> Export CSV
+          </a>
+        </Button>
+      </div>
     </div>
 
     <form method="get" className="mb-5 rounded-lg border border-border bg-surface-raised p-4">

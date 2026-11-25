@@ -5,6 +5,7 @@ import { Plus, Trash2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
+import { useActionPermission } from "@/components/permissions-provider";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
@@ -20,6 +21,7 @@ export function UomManager({
   units: UnitOfMeasure[];
 }) {
   const router = useRouter();
+  const canEdit = useActionPermission("edit");
   const [code, setCode] = useState("");
   const [name, setName] = useState("");
   const [pending, setPending] = useState(false);
@@ -82,6 +84,7 @@ export function UomManager({
               placeholder="e.g. box"
               value={code}
               onChange={(e) => setCode(e.target.value)}
+              disabled={!canEdit || pending}
               className="h-9"
             />
           </div>
@@ -92,10 +95,11 @@ export function UomManager({
               placeholder="e.g. Boxes"
               value={name}
               onChange={(e) => setName(e.target.value)}
+              disabled={!canEdit || pending}
               className="h-9"
             />
           </div>
-          <Button onClick={handleAdd} disabled={pending || !code.trim() || !name.trim()}>
+          <Button permission="edit" onClick={handleAdd} disabled={pending || !code.trim() || !name.trim()}>
             <Plus className="size-4" /> Add Unit
           </Button>
         </div>
@@ -130,8 +134,9 @@ export function UomManager({
                   <td>
                     <button
                       type="button"
-                      onClick={() => handleToggle(u.id, u.isActive)}
-                      className="cursor-pointer"
+                      disabled={!canEdit || pending}
+                      onClick={() => canEdit && handleToggle(u.id, u.isActive)}
+                      className={canEdit ? "cursor-pointer" : "cursor-not-allowed opacity-60"}
                     >
                       <Badge tone={u.isActive ? "success" : "neutral"}>
                         {u.isActive ? "Active" : "Disabled"}
@@ -140,6 +145,7 @@ export function UomManager({
                   </td>
                   <td className="text-right">
                     <Button
+                      permission="delete"
                       variant="ghost"
                       size="icon"
                       className="text-muted-foreground hover:text-danger"

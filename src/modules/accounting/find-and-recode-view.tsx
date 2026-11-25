@@ -15,7 +15,10 @@ import {
   SlidersHorizontal,
   X,
 } from "lucide-react";
+import { useActionPermission } from "@/components/permissions-provider";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Combobox } from "@/components/ui/combobox";
 import {
   DialogClose,
   DialogContent,
@@ -46,6 +49,22 @@ type Props = {
   currency: string;
 };
 
+function formatCurrencyTotals(
+  lines: readonly RecodableLine[],
+  pickMinor: (line: RecodableLine) => number,
+  fallbackCurrency: string,
+): string {
+  if (lines.length === 0) return formatMoney(0, fallbackCurrency);
+  const byCurrency = new Map<string, number>();
+  for (const line of lines) {
+    const code = line.currencyCode || fallbackCurrency;
+    byCurrency.set(code, (byCurrency.get(code) ?? 0) + pickMinor(line));
+  }
+  return Array.from(byCurrency.entries())
+    .map(([code, minor]) => formatMoney(minor, code))
+    .join(" · ");
+}
+
 export function FindAndRecodeView({
   businessId,
   initialLines,
@@ -56,6 +75,7 @@ export function FindAndRecodeView({
   currency,
 }: Props) {
   const router = useRouter();
+  const canPost = useActionPermission("post");
   const [isPending, startTransition] = useTransition();
 
   // Search filter state
@@ -96,7 +116,7 @@ export function FindAndRecodeView({
   };
 
   const handleToggleLine = (line: RecodableLine) => {
-    if (line.isLocked) return;
+    if (!canPost || line.isLocked) return;
     const key = getLineKey(line);
     const next = new Set(selectedKeys);
     if (next.has(key)) {
@@ -138,7 +158,7 @@ export function FindAndRecodeView({
 
   // Compute selected lines summary
   const selectedLines = initialLines.filter((l) => selectedKeys.has(getLineKey(l)));
-  const totalSelectedNetMinor = selectedLines.reduce((sum, l) => sum + l.netAmountMinor, 0);
+  const selectedNetSummary = formatCurrencyTotals(selectedLines, (l) => l.netAmountMinor, currency);
 
   const handleExecuteRecode = () => {
     setModalError(null);
@@ -206,9 +226,9 @@ export function FindAndRecodeView({
       case "purchase_invoice":
         return `/b/${businessId}/purchases/invoices/${line.sourceId}`;
       case "bank_transaction":
-        return `/b/${businessId}/reports/bank-transactions`;
+        return `/b/${businessId}/banking/transactions/${line.sourceId}`;
       case "manual_journal":
-        return `/b/${businessId}/accounting/journal`;
+        return `/b/${businessId}/accounting/journal/${line.sourceId}`;
     }
   };
 
@@ -249,69 +269,83 @@ export function FindAndRecodeView({
           {/* Source Type Filter */}
           <div className="space-y-1">
             <label className="text-xs font-medium text-muted-foreground">Source Type</label>
-            <select
+            <Combobox
+              size="sm"
+              ariaLabel="Source Type"
+              searchable={false}
               value={sourceType}
-              onChange={(e) => setSourceType(e.target.value)}
-              className="h-9 w-full rounded-md border border-border-strong bg-surface-raised px-2.5 text-xs text-foreground focus:border-primary focus:outline-none"
-            >
-              <option value="all">All Sources</option>
-              <option value="sales_invoice">Sales Invoices</option>
-              <option value="purchase_invoice">Purchase Invoices</option>
-              <option value="bank_transaction">Bank Transactions</option>
-              <option value="manual_journal">Manual Journals</option>
-            </select>
+              onValueChange={setSourceType}
+              options={[
+                { value: "all", label: "All Sources" },
+                { value: "sales_invoice", label: "Sales Invoices" },
+                { value: "purchase_invoice", label: "Purchase Invoices" },
+                { value: "bank_transaction", label: "Bank Transactions" },
+                { value: "manual_journal", label: "Manual Journals" },
+              ]}
+            />
           </div>
 
           {/* Account Filter */}
           <div className="space-y-1">
             <label className="text-xs font-medium text-muted-foreground">Current Account</label>
-            <select
+            <Combobox
+              size="sm"
+              ariaLabel="Current Account"
+              options={accounts.map((acc) => ({
+                value: acc.id,
+                label: `${acc.name} (${acc.type})`,
+              }))}
               value={accountId}
-              onChange={(e) => setAccountId(e.target.value)}
-              className="h-9 w-full rounded-md border border-border-strong bg-surface-raised px-2.5 text-xs text-foreground focus:border-primary focus:outline-none"
-            >
-              <option value="">Any Account</option>
-              {accounts.map((acc) => (
-                <option key={acc.id} value={acc.id}>
-                  {acc.name} ({acc.type})
-                </option>
-              ))}
-            </select>
+              onValueChange={setAccountId}
+              allowClear
+              clearLabel="Any Account"
+              placeholder="Any Account"
+              searchPlaceholder="Search accounts…"
+              emptyText="No accounts found."
+            />
           </div>
 
           {/* Tax Code Filter */}
           <div className="space-y-1">
             <label className="text-xs font-medium text-muted-foreground">Current Tax Code</label>
-            <select
+            <Combobox
+              size="sm"
+              ariaLabel="Current Tax Code"
+              options={taxCodes.map((tc) => ({
+                value: tc.id,
+                label: `${tc.name} (${tc.rate_basis_points / 100}%)`,
+              }))}
               value={taxCodeId}
-              onChange={(e) => setTaxCodeId(e.target.value)}
-              className="h-9 w-full rounded-md border border-border-strong bg-surface-raised px-2.5 text-xs text-foreground focus:border-primary focus:outline-none"
-            >
-              <option value="">Any Tax Code</option>
-              {taxCodes.map((tc) => (
-                <option key={tc.id} value={tc.id}>
-                  {tc.name} ({tc.rate_basis_points / 100}%)
-                </option>
-              ))}
-            </select>
+              onValueChange={setTaxCodeId}
+              allowClear
+              clearLabel="Any Tax Code"
+              placeholder="Any Tax Code"
+              searchPlaceholder="Search tax codes…"
+              emptyText="No tax codes found."
+            />
           </div>
 
           {/* Project Filter */}
           <div className="space-y-1">
             <label className="text-xs font-medium text-muted-foreground">Current Project</label>
-            <select
+            <Combobox
+              size="sm"
+              ariaLabel="Current Project"
+              options={[
+                { value: "none", label: "No Project Assigned" },
+                ...projects.map((p) => ({
+                  value: p.id,
+                  label: `${p.code} - ${p.name}`,
+                })),
+              ]}
               value={projectId}
-              onChange={(e) => setProjectId(e.target.value)}
-              className="h-9 w-full rounded-md border border-border-strong bg-surface-raised px-2.5 text-xs text-foreground focus:border-primary focus:outline-none"
-            >
-              <option value="">Any Project</option>
-              <option value="none">No Project Assigned</option>
-              {projects.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.code} - {p.name}
-                </option>
-              ))}
-            </select>
+              onValueChange={setProjectId}
+              allowClear
+              clearLabel="Any Project"
+              placeholder="Any Project"
+              searchPlaceholder="Search projects…"
+              emptyText="No projects found."
+            />
           </div>
 
           {/* Date From */}
@@ -366,7 +400,7 @@ export function FindAndRecodeView({
       </form>
 
       {/* Floating / Sticky Recode Action Bar when lines are selected */}
-      {selectedLines.length > 0 && (
+      {canPost && selectedLines.length > 0 && (
         <div className="sticky top-4 z-30 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-primary/30 bg-primary/10 p-3 shadow-md backdrop-blur-md">
           <div className="flex items-center gap-3">
             <span className="inline-flex size-6 items-center justify-center rounded-full bg-primary text-xs font-bold text-primary-foreground">
@@ -376,12 +410,13 @@ export function FindAndRecodeView({
               {selectedLines.length} line{selectedLines.length === 1 ? "" : "s"} selected
             </span>
             <span className="text-xs text-muted-foreground">
-              Total Net: <span className="font-mono font-bold text-foreground">{formatMoney(totalSelectedNetMinor, currency)}</span>
+              Total Net: <span className="font-mono font-bold text-foreground">{selectedNetSummary}</span>
             </span>
           </div>
 
           <div className="flex items-center gap-2">
             <Button
+              permission="post"
               size="sm"
               variant="secondary"
               onClick={() => {
@@ -394,6 +429,7 @@ export function FindAndRecodeView({
             </Button>
 
             <Button
+              permission="post"
               size="sm"
               variant="secondary"
               onClick={() => {
@@ -406,6 +442,7 @@ export function FindAndRecodeView({
             </Button>
 
             <Button
+              permission="post"
               size="sm"
               variant="secondary"
               onClick={() => {
@@ -441,16 +478,22 @@ export function FindAndRecodeView({
           <table className="data-table min-w-[1050px]">
             <thead>
               <tr>
-                <th className="w-10 text-center">
-                  <input
-                    type="checkbox"
-                    checked={allSelected}
-                    onChange={handleToggleSelectAll}
-                    disabled={unlockedLines.length === 0}
-                    className="size-4 rounded border-border-strong text-primary focus:ring-primary"
-                    aria-label="Select all unlocked lines"
-                  />
-                </th>
+                {canPost && (
+                  <th className="w-10 text-center">
+                    <Checkbox
+                      checked={
+                        allSelected
+                          ? true
+                          : unlockedLines.length > 0 && selectedKeys.size > 0
+                            ? "indeterminate"
+                            : false
+                      }
+                      onCheckedChange={handleToggleSelectAll}
+                      disabled={unlockedLines.length === 0}
+                      aria-label="Select all unlocked lines"
+                    />
+                  </th>
+                )}
                 <th>Date</th>
                 <th>Source</th>
                 <th>Doc #</th>
@@ -460,37 +503,37 @@ export function FindAndRecodeView({
                 <th>Tax Code</th>
                 <th>Project</th>
                 <th className="text-right!">Net Amount</th>
-                <th className="text-right!">Gross ({currency})</th>
+                <th className="text-right!">Gross</th>
               </tr>
             </thead>
             <tbody>
               {initialLines.map((line) => {
                 const key = getLineKey(line);
-                const isChecked = selectedKeys.has(key);
+                const isChecked = canPost && selectedKeys.has(key);
 
                 return (
                   <tr
                     key={key}
-                    onClick={() => handleToggleLine(line)}
-                    className={`cursor-pointer transition-colors ${
+                    onClick={canPost ? () => handleToggleLine(line) : undefined}
+                    className={`transition-colors ${canPost ? "cursor-pointer " : ""}${
                       isChecked ? "bg-primary/5" : line.isLocked ? "opacity-60" : "hover:bg-surface-muted"
                     }`}
                   >
-                    <td className="text-center" onClick={(e) => e.stopPropagation()}>
-                      {line.isLocked ? (
-                        <span title="Locked by financial period lock date">
-                          <Lock className="mx-auto size-3.5 text-muted-foreground" />
-                        </span>
-                      ) : (
-                        <input
-                          type="checkbox"
-                          checked={isChecked}
-                          onChange={() => handleToggleLine(line)}
-                          className="size-4 rounded border-border-strong text-primary focus:ring-primary"
-                          aria-label={`Select line ${line.description}`}
-                        />
-                      )}
-                    </td>
+                    {canPost && (
+                      <td className="text-center" onClick={(e) => e.stopPropagation()}>
+                        {line.isLocked ? (
+                          <span title="Locked by financial period lock date">
+                            <Lock className="mx-auto size-3.5 text-muted-foreground" />
+                          </span>
+                        ) : (
+                          <Checkbox
+                            checked={isChecked}
+                            onCheckedChange={() => handleToggleLine(line)}
+                            aria-label={`Select line ${line.description}`}
+                          />
+                        )}
+                      </td>
+                    )}
                     <td className="text-xs text-muted-foreground whitespace-nowrap">{formatDate(line.date)}</td>
                     <td>{getSourceBadge(line.sourceType)}</td>
                     <td>
@@ -516,7 +559,7 @@ export function FindAndRecodeView({
                       {formatMoney(line.netAmountMinor, line.currencyCode)}
                     </td>
                     <td className="money text-right font-mono text-xs font-semibold">
-                      {formatMoney(line.grossAmountMinor, currency)}
+                      {formatMoney(line.grossAmountMinor, line.currencyCode)}
                     </td>
                   </tr>
                 );
@@ -524,14 +567,14 @@ export function FindAndRecodeView({
             </tbody>
             <tfoot>
               <tr className="border-t border-border-strong bg-surface font-semibold text-xs">
-                <td colSpan={9} className="h-10 px-3">
+                <td colSpan={canPost ? 9 : 8} className="h-10 px-3">
                   Showing {initialLines.length} line{initialLines.length === 1 ? "" : "s"}
                 </td>
                 <td className="text-right pr-2">
                   Total Gross:
                 </td>
                 <td className="money text-right font-bold pr-3">
-                  {formatMoney(initialLines.reduce((sum, l) => sum + l.grossAmountMinor, 0), currency)}
+                  {formatCurrencyTotals(initialLines, (l) => l.grossAmountMinor, currency)}
                 </td>
               </tr>
             </tfoot>
@@ -562,18 +605,18 @@ export function FindAndRecodeView({
             {modalType === "account" && (
               <div className="space-y-1.5">
                 <label className="text-xs font-semibold text-foreground">Target GL Account</label>
-                <select
+                <Combobox
+                  ariaLabel="Target GL Account"
+                  options={accounts.map((acc) => ({
+                    value: acc.id,
+                    label: `${acc.name} — ${acc.type} (${acc.subtype})`,
+                  }))}
                   value={targetAccount}
-                  onChange={(e) => setTargetAccount(e.target.value)}
-                  className="h-10 w-full rounded-md border border-border-strong bg-surface px-3 text-sm focus:border-primary focus:outline-none"
-                >
-                  <option value="">Select target account...</option>
-                  {accounts.map((acc) => (
-                    <option key={acc.id} value={acc.id}>
-                      {acc.name} — {acc.type} ({acc.subtype})
-                    </option>
-                  ))}
-                </select>
+                  onValueChange={setTargetAccount}
+                  placeholder="Select target account..."
+                  searchPlaceholder="Search GL accounts…"
+                  emptyText="No accounts found."
+                />
                 <p className="text-[11px] text-muted-foreground">
                   The selected account will replace the revenue/expense account on all checked lines.
                 </p>
@@ -583,18 +626,20 @@ export function FindAndRecodeView({
             {modalType === "project" && (
               <div className="space-y-1.5">
                 <label className="text-xs font-semibold text-foreground">Target Project</label>
-                <select
+                <Combobox
+                  ariaLabel="Target Project"
+                  options={projects.map((p) => ({
+                    value: p.id,
+                    label: `${p.code} - ${p.name}`,
+                  }))}
                   value={targetProject}
-                  onChange={(e) => setTargetProject(e.target.value)}
-                  className="h-10 w-full rounded-md border border-border-strong bg-surface px-3 text-sm focus:border-primary focus:outline-none"
-                >
-                  <option value="">Clear Project (Untagged)</option>
-                  {projects.map((p) => (
-                    <option key={p.id} value={p.id}>
-                      {p.code} - {p.name}
-                    </option>
-                  ))}
-                </select>
+                  onValueChange={setTargetProject}
+                  allowClear
+                  clearLabel="Clear Project (Untagged)"
+                  placeholder="Clear Project (Untagged)"
+                  searchPlaceholder="Search projects…"
+                  emptyText="No projects found."
+                />
                 <p className="text-[11px] text-muted-foreground">
                   Assigning a project updates line reporting across Project Profitability and Job Costing.
                 </p>
@@ -604,18 +649,18 @@ export function FindAndRecodeView({
             {modalType === "taxCode" && (
               <div className="space-y-1.5">
                 <label className="text-xs font-semibold text-foreground">Target Tax Code</label>
-                <select
+                <Combobox
+                  ariaLabel="Target Tax Code"
+                  options={taxCodes.map((tc) => ({
+                    value: tc.id,
+                    label: `${tc.name} (${tc.rate_basis_points / 100}%)`,
+                  }))}
                   value={targetTaxCode}
-                  onChange={(e) => setTargetTaxCode(e.target.value)}
-                  className="h-10 w-full rounded-md border border-border-strong bg-surface px-3 text-sm focus:border-primary focus:outline-none"
-                >
-                  <option value="">Select tax code...</option>
-                  {taxCodes.map((tc) => (
-                    <option key={tc.id} value={tc.id}>
-                      {tc.name} ({tc.rate_basis_points / 100}%)
-                    </option>
-                  ))}
-                </select>
+                  onValueChange={setTargetTaxCode}
+                  placeholder="Select tax code..."
+                  searchPlaceholder="Search tax codes…"
+                  emptyText="No tax codes found."
+                />
                 <p className="text-[11px] text-muted-foreground">
                   Line tax amounts and output/input VAT ledger entries will be recalculated accordingly.
                 </p>
@@ -633,7 +678,7 @@ export function FindAndRecodeView({
                 Cancel
               </Button>
             </DialogClose>
-            <Button onClick={handleExecuteRecode} disabled={isPending}>
+            <Button permission="post" onClick={handleExecuteRecode} disabled={isPending}>
               {isPending ? (
                 <>
                   <RefreshCw className="mr-1.5 size-3.5 animate-spin" />

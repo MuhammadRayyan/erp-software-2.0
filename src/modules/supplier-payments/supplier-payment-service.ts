@@ -1,9 +1,20 @@
 import { assertMutationPermission } from "@/core/permissions/mutation-permissions";
-import { createSettlement, voidSettlement, applySettlementCredit, type SettlementConfig } from "@/modules/settlement/settlement-service";
-import { getBusinessDb } from "@/core/db/business";
+import { createSettlement, voidSettlement, applySettlementCredit, postPendingSettlement, revertPendingSettlementToDraft, submitOrPostDraftSettlement, deleteDraftSettlement, type SettlementConfig } from "@/modules/settlement/settlement-service";
+import { evaluateApprovalRequirement, recordPendingApprovalInTransaction } from "@/modules/approvals/approval-policy";
+import { getBusinessDb, runImmediateTransaction } from "@/core/db/business";
 import { postSupplierPayment } from "@/modules/accounting/services/supplier-payment-posting-service";
 import { supplierPaymentInputSchema, type SupplierPaymentInput, type ApplySupplierPaymentCreditInput } from "./supplier-payment-input";
 import { recordActivity } from "@/modules/activity-log/activity-log-service";
+import type { ListSortDir } from "@/lib/list-query-params";
+import {
+  buildCashDocumentWhere,
+  clampPositiveInt,
+  DEFAULT_LIST_PAGE_SIZE,
+  MAX_LIST_PAGE_SIZE,
+  queryCashDocumentSummary,
+  resolveSortSql,
+  type CashDocumentListSummary,
+} from "@/modules/shared/list-query-helpers";
 
 
 export const supplierPaymentConfig: SettlementConfig = {
@@ -35,9 +46,14 @@ export const supplierPaymentConfig: SettlementConfig = {
 const paymentConfig = supplierPaymentConfig;
 
 export function createSupplierPayment(businessId: string, userId: string, input: SupplierPaymentInput) {
-  assertMutationPermission(businessId, userId, "purchases", "create", "post");
+  assertMutationPermission(businessId, userId, "purchases", "create");
   const data = supplierPaymentInputSchema.parse(input);
   const context = getBusinessDb(businessId, userId);
+
+  const preCheck = evaluateApprovalRequirement(businessId, userId, "supplier_payment", 0, context.sqlite);
+  if (!preCheck.requiresApproval && !preCheck.ruleEnabled) {
+    assertMutationPermission(businessId, userId, "purchases", "post");
+  }
 
   const effectiveInvoiceId = data.purchaseInvoiceId || data.invoiceId;
   const allocations = data.allocations && data.allocations.length > 0
@@ -53,51 +69,168 @@ export function createSupplierPayment(businessId: string, userId: string, input:
 
   let result!: ReturnType<typeof createSettlement>;
   context.sqlite.transaction(() => {
-    result = createSettlement(context.sqlite, paymentConfig, settlementInput, userId);
+    result = createSettlement(context.sqlite, paymentConfig, settlementInput, userId, {
+      resolveStatus: (baseAmountMinor) => {
+        const evalResult = evaluateApprovalRequirement(
+          businessId,
+          userId,
+          "supplier_payment",
+          baseAmountMinor,
+          context.sqlite,
+        );
+        if (evalResult.requiresApproval) {
+          return "pending_approval";
+        }
+        assertMutationPermission(businessId, userId, "purchases", "post");
+        return "posted";
+      },
+    });
+
+    if (result.documentStatus === "pending_approval") {
+      recordPendingApprovalInTransaction(context.sqlite, {
+        businessId,
+        userId,
+        entityType: "supplier_payment",
+        entityId: result.id,
+        entityNumber: result.paymentNumber,
+        amountMinor: result.amountMinor,
+        baseAmountMinor: result.baseAmountMinor,
+        currencyCode: result.currencyCode,
+        targetIntent: "post",
+      });
+    }
   }).immediate();
 
-  const paymentRow = context.sqlite
-    .prepare("SELECT payment_number FROM supplier_payments WHERE id = ?")
-    .get(result.id) as { payment_number: string } | undefined;
-  const paymentNumber = paymentRow?.payment_number || "Payment";
+  const paymentNumber = result.paymentNumber || "Payment";
 
   recordActivity(businessId, {
     userId,
-    action: "posted",
+    action: result.documentStatus === "pending_approval" ? "created" : "posted",
     entityType: "supplier_payment",
     entityId: result.id,
     entityNumber: paymentNumber,
-    summary: `Recorded supplier payment ${paymentNumber} for ${data.currencyCode} ${data.amount}`,
-    details: { supplierId: data.supplierId, amount: data.amount, currency: data.currencyCode },
+    summary:
+      result.documentStatus === "pending_approval"
+        ? `Submitted supplier payment ${paymentNumber} for approval (${data.currencyCode} ${data.amount})`
+        : `Recorded supplier payment ${paymentNumber} for ${data.currencyCode} ${data.amount}`,
+    details: { supplierId: data.supplierId, amount: data.amount, currency: data.currencyCode, status: result.documentStatus },
   });
 
   return result;
 }
 
+export function postPendingSupplierPayment(businessId: string, userId: string, paymentId: string) {
+  assertMutationPermission(businessId, userId, "purchases", "post");
+  const context = getBusinessDb(businessId, userId);
+  runImmediateTransaction(context.sqlite, () => {
+    postPendingSettlement(context.sqlite, paymentConfig, paymentId);
+  });
+}
+
+export function revertSupplierPaymentToDraft(businessId: string, userId: string, paymentId: string) {
+  assertMutationPermission(businessId, userId, "purchases", "post");
+  const context = getBusinessDb(businessId, userId);
+  revertPendingSettlementToDraft(context.sqlite, paymentConfig, paymentId);
+}
+
+export function submitOrPostDraftSupplierPayment(
+  businessId: string,
+  userId: string,
+  paymentId: string,
+  intent: "post" | "submit_approval" = "post",
+) {
+  assertMutationPermission(businessId, userId, "purchases", "edit");
+  const context = getBusinessDb(businessId, userId);
+  const result = runImmediateTransaction(context.sqlite, () => {
+    const submitted = submitOrPostDraftSettlement(
+      context.sqlite,
+      paymentConfig,
+      paymentId,
+      (baseAmountMinor) => {
+        if (intent === "submit_approval") {
+          return "pending_approval";
+        }
+        const evalResult = evaluateApprovalRequirement(
+          businessId,
+          userId,
+          "supplier_payment",
+          baseAmountMinor,
+          context.sqlite,
+        );
+        if (evalResult.requiresApproval) {
+          return "pending_approval";
+        }
+        assertMutationPermission(businessId, userId, "purchases", "post");
+        return "posted";
+      },
+    );
+
+    if (submitted.documentStatus === "pending_approval") {
+      recordPendingApprovalInTransaction(context.sqlite, {
+        businessId,
+        userId,
+        entityType: "supplier_payment",
+        entityId: submitted.id,
+        entityNumber: submitted.paymentNumber,
+        amountMinor: submitted.amountMinor,
+        baseAmountMinor: submitted.baseAmountMinor,
+        currencyCode: submitted.currencyCode,
+        targetIntent: "post",
+      });
+    }
+    return submitted;
+  });
+
+  recordActivity(businessId, {
+    userId,
+    action: result.documentStatus === "pending_approval" ? "updated" : "posted",
+    entityType: "supplier_payment",
+    entityId: result.id,
+    entityNumber: result.paymentNumber,
+    summary:
+      result.documentStatus === "pending_approval"
+        ? `Submitted draft supplier payment ${result.paymentNumber} for approval`
+        : `Posted draft supplier payment ${result.paymentNumber}`,
+    details: { supplierId: result.partyId, status: result.documentStatus },
+  });
+
+  return result;
+}
+
+export function deleteDraftSupplierPayment(businessId: string, userId: string, paymentId: string) {
+  assertMutationPermission(businessId, userId, "purchases", "delete");
+  const context = getBusinessDb(businessId, userId);
+  const deleted = runImmediateTransaction(context.sqlite, () =>
+    deleteDraftSettlement(context.sqlite, paymentConfig, paymentId),
+  );
+
+  recordActivity(businessId, {
+    userId,
+    action: "deleted",
+    entityType: "supplier_payment",
+    entityId: deleted.id,
+    entityNumber: deleted.paymentNumber,
+    summary: `Deleted draft supplier payment ${deleted.paymentNumber}`,
+    details: { supplierId: deleted.partyId },
+  });
+}
+
 export type SupplierPaymentListFilters = {
+  q?: string;
+  status?: string;
   /** Inclusive lower bound on payment date (YYYY-MM-DD). Invalid values are ignored. */
   from?: string;
   /** Inclusive upper bound on payment date (YYYY-MM-DD). Invalid values are ignored. */
   to?: string;
+  sort?: string;
+  dir?: ListSortDir;
   /** Maximum rows to return (server-side LIMIT). Used by the paginated list path. */
   take?: number;
   /** Number of rows to skip (server-side OFFSET). Used by the paginated list path. */
   skip?: number;
 };
 
-function validDate(value?: string) {
-  return value && /^\d{4}-\d{2}-\d{2}$/.test(value) ? value : undefined;
-}
-
-const DEFAULT_PAGE_SIZE = 50;
-const MAX_PAGE_SIZE = 200;
-
-function clampPositiveInt(value: number | undefined, fallback: number, max: number): number {
-  if (value === undefined || !Number.isInteger(value) || value < 1) return fallback;
-  return Math.min(value, max);
-}
-
-type SupplierPaymentListRow = {
+export type SupplierPaymentListRow = {
   id: string;
   payment_number: string;
   date: string;
@@ -106,7 +239,7 @@ type SupplierPaymentListRow = {
   currency_code: string;
   currency_minor_unit: number;
   reference: string | null;
-  document_status: "posted" | "void";
+  document_status: "draft" | "pending_approval" | "posted" | "void";
   created_at: string;
   supplier_id: string;
   supplier_name: string;
@@ -116,12 +249,12 @@ type SupplierPaymentListRow = {
 
 /**
  * Paginated supplier-payment list result. The rows slice contains just the
- * rows for the requested page; `total` is the unfiltered-over-rows count
- * for the same `filters` so the UI can show "Page X of Y".
+ * rows for the requested page; `total` is the filtered count across matching rows.
  */
 export type PaginatedSupplierPayments = {
   rows: SupplierPaymentListRow[];
   total: number;
+  summary: CashDocumentListSummary;
   /** 1-indexed page number actually returned (clamped to the last valid page). */
   page: number;
   /** Rows per page that were requested. */
@@ -130,71 +263,50 @@ export type PaginatedSupplierPayments = {
   totalPages: number;
 };
 
-/**
- * Count supplier payments matching `filters` using the same WHERE-clause
- * builder as `listAllSupplierPayments`. Returns the row count used by
- * `listSupplierPaymentsPaginated` to compute total pages.
- */
-function countSupplierPaymentRows(businessId: string, userId: string, filters?: SupplierPaymentListFilters): number {
-  const { sqlite } = getBusinessDb(businessId, userId);
-  const conditions: string[] = [];
-  const values: string[] = [];
-  const dateFrom = validDate(filters?.from);
-  const dateTo = validDate(filters?.to);
-  if (dateFrom) {
-    conditions.push("sp.date >= ?");
-    values.push(dateFrom);
-  }
-  if (dateTo) {
-    conditions.push("sp.date <= ?");
-    values.push(dateTo);
-  }
-  const where = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";
-  const row = sqlite.prepare(`SELECT COUNT(*) AS total FROM supplier_payments sp ${where}`).get(...values) as { total: number };
-  return row.total;
-}
+const SUPPLIER_PAYMENT_QUERY_CFG = {
+  tableName: "supplier_payments",
+  docAlias: "sp",
+  numberCol: "payment_number",
+  partyTable: "suppliers",
+  partyAlias: "s",
+  partyFk: "supplier_id",
+} as const;
 
 /**
- * Paginated list of supplier payments for the list page. Server-side
- * LIMIT/OFFSET keeps the query cheap as the payments table grows. The
- * returned `total` is the count for the same `filters` excluding the page
- * bounds.
- *
- * @param page 1-indexed page number (clamped to >= 1).
- * @param pageSize rows per page (defaults to 50, capped at 200).
+ * Paginated list of supplier payments with SQL search, status/date filtering,
+ * sorting, and DB-wide totals across all matching rows.
  */
 export function listSupplierPaymentsPaginated(
   businessId: string,
   userId: string,
   filters: SupplierPaymentListFilters & { page?: number; pageSize?: number } = {},
 ): PaginatedSupplierPayments {
+  const { sqlite } = getBusinessDb(businessId, userId);
   const page = clampPositiveInt(filters.page, 1, Number.MAX_SAFE_INTEGER);
-  const pageSize = clampPositiveInt(filters.pageSize, DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE);
-  const total = countSupplierPaymentRows(businessId, userId, filters);
+  const pageSize = clampPositiveInt(filters.pageSize, DEFAULT_LIST_PAGE_SIZE, MAX_LIST_PAGE_SIZE);
+  const summary = queryCashDocumentSummary(sqlite, filters, SUPPLIER_PAYMENT_QUERY_CFG);
+  const total = summary.filteredTotal;
   const maxPage = Math.max(1, Math.ceil(total / pageSize));
   const effectivePage = Math.min(page, maxPage);
   const offset = (effectivePage - 1) * pageSize;
   const rows = listAllSupplierPayments(businessId, userId, { ...filters, take: pageSize, skip: offset });
-  return { rows, total, page: effectivePage, pageSize, totalPages: maxPage };
+  return { rows, total, summary, page: effectivePage, pageSize, totalPages: maxPage };
 }
 
 export function listAllSupplierPayments(businessId: string, userId: string, filters?: SupplierPaymentListFilters): SupplierPaymentListRow[] {
   const { sqlite } = getBusinessDb(businessId, userId);
-  const conditions: string[] = [];
-  const values: string[] = [];
-  const dateFrom = validDate(filters?.from);
-  const dateTo = validDate(filters?.to);
-  if (dateFrom) {
-    conditions.push("sp.date >= ?");
-    values.push(dateFrom);
-  }
-  if (dateTo) {
-    conditions.push("sp.date <= ?");
-    values.push(dateTo);
-  }
-  const where = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";
-  // Server-side LIMIT/OFFSET supports the paginated list path. When both
-  // are undefined the query returns the full result set.
+  const { where, values } = buildCashDocumentWhere(filters, SUPPLIER_PAYMENT_QUERY_CFG);
+  const sortColumns: Record<string, string> = {
+    payment_number: "sp.payment_number",
+    supplier_name: "s.name",
+    date: "sp.date",
+    bank_account_name: "a.name",
+    reference: "COALESCE(sp.reference, '')",
+    amount_minor: "sp.amount_minor",
+    base_amount_minor: "sp.base_amount_minor",
+    document_status: "sp.document_status",
+  };
+  const orderByClause = resolveSortSql(filters?.sort, filters?.dir, sortColumns, "sp.date DESC, sp.created_at DESC, sp.id DESC");
   const limitClause = filters?.take !== undefined && Number.isFinite(filters.take) && filters.take >= 0 ? `LIMIT ${Math.floor(filters.take)}` : "";
   const offsetClause = filters?.skip !== undefined && Number.isFinite(filters.skip) && filters.skip >= 0 ? `OFFSET ${Math.floor(filters.skip)}` : "";
   const pagination = `${limitClause} ${offsetClause}`.trim();
@@ -208,7 +320,7 @@ export function listAllSupplierPayments(businessId: string, userId: string, filt
     INNER JOIN accounts a ON a.id = sp.bank_account_id
     INNER JOIN currencies cur ON cur.code = sp.currency_code
     ${where}
-    ORDER BY sp.date DESC, sp.created_at DESC
+    ORDER BY ${orderByClause}
     ${pagination}
   `).all(...values) as SupplierPaymentListRow[];
 }
@@ -232,10 +344,10 @@ export type SupplierPaymentDetailRecord = {
   realized_fx_amount_minor: number;
   reference: string | null;
   description: string | null;
-  document_status: "posted" | "void";
+  document_status: "draft" | "pending_approval" | "posted" | "void";
   created_by: string;
   created_at: string;
-  posted_at: string;
+  posted_at: string | null;
   voided_at: string | null;
   total_allocated_minor: number;
   unallocated_amount_minor: number;

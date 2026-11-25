@@ -7,6 +7,8 @@ import { listInvoices } from "@/modules/sales-invoices/invoice-service";
 import { ReceiptForm } from "@/modules/receipts/receipt-form";
 import { getCurrencySettings } from "@/modules/currency/exchange-rate";
 import { minorToCurrencyInput } from "@/modules/currency/conversion";
+import { NoticeToast } from "@/components/notice-toast";
+import { getBusinessTodayIso } from "@/core/format";
 
 export default async function NewReceiptPage({
   params,
@@ -21,6 +23,8 @@ export default async function NewReceiptPage({
     date?: string;
     reference?: string;
     description?: string;
+    notice?: string;
+    fresh?: string;
   }>;
 }) {
   const { businessId } = await params;
@@ -36,7 +40,7 @@ export default async function NewReceiptPage({
   const currencyMinorUnits = new Map(currencySettings.currencies.map((currency) => [currency.code, currency.minor_unit]));
   const customerId = selected?.customerId ?? query.customerId ?? "";
   const invoiceId = selected?.id ?? "";
-  const today = new Date().toISOString().slice(0, 10);
+  const today = getBusinessTodayIso();
 
   return (
     <div className="page-container">
@@ -44,10 +48,12 @@ export default async function NewReceiptPage({
         <ArrowLeft className="size-4" /> {selected?.invoiceNumber ?? "Sales Invoices"}
       </Link>
       <div className="mb-7">
+        <NoticeToast key={query.fresh ?? query.notice} message={query.notice} />
         <h1 className="page-title">Record Receipt</h1>
         <p className="page-description">Allocate customer payments across multiple open invoices, or record an unallocated advance retainer deposit.</p>
       </div>
       <ReceiptForm
+        key={query.fresh ?? "new"}
         businessId={businessId}
         currency={access.business.currency}
         currencies={currencySettings.currencies.filter((currency) => currency.is_active).map((currency) => ({ code: currency.code, name: currency.name, minorUnit: currency.minor_unit }))}

@@ -1,5 +1,6 @@
-import { requireModule } from "@/core/permissions/require-module";
-import { getCurrentSession } from "@/core/auth/session";
+import { notFound } from "next/navigation";
+import { getCurrentSession, requireUser } from "@/core/auth/session";
+import { getBusinessForUser } from "@/core/businesses/business-service";
 import { getSystemDb } from "@/core/db/system";
 import { userSettings } from "@/core/db/system-schema";
 import { eq } from "drizzle-orm";
@@ -8,7 +9,9 @@ import { AppearanceForm } from "@/modules/appearance/appearance-form";
 
 export default async function AppearanceSettingsPage({ params }: { params: Promise<{ businessId: string }> }) {
   const { businessId } = await params;
-  await requireModule(businessId, "settings");
+  const user = await requireUser();
+  const access = getBusinessForUser(businessId, user.id);
+  if (!access) notFound();
 
   const session = await getCurrentSession();
   let themeFont = "inter";

@@ -17,19 +17,24 @@ export default async function UsersPage({
 
   if (access.membership.role !== "administrator") {
     return (
-      <div className="page-container">
+      <SettingsShell
+        businessId={businessId}
+        title="Users & Access Control"
+        description="Invite team members, assign administrator or standard roles, configure visible modules, and manage account security."
+      >
         <p className="text-muted-foreground text-sm">Administrator access is required.</p>
-      </div>
+      </SettingsShell>
     );
   }
 
   const rows = listBusinessUsers(businessId, user.id).map(
-    ({ user: member, membership, invitationStatus, isOwner, modules, capabilities }) => ({
+    ({ user: member, membership, invitationStatus, isOwner, requiresApproval, modules, capabilities }) => ({
       membershipId: membership.id,
       userId: member.id,
       name: member.name,
       email: member.email,
       role: membership.role,
+      requiresApproval,
       modules,
       capabilities,
       current: member.id === user.id,

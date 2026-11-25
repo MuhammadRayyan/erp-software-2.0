@@ -7,7 +7,8 @@ Sentry.init({
   replaysOnErrorSampleRate: 1.0,
   enableLogs: true,
   integrations: [
-    Sentry.replayIntegration(),
+    // Never record on-screen financial data or typed values in session replays.
+    Sentry.replayIntegration({ maskAllText: true, maskAllInputs: true, blockAllMedia: true }),
   ],
 });
 export const onRouterTransitionStart = Sentry.captureRouterTransitionStart;

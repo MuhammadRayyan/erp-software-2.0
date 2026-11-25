@@ -20,6 +20,7 @@ export type StoredLine = BaseStoredLine & {
   taxAmountMinor: number;
   grossAmountMinor: number;
   lineIndex: number;
+  customFields?: Record<string, string>;
 };
 
 type Config = {
@@ -85,8 +86,11 @@ export function calculateLines(
       // The discounted total is the GROSS amount
       grossAmountMinor = discountedTotalMinor;
       if (taxCode.vat_category === "reverse_charge") {
+        // The supplier charges no VAT under reverse charge, so the entered
+        // price is the net. VAT is still self-assessed on it (VAT201 output
+        // and recoverable input), exactly as on tax-exclusive documents.
         netAmountMinor = grossAmountMinor;
-        taxAmountMinor = 0; // Reverse charge does not add to gross, but in inclusive, gross is net
+        taxAmountMinor = calculateTax(netAmountMinor, taxCode.rate_basis_points);
       } else {
         const split = splitTaxInclusive(grossAmountMinor, taxCode.rate_basis_points);
         netAmountMinor = split.netMinor;
@@ -115,6 +119,7 @@ export function calculateLines(
       taxAmountMinor,
       grossAmountMinor,
       lineIndex: position,
+      customFields: line.customFields,
     };
   });
 }

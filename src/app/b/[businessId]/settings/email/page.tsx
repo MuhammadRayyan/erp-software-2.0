@@ -20,9 +20,13 @@ export default async function EmailSettingsPage({
 
   if (access.membership.role !== "administrator") {
     return (
-      <div className="page-container">
+      <SettingsShell
+        businessId={businessId}
+        title="Email & SMTP Configuration"
+        description="Connect your business email provider (Hostinger, Google Workspace, Outlook, Amazon SES) to send invoices, quotes, receipts, and statements with custom branding and verified deliverability."
+      >
         <p className="text-muted-foreground text-sm">Administrator access is required to configure email settings.</p>
-      </div>
+      </SettingsShell>
     );
   }
 

@@ -3,11 +3,13 @@ import { notFound } from "next/navigation";
 import { NoticeToast } from "@/components/notice-toast";
 import { StatusBadge } from "@/components/status-badge";
 import { requireModule } from "@/core/permissions/require-module";
-import { formatDate, formatMoney } from "@/core/format";
+import { formatDate, formatMoney, getCurrencyMinorUnit } from "@/core/format";
 import { quantityMicrosToInput, rateBasisPointsToPercent } from "@/modules/accounting/calculations/money";
 import { ProjectLinks } from "@/modules/projects/project-links";
 import { getPurchaseInvoice } from "@/modules/purchase-invoices/purchase-invoice-service";
 import { PurchaseInvoiceViewActions } from "@/modules/purchase-invoices/purchase-invoice-view-actions";
+import { getLatestApprovalForEntity } from "@/modules/approvals/approval-service";
+import { DocumentApprovalBanner } from "@/components/approvals/document-approval-banner";
 import { DocumentFlowStepper, type FlowStep } from "@/components/documents/document-flow-stepper";
 import { Breadcrumbs } from "@/components/breadcrumbs";
 import { getSupplierUnallocatedCredit } from "@/modules/supplier-payments/supplier-payment-service";
@@ -160,6 +162,14 @@ export default async function PurchaseInvoiceViewPage({
           hasGoodsReceipts={record.goodsReceipts.length > 0}
         />
       </div>
+      <div className="mb-5">
+        <DocumentApprovalBanner
+          businessId={businessId}
+          currentUserId={user.id}
+          isAdmin={access.membership.role === "administrator"}
+          approval={getLatestApprovalForEntity(businessId, user.id, "purchase_invoice", invoice.id)}
+        />
+      </div>
 
       <DocumentViewLayout
         data={viewBundle.data}
@@ -177,7 +187,7 @@ export default async function PurchaseInvoiceViewPage({
           invoiceNumber={invoice.internalNumber}
           balanceMinor={record.balanceMinor}
           currencyCode={currency}
-          minorUnit={2}
+          minorUnit={getCurrencyMinorUnit(currency)}
           availablePrepayments={availablePrepayments}
         />
       )}

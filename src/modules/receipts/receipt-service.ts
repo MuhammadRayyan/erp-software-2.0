@@ -1,6 +1,7 @@
 import { assertMutationPermission } from "@/core/permissions/mutation-permissions";
-import { createSettlement, voidSettlement, applySettlementCredit, type SettlementConfig } from "@/modules/settlement/settlement-service";
-import { getBusinessDb } from "@/core/db/business";
+import { createSettlement, voidSettlement, applySettlementCredit, postPendingSettlement, revertPendingSettlementToDraft, submitOrPostDraftSettlement, deleteDraftSettlement, type SettlementConfig } from "@/modules/settlement/settlement-service";
+import { evaluateApprovalRequirement, recordPendingApprovalInTransaction } from "@/modules/approvals/approval-policy";
+import { getBusinessDb, runImmediateTransaction } from "@/core/db/business";
 import { postReceipt } from "@/modules/accounting/services/receipt-posting-service";
 import {
   receiptInputSchema,
@@ -9,6 +10,16 @@ import {
   type ApplyReceiptCreditInput,
 } from "./receipt-input";
 import { recordActivity } from "@/modules/activity-log/activity-log-service";
+import type { ListSortDir } from "@/lib/list-query-params";
+import {
+  buildCashDocumentWhere,
+  clampPositiveInt,
+  DEFAULT_LIST_PAGE_SIZE,
+  MAX_LIST_PAGE_SIZE,
+  queryCashDocumentSummary,
+  resolveSortSql,
+  type CashDocumentListSummary,
+} from "@/modules/shared/list-query-helpers";
 
 export const receiptConfig: SettlementConfig = {
   partyType: "customer",
@@ -50,56 +61,179 @@ export const receiptConfig: SettlementConfig = {
 
 
 export function createReceipt(businessId: string, userId: string, input: ReceiptInput) {
-  assertMutationPermission(businessId, userId, "sales", "create", "post");
+  assertMutationPermission(businessId, userId, "sales", "create");
   const data = receiptInputSchema.parse(input);
   const context = getBusinessDb(businessId, userId);
+
+  const preCheck = evaluateApprovalRequirement(businessId, userId, "receipt", 0, context.sqlite);
+  if (!preCheck.requiresApproval && !preCheck.ruleEnabled) {
+    assertMutationPermission(businessId, userId, "sales", "post");
+  }
+
   let result!: ReturnType<typeof createSettlement>;
   context.sqlite.transaction(() => {
-    result = createSettlement(context.sqlite, receiptConfig, data, userId);
+    result = createSettlement(context.sqlite, receiptConfig, data, userId, {
+      resolveStatus: (baseAmountMinor) => {
+        const evalResult = evaluateApprovalRequirement(
+          businessId,
+          userId,
+          "receipt",
+          baseAmountMinor,
+          context.sqlite,
+        );
+        if (evalResult.requiresApproval) {
+          return "pending_approval";
+        }
+        assertMutationPermission(businessId, userId, "sales", "post");
+        return "posted";
+      },
+    });
+
+    if (result.documentStatus === "pending_approval") {
+      recordPendingApprovalInTransaction(context.sqlite, {
+        businessId,
+        userId,
+        entityType: "receipt",
+        entityId: result.id,
+        entityNumber: result.paymentNumber,
+        amountMinor: result.amountMinor,
+        baseAmountMinor: result.baseAmountMinor,
+        currencyCode: result.currencyCode,
+        targetIntent: "post",
+      });
+    }
   }).immediate();
 
-  const receiptRow = context.sqlite
-    .prepare("SELECT receipt_number FROM receipts WHERE id = ?")
-    .get(result.id) as { receipt_number: string } | undefined;
-  const receiptNumber = receiptRow?.receipt_number || "Receipt";
+  const receiptNumber = result.paymentNumber || "Receipt";
 
   recordActivity(businessId, {
     userId,
-    action: "posted",
+    action: result.documentStatus === "pending_approval" ? "created" : "posted",
     entityType: "receipt",
     entityId: result.id,
     entityNumber: receiptNumber,
-    summary: `Recorded payment receipt ${receiptNumber} for ${data.currencyCode} ${data.amount}`,
-    details: { customerId: data.customerId, amount: data.amount, currency: data.currencyCode },
+    summary:
+      result.documentStatus === "pending_approval"
+        ? `Submitted payment receipt ${receiptNumber} for approval (${data.currencyCode} ${data.amount})`
+        : `Recorded payment receipt ${receiptNumber} for ${data.currencyCode} ${data.amount}`,
+    details: { customerId: data.customerId, amount: data.amount, currency: data.currencyCode, status: result.documentStatus },
   });
 
   return result;
 }
 
+export function postPendingReceipt(businessId: string, userId: string, receiptId: string) {
+  assertMutationPermission(businessId, userId, "sales", "post");
+  const context = getBusinessDb(businessId, userId);
+  runImmediateTransaction(context.sqlite, () => {
+    postPendingSettlement(context.sqlite, receiptConfig, receiptId);
+  });
+}
+
+export function revertReceiptToDraft(businessId: string, userId: string, receiptId: string) {
+  assertMutationPermission(businessId, userId, "sales", "post");
+  const context = getBusinessDb(businessId, userId);
+  revertPendingSettlementToDraft(context.sqlite, receiptConfig, receiptId);
+}
+
+export function submitOrPostDraftReceipt(
+  businessId: string,
+  userId: string,
+  receiptId: string,
+  intent: "post" | "submit_approval" = "post",
+) {
+  assertMutationPermission(businessId, userId, "sales", "edit");
+  const context = getBusinessDb(businessId, userId);
+  const result = runImmediateTransaction(context.sqlite, () => {
+    const submitted = submitOrPostDraftSettlement(
+      context.sqlite,
+      receiptConfig,
+      receiptId,
+      (baseAmountMinor) => {
+        if (intent === "submit_approval") {
+          return "pending_approval";
+        }
+        const evalResult = evaluateApprovalRequirement(
+          businessId,
+          userId,
+          "receipt",
+          baseAmountMinor,
+          context.sqlite,
+        );
+        if (evalResult.requiresApproval) {
+          return "pending_approval";
+        }
+        assertMutationPermission(businessId, userId, "sales", "post");
+        return "posted";
+      },
+    );
+
+    if (submitted.documentStatus === "pending_approval") {
+      recordPendingApprovalInTransaction(context.sqlite, {
+        businessId,
+        userId,
+        entityType: "receipt",
+        entityId: submitted.id,
+        entityNumber: submitted.paymentNumber,
+        amountMinor: submitted.amountMinor,
+        baseAmountMinor: submitted.baseAmountMinor,
+        currencyCode: submitted.currencyCode,
+        targetIntent: "post",
+      });
+    }
+    return submitted;
+  });
+
+  recordActivity(businessId, {
+    userId,
+    action: result.documentStatus === "pending_approval" ? "updated" : "posted",
+    entityType: "receipt",
+    entityId: result.id,
+    entityNumber: result.paymentNumber,
+    summary:
+      result.documentStatus === "pending_approval"
+        ? `Submitted draft receipt ${result.paymentNumber} for approval`
+        : `Posted draft receipt ${result.paymentNumber}`,
+    details: { customerId: result.partyId, status: result.documentStatus },
+  });
+
+  return result;
+}
+
+export function deleteDraftReceipt(businessId: string, userId: string, receiptId: string) {
+  assertMutationPermission(businessId, userId, "sales", "delete");
+  const context = getBusinessDb(businessId, userId);
+  const deleted = runImmediateTransaction(context.sqlite, () =>
+    deleteDraftSettlement(context.sqlite, receiptConfig, receiptId),
+  );
+
+  recordActivity(businessId, {
+    userId,
+    action: "deleted",
+    entityType: "receipt",
+    entityId: deleted.id,
+    entityNumber: deleted.paymentNumber,
+    summary: `Deleted draft receipt ${deleted.paymentNumber}`,
+    details: { customerId: deleted.partyId },
+  });
+}
+
 export type ReceiptListFilters = {
+  q?: string;
+  status?: string;
   /** Inclusive lower bound on receipt date (YYYY-MM-DD). Invalid values are ignored. */
   from?: string;
   /** Inclusive upper bound on receipt date (YYYY-MM-DD). Invalid values are ignored. */
   to?: string;
+  sort?: string;
+  dir?: ListSortDir;
   /** Maximum rows to return (server-side LIMIT). Used by the paginated list path. */
   take?: number;
   /** Number of rows to skip (server-side OFFSET). Used by the paginated list path. */
   skip?: number;
 };
 
-function validDate(value?: string) {
-  return value && /^\d{4}-\d{2}-\d{2}$/.test(value) ? value : undefined;
-}
-
-const DEFAULT_PAGE_SIZE = 50;
-const MAX_PAGE_SIZE = 200;
-
-function clampPositiveInt(value: number | undefined, fallback: number, max: number): number {
-  if (value === undefined || !Number.isInteger(value) || value < 1) return fallback;
-  return Math.min(value, max);
-}
-
-type ReceiptListRow = {
+export type ReceiptListRow = {
   id: string;
   receipt_number: string;
   date: string;
@@ -108,7 +242,7 @@ type ReceiptListRow = {
   currency_code: string;
   currency_minor_unit: number;
   reference: string | null;
-  document_status: "posted" | "void";
+  document_status: "draft" | "pending_approval" | "posted" | "void";
   created_at: string;
   customer_id: string;
   customer_name: string;
@@ -118,12 +252,12 @@ type ReceiptListRow = {
 
 /**
  * Paginated receipt list result. The rows slice contains just the rows for
- * the requested page; `total` is the unfiltered-over-rows count for the same
- * `filters` so the UI can show "Page X of Y".
+ * the requested page; `total` is the filtered count across matching rows.
  */
 export type PaginatedReceipts = {
   rows: ReceiptListRow[];
   total: number;
+  summary: CashDocumentListSummary;
   /** 1-indexed page number actually returned (clamped to the last valid page). */
   page: number;
   /** Rows per page that were requested. */
@@ -132,71 +266,50 @@ export type PaginatedReceipts = {
   totalPages: number;
 };
 
-/**
- * Count receipts matching `filters` using the same WHERE-clause builder as
- * `listReceipts`. Returns the row count used by `listReceiptsPaginated` to
- * compute total pages.
- */
-function countReceiptRows(businessId: string, userId: string, filters?: ReceiptListFilters): number {
-  const { sqlite } = getBusinessDb(businessId, userId);
-  const conditions: string[] = [];
-  const values: string[] = [];
-  const dateFrom = validDate(filters?.from);
-  const dateTo = validDate(filters?.to);
-  if (dateFrom) {
-    conditions.push("r.date >= ?");
-    values.push(dateFrom);
-  }
-  if (dateTo) {
-    conditions.push("r.date <= ?");
-    values.push(dateTo);
-  }
-  const where = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";
-  const row = sqlite.prepare(`SELECT COUNT(*) AS total FROM receipts r ${where}`).get(...values) as { total: number };
-  return row.total;
-}
+const RECEIPT_QUERY_CFG = {
+  tableName: "receipts",
+  docAlias: "r",
+  numberCol: "receipt_number",
+  partyTable: "customers",
+  partyAlias: "c",
+  partyFk: "customer_id",
+} as const;
 
 /**
- * Paginated list of receipts for the list page. Server-side LIMIT/OFFSET
- * keeps the query cheap as the receipts table grows. The returned `total`
- * is the count for the same `filters` excluding the page bounds.
- *
- * @param page 1-indexed page number (clamped to >= 1).
- * @param pageSize rows per page (defaults to 50, capped at 200).
+ * Paginated list of receipts for the list page with SQL search, status/date
+ * filtering, sorting, and DB-wide totals across all matching rows.
  */
 export function listReceiptsPaginated(
   businessId: string,
   userId: string,
   filters: ReceiptListFilters & { page?: number; pageSize?: number } = {},
 ): PaginatedReceipts {
+  const { sqlite } = getBusinessDb(businessId, userId);
   const page = clampPositiveInt(filters.page, 1, Number.MAX_SAFE_INTEGER);
-  const pageSize = clampPositiveInt(filters.pageSize, DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE);
-  const total = countReceiptRows(businessId, userId, filters);
+  const pageSize = clampPositiveInt(filters.pageSize, DEFAULT_LIST_PAGE_SIZE, MAX_LIST_PAGE_SIZE);
+  const summary = queryCashDocumentSummary(sqlite, filters, RECEIPT_QUERY_CFG);
+  const total = summary.filteredTotal;
   const maxPage = Math.max(1, Math.ceil(total / pageSize));
   const effectivePage = Math.min(page, maxPage);
   const offset = (effectivePage - 1) * pageSize;
   const rows = listReceipts(businessId, userId, { ...filters, take: pageSize, skip: offset });
-  return { rows, total, page: effectivePage, pageSize, totalPages: maxPage };
+  return { rows, total, summary, page: effectivePage, pageSize, totalPages: maxPage };
 }
 
 export function listReceipts(businessId: string, userId: string, filters?: ReceiptListFilters): ReceiptListRow[] {
   const { sqlite } = getBusinessDb(businessId, userId);
-  const conditions: string[] = [];
-  const values: string[] = [];
-  const dateFrom = validDate(filters?.from);
-  const dateTo = validDate(filters?.to);
-  if (dateFrom) {
-    conditions.push("r.date >= ?");
-    values.push(dateFrom);
-  }
-  if (dateTo) {
-    conditions.push("r.date <= ?");
-    values.push(dateTo);
-  }
-  const where = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";
-  // Server-side LIMIT/OFFSET supports the paginated list path. When both
-  // are undefined the query returns the full result set (used by per-customer
-  // drill-downs, reports, etc.).
+  const { where, values } = buildCashDocumentWhere(filters, RECEIPT_QUERY_CFG);
+  const sortColumns: Record<string, string> = {
+    receipt_number: "r.receipt_number",
+    customer_name: "c.name",
+    date: "r.date",
+    bank_account_name: "a.name",
+    reference: "COALESCE(r.reference, '')",
+    amount_minor: "r.amount_minor",
+    base_amount_minor: "r.base_amount_minor",
+    document_status: "r.document_status",
+  };
+  const orderByClause = resolveSortSql(filters?.sort, filters?.dir, sortColumns, "r.date DESC, r.created_at DESC, r.id DESC");
   const limitClause = filters?.take !== undefined && Number.isFinite(filters.take) && filters.take >= 0 ? `LIMIT ${Math.floor(filters.take)}` : "";
   const offsetClause = filters?.skip !== undefined && Number.isFinite(filters.skip) && filters.skip >= 0 ? `OFFSET ${Math.floor(filters.skip)}` : "";
   const pagination = `${limitClause} ${offsetClause}`.trim();
@@ -210,7 +323,7 @@ export function listReceipts(businessId: string, userId: string, filters?: Recei
     INNER JOIN accounts a ON a.id = r.bank_account_id
     INNER JOIN currencies cur ON cur.code = r.currency_code
     ${where}
-    ORDER BY r.date DESC, r.created_at DESC
+    ORDER BY ${orderByClause}
     ${pagination}
   `).all(...values) as ReceiptListRow[];
 }
@@ -235,10 +348,10 @@ export type ReceiptDetailRecord = {
   realized_fx_amount_minor: number;
   reference: string | null;
   description: string | null;
-  document_status: "posted" | "void";
+  document_status: "draft" | "pending_approval" | "posted" | "void";
   created_by: string;
   created_at: string;
-  posted_at: string;
+  posted_at: string | null;
   voided_at: string | null;
   total_allocated_minor: number;
   unallocated_amount_minor: number;

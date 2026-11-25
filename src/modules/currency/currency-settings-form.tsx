@@ -16,6 +16,7 @@ import {
   saveExchangeRateAction,
   saveRealizedFxAccountsAction,
 } from "./actions";
+import { getBusinessTodayIso } from "@/core/format";
 
 
 type Currency = { code: string; name: string; symbol: string | null; minor_unit: number; is_base: number; is_active: number };
@@ -29,7 +30,7 @@ export function CurrencySettingsForm({
   gainAccounts: Account[]; lossAccounts: Account[]; gainAccountId: string; lossAccountId: string;
 }) {
   const router = useRouter();
-  const today = new Date().toISOString().slice(0, 10);
+  const today = getBusinessTodayIso();
   const foreign = currencies.filter((currency) => !currency.is_base && currency.is_active);
   const [rate, setRate] = useState({ currencyCode: foreign[0]?.code ?? "USD", rateDate: today, rateToBase: "", source: "Manual" as "Manual" | "CBUAE", sourceReference: "" });
   const [newCurrency, setNewCurrency] = useState({ code: "", name: "", symbol: "", minorUnit: 2, isActive: true });

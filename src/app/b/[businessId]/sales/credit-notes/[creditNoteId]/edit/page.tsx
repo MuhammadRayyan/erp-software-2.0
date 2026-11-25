@@ -10,7 +10,7 @@ import { getCreditNote, getRemainingInvoiceBalance } from "@/modules/sales-credi
 import { listInvoices } from "@/modules/sales-invoices/invoice-service";
 import { minorToCurrencyInput } from "@/modules/currency/conversion";
 import { getCurrencySettings } from "@/modules/currency/exchange-rate";
-import { BackLink } from "@/components/back-link";
+import { Breadcrumbs } from "@/components/breadcrumbs";
 
 export default async function EditCreditNotePage({ params }: { params: Promise<{ businessId: string; creditNoteId: string }> }) {
   const { businessId, creditNoteId } = await params;
@@ -27,7 +27,14 @@ export default async function EditCreditNotePage({ params }: { params: Promise<{
   const currencySettings = getCurrencySettings(businessId, user.id);
   const minorUnits = new Map(currencySettings.currencies.map((currency) => [currency.code, currency.minor_unit]));
   return <div className="page-container">
-    <BackLink href={`/b/${businessId}/sales/credit-notes/${creditNoteId}`}>{record.note.creditNoteNumber}</BackLink>
+    <Breadcrumbs
+      businessId={businessId}
+      items={[
+        { label: "Sales Credit Notes", href: `/b/${businessId}/sales/credit-notes` },
+        { label: record.note.creditNoteNumber, href: `/b/${businessId}/sales/credit-notes/${creditNoteId}` },
+        { label: "Edit" },
+      ]}
+    />
     <div className="mb-7"><h1 className="page-title">Edit Sales Credit Note</h1><p className="page-description">{record.note.documentStatus === "posted" ? "Financial changes rebuild the journal atomically." : "Update the draft, or post it when ready."}</p></div>
     <CreditNoteForm
       businessId={businessId}
@@ -36,7 +43,7 @@ export default async function EditCreditNotePage({ params }: { params: Promise<{
       customers={customers.map(({ id, name }) => ({ id, name }))}
       invoices={invoices.map((invoice) => ({ id: invoice.id, invoiceNumber: invoice.invoiceNumber, customerId: invoice.customerId, balanceMinor: invoice.balanceMinor, currencyCode: invoice.currencyCode, minorUnit: minorUnits.get(invoice.currencyCode) ?? 2, exchangeRateToBase: invoice.exchangeRateToBase, exchangeRateDate: invoice.exchangeRateDate, exchangeRateSource: invoice.exchangeRateSource }))}
       salesAccounts={accounts.map(({ id, name }) => ({ id, name }))}
-      taxCodes={taxes.map(({ id, name, rateBasisPoints }) => ({ id, name, rateBasisPoints }))}
+      taxCodes={taxes.map(({ id, name, rateBasisPoints, vatCategory }) => ({ id, name, rateBasisPoints, vatCategory }))}
       projects={projects.map((project) => ({ id: project.id, code: project.code, name: project.name, customerId: project.customer_id }))}
       currency={access.business.currency}
       initial={{
@@ -47,12 +54,24 @@ export default async function EditCreditNotePage({ params }: { params: Promise<{
         customerId: record.note.customerId,
         projectId: record.note.projectId ?? "",
         sourceInvoiceId: record.note.sourceInvoiceId,
+        amountsIncludeTax: Boolean(record.note.amountsIncludeTax),
         date: record.note.date,
         taxDate: record.note.taxDate,
         supplyEmirate: record.note.supplyEmirate ?? "",
         reference: record.note.reference ?? "",
         reason: record.note.reason ?? "",
-        lines: record.lines.map((line) => ({ description: line.description, quantity: quantityMicrosToInput(line.quantityMicros), unitPrice: minorToCurrencyInput(line.unitPriceMinor, minorUnits.get(record.note.currencyCode) ?? 2), salesAccountId: line.salesAccountId, taxCodeId: line.taxCodeId, projectId: line.projectId ?? "" })),
+        notes: record.note.notes ?? "",
+        terms: record.note.terms ?? "",
+        lines: record.lines.map((line) => ({
+          description: line.description,
+          quantity: quantityMicrosToInput(line.quantityMicros),
+          unitPrice: minorToCurrencyInput(line.unitPriceMinor, minorUnits.get(record.note.currencyCode) ?? 2),
+          discountType: ((line as any).discountType as "none" | "percentage" | "fixed") || "none",
+          discountValue: String((line as any).discountValue ?? "0"),
+          salesAccountId: line.salesAccountId,
+          taxCodeId: line.taxCodeId,
+          projectId: line.projectId ?? "",
+        })),
       }}
     />
   </div>;

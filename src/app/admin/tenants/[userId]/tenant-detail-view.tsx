@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useEffect, useState, useTransition } from "react";
 import Link from "next/link";
 import {
   AlertTriangle,
@@ -26,6 +26,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { FormError } from "@/components/form-error";
 import { toast } from "sonner";
 import {
   resetTenantPasswordAction,
@@ -33,15 +34,21 @@ import {
   toggleTenantSuspensionAction,
   updateTenantQuotasAction,
 } from "../../actions";
-import { ConfirmDialog } from "../../confirm-dialog";
-import { copyToClipboard } from "../../clipboard";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { copyToClipboard } from "@/lib/clipboard";
+import { formatDate } from "@/core/format";
 import type { TenantDetails } from "@/core/admin/tenant-service";
 
 function generateSecurePassword(): string {
   const chars = "abcdefghjkmnpqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789!@#$%^&*";
+  const maxValid = Math.floor(0x100000000 / chars.length) * chars.length;
+  const buf = new Uint32Array(1);
   let pwd = "";
-  for (let i = 0; i < 16; i++) {
-    pwd += chars.charAt(Math.floor(Math.random() * chars.length));
+  while (pwd.length < 16) {
+    crypto.getRandomValues(buf);
+    if (buf[0] < maxValid) {
+      pwd += chars.charAt(buf[0] % chars.length);
+    }
   }
   return pwd;
 }
@@ -50,6 +57,12 @@ export function TenantDetailView({ initialDetails }: { initialDetails: TenantDet
   const [details, setDetails] = useState(initialDetails);
   const [maxBusinesses, setMaxBusinesses] = useState(String(initialDetails.user.maxBusinesses));
   const [maxUsers, setMaxUsers] = useState(String(initialDetails.user.maxUsers));
+
+  useEffect(() => {
+    setDetails(initialDetails);
+    setMaxBusinesses(String(initialDetails.user.maxBusinesses));
+    setMaxUsers(String(initialDetails.user.maxUsers));
+  }, [initialDetails]);
   const [isPending, startTransition] = useTransition();
 
   // Suspension confirmation state
@@ -62,17 +75,26 @@ export function TenantDetailView({ initialDetails }: { initialDetails: TenantDet
 
   // Business suspend confirmation state
   const [businessConfirmTarget, setBusinessConfirmTarget] = useState<TenantDetails["businesses"][0] | null>(null);
+  const [quotaError, setQuotaError] = useState("");
+  const [resetError, setResetError] = useState("");
 
   const isSuspended = details.user.status === "suspended";
   const distinctSubUsersCount = new Set(details.subUsers.map((su) => su.userId)).size;
 
   function handleSaveQuotas(e: React.FormEvent) {
     e.preventDefault();
-    const bQuota = parseInt(maxBusinesses, 10);
-    const uQuota = parseInt(maxUsers, 10);
+    setQuotaError("");
+    const bQuota = Number(maxBusinesses.trim());
+    const uQuota = Number(maxUsers.trim());
 
-    if (isNaN(bQuota) || bQuota < 1) return toast.error("Max businesses must be at least 1.");
-    if (isNaN(uQuota) || uQuota < 1) return toast.error("Max sub-users must be at least 1.");
+    if (!Number.isInteger(bQuota) || bQuota < 1 || bQuota > 1000) {
+      setQuotaError("Max businesses must be a whole number between 1 and 1000.");
+      return toast.error("Max businesses must be a whole number between 1 and 1000.");
+    }
+    if (!Number.isInteger(uQuota) || uQuota < 1 || uQuota > 10000) {
+      setQuotaError("Max sub-users must be a whole number between 1 and 10000.");
+      return toast.error("Max sub-users must be a whole number between 1 and 10000.");
+    }
 
     startTransition(async () => {
       const res = await updateTenantQuotasAction(details.user.id, {
@@ -91,7 +113,9 @@ export function TenantDetailView({ initialDetails }: { initialDetails: TenantDet
         }));
         toast.success("Account allocation limits updated successfully.");
       } else {
-        toast.error(res.error || "Failed to update quotas.");
+        const msg = res.error || "Failed to update quotas.";
+        setQuotaError(msg);
+        toast.error(msg);
       }
     });
   }
@@ -129,7 +153,9 @@ export function TenantDetailView({ initialDetails }: { initialDetails: TenantDet
 
   function handleResetPasswordSubmit(e: React.FormEvent) {
     e.preventDefault();
+    setResetError("");
     if (!newPassword || newPassword.length < 8) {
+      setResetError("Password must be at least 8 characters long.");
       return toast.error("Password must be at least 8 characters long.");
     }
 
@@ -139,8 +165,11 @@ export function TenantDetailView({ initialDetails }: { initialDetails: TenantDet
         toast.success("Password reset successfully. Active sessions revoked.");
         setResetModalOpen(false);
         setNewPassword("");
+        setResetError("");
       } else {
-        toast.error(res.error || "Failed to reset password.");
+        const msg = res.error || "Failed to reset password.";
+        setResetError(msg);
+        toast.error(msg);
       }
     });
   }
@@ -188,10 +217,6 @@ export function TenantDetailView({ initialDetails }: { initialDetails: TenantDet
       {/* Top Breadcrumb Navigation */}
       <div className="flex items-center gap-2 text-sm text-muted-foreground">
         <Link href="/admin" className="hover:text-foreground">
-          Admin Control Panel
-        </Link>
-        <span>/</span>
-        <Link href="/admin?tab=tenants" className="hover:text-foreground">
           Account Holders
         </Link>
         <span>/</span>
@@ -227,7 +252,7 @@ export function TenantDetailView({ initialDetails }: { initialDetails: TenantDet
             <div className="mt-1 flex flex-wrap items-center gap-3 text-sm text-muted-foreground">
               <span className="font-mono">{details.user.email}</span>
               <span>•</span>
-              <span>Enrolled {new Date(details.user.createdAt).toLocaleDateString()}</span>
+              <span>Enrolled {formatDate(new Date(details.user.createdAt).toISOString())}</span>
               <span>•</span>
               <span>{details.businesses.length} Workspaces</span>
               <span>•</span>
@@ -291,7 +316,7 @@ export function TenantDetailView({ initialDetails }: { initialDetails: TenantDet
           </span>
         </div>
 
-        <form onSubmit={handleSaveQuotas} className="mt-5 grid grid-cols-1 gap-4 sm:grid-cols-3">
+        <form onSubmit={handleSaveQuotas} className="mt-5 grid grid-cols-1 gap-4 sm:grid-cols-3" noValidate>
           {/* Max Businesses */}
           <div className="space-y-1.5">
             <div className="flex items-center justify-between">
@@ -336,6 +361,11 @@ export function TenantDetailView({ initialDetails }: { initialDetails: TenantDet
               Save Allocation Limits
             </Button>
           </div>
+          {quotaError && (
+            <div className="sm:col-span-3">
+              <FormError message={quotaError} />
+            </div>
+          )}
         </form>
       </div>
 
@@ -378,7 +408,7 @@ export function TenantDetailView({ initialDetails }: { initialDetails: TenantDet
                         <td className="px-4 py-3">
                           <div className="font-semibold text-foreground">{b.name}</div>
                           <div className="text-xs text-muted-foreground">
-                            Created {new Date(b.createdAt).toLocaleDateString()}
+                            Created {formatDate(b.createdAt)}
                           </div>
                         </td>
 
@@ -416,6 +446,7 @@ export function TenantDetailView({ initialDetails }: { initialDetails: TenantDet
                               <Button
                                 size="sm"
                                 variant="secondary"
+                                disabled={isPending}
                                 className="h-8 text-sm border-emerald-600/40 text-emerald-700"
                                 onClick={() => handleReactivateBusiness(b)}
                               >
@@ -425,6 +456,7 @@ export function TenantDetailView({ initialDetails }: { initialDetails: TenantDet
                               <Button
                                 size="sm"
                                 variant="secondary"
+                                disabled={isPending}
                                 className="h-8 text-sm border-amber-600/40 text-amber-700"
                                 onClick={() => setBusinessConfirmTarget(b)}
                               >
@@ -525,8 +557,8 @@ export function TenantDetailView({ initialDetails }: { initialDetails: TenantDet
         title="Suspend Account Holder"
         description={`Suspending '${details.user.name}' will immediately revoke all their active sessions, block future sign-ins, and prevent access across their ${details.businesses.length} workspace(s). Are you sure?`}
         confirmLabel="Suspend Account"
-        variant="danger"
-        isLoading={isPending}
+        tone="danger"
+        pending={isPending}
         onConfirm={handleConfirmSuspend}
       />
 
@@ -538,14 +570,25 @@ export function TenantDetailView({ initialDetails }: { initialDetails: TenantDet
           title="Suspend Business Workspace"
           description={`Suspending workspace '${businessConfirmTarget.name}' will restrict tenant users from accessing this workspace. Are you sure you want to suspend it?`}
           confirmLabel="Suspend Workspace"
-          variant="danger"
-          isLoading={isPending}
+          tone="danger"
+          pending={isPending}
           onConfirm={handleConfirmBusinessSuspension}
         />
       )}
 
       {/* Reset Password Modal */}
-      <DialogRoot open={resetModalOpen} onOpenChange={setResetModalOpen}>
+      <DialogRoot
+        open={resetModalOpen}
+        onOpenChange={(next) => {
+          if (!next && isPending) return;
+          setResetModalOpen(next);
+          if (!next) {
+            setNewPassword("");
+            setResetError("");
+            setCopied(false);
+          }
+        }}
+      >
         <DialogContent className="max-w-md">
           <div className="flex items-start gap-3">
             <div className="grid size-9 shrink-0 place-items-center rounded-lg bg-amber-500/10 text-amber-600">
@@ -561,14 +604,19 @@ export function TenantDetailView({ initialDetails }: { initialDetails: TenantDet
             </div>
           </div>
 
-          <form onSubmit={handleResetPasswordSubmit} className="mt-5 space-y-4 text-sm">
+          <form onSubmit={handleResetPasswordSubmit} className="mt-5 space-y-4 text-sm" noValidate>
+            {resetError && <FormError message={resetError} />}
             <div className="space-y-1.5">
               <div className="flex items-center justify-between">
                 <Label htmlFor="reset-new-password">New Temporary Password</Label>
                 <div className="flex items-center gap-2">
                   <button
                     type="button"
-                    onClick={() => setNewPassword(generateSecurePassword())}
+                    onClick={() => {
+                      setNewPassword(generateSecurePassword());
+                      if (resetError) setResetError("");
+                      setCopied(false);
+                    }}
                     className="flex items-center gap-1.5 text-xs font-medium text-primary hover:underline"
                   >
                     <Sparkles className="size-3.5" /> Auto-Generate
@@ -599,7 +647,10 @@ export function TenantDetailView({ initialDetails }: { initialDetails: TenantDet
                 type="text"
                 placeholder="Min 8 characters or auto-generate"
                 value={newPassword}
-                onChange={(e) => setNewPassword(e.target.value)}
+                onChange={(e) => {
+                  setNewPassword(e.target.value);
+                  if (resetError) setResetError("");
+                }}
                 required
                 className="font-mono text-sm"
               />

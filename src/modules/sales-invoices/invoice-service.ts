@@ -1,7 +1,8 @@
 import { assertMutationPermission, assertSavePermission } from "@/core/permissions/mutation-permissions";
+import { getBusinessAccess } from "@/core/permissions/permissions";
 import { randomUUID } from "node:crypto";
 import { asc, eq } from "drizzle-orm";
-import { getBusinessDb } from "@/core/db/business";
+import { getBusinessDb, runImmediateTransaction } from "@/core/db/business";
 import {
   businessTaxSettings,
   customers,
@@ -16,20 +17,35 @@ import { effectiveProjectId, validateProjectReferences } from "@/modules/project
 import { replaceTaxEntries, reverseTaxEntries } from "@/modules/tax/tax-entry-service";
 import { assertVatDateUnlocked, assertVatSourceUnlocked } from "@/modules/tax/tax-lock-service";
 import { assertDateNotLocked } from "@/modules/accounting/services/financial-lock-service";
-import { saveCustomFieldValuesInTransaction } from "@/modules/custom-fields/custom-field-service";
+import { saveCustomFieldValuesInTransaction, saveLineCustomFieldValuesInTransaction, getCustomFieldValuesForEntities } from "@/modules/custom-fields/custom-field-service";
 import { invoiceInputSchema, type InvoiceInput } from "./invoice-input";
+import type { ListSortDir } from "@/lib/list-query-params";
+import {
+  buildLikePattern,
+  clampPositiveInt,
+  DEFAULT_LIST_PAGE_SIZE,
+  MAX_LIST_PAGE_SIZE,
+  pushInvoiceStatusConditions,
+  resolveSortSql,
+  SALES_ALLOCATED_BASE_EXPR,
+  SALES_ALLOCATED_CTE,
+  SALES_ALLOCATED_FOREIGN_EXPR,
+  validIsoDate,
+  type InvoiceListSummary,
+} from "@/modules/shared/list-query-helpers";
 import { convertDocumentLinesToBase, minorToCurrencyInput, parseCurrencyAmountToMinor } from "@/modules/currency/conversion";
-import { getCurrency } from "@/modules/currency/currency";
+import { getBaseCurrency, getCurrency } from "@/modules/currency/currency";
 import { resolveRateSnapshot } from "@/modules/currency/validation";
 import { calculateLines, totalsForLines, type StoredLine } from "@/modules/accounting/services/document-line-calculator";
 import { getCustomerUnallocatedCredit, receiptConfig } from "@/modules/receipts/receipt-service";
 import { applySettlementCredit } from "@/modules/settlement/settlement-service";
 import { recordActivity } from "@/modules/activity-log/activity-log-service";
 import { getBusinessProfile } from "@/modules/business-profile/business-profile-service";
+import { evaluateApprovalRequirement, recordPendingApprovalInTransaction } from "@/modules/approvals/approval-policy";
 
-export type DocumentStatus = "draft" | "posted" | "void";
+export type DocumentStatus = "draft" | "pending_approval" | "posted" | "void";
 export type PaymentStatus = "unpaid" | "partially_paid" | "paid" | "overdue";
-export type InvoiceSaveIntent = "draft" | "post";
+export type InvoiceSaveIntent = "draft" | "submit_approval" | "post";
 
 function derivePaymentStatus(
   documentStatus: DocumentStatus,
@@ -40,7 +56,7 @@ function derivePaymentStatus(
   if (documentStatus !== "posted") return null;
   const balanceMinor = Math.max(0, totalMinor - allocatedMinor);
   if (balanceMinor === 0) return "paid";
-  if (dueDate < new Date().toISOString().slice(0, 10)) return "overdue";
+  if (dueDate < getBusinessTodayIso()) return "overdue";
   if (allocatedMinor > 0) return "partially_paid";
   return "unpaid";
 }
@@ -92,30 +108,17 @@ function insertLines(
 }
 
 
-const ALLOCATED_MINOR_FRAGMENT = `
-  COALESCE((SELECT SUM(ra.amount_minor) FROM receipt_allocations ra
-    INNER JOIN receipts r ON r.id = ra.receipt_id AND r.document_status = 'posted'
-    WHERE ra.sales_invoice_id = i.id), 0)
-  + COALESCE((SELECT SUM(scna.amount_minor) FROM sales_credit_note_allocations scna
-    INNER JOIN sales_credit_notes scn ON scn.id = scna.credit_note_id AND scn.document_status = 'posted'
-    WHERE scna.sales_invoice_id = i.id), 0)
-`;
-
-const ALLOCATED_BASE_MINOR_FRAGMENT = `
-  COALESCE((SELECT SUM(ra.base_carrying_amount_released) FROM receipt_allocations ra
-    INNER JOIN receipts r ON r.id = ra.receipt_id AND r.document_status = 'posted'
-    WHERE ra.sales_invoice_id = i.id), 0)
-  + COALESCE((SELECT SUM(scna.base_carrying_amount_released) FROM sales_credit_note_allocations scna
-    INNER JOIN sales_credit_notes scn ON scn.id = scna.credit_note_id AND scn.document_status = 'posted'
-    WHERE scna.sales_invoice_id = i.id), 0)
-`;
-
 export type InvoiceListFilters = {
-    status?: "draft" | "overdue" | "unpaid" | "paid" | "void";
+  status?: string;
+  q?: string;
+  customerId?: string;
+  projectId?: string;
   /** Inclusive lower bound on invoice_date (YYYY-MM-DD). Invalid values are ignored. */
   from?: string;
   /** Inclusive upper bound on invoice_date (YYYY-MM-DD). Invalid values are ignored. */
   to?: string;
+  sort?: string;
+  dir?: ListSortDir;
   /** Maximum rows to return (server-side LIMIT). Used by the paginated list path. */
   take?: number;
   /** Number of rows to skip (server-side OFFSET). Used by the paginated list path. */
@@ -124,13 +127,13 @@ export type InvoiceListFilters = {
 
 /**
  * Paginated invoice list result. The rows slice contains just the rows
- * for the requested page; `total` is the unfiltered-over-rows count for
- * the same `filters` (so the UI can show "Page X of Y"). When `filters`
- * is empty the total is the full invoice count for the business.
+ * for the requested page; `total` is the filtered count for the active filters
+ * and `summary` holds database-wide aggregates over all matching rows.
  */
 export type PaginatedInvoices = {
   rows: Awaited<ReturnType<typeof listInvoiceRows>>;
   total: number;
+  summary: InvoiceListSummary;
   /** 1-indexed page number actually returned (clamped to the last valid page). */
   page: number;
   /** Rows per page that were requested. */
@@ -139,42 +142,41 @@ export type PaginatedInvoices = {
   totalPages: number;
 };
 
-const DEFAULT_PAGE_SIZE = 50;
-const MAX_PAGE_SIZE = 200;
-
-function clampPositiveInt(value: number | undefined, fallback: number, max: number): number {
-  if (value === undefined || !Number.isInteger(value) || value < 1) return fallback;
-  return Math.min(value, max);
-}
-
-/**
- * Count invoices matching `filters` (without customer scoping) using the
- * same WHERE-clause builder as `listInvoiceRows`. Returns the row count
- * used by `listInvoicesPaginated` to compute total pages.
- */
-function countInvoiceRows(businessId: string, userId: string, filters?: InvoiceListFilters): number {
-  const { sqlite } = getBusinessDb(businessId, userId);
+function buildSalesInvoiceWhere(
+  customerId: string | undefined,
+  filters: InvoiceListFilters | undefined,
+  businessToday: string,
+) {
   const conditions: string[] = [];
-  const values: string[] = [];
-  const dateFrom = validDate(filters?.from);
-  const dateTo = validDate(filters?.to);
-
-    if (filters?.status === "overdue") {
-      conditions.push("i.document_status = 'posted'");
-      conditions.push(`i.total_minor > (${ALLOCATED_MINOR_FRAGMENT})`);
-      conditions.push("i.due_date < date('now', 'localtime')");
-    } else if (filters?.status === "draft") {
-      conditions.push("i.document_status = 'draft'");
-    } else if (filters?.status === "void") {
-      conditions.push("i.document_status = 'void'");
-    } else if (filters?.status === "unpaid") {
-      conditions.push("i.document_status = 'posted'");
-      conditions.push(`i.total_minor > (${ALLOCATED_MINOR_FRAGMENT})`);
-    } else if (filters?.status === "paid") {
-      conditions.push("i.document_status = 'posted'");
-      conditions.push(`i.total_minor <= (${ALLOCATED_MINOR_FRAGMENT})`);
-    }
-
+  const values: Array<string | number> = [];
+  const scopedCustomerId = customerId ?? (filters?.customerId?.trim() || undefined);
+  if (scopedCustomerId) {
+    conditions.push("i.customer_id = ?");
+    values.push(scopedCustomerId);
+  }
+  const projectId = filters?.projectId?.trim();
+  if (projectId) {
+    conditions.push(
+      "(EXISTS (SELECT 1 FROM sales_invoice_lines sil WHERE sil.invoice_id = i.id AND COALESCE(sil.project_id, i.project_id) = ?) OR (i.project_id = ? AND NOT EXISTS (SELECT 1 FROM sales_invoice_lines sil WHERE sil.invoice_id = i.id)))",
+    );
+    values.push(projectId, projectId);
+  }
+  const { isVoidFilter } = pushInvoiceStatusConditions(filters?.status, {
+    tableAlias: "i",
+    allocatedExpr: SALES_ALLOCATED_FOREIGN_EXPR,
+    businessToday,
+    conditions,
+    values,
+  });
+  const likePattern = buildLikePattern(filters?.q);
+  if (likePattern) {
+    conditions.push(
+      "(lower(i.invoice_number) LIKE ? ESCAPE '\\' OR lower(c.name) LIKE ? ESCAPE '\\' OR lower(COALESCE(i.reference, '')) LIKE ? ESCAPE '\\')",
+    );
+    values.push(likePattern, likePattern, likePattern);
+  }
+  const dateFrom = validIsoDate(filters?.from);
+  const dateTo = validIsoDate(filters?.to);
   if (dateFrom) {
     conditions.push("i.invoice_date >= ?");
     values.push(dateFrom);
@@ -184,40 +186,100 @@ function countInvoiceRows(businessId: string, userId: string, filters?: InvoiceL
     values.push(dateTo);
   }
   const where = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";
-  const row = sqlite.prepare(`SELECT COUNT(*) AS total FROM sales_invoices i ${where}`).get(...values) as { total: number };
-  return row.total;
+  return { where, values, isVoidFilter };
+}
+
+export function listInvoiceFilterOptions(businessId: string, userId: string) {
+  const { sqlite } = getBusinessDb(businessId, userId);
+  const customerRows = sqlite
+    .prepare(
+      `SELECT DISTINCT c.id, c.name
+       FROM customers c
+       INNER JOIN sales_invoices i ON i.customer_id = c.id
+       ORDER BY c.name ASC`,
+    )
+    .all() as Array<{ id: string; name: string }>;
+  const projectRows = sqlite
+    .prepare(
+      `SELECT p.id, p.name
+       FROM projects p
+       WHERE EXISTS (SELECT 1 FROM sales_invoices i WHERE i.project_id = p.id)
+          OR EXISTS (SELECT 1 FROM sales_invoice_lines l WHERE l.project_id = p.id)
+       ORDER BY p.name ASC`,
+    )
+    .all() as Array<{ id: string; name: string }>;
+  return {
+    customers: customerRows.map((c) => [c.id, c.name] as [string, string]),
+    projects: projectRows.map((p) => [p.id, p.name] as [string, string]),
+  };
 }
 
 /**
- * Paginated list of invoices for the list page. Server-side LIMIT/OFFSET
- * keeps the query cheap as the invoice table grows past thousands of
- * rows. The returned `total` is the count for the same `filters`
- * excluding the page bounds — the UI uses it to render "Page X of Y"
- * and disable the Next button on the last page.
- *
- * @param page 1-indexed page number (clamped to >= 1).
- * @param pageSize rows per page (defaults to 50, capped at 200 to
- *   protect against accidental huge-page requests).
+ * Paginated list of invoices for the list page with SQL-driven filtering,
+ * sorting, and DB-wide multi-currency totals across all matching rows.
  */
 export function listInvoicesPaginated(
   businessId: string,
   userId: string,
   filters: InvoiceListFilters & { page?: number; pageSize?: number } = {},
 ): PaginatedInvoices {
+  const { sqlite } = getBusinessDb(businessId, userId);
   const page = clampPositiveInt(filters.page, 1, Number.MAX_SAFE_INTEGER);
-  const pageSize = clampPositiveInt(filters.pageSize, DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE);
-  const total = countInvoiceRows(businessId, userId, filters);
-  // Clamp the page number to the last valid page so out-of-range URLs
-  // (e.g. `?page=999`) still render the last page rather than 0 rows.
-  const maxPage = Math.max(1, Math.ceil(total / pageSize));
+  const pageSize = clampPositiveInt(filters.pageSize, DEFAULT_LIST_PAGE_SIZE, MAX_LIST_PAGE_SIZE);
+  const businessToday = getBusinessTodayIso();
+  const { where, values, isVoidFilter } = buildSalesInvoiceWhere(undefined, filters, businessToday);
+
+  const unfilteredRow = sqlite.prepare("SELECT COUNT(*) AS total FROM sales_invoices").get() as { total: number };
+  const summaryRows = sqlite
+    .prepare(`
+      WITH ${SALES_ALLOCATED_CTE}
+      SELECT
+        i.currency_code,
+        cur.minor_unit AS currency_minor_unit,
+        COUNT(*) AS row_count,
+        SUM(CASE WHEN i.document_status = 'posted' THEN 1 ELSE 0 END) AS posted_count,
+        SUM(CASE WHEN ? = 1 OR i.document_status <> 'void' THEN i.total_minor ELSE 0 END) AS total_minor,
+        SUM(CASE WHEN i.document_status = 'posted' THEN MAX(0, i.total_minor - (${SALES_ALLOCATED_FOREIGN_EXPR})) ELSE 0 END) AS balance_minor,
+        SUM(CASE WHEN i.document_status = 'posted' AND i.total_minor > (${SALES_ALLOCATED_FOREIGN_EXPR}) AND i.due_date < ? THEN 1 ELSE 0 END) AS overdue_count
+      FROM sales_invoices i
+      INNER JOIN customers c ON c.id = i.customer_id
+      INNER JOIN currencies cur ON cur.code = i.currency_code
+      LEFT JOIN receipt_alloc ra ON ra.invoice_id = i.id
+      LEFT JOIN credit_alloc ca ON ca.invoice_id = i.id
+      ${where}
+      GROUP BY i.currency_code, cur.minor_unit
+      ORDER BY i.currency_code ASC
+    `)
+    .all(isVoidFilter ? 1 : 0, businessToday, ...values) as Array<{
+    currency_code: string;
+    currency_minor_unit: number;
+    row_count: number;
+    posted_count: number;
+    total_minor: number;
+    balance_minor: number;
+    overdue_count: number;
+  }>;
+
+  const filteredTotal = summaryRows.reduce((sum, row) => sum + Number(row.row_count || 0), 0);
+  const overdueCount = summaryRows.reduce((sum, row) => sum + Number(row.overdue_count || 0), 0);
+  const summary: InvoiceListSummary = {
+    unfilteredTotal: unfilteredRow.total,
+    filteredTotal,
+    overdueCount,
+    currencyTotals: summaryRows.map((row) => ({
+      currencyCode: row.currency_code,
+      currencyMinorUnit: row.currency_minor_unit,
+      totalMinor: Number(row.total_minor || 0),
+      balanceMinor: Number(row.balance_minor || 0),
+      hasPosted: Number(row.posted_count || 0) > 0,
+    })),
+  };
+
+  const maxPage = Math.max(1, Math.ceil(filteredTotal / pageSize));
   const effectivePage = Math.min(page, maxPage);
   const offset = (effectivePage - 1) * pageSize;
   const rows = listInvoiceRows(businessId, userId, undefined, { ...filters, take: pageSize, skip: offset });
-  return { rows, total, page: effectivePage, pageSize, totalPages: maxPage };
-}
-
-function validDate(value?: string) {
-  return value && /^\d{4}-\d{2}-\d{2}$/.test(value) ? value : undefined;
+  return { rows, total: filteredTotal, summary, page: effectivePage, pageSize, totalPages: maxPage };
 }
 
 function listInvoiceRows(
@@ -227,62 +289,52 @@ function listInvoiceRows(
   filters?: InvoiceListFilters,
 ) {
   const { sqlite } = getBusinessDb(businessId, userId);
-  const conditions: string[] = [];
-  const values: string[] = [];
-  if (customerId) {
-    conditions.push("i.customer_id = ?");
-    values.push(customerId);
-  }
-  const dateFrom = validDate(filters?.from);
-  const dateTo = validDate(filters?.to);
-
-    if (filters?.status === "overdue") {
-      conditions.push("i.document_status = 'posted'");
-      conditions.push(`i.total_minor > (${ALLOCATED_MINOR_FRAGMENT})`);
-      conditions.push("i.due_date < date('now', 'localtime')");
-    } else if (filters?.status === "draft") {
-      conditions.push("i.document_status = 'draft'");
-    } else if (filters?.status === "void") {
-      conditions.push("i.document_status = 'void'");
-    } else if (filters?.status === "unpaid") {
-      conditions.push("i.document_status = 'posted'");
-      conditions.push(`i.total_minor > (${ALLOCATED_MINOR_FRAGMENT})`);
-    } else if (filters?.status === "paid") {
-      conditions.push("i.document_status = 'posted'");
-      conditions.push(`i.total_minor <= (${ALLOCATED_MINOR_FRAGMENT})`);
-    }
-
-  if (dateFrom) {
-    conditions.push("i.invoice_date >= ?");
-    values.push(dateFrom);
-  }
-  if (dateTo) {
-    conditions.push("i.invoice_date <= ?");
-    values.push(dateTo);
-  }
-  const where = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";
-  // Server-side LIMIT/OFFSET supports the paginated list path. When both
-  // are undefined the query returns the full result set (used by the
-  // overview page, customer statement view, etc.).
+  const businessToday = getBusinessTodayIso();
+  const { where, values } = buildSalesInvoiceWhere(customerId, filters, businessToday);
+  const sortColumns: Record<string, string> = {
+    invoiceNumber: "i.invoice_number",
+    customerName: "c.name",
+    invoiceDate: "i.invoice_date",
+    dueDate: "i.due_date",
+    totalMinor: "i.total_minor",
+    balanceMinor: `CASE WHEN i.document_status = 'posted' THEN MAX(0, i.total_minor - (${SALES_ALLOCATED_FOREIGN_EXPR})) ELSE 0 END`,
+    documentStatus: "i.document_status",
+    paymentStatus: `CASE WHEN i.document_status <> 'posted' THEN 5 WHEN i.total_minor <= (${SALES_ALLOCATED_FOREIGN_EXPR}) THEN 4 WHEN i.due_date < '${businessToday}' THEN 1 WHEN (${SALES_ALLOCATED_FOREIGN_EXPR}) > 0 THEN 2 ELSE 3 END`,
+  };
+  const orderByClause = resolveSortSql(
+    filters?.sort,
+    filters?.dir,
+    sortColumns,
+    "i.invoice_date DESC, i.created_at DESC, i.id DESC",
+  );
   const limitClause = filters?.take !== undefined && Number.isFinite(filters.take) && filters.take >= 0 ? `LIMIT ${Math.floor(filters.take)}` : "";
   const offsetClause = filters?.skip !== undefined && Number.isFinite(filters.skip) && filters.skip >= 0 ? `OFFSET ${Math.floor(filters.skip)}` : "";
   const pagination = `${limitClause} ${offsetClause}`.trim();
   const rows = sqlite
     .prepare(`
+      WITH ${SALES_ALLOCATED_CTE},
+      inv_projects AS (
+        SELECT l.invoice_id, GROUP_CONCAT(DISTINCT COALESCE(l.project_id, si.project_id)) AS project_ids
+        FROM sales_invoice_lines l
+        INNER JOIN sales_invoices si ON si.id = l.invoice_id
+        GROUP BY l.invoice_id
+      )
       SELECT i.id, i.invoice_number, i.customer_id, c.name AS customer_name, c.email AS customer_email,
              i.invoice_date, i.due_date, i.total_minor, i.base_total_minor, i.currency_code,
              cur.minor_unit AS currency_minor_unit,
              i.exchange_rate_to_base, i.exchange_rate_date, i.exchange_rate_source, i.document_status,
              i.updated_at,
-             (SELECT GROUP_CONCAT(DISTINCT COALESCE(l.project_id, i.project_id))
-                FROM sales_invoice_lines l WHERE l.invoice_id = i.id) AS project_ids,
-             (${ALLOCATED_MINOR_FRAGMENT}) AS allocated_minor,
-             (${ALLOCATED_BASE_MINOR_FRAGMENT}) AS allocated_base_minor
+             COALESCE(ip.project_ids, i.project_id) AS project_ids,
+             (${SALES_ALLOCATED_FOREIGN_EXPR}) AS allocated_minor,
+             (${SALES_ALLOCATED_BASE_EXPR}) AS allocated_base_minor
       FROM sales_invoices i
       INNER JOIN customers c ON c.id = i.customer_id
       INNER JOIN currencies cur ON cur.code = i.currency_code
+      LEFT JOIN receipt_alloc ra ON ra.invoice_id = i.id
+      LEFT JOIN credit_alloc ca ON ca.invoice_id = i.id
+      LEFT JOIN inv_projects ip ON ip.invoice_id = i.id
       ${where}
-      ORDER BY i.invoice_date DESC, i.created_at DESC
+      ORDER BY ${orderByClause}
       ${pagination}
     `)
     .all(...values) as {
@@ -306,37 +358,49 @@ function listInvoiceRows(
       allocated_base_minor: number;
       project_ids: string | null;
     }[];
-  const projects = sqlite.prepare("SELECT id, code, name FROM projects").all() as { id: string; code: string; name: string }[];
-  const projectById = new Map(projects.map((project) => [project.id, project]));
-  return rows.map((row) => ({
-    id: row.id,
-    invoiceNumber: row.invoice_number,
-    customerId: row.customer_id,
-    customerName: row.customer_name,
-    customerEmail: row.customer_email ?? null,
-    invoiceDate: row.invoice_date,
-    dueDate: row.due_date,
-    totalMinor: row.total_minor,
-    baseTotalMinor: row.base_total_minor,
-    currencyCode: row.currency_code,
-    currencyMinorUnit: row.currency_minor_unit,
-    exchangeRateToBase: row.exchange_rate_to_base,
-    exchangeRateDate: row.exchange_rate_date,
-    exchangeRateSource: row.exchange_rate_source,
-    allocatedMinor: row.allocated_minor,
-    balanceMinor: row.document_status === "posted" ? row.total_minor - row.allocated_minor : 0,
-    baseBalanceMinor: row.document_status === "posted" ? row.base_total_minor - row.allocated_base_minor : 0,
-    documentStatus: row.document_status,
-    paymentStatus: derivePaymentStatus(
-      row.document_status,
-      row.total_minor,
-      row.allocated_minor,
-      row.due_date,
-    ),
-    projectIds: row.project_ids?.split(",").filter(Boolean) ?? [],
-    projectNames: (row.project_ids?.split(",").filter(Boolean) ?? []).map((id) => projectById.get(id)?.name ?? id),
-    updatedAt: row.updated_at,
-  }));
+  const referencedProjectIds = Array.from(
+    new Set(rows.flatMap((row) => row.project_ids?.split(",").filter(Boolean) ?? [])),
+  );
+  const projectById = new Map<string, { id: string; code: string; name: string }>();
+  if (referencedProjectIds.length > 0) {
+    const placeholders = referencedProjectIds.map(() => "?").join(", ");
+    const projects = sqlite
+      .prepare(`SELECT id, code, name FROM projects WHERE id IN (${placeholders})`)
+      .all(...referencedProjectIds) as { id: string; code: string; name: string }[];
+    for (const project of projects) projectById.set(project.id, project);
+  }
+  return rows.map((row) => {
+    const projectIds = row.project_ids?.split(",").filter(Boolean) ?? [];
+    return {
+      id: row.id,
+      invoiceNumber: row.invoice_number,
+      customerId: row.customer_id,
+      customerName: row.customer_name,
+      customerEmail: row.customer_email ?? null,
+      invoiceDate: row.invoice_date,
+      dueDate: row.due_date,
+      totalMinor: row.total_minor,
+      baseTotalMinor: row.base_total_minor,
+      currencyCode: row.currency_code,
+      currencyMinorUnit: row.currency_minor_unit,
+      exchangeRateToBase: row.exchange_rate_to_base,
+      exchangeRateDate: row.exchange_rate_date,
+      exchangeRateSource: row.exchange_rate_source,
+      allocatedMinor: row.allocated_minor,
+      balanceMinor: row.document_status === "posted" ? row.total_minor - row.allocated_minor : 0,
+      baseBalanceMinor: row.document_status === "posted" ? row.base_total_minor - row.allocated_base_minor : 0,
+      documentStatus: row.document_status,
+      paymentStatus: derivePaymentStatus(
+        row.document_status,
+        row.total_minor,
+        row.allocated_minor,
+        row.due_date,
+      ),
+      projectIds,
+      projectNames: projectIds.map((id) => projectById.get(id)?.name ?? id),
+      updatedAt: row.updated_at,
+    };
+  });
 }
 
 export function listInvoices(businessId: string, userId: string, filters?: InvoiceListFilters) {
@@ -345,6 +409,142 @@ export function listInvoices(businessId: string, userId: string, filters?: Invoi
 
 export function listInvoicesForCustomer(businessId: string, userId: string, customerId: string) {
   return listInvoiceRows(businessId, userId, customerId);
+}
+
+export type OverviewRecentInvoice = {
+  id: string;
+  invoiceNumber: string;
+  customerName: string;
+  invoiceDate: string;
+  totalMinor: number;
+  currencyCode: string;
+  currencyMinorUnit: number;
+  documentStatus: DocumentStatus;
+  paymentStatus: PaymentStatus | null;
+};
+
+export type OverviewInvoiceMetrics = {
+  postedSalesBaseMinor: number;
+  postedSalesCount: number;
+  outstandingBaseMinor: number;
+  openCount: number;
+  overdueBaseMinor: number;
+  overdueCount: number;
+  recentInvoices: OverviewRecentInvoice[];
+};
+
+/**
+ * Aggregate Overview KPI totals (period sales, open receivables, overdue) in SQLite
+ * and load only the 6 most recent sales invoices, avoiding an unbounded `listInvoices()` scan.
+ */
+export function getOverviewInvoiceMetrics(
+  businessId: string,
+  userId: string,
+  filters?: { from?: string; to?: string },
+): OverviewInvoiceMetrics {
+  const { sqlite } = getBusinessDb(businessId, userId);
+  const businessToday = getBusinessTodayIso();
+  const dateFrom = validIsoDate(filters?.from) ?? null;
+  const dateTo = validIsoDate(filters?.to) ?? null;
+
+  const aggRow = sqlite
+    .prepare(`
+      WITH ${SALES_ALLOCATED_CTE},
+      posted_balances AS (
+        SELECT
+          i.invoice_date,
+          i.due_date,
+          i.base_total_minor,
+          (i.total_minor - (${SALES_ALLOCATED_FOREIGN_EXPR})) AS foreign_balance_minor,
+          (i.base_total_minor - (${SALES_ALLOCATED_BASE_EXPR})) AS base_balance_minor
+        FROM sales_invoices i
+        LEFT JOIN receipt_alloc ra ON ra.invoice_id = i.id
+        LEFT JOIN credit_alloc ca ON ca.invoice_id = i.id
+        WHERE i.document_status = 'posted'
+      )
+      SELECT
+        COALESCE(SUM(CASE
+          WHEN (@from IS NULL OR invoice_date >= @from)
+           AND (@to IS NULL OR invoice_date <= @to)
+          THEN base_total_minor ELSE 0 END), 0) AS postedSalesBaseMinor,
+        COALESCE(SUM(CASE
+          WHEN (@from IS NULL OR invoice_date >= @from)
+           AND (@to IS NULL OR invoice_date <= @to)
+          THEN 1 ELSE 0 END), 0) AS postedSalesCount,
+        COALESCE(SUM(base_balance_minor), 0) AS outstandingBaseMinor,
+        COALESCE(SUM(CASE WHEN foreign_balance_minor > 0 THEN 1 ELSE 0 END), 0) AS openCount,
+        COALESCE(SUM(CASE WHEN foreign_balance_minor > 0 AND due_date < @today THEN base_balance_minor ELSE 0 END), 0) AS overdueBaseMinor,
+        COALESCE(SUM(CASE WHEN foreign_balance_minor > 0 AND due_date < @today THEN 1 ELSE 0 END), 0) AS overdueCount
+      FROM posted_balances
+    `)
+    .get({ today: businessToday, from: dateFrom, to: dateTo }) as {
+    postedSalesBaseMinor: number;
+    postedSalesCount: number;
+    outstandingBaseMinor: number;
+    openCount: number;
+    overdueBaseMinor: number;
+    overdueCount: number;
+  };
+
+  const recentRows = sqlite
+    .prepare(`
+      WITH ${SALES_ALLOCATED_CTE}
+      SELECT
+        i.id,
+        i.invoice_number,
+        c.name AS customer_name,
+        i.invoice_date,
+        i.due_date,
+        i.total_minor,
+        i.currency_code,
+        cur.minor_unit AS currency_minor_unit,
+        i.document_status,
+        (${SALES_ALLOCATED_FOREIGN_EXPR}) AS allocated_minor
+      FROM sales_invoices i
+      INNER JOIN customers c ON c.id = i.customer_id
+      INNER JOIN currencies cur ON cur.code = i.currency_code
+      LEFT JOIN receipt_alloc ra ON ra.invoice_id = i.id
+      LEFT JOIN credit_alloc ca ON ca.invoice_id = i.id
+      ORDER BY i.invoice_date DESC, i.created_at DESC, i.id DESC
+      LIMIT 6
+    `)
+    .all() as Array<{
+    id: string;
+    invoice_number: string;
+    customer_name: string;
+    invoice_date: string;
+    due_date: string;
+    total_minor: number;
+    currency_code: string;
+    currency_minor_unit: number;
+    document_status: DocumentStatus;
+    allocated_minor: number;
+  }>;
+
+  return {
+    postedSalesBaseMinor: Number(aggRow.postedSalesBaseMinor || 0),
+    postedSalesCount: Number(aggRow.postedSalesCount || 0),
+    outstandingBaseMinor: Number(aggRow.outstandingBaseMinor || 0),
+    openCount: Number(aggRow.openCount || 0),
+    overdueBaseMinor: Number(aggRow.overdueBaseMinor || 0),
+    overdueCount: Number(aggRow.overdueCount || 0),
+    recentInvoices: recentRows.map((row) => ({
+      id: row.id,
+      invoiceNumber: row.invoice_number,
+      customerName: row.customer_name,
+      invoiceDate: row.invoice_date,
+      totalMinor: row.total_minor,
+      currencyCode: row.currency_code,
+      currencyMinorUnit: row.currency_minor_unit,
+      documentStatus: row.document_status,
+      paymentStatus: derivePaymentStatus(
+        row.document_status,
+        row.total_minor,
+        row.allocated_minor,
+        row.due_date,
+      ),
+    })),
+  };
 }
 
 export function getInvoice(businessId: string, userId: string, invoiceId: string) {
@@ -425,6 +625,12 @@ export function getInvoice(businessId: string, userId: string, invoiceId: string
       document_status: DocumentStatus;
       allocated_minor: number;
     }[];
+  const lineCustomFieldsMap = getCustomFieldValuesForEntities(
+    businessId,
+    userId,
+    "sales_invoice_line",
+    lines.map((l) => l.id),
+  );
   return {
     ...header,
     project: header.invoice.projectId ? projectById.get(header.invoice.projectId) ?? null : null,
@@ -436,6 +642,7 @@ export function getInvoice(businessId: string, userId: string, invoiceId: string
       salesAccount: accountById.get(line.salesAccountId) ?? null,
       taxCode: taxCodeById.get(line.taxCodeId) ?? null,
       project: effectiveProjectId(line.projectId, header.invoice.projectId) ? projectById.get(effectiveProjectId(line.projectId, header.invoice.projectId)!) ?? null : null,
+      customFields: lineCustomFieldsMap.get(line.id) ?? {},
     })),
     allocatedMinor,
     balanceMinor:
@@ -512,7 +719,7 @@ export function createInvoice(
   intent: InvoiceSaveIntent,
   customFieldValues?: Record<string, string>,
 ) {
-  assertSavePermission(businessId, userId, "sales", undefined, intent);
+  assertSavePermission(businessId, userId, "sales", undefined, "draft");
   const data = invoiceInputSchema.parse(input);
   const context = getBusinessDb(businessId, userId);
   const customer = context.db.select().from(customers).where(eq(customers.id, data.customerId)).get();
@@ -531,6 +738,20 @@ export function createInvoice(
   const lines = calculateLines(context.sqlite, data.lines, rate.currencyMinorUnit, { accountTypeFilter: "income", taxDirection: "sales", supportItems: true, accountFieldOnLine: "salesAccountId", amountsIncludeTax: data.amountsIncludeTax });
   const totals = totalsForLines(lines);
   const base = convertDocumentLinesToBase(lines, rate);
+
+  const approvalEval =
+    intent === "draft"
+      ? { requiresApproval: false, requireCheckerSeparation: true }
+      : evaluateApprovalRequirement(businessId, userId, "sales_invoice", base.baseTotalMinor, context.sqlite);
+  const effectiveIntent: InvoiceSaveIntent =
+    intent === "draft"
+      ? "draft"
+      : intent === "submit_approval" || approvalEval.requiresApproval
+        ? "submit_approval"
+        : "post";
+  if (effectiveIntent === "post") {
+    assertMutationPermission(businessId, userId, "sales", "post");
+  }
   const id = randomUUID();
   const now = new Date().toISOString();
   let recordedInvoiceNumber = "";
@@ -556,7 +777,7 @@ export function createInvoice(
   const customerAddress = customer.billingAddress || [customer.addressLine1, customer.city, customer.countrySubdivision, customer.countryCode].filter(Boolean).join(", ");
 
   context.sqlite.transaction(() => {
-    if (intent === "post") assertVatDateUnlocked(context.sqlite, taxDate, lines.map((line) => line.taxCodeId));
+    if (effectiveIntent === "post") assertVatDateUnlocked(context.sqlite, taxDate, lines.map((line) => line.taxCodeId));
     const invoiceNumber = allocateNumber(context.sqlite, "invoice");
     recordedInvoiceNumber = invoiceNumber;
     context.sqlite
@@ -608,6 +829,11 @@ export function createInvoice(
         now,
       );
     insertLines(context.db, id, lines);
+    saveLineCustomFieldValuesInTransaction(
+      context.sqlite,
+      "sales_invoice_line",
+      lines.map((l) => ({ lineId: l.id, customFields: l.customFields })),
+    );
 
     if (effectiveSalesOrderId) {
       const parentOrder = context.sqlite.prepare(
@@ -629,7 +855,23 @@ export function createInvoice(
 
       saveCustomFieldValuesInTransaction(context.sqlite, "sales_invoice", id, customFieldValues);
     }
-    if (intent === "post") {
+    if (effectiveIntent === "submit_approval") {
+      context.sqlite
+        .prepare("UPDATE sales_invoices SET document_status = 'pending_approval' WHERE id = ?")
+        .run(id);
+      recordPendingApprovalInTransaction(context.sqlite, {
+        businessId,
+        userId,
+        entityType: "sales_invoice",
+        entityId: id,
+        entityNumber: invoiceNumber,
+        amountMinor: totals.totalMinor,
+        baseAmountMinor: base.baseTotalMinor,
+        currencyCode: rate.currencyCode,
+        targetIntent: "post",
+      });
+    }
+    if (effectiveIntent === "post") {
       assertDateNotLocked(context.sqlite, data.invoiceDate, "Sales invoice");
       postSalesInvoice(
         context.sqlite,
@@ -699,12 +941,12 @@ export function createInvoice(
   const formattedTotal = (totals.totalMinor / (10 ** rate.currencyMinorUnit)).toFixed(2);
   recordActivity(businessId, {
     userId,
-    action: intent === "post" ? "posted" : "created",
+    action: effectiveIntent === "post" ? "posted" : "created",
     entityType: "sales_invoice",
     entityId: id,
     entityNumber: recordedInvoiceNumber,
-    summary: `${intent === "post" ? "Posted" : "Created draft"} sales invoice ${recordedInvoiceNumber} for ${rate.currencyCode} ${formattedTotal}`,
-    details: { customerId: data.customerId, totalMinor: totals.totalMinor, currency: rate.currencyCode, status: intent === "post" ? "posted" : "draft" },
+    summary: `${effectiveIntent === "post" ? "Posted" : effectiveIntent === "submit_approval" ? "Submitted for approval" : "Created draft"} sales invoice ${recordedInvoiceNumber} for ${rate.currencyCode} ${formattedTotal}`,
+    details: { customerId: data.customerId, totalMinor: totals.totalMinor, currency: rate.currencyCode, status: effectiveIntent === "post" ? "posted" : effectiveIntent === "submit_approval" ? "pending_approval" : "draft" },
   });
 
   return id;
@@ -717,13 +959,21 @@ export function updateInvoice(
   input: InvoiceInput,
   intent: InvoiceSaveIntent,
   customFieldValues?: Record<string, string>,
+  options?: { bypassApprovalPolicy?: boolean },
 ) {
-  assertSavePermission(businessId, userId, "sales", invoiceId, intent);
+  if (options?.bypassApprovalPolicy) {
+    assertMutationPermission(businessId, userId, "sales", "post");
+  } else {
+    assertSavePermission(businessId, userId, "sales", invoiceId, "draft");
+  }
   const data = invoiceInputSchema.parse(input);
   const context = getBusinessDb(businessId, userId);
   const current = context.db.select().from(salesInvoices).where(eq(salesInvoices.id, invoiceId)).get();
   if (!current) throw new Error("Invoice not found.");
   if (current.documentStatus === "void") throw new Error("A void invoice cannot be edited.");
+  if (current.documentStatus === "pending_approval" && !options?.bypassApprovalPolicy) {
+    throw new Error("This invoice is pending approval. Withdraw or reject it to draft before editing.");
+  }
   if (current.documentStatus === "posted") {
     assertDateNotLocked(context.sqlite, current.invoiceDate, "Sales invoice");
   }
@@ -758,9 +1008,17 @@ export function updateInvoice(
     throw new Error("Cannot reduce invoice total below amount already received.");
   }
   const now = new Date().toISOString();
-  const shouldPost = current.documentStatus === "posted" || intent === "post";
+  const approvalEval =
+    current.documentStatus === "posted" || intent === "draft" || options?.bypassApprovalPolicy
+      ? { requiresApproval: false }
+      : evaluateApprovalRequirement(businessId, userId, "sales_invoice", base.baseTotalMinor, context.sqlite);
+  const shouldPost =
+    current.documentStatus === "posted" || (intent === "post" && !approvalEval.requiresApproval);
+  const shouldSubmitApproval =
+    !shouldPost &&
+    (intent === "submit_approval" || (intent === "post" && approvalEval.requiresApproval));
 
-  context.sqlite.transaction(() => {
+  runImmediateTransaction(context.sqlite, () => {
     if (current.documentStatus === "posted") {
       assertDateNotLocked(context.sqlite, current.invoiceDate, "Sales invoice");
       assertVatSourceUnlocked(context.sqlite, "sales_invoice", invoiceId, current.taxDate);
@@ -840,8 +1098,17 @@ export function updateInvoice(
         now,
         invoiceId,
       );
+    const oldLineIds = (
+      context.sqlite.prepare("SELECT id FROM sales_invoice_lines WHERE invoice_id = ?").all(invoiceId) as { id: string }[]
+    ).map((r) => r.id);
     context.sqlite.prepare("DELETE FROM sales_invoice_lines WHERE invoice_id = ?").run(invoiceId);
     insertLines(context.db, invoiceId, lines);
+    saveLineCustomFieldValuesInTransaction(
+      context.sqlite,
+      "sales_invoice_line",
+      lines.map((l) => ({ lineId: l.id, customFields: l.customFields })),
+      oldLineIds,
+    );
 
     if (effectiveSalesOrderId) {
       context.sqlite.prepare(
@@ -856,6 +1123,22 @@ export function updateInvoice(
     if (customFieldValues) {
 
       saveCustomFieldValuesInTransaction(context.sqlite, "sales_invoice", invoiceId, customFieldValues);
+    }
+    if (shouldSubmitApproval) {
+      context.sqlite
+        .prepare("UPDATE sales_invoices SET document_status = 'pending_approval' WHERE id = ?")
+        .run(invoiceId);
+      recordPendingApprovalInTransaction(context.sqlite, {
+        businessId,
+        userId,
+        entityType: "sales_invoice",
+        entityId: invoiceId,
+        entityNumber: current.invoiceNumber,
+        amountMinor: totals.totalMinor,
+        baseAmountMinor: base.baseTotalMinor,
+        currencyCode: rate.currencyCode,
+        targetIntent: "post",
+      });
     }
     if (shouldPost) {
       postSalesInvoice(
@@ -885,18 +1168,19 @@ export function updateInvoice(
         `)
         .run(now, invoiceId);
     }
-  }).immediate();
+  });
 
   const formattedTotal = (totals.totalMinor / (10 ** rate.currencyMinorUnit)).toFixed(2);
   const action = shouldPost && current.documentStatus !== "posted" ? "posted" : "updated";
+  const finalStatus = shouldPost ? "posted" : shouldSubmitApproval ? "pending_approval" : current.documentStatus;
   recordActivity(businessId, {
     userId,
     action,
     entityType: "sales_invoice",
     entityId: invoiceId,
     entityNumber: current.invoiceNumber,
-    summary: `${action === "posted" ? "Posted" : "Updated"} sales invoice ${current.invoiceNumber} for ${rate.currencyCode} ${formattedTotal}`,
-    details: { customerId: data.customerId, totalMinor: totals.totalMinor, currency: rate.currencyCode, status: shouldPost ? "posted" : current.documentStatus },
+    summary: `${action === "posted" ? "Posted" : shouldSubmitApproval ? "Submitted for approval" : "Updated"} sales invoice ${current.invoiceNumber} for ${rate.currencyCode} ${formattedTotal}`,
+    details: { customerId: data.customerId, totalMinor: totals.totalMinor, currency: rate.currencyCode, status: finalStatus },
   });
 }
 
@@ -950,12 +1234,13 @@ export function duplicateInvoice(businessId: string, userId: string, invoiceId: 
   const record = getInvoice(businessId, userId, invoiceId);
   if (!record) throw new Error("Invoice not found.");
   const context = getBusinessDb(businessId, userId);
+  const baseCurrency = getBaseCurrency(context.sqlite);
   const minorUnit = getCurrency(context.sqlite, record.invoice.currencyCode).minor_unit;
 
-  const today = new Date().toISOString().split("T")[0];
+  const today = getBusinessTodayIso();
   const rawTerms = (record.customer as any)?.paymentTermsDays;
   const dueDays = (rawTerms !== null && rawTerms !== undefined) ? Number(rawTerms) : 30;
-  const dueDate = new Date(Date.now() + dueDays * 86400000).toISOString().split("T")[0];
+  const dueDate = addDaysIso(getBusinessTodayIso(), dueDays);
 
   return createInvoice(
     businessId,
@@ -964,7 +1249,7 @@ export function duplicateInvoice(businessId: string, userId: string, invoiceId: 
       customerId: record.invoice.customerId,
       currencyCode: record.invoice.currencyCode,
       exchangeRateToBase: record.invoice.exchangeRateToBase,
-      exchangeRateDate: today,
+      exchangeRateDate: record.invoice.currencyCode === baseCurrency.code ? today : record.invoice.exchangeRateDate,
       exchangeRateSource: record.invoice.exchangeRateSource as "Base" | "Manual" | "CBUAE",
       projectId: record.invoice.projectId ?? "",
       invoiceDate: today,
@@ -1006,19 +1291,19 @@ export function voidInvoice(businessId: string, userId: string, invoiceId: strin
   const now = new Date().toISOString();
   context.sqlite.transaction(() => {
     assertDateNotLocked(context.sqlite, invoice.invoiceDate, "Sales invoice void");
-    assertDateNotLocked(context.sqlite, now.slice(0, 10), "Sales invoice void");
+    assertDateNotLocked(context.sqlite, getBusinessTodayIso(), "Sales invoice void");
     assertVatSourceUnlocked(context.sqlite, "sales_invoice", invoiceId, invoice.taxDate);
     reverseTransaction(context.sqlite, {
       originalSourceType: "sales_invoice",
       originalSourceId: invoiceId,
       reversalSourceType: "sales_invoice_void",
       reversalSourceId: invoiceId,
-      date: now.slice(0, 10),
+      date: getBusinessTodayIso(),
       description: `Void Sales Invoice ${invoice.invoiceNumber}`,
     });
     reverseTaxEntries(context.sqlite, {
       originalSourceType: "sales_invoice", sourceId: invoiceId,
-      reversalSourceType: "sales_invoice_void", taxDate: invoice.taxDate,
+      reversalSourceType: "sales_invoice_void", taxDate: getBusinessTodayIso(),
     });
     context.sqlite
       .prepare("UPDATE sales_invoices SET document_status = 'void', voided_at = ?, updated_at = ? WHERE id = ?")
@@ -1060,62 +1345,141 @@ export function voidInvoice(businessId: string, userId: string, invoiceId: strin
   });
 }
 
-export function postInvoice(businessId: string, userId: string, invoiceId: string) {
+function buildInvoiceInputFromRecord(
+  context: ReturnType<typeof getBusinessDb>,
+  record: NonNullable<ReturnType<typeof getInvoice>>,
+): InvoiceInput {
+  const minorUnit = getCurrency(context.sqlite, record.invoice.currencyCode).minor_unit;
+  return {
+    customerId: record.invoice.customerId,
+    currencyCode: record.invoice.currencyCode,
+    exchangeRateToBase: record.invoice.exchangeRateToBase,
+    exchangeRateDate: record.invoice.exchangeRateDate,
+    exchangeRateSource: record.invoice.exchangeRateSource as "Base" | "Manual" | "CBUAE",
+    projectId: record.invoice.projectId ?? "",
+    invoiceDate: record.invoice.invoiceDate,
+    taxDate: record.invoice.taxDate,
+    supplyEmirate: record.invoice.supplyEmirate ?? "",
+    dueDate: record.invoice.dueDate,
+    reference: record.invoice.reference ?? "",
+    notes: record.invoice.notes ?? "",
+    terms: record.invoice.terms ?? "",
+    salesOrderId: record.invoice.salesOrderId ?? "",
+    quoteId: record.invoice.quoteId ?? "",
+    amountsIncludeTax: Boolean(record.invoice.amountsIncludeTax),
+    lines: record.lines.map((line) => ({
+      itemId: line.itemId ?? "",
+      description: line.description,
+      quantity: quantityMicrosToInput(line.quantityMicros),
+      unitPrice: minorToCurrencyInput(line.unitPriceMinor, minorUnit),
+      discountType: (line.discountType ?? "none") as any,
+      discountValue: line.discountValue ?? "0",
+      salesAccountId: line.salesAccountId,
+      taxCodeId: line.taxCodeId,
+      projectId: line.projectId ?? "",
+      customFields: line.customFields ?? {},
+    })),
+  };
+}
+
+export function postInvoice(
+  businessId: string,
+  userId: string,
+  invoiceId: string,
+  intent: "post" | "submit_approval" = "post",
+): DocumentStatus {
+  assertMutationPermission(businessId, userId, "sales", "edit");
+  const record = getInvoice(businessId, userId, invoiceId);
+  if (!record) throw new Error("Invoice not found.");
+  if (record.invoice.documentStatus === "posted") return "posted";
+  if (record.invoice.documentStatus === "void") throw new Error("A void invoice cannot be posted.");
+  if (record.invoice.documentStatus === "pending_approval") {
+    throw new Error("This invoice is pending approval and must be finalized through the approval queue.");
+  }
+
+  const context = getBusinessDb(businessId, userId);
+  const evalResult =
+    intent === "submit_approval"
+      ? { requiresApproval: true }
+      : evaluateApprovalRequirement(
+          businessId,
+          userId,
+          "sales_invoice",
+          record.invoice.baseTotalMinor,
+          context.sqlite,
+        );
+  if (!evalResult.requiresApproval) {
+    assertMutationPermission(businessId, userId, "sales", "post");
+  }
+  updateInvoice(
+    businessId,
+    userId,
+    invoiceId,
+    buildInvoiceInputFromRecord(context, record),
+    evalResult.requiresApproval ? "submit_approval" : "post",
+  );
+  return evalResult.requiresApproval ? "pending_approval" : "posted";
+}
+
+export function postPendingSalesInvoice(businessId: string, userId: string, invoiceId: string) {
   assertMutationPermission(businessId, userId, "sales", "post");
   const record = getInvoice(businessId, userId, invoiceId);
   if (!record) throw new Error("Invoice not found.");
   if (record.invoice.documentStatus === "posted") return;
   if (record.invoice.documentStatus === "void") throw new Error("A void invoice cannot be posted.");
-
   const context = getBusinessDb(businessId, userId);
-  const minorUnit = getCurrency(context.sqlite, record.invoice.currencyCode).minor_unit;
   updateInvoice(
     businessId,
     userId,
     invoiceId,
-    {
-      customerId: record.invoice.customerId,
-      currencyCode: record.invoice.currencyCode,
-      exchangeRateToBase: record.invoice.exchangeRateToBase,
-      exchangeRateDate: record.invoice.exchangeRateDate,
-      exchangeRateSource: record.invoice.exchangeRateSource as "Base" | "Manual" | "CBUAE",
-      projectId: record.invoice.projectId ?? "",
-      invoiceDate: record.invoice.invoiceDate,
-      taxDate: record.invoice.taxDate,
-      supplyEmirate: record.invoice.supplyEmirate ?? "",
-      dueDate: record.invoice.dueDate,
-      reference: record.invoice.reference ?? "",
-      notes: record.invoice.notes ?? "",
-      terms: record.invoice.terms ?? "",
-      salesOrderId: record.invoice.salesOrderId ?? "",
-      quoteId: record.invoice.quoteId ?? "",
-      amountsIncludeTax: Boolean(record.invoice.amountsIncludeTax),
-      lines: record.lines.map((line) => ({
-        itemId: line.itemId ?? "",
-        description: line.description,
-        quantity: quantityMicrosToInput(line.quantityMicros),
-        unitPrice: minorToCurrencyInput(line.unitPriceMinor, minorUnit),
-        discountType: (line.discountType ?? "none") as any,
-        discountValue: line.discountValue ?? "0",
-        salesAccountId: line.salesAccountId,
-        taxCodeId: line.taxCodeId,
-        projectId: line.projectId ?? "",
-      })),
-    },
+    buildInvoiceInputFromRecord(context, record),
     "post",
+    undefined,
+    { bypassApprovalPolicy: true },
   );
 }
 
-export type BatchActionResult = {
-  successCount: number;
-  failedCount: number;
-  errors: { id: string; number?: string; error: string }[];
-};
-
-export function batchPostInvoices(businessId: string, userId: string, invoiceIds: string[]): BatchActionResult {
+export function revertSalesInvoiceToDraft(businessId: string, userId: string, invoiceId: string) {
   assertMutationPermission(businessId, userId, "sales", "post");
-  const result: BatchActionResult = { successCount: 0, failedCount: 0, errors: [] };
+  const context = getBusinessDb(businessId, userId);
+  const row = context.sqlite
+    .prepare("SELECT id, document_status FROM sales_invoices WHERE id = ?")
+    .get(invoiceId) as { id: string; document_status: string } | undefined;
+  if (!row) throw new Error("Invoice not found.");
+  if (row.document_status !== "pending_approval") {
+    throw new Error(`Cannot return invoice in "${row.document_status}" status to draft.`);
+  }
+  context.sqlite
+    .prepare("UPDATE sales_invoices SET document_status = 'draft', updated_at = ? WHERE id = ?")
+    .run(new Date().toISOString(), invoiceId);
+}
+
+export type { BatchActionResult } from "@/modules/shared/batch";
+import type { BatchActionResult } from "@/modules/shared/batch";
+import { getBusinessTodayIso } from "@/core/format";
+import { addDaysIso } from "@/modules/tax/uae-vat-config";
+
+export function batchPostInvoices(
+  businessId: string,
+  userId: string,
+  invoiceIds: string[],
+  intent: "post" | "submit_approval" = "post",
+): BatchActionResult {
+  const access = getBusinessAccess(businessId, userId);
+  if (!access) throw new Error("BUSINESS_ACCESS_DENIED");
+  assertMutationPermission(businessId, userId, "sales", "edit");
+  if (intent !== "submit_approval" && !access.requiresApproval) {
+    assertMutationPermission(businessId, userId, "sales", "post");
+  }
+  const result: BatchActionResult = {
+    successCount: 0,
+    postedCount: 0,
+    pendingApprovalCount: 0,
+    failedCount: 0,
+    errors: [],
+  };
   for (const id of invoiceIds) {
+    let invoiceNumber: string | undefined;
     try {
       const record = getInvoice(businessId, userId, id);
       if (!record) {
@@ -1123,20 +1487,27 @@ export function batchPostInvoices(businessId: string, userId: string, invoiceIds
         result.errors.push({ id, error: "Invoice not found" });
         continue;
       }
+      invoiceNumber = record.invoice.invoiceNumber;
       if (record.invoice.documentStatus === "posted") {
         result.successCount++;
+        result.postedCount = (result.postedCount ?? 0) + 1;
         continue;
       }
       if (record.invoice.documentStatus === "void") {
         result.failedCount++;
-        result.errors.push({ id, number: record.invoice.invoiceNumber, error: "Cannot post a void invoice" });
+        result.errors.push({ id, number: invoiceNumber, error: "Cannot post a void invoice" });
         continue;
       }
-      postInvoice(businessId, userId, id);
+      const nextStatus = postInvoice(businessId, userId, id, intent);
       result.successCount++;
+      if (nextStatus === "pending_approval") {
+        result.pendingApprovalCount = (result.pendingApprovalCount ?? 0) + 1;
+      } else {
+        result.postedCount = (result.postedCount ?? 0) + 1;
+      }
     } catch (err) {
       result.failedCount++;
-      result.errors.push({ id, error: err instanceof Error ? err.message : "Posting failed" });
+      result.errors.push({ id, number: invoiceNumber, error: err instanceof Error ? err.message : "Posting failed" });
     }
   }
   return result;

@@ -13,6 +13,8 @@ import {
   voidPayslip,
   generateBatchPayslips,
 } from "../services/payroll-service";
+import { runBatch, type BatchActionResult } from "@/modules/shared/batch";
+import { getBusinessDb } from "@/core/db/business";
 
 export type ActionResult<T = unknown> = {
   success?: boolean;
@@ -35,6 +37,10 @@ const employeeSchema = z.object({
   housingAllowanceMinor: z.number().int().min(0).optional().nullable(),
   transportAllowanceMinor: z.number().int().min(0).optional().nullable(),
   otherAllowancesMinor: z.number().int().min(0).optional().nullable(),
+  molPersonId: z.string().trim().max(30).optional().nullable(),
+  bankRoutingCode: z.string().trim().max(20).optional().nullable(),
+  iban: z.string().trim().max(40).optional().nullable(),
+  wpsEnabled: z.boolean().optional(),
   isActive: z.boolean().optional(),
 });
 
@@ -200,7 +206,7 @@ export async function generateBatchPayslipsAction(
   businessId: string,
   input: unknown
 ): Promise<ActionResult<{ createdCount: number }>> {
-  const { user } = await requirePermission(businessId, "payroll", "create");
+  const { user } = await requireInputSavePermission(businessId, "payroll", input);
   const parsed = batchPayRunSchema.safeParse(input);
   if (!parsed.success) {
     return {
@@ -217,4 +223,24 @@ export async function generateBatchPayslipsAction(
     const message = err instanceof Error ? err.message : "Failed to generate batch payslips.";
     return { error: message };
   }
+}
+
+function payslipNumber(businessId: string, userId: string) {
+  const { sqlite } = getBusinessDb(businessId, userId);
+  const query = sqlite.prepare("SELECT payslip_number AS n FROM payslips WHERE id = ?");
+  return (id: string) => (query.get(id) as { n: string } | undefined)?.n;
+}
+
+export async function batchPostPayslipsAction(businessId: string, ids: string[]): Promise<BatchActionResult> {
+  const { user } = await requirePermission(businessId, "payroll", "post");
+  const result = runBatch(ids, (id) => postPayslipToLedger(businessId, user.id, id), payslipNumber(businessId, user.id));
+  revalidatePath(`/b/${businessId}/payroll/payslips`);
+  return result;
+}
+
+export async function batchVoidPayslipsAction(businessId: string, ids: string[]): Promise<BatchActionResult> {
+  const { user } = await requirePermission(businessId, "payroll", "delete");
+  const result = runBatch(ids, (id) => voidPayslip(businessId, user.id, id), payslipNumber(businessId, user.id));
+  revalidatePath(`/b/${businessId}/payroll/payslips`);
+  return result;
 }

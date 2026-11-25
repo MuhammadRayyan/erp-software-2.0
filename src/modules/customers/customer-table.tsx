@@ -1,34 +1,75 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, useTransition, type ReactNode } from "react";
+import type { RowSelectionState } from "@tanstack/react-table";
+import { BatchDocumentActions } from "@/components/batch/batch-document-actions";
+import { BatchActiveButtons } from "@/components/batch/batch-active-buttons";
+import { selectionColumn } from "@/components/batch/selection-column";
+import { batchSetCustomersActiveAction } from "./actions";
 import Link from "next/link";
-import { Filter, ChevronRight, MoreHorizontal, Eye, FileEdit, FileText, FilePlus2, BookOpenText } from "lucide-react";
-import { 
+import { debounce, useQueryStates } from "nuqs";
+import { MoreHorizontal, FileEdit, FileText, FilePlus2, BookOpenText } from "lucide-react";
+import { useActionPermission } from "@/components/permissions-provider";
+import {
   useLegacyTable as useTable,
   getCoreRowModel as createCoreRowModel,
-  getSortedRowModel as createSortedRowModel
 } from "@tanstack/react-table/legacy";
-import { type SortingState } from "@tanstack/react-table";
 import { Badge } from "@/components/ui/badge";
-import { ListToolbar, SearchInput, ActiveFiltersRow, FilterChip } from "@/components/list-toolbar";
+import { ListToolbar, SearchInput, ToolbarSelect, ActiveFiltersRow, FilterChip } from "@/components/list-toolbar";
 import { Button } from "@/components/ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { useColumns } from "@/components/columns-dropdown";
-import { DataTable } from "@/components/ui/data-table";
+import { DataTable, ListTableCard } from "@/components/ui/data-table";
 import { formatCustomFieldValue, type CustomFieldColumn } from "@/modules/custom-fields/custom-field-display";
 import { DensityToggle } from "@/components/density-toggle";
+import { ExportCsvButton } from "@/components/export-csv-button";
 import { useTableDensity } from "@/components/use-table-density";
+import { TableTotalsBar } from "@/components/table-totals-bar";
+import type { DirectoryListSummary } from "./customer-service";
+import {
+  directoryListParsers,
+  resolveNextSortFromUpdater,
+  toSortingState,
+} from "@/lib/list-query-params";
 
 type CustomerRow = { id: string; name: string; email: string | null; phone: string | null; isActive: boolean; };
 
 const baseColumnLabels: Record<string, string> = { email: "Email", phone: "Phone", status: "Status" };
 
-export function CustomerTable({ businessId, customers, customFields = [], customValues = {}, serverSnapshot }: { businessId: string; customers: CustomerRow[]; customFields?: CustomFieldColumn[]; customValues?: Record<string, Record<string, string>>; serverSnapshot?: import("@/components/use-column-visibility").ColumnVisibility }) {
+export function CustomerTable({
+  businessId,
+  customers,
+  summary,
+  customFields = [],
+  customValues = {},
+  serverSnapshot,
+  footer,
+}: {
+  businessId: string;
+  customers: CustomerRow[];
+  summary: DirectoryListSummary;
+  customFields?: CustomFieldColumn[];
+  customValues?: Record<string, Record<string, string>>;
+  serverSnapshot?: import("@/components/use-column-visibility").ColumnVisibility;
+  footer?: ReactNode;
+}) {
   const { density } = useTableDensity(businessId);
+  const canCreatePerm = useActionPermission("create");
 
-  const [query, setQuery] = useState("");
-  const [activeOnly, setActiveOnly] = useState(false);
-  const [sorting, setSorting] = useState<SortingState>([]);
+  const [, startTransition] = useTransition();
+  const [urlState, setUrlState] = useQueryStates(directoryListParsers, {
+    shallow: false,
+    history: "replace",
+    scroll: false,
+    startTransition,
+  });
+
+  const query = urlState.q;
+  const statusFilter = urlState.status;
+  const sorting = useMemo(
+    () => toSortingState(urlState.sort, urlState.dir),
+    [urlState.sort, urlState.dir],
+  );
 
   // Memoized so the shared visibility hook sees a stable defaults reference.
   const initialColumns = useMemo(
@@ -58,14 +99,17 @@ export function CustomerTable({ businessId, customers, customFields = [], custom
   });
 
   const rows = useMemo(
-    () => customers
-      .filter((customer) => {
-        const matchesQuery = [customer.name, customer.email, customer.phone].some((value) => value?.toLowerCase().includes(query.toLowerCase().trim()));
-        return (!activeOnly || customer.isActive) && matchesQuery;
-      })
-      .map((customer) => ({ ...customer, businessId, customValues: customValues[customer.id] })), 
-    [customers, query, activeOnly, businessId, customValues]
+    () => customers.map((customer) => ({ ...customer, businessId, customValues: customValues[customer.id] })),
+    [customers, businessId, customValues],
   );
+
+  const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
+  const exportColumns = useMemo(() => [
+              { header: "Name", accessorKey: "name" },
+              { header: "Email", accessorFn: (r: CustomerRow) => r.email ?? "" },
+              { header: "Phone", accessorFn: (r: CustomerRow) => r.phone ?? "" },
+              { header: "Status", accessorFn: (r: CustomerRow) => (r.isActive ? "Active" : "Inactive") },
+            ], []);
 
   const columns: any[] = useMemo(
     () => {
@@ -105,6 +149,7 @@ export function CustomerTable({ businessId, customers, customFields = [], custom
       const customCols = customFields.map((field) => ({
         accessorKey: field.id,
         header: field.name,
+        enableSorting: false,
         meta: { className: "text-muted-foreground" },
         cell: ({ row }: any) => formatCustomFieldValue(field.fieldType, row.original.customValues?.[field.id]),
       }));
@@ -115,8 +160,9 @@ export function CustomerTable({ businessId, customers, customFields = [], custom
         {
           id: "actions",
           header: () => <span className="sr-only">Actions</span>,
-          meta: { className: "w-16 text-right" },
+          meta: { className: "w-12 text-right" },
           enableSorting: false,
+          enableHiding: false,
           cell: ({ row }: any) => {
             const cust = row.original;
             return (
@@ -128,11 +174,6 @@ export function CustomerTable({ businessId, customers, customFields = [], custom
                     </Button>
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="end" className="w-48">
-                    <DropdownMenuItem asChild>
-                      <Link href={`/b/${cust.businessId}/customers/${cust.id}`}>
-                        <Eye className="size-4 text-muted-foreground" /> View Profile
-                      </Link>
-                    </DropdownMenuItem>
                     <DropdownMenuItem permission="edit" asChild>
                       <Link href={`/b/${cust.businessId}/customers/${cust.id}/edit`}>
                         <FileEdit className="size-4 text-muted-foreground" /> Edit Customer
@@ -143,7 +184,7 @@ export function CustomerTable({ businessId, customers, customFields = [], custom
                         <BookOpenText className="size-4 text-muted-foreground" /> Statement
                       </Link>
                     </DropdownMenuItem>
-                    <DropdownMenuSeparator />
+                    {canCreatePerm && <DropdownMenuSeparator />}
                     <DropdownMenuItem permission="create" asChild>
                       <Link href={`/b/${cust.businessId}/sales/invoices/new?customerId=${cust.id}`}>
                         <FileText className="size-4 text-muted-foreground" /> New Invoice
@@ -156,74 +197,124 @@ export function CustomerTable({ businessId, customers, customFields = [], custom
                     </DropdownMenuItem>
                   </DropdownMenuContent>
                 </DropdownMenu>
-                <Button asChild variant="ghost" size="icon" className="size-7 text-muted-foreground opacity-50 transition-opacity md:opacity-0 md:group-hover:opacity-100">
-                  <Link href={`/b/${cust.businessId}/customers/${cust.id}`} aria-label={`Open ${cust.name}`}>
-                    <ChevronRight className="size-4" />
-                  </Link>
-                </Button>
               </div>
             );
           },
         },
       ];
     },
-    [customFields]
+    [canCreatePerm, customFields]
   );
+
+  const tableColumns = useMemo(() => [selectionColumn<CustomerRow>((row) => row.name), ...columns], [columns]);
 
   const table = useTable({
     data: rows,
-    columns,
+    columns: tableColumns,
+    manualSorting: true,
+    getRowId: (row: CustomerRow) => row.id,
+    enableRowSelection: true,
+    onRowSelectionChange: setRowSelection,
     state: {
       sorting,
       columnVisibility: colVisibility,
+      rowSelection,
     },
-    onSortingChange: setSorting,
+    onSortingChange: (updater) => {
+      const next = resolveNextSortFromUpdater(updater, urlState.sort, urlState.dir, "asc");
+      void setUrlState({ sort: next.sort, dir: next.dir, page: 1 });
+    },
     getCoreRowModel: createCoreRowModel(),
-    getSortedRowModel: createSortedRowModel(),
   });
 
   const clearFilters = () => {
-    setQuery("");
-    setActiveOnly(false);
+    void setUrlState({ q: "", status: "", page: 1 });
   };
-  const hasActiveFilter = Boolean(query || activeOnly);
+  const hasActiveFilter = Boolean(query || statusFilter);
 
   return (
     <>
       <ListToolbar>
-        <SearchInput value={query} onChange={setQuery} placeholder="Search customers…" ariaLabel="Search customers" />
-        <Button
-          type="button"
-          variant={activeOnly ? "primary" : "secondary"}
-          size="sm"
-          className="h-9 gap-1.5 text-xs font-medium"
-          onClick={() => setActiveOnly((value) => !value)}
-        >
-          <Filter className="size-3.5" /> Active only
-        </Button>
+        <SearchInput
+          value={query}
+          onChange={(value) => {
+            void setUrlState({ q: value, page: 1 }, { limitUrlUpdates: value ? debounce(250) : undefined });
+          }}
+          placeholder="Search customers…"
+          ariaLabel="Search customers"
+        />
+        <ToolbarSelect
+          value={statusFilter}
+          onChange={(value) => void setUrlState({ status: value, page: 1 })}
+          ariaLabel="Filter by status"
+          options={[
+            { value: "", label: "All statuses" },
+            { value: "active", label: "Active only" },
+            { value: "inactive", label: "Inactive only" },
+          ]}
+        />
         <div className="ml-auto flex items-center gap-1.5 shrink-0">
+          <ExportCsvButton
+            size="sm"
+            filename="customers"
+            data={customers}
+            totalCount={summary.filteredTotal}
+            columns={exportColumns}
+          />
           <DensityToggle businessId={businessId} />
           {dropdown}
         </div>
       </ListToolbar>
       {hasActiveFilter && (
         <ActiveFiltersRow onClearAll={clearFilters}>
-          {activeOnly && (
-            <FilterChip onRemove={() => setActiveOnly(false)}>
-              Status: Active only
+          {statusFilter && (
+            <FilterChip onRemove={() => void setUrlState({ status: "", page: 1 })}>
+              Status: {statusFilter === "inactive" ? "Inactive only" : "Active only"}
             </FilterChip>
           )}
-          {query && <FilterChip onRemove={() => setQuery("")}>Search: {query}</FilterChip>}
+          {query && <FilterChip onRemove={() => void setUrlState({ q: "", page: 1 })}>Search: {query}</FilterChip>}
         </ActiveFiltersRow>
       )}
-      <DataTable 
-        table={table}
-        density={density} 
-        minWidth="min-w-[800px]" 
-        noResultsMessage="No customers match these filters"
-        noResultsSubtext="Clear the search or active-status filter."
-        onClearFilters={clearFilters}
-      />
+      <ListTableCard>
+        <DataTable
+          table={table}
+          density={density}
+          framed={false}
+          minWidth="min-w-[800px]"
+          getRowHref={(c: CustomerRow) => `/b/${businessId}/customers/${c.id}`}
+          noResultsMessage="No customers match these filters"
+          noResultsSubtext="Clear the search or active-status filter."
+          onClearFilters={clearFilters}
+        />
+        {summary.filteredTotal > 0 && (
+          <TableTotalsBar
+            filteredCount={summary.filteredTotal}
+            totalCount={summary.unfilteredTotal}
+            itemLabel="customers"
+            metrics={[
+              { label: "Active", value: String(summary.activeCount), tone: "primary" },
+            ]}
+          />
+        )}
+        {footer}
+      </ListTableCard>
+      <BatchDocumentActions
+        selected={rows.filter((row) => rowSelection[row.id])}
+        totalCount={rows.length}
+        noun={{ one: "customer", many: "customers" }}
+        statusOf={(row) => (row.isActive ? "active" : "inactive")}
+        onClear={() => setRowSelection({})}
+        onSelectAll={() => table.toggleAllRowsSelected(true)}
+        exportConfig={{ filename: "customers", columns: exportColumns }}
+      >
+        <BatchActiveButtons
+          selected={rows.filter((row) => rowSelection[row.id])}
+          isActive={(row) => row.isActive}
+          noun={{ one: "customer", many: "customers" }}
+          setActive={(ids, value) => batchSetCustomersActiveAction(businessId, ids, value)}
+          onDone={() => setRowSelection({})}
+        />
+      </BatchDocumentActions>
     </>
   );
 }

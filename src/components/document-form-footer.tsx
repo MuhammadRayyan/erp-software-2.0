@@ -1,9 +1,14 @@
+"use client";
+
 import * as React from "react";
+import type { Control, FieldValues } from "react-hook-form";
 import { Button } from "@/components/ui/button";
 import { StatusBadge } from "@/components/status-badge";
 import { formatMoney } from "@/core/format";
 import { cn } from "@/lib/cn";
 import { DocumentWorkflowPermissions } from "@/components/permissions-provider";
+import { useDocumentTotals, type DocumentLineTaxOption } from "@/components/documents/document-calculations";
+import { requestGuardedNavigation } from "@/hooks/use-unsaved-changes";
 
 export type DocumentTotalsSummary = {
   subtotalMinor?: number;
@@ -14,12 +19,96 @@ export type DocumentTotalsSummary = {
   minorUnit?: number;
 };
 
-export function DocumentFormFooter({
+export type LiveFooterTotalsConfig<
+  TFieldValues extends FieldValues = FieldValues,
+  TContext = any,
+  TTransformedValues = TFieldValues,
+> = {
+  control: Control<TFieldValues, TContext, TTransformedValues>;
+  taxCodes: DocumentLineTaxOption[];
+  currencyCode: string;
+  minorUnit?: number;
+  creditAppliedMinor?: number;
+  availableCreditMinor?: number;
+};
+
+function FooterTotalsPill({
+  totalMinor,
+  creditAppliedMinor,
+  currencyCode,
+  minorUnit = 2,
+}: {
+  totalMinor: number;
+  creditAppliedMinor?: number;
+  currencyCode: string;
+  minorUnit?: number;
+}) {
+  const credit = creditAppliedMinor ?? 0;
+  const netMinor = Math.max(0, totalMinor - credit);
+  return (
+    <div className="flex items-center gap-3 text-xs sm:text-sm">
+      {credit > 0 && (
+        <div className="hidden lg:flex items-center gap-1 text-success">
+          <span>Credit:</span>
+          <span className="font-medium tabular">
+            -{formatMoney(credit, currencyCode, minorUnit)}
+          </span>
+        </div>
+      )}
+      <div className="flex items-center gap-1.5 bg-surface-muted px-2.5 py-1 rounded-md border border-border">
+        <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+          {credit > 0 ? "Net Due:" : "Total:"}
+        </span>
+        <span className="text-sm font-bold text-foreground tabular whitespace-nowrap">
+          {formatMoney(netMinor, currencyCode, minorUnit)}
+        </span>
+      </div>
+    </div>
+  );
+}
+
+function IsolatedFooterTotal<
+  TFieldValues extends FieldValues = FieldValues,
+  TContext = any,
+  TTransformedValues = TFieldValues,
+>({
+  control,
+  taxCodes,
+  currencyCode,
+  minorUnit = 2,
+  creditAppliedMinor,
+  availableCreditMinor,
+}: LiveFooterTotalsConfig<TFieldValues, TContext, TTransformedValues>) {
+  const { totalMinor } = useDocumentTotals({
+    control: control as unknown as Control<FieldValues>,
+    taxCodes,
+    minorUnit,
+  });
+  const computedCredit =
+    availableCreditMinor != null && availableCreditMinor > 0
+      ? Math.min(totalMinor, availableCreditMinor)
+      : creditAppliedMinor;
+  return (
+    <FooterTotalsPill
+      totalMinor={totalMinor}
+      creditAppliedMinor={computedCredit}
+      currencyCode={currencyCode}
+      minorUnit={minorUnit}
+    />
+  );
+}
+
+export function DocumentFormFooter<
+  TFieldValues extends FieldValues = FieldValues,
+  TContext = any,
+  TTransformedValues = TFieldValues,
+>({
   children,
   onCancel,
   cancelLabel = "Cancel",
   status,
   totals,
+  liveTotals,
   className,
 }: {
   children: React.ReactNode;
@@ -27,6 +116,7 @@ export function DocumentFormFooter({
   cancelLabel?: string;
   status?: string;
   totals?: DocumentTotalsSummary;
+  liveTotals?: LiveFooterTotalsConfig<TFieldValues, TContext, TTransformedValues>;
   className?: string;
 }) {
   return (
@@ -37,7 +127,11 @@ export function DocumentFormFooter({
       )}
     >
       <div className="flex items-center gap-3">
-        <Button variant="ghost" onClick={onCancel} type="button">
+        <Button
+          variant="ghost"
+          onClick={() => requestGuardedNavigation("#cancel", onCancel)}
+          type="button"
+        >
           {cancelLabel}
         </Button>
         {status && (
@@ -48,48 +142,22 @@ export function DocumentFormFooter({
         )}
       </div>
 
-      {totals && (
-        <div className="flex items-center gap-3 sm:gap-4 text-xs sm:text-sm">
-          {totals.subtotalMinor !== undefined && (
-            <div className="hidden md:flex items-center gap-1 text-muted-foreground">
-              <span>Subtotal:</span>
-              <span className="font-medium text-foreground tabular">
-                {formatMoney(totals.subtotalMinor, totals.currencyCode, totals.minorUnit ?? 2)}
-              </span>
-            </div>
-          )}
-          {totals.taxMinor !== undefined && totals.taxMinor > 0 && (
-            <div className="hidden md:flex items-center gap-1 text-muted-foreground">
-              <span>Tax:</span>
-              <span className="font-medium text-foreground tabular">
-                {formatMoney(totals.taxMinor, totals.currencyCode, totals.minorUnit ?? 2)}
-              </span>
-            </div>
-          )}
-          {totals.creditAppliedMinor !== undefined && totals.creditAppliedMinor > 0 && (
-            <div className="hidden lg:flex items-center gap-1 text-emerald-600 dark:text-emerald-400">
-              <span>Credit:</span>
-              <span className="font-medium tabular">
-                -{formatMoney(totals.creditAppliedMinor, totals.currencyCode, totals.minorUnit ?? 2)}
-              </span>
-            </div>
-          )}
-          <div className="flex items-center gap-1.5 bg-surface-muted px-2.5 py-1 rounded-md border border-border">
-            <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-              {totals.creditAppliedMinor && totals.creditAppliedMinor > 0 ? "Net Due:" : "Total:"}
-            </span>
-            <span className="text-sm font-bold text-foreground tabular">
-              {formatMoney(
-                Math.max(0, totals.totalMinor - (totals.creditAppliedMinor ?? 0)),
-                totals.currencyCode,
-                totals.minorUnit ?? 2
-              )}
-            </span>
-          </div>
-        </div>
-      )}
+      {liveTotals ? (
+        <IsolatedFooterTotal {...liveTotals} />
+      ) : totals ? (
+        <FooterTotalsPill
+          totalMinor={totals.totalMinor}
+          creditAppliedMinor={totals.creditAppliedMinor}
+          currencyCode={totals.currencyCode}
+          minorUnit={totals.minorUnit}
+        />
+      ) : null}
 
-      <div className="flex items-center gap-3 ml-auto sm:ml-0"><DocumentWorkflowPermissions status={status}>{children}</DocumentWorkflowPermissions></div>
+      <div className="flex items-center gap-3 ml-auto sm:ml-0">
+        <DocumentWorkflowPermissions status={status}>
+          {children}
+        </DocumentWorkflowPermissions>
+      </div>
     </div>
   );
 }

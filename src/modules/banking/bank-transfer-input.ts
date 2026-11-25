@@ -5,7 +5,7 @@ export const bankTransferInputSchema = z.object({
   toBankAccountId: z.string().uuid("Choose the destination Bank Account"),
   date: z.iso.date("Enter a valid transfer date"),
   amount: z.string().trim()
-    .regex(/^\d{1,10}(?:\.\d{1,2})?$/, "Enter an amount with up to 2 decimals")
+    .regex(/^\d{1,12}(?:\.\d{1,6})?$/, "Enter a valid positive amount")
     .refine((value) => Number(value) > 0, "Amount must be greater than zero"),
   reference: z.string().trim().max(100).optional().default(""),
   description: z.string().trim().max(300).optional().default(""),

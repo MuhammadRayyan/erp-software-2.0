@@ -6,23 +6,68 @@ import { requireModule } from "@/core/permissions/require-module";
 import { getSupplierPayment } from "@/modules/supplier-payments/supplier-payment-service";
 import { SupplierPaymentViewActions } from "@/modules/supplier-payments/supplier-payment-view-actions";
 import { getSourceBankingStatus } from "@/modules/banking/banking-report-service";
-import { BackLink } from "@/components/back-link";
+import { Breadcrumbs } from "@/components/breadcrumbs";
+import { DocumentFlowStepper, type FlowStep } from "@/components/documents/document-flow-stepper";
 import { getDocumentViewData } from "@/modules/document-templates/document-data-extractor";
 import { DocumentViewLayout } from "@/modules/document-templates/components/document-view-layout";
+import { getLatestApprovalForEntity } from "@/modules/approvals/approval-service";
+import { DocumentApprovalBanner } from "@/components/approvals/document-approval-banner";
+import { NoticeToast } from "@/components/notice-toast";
 
 export default async function SupplierPaymentViewPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ businessId: string; paymentId: string }>;
+  searchParams: Promise<{ notice?: string }>;
 }) {
   const { businessId, paymentId } = await params;
+  const query = await searchParams;
   const { user, access } = await requireModule(businessId, "purchases");
   const record = getSupplierPayment(businessId, user.id, paymentId);
   if (!record) notFound();
   const banking = getSourceBankingStatus(businessId, user.id, "supplier_payment", paymentId);
   const payment = record.payment;
-  const status = String(payment.document_status) as "posted" | "void";
+  const status = String(payment.document_status) as "draft" | "pending_approval" | "posted" | "void";
   const number = String(payment.payment_number);
+  const latestApproval = getLatestApprovalForEntity(businessId, user.id, "supplier_payment", paymentId);
+  const primaryJournal = record.journals.find((j) => j.source_type === "supplier_payment") ?? record.journals[0];
+
+  const flowSteps: FlowStep[] = [
+    ...(record.allocations.length > 0
+      ? [{
+          key: "invoices",
+          label: record.allocations.length === 1 ? "Purchase Invoice" : "Purchase Invoices",
+          documentNumber:
+            record.allocations.length === 1
+              ? record.allocations[0].internal_number
+              : `${record.allocations.length} bills`,
+          href:
+            record.allocations.length === 1
+              ? `/b/${businessId}/purchases/invoices/${record.allocations[0].invoice_id}`
+              : undefined,
+          state: "completed" as const,
+        }]
+      : []),
+    {
+      key: "payment",
+      label: "Supplier Payment",
+      documentNumber: number,
+      statusLabel: status,
+      state: "current",
+    },
+    ...(primaryJournal
+      ? [{
+          key: "journal",
+          label: "Journal",
+          documentNumber: primaryJournal.entry_number,
+          href: `/b/${businessId}/accounting/journal/${primaryJournal.id}`,
+          state: "completed" as const,
+        }]
+      : status !== "void"
+        ? [{ key: "journal", label: "Journal", state: "pending" as const }]
+        : []),
+  ];
 
   const viewBundle = getDocumentViewData(
     businessId,
@@ -35,7 +80,14 @@ export default async function SupplierPaymentViewPage({
 
   return (
     <div className="page-container">
-      <BackLink href={`/b/${businessId}/purchases/payments`}>Supplier Payments</BackLink>
+      <NoticeToast message={query.notice} />
+      <Breadcrumbs
+        businessId={businessId}
+        items={[
+          { label: "Supplier Payments", href: `/b/${businessId}/purchases/payments` },
+          { label: number },
+        ]}
+      />
       <div className="mb-6 flex flex-col justify-between gap-4 lg:flex-row lg:items-start">
         <div>
           <div className="flex items-center gap-2">
@@ -51,11 +103,24 @@ export default async function SupplierPaymentViewPage({
           <p className="money mt-3 text-xl font-semibold">
             {formatMoney(Number(payment.amount_minor), String(payment.currency_code))}
           </p>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Bank {formatMoney(Number(payment.base_amount_minor), access.business.currency)} at 1 {String(payment.currency_code)} = {String(payment.exchange_rate_to_base)} {access.business.currency} · Realized FX {formatMoney(Number(payment.realized_fx_amount_minor), access.business.currency)}
-          </p>
+          {String(payment.currency_code) !== access.business.currency && (
+            <p className="mt-1 text-sm text-muted-foreground">
+              Bank {formatMoney(Number(payment.base_amount_minor), access.business.currency)} at 1 {String(payment.currency_code)} = {String(payment.exchange_rate_to_base)} {access.business.currency} · Realized FX {formatMoney(Number(payment.realized_fx_amount_minor), access.business.currency)}
+            </p>
+          )}
         </div>
-        <SupplierPaymentViewActions businessId={businessId} paymentId={paymentId} paymentNumber={number} status={status} />
+        <SupplierPaymentViewActions businessId={businessId} paymentId={paymentId} paymentNumber={number} status={status} journalEntryId={primaryJournal?.id ?? null} />
+      </div>
+      {(record.allocations.length > 0 || Boolean(primaryJournal)) && (
+        <DocumentFlowStepper steps={flowSteps} className="no-print" />
+      )}
+      <div className="mb-5">
+        <DocumentApprovalBanner
+          businessId={businessId}
+          currentUserId={user.id}
+          isAdmin={access.membership.role === "administrator"}
+          approval={latestApproval}
+        />
       </div>
 
       <DocumentViewLayout
@@ -129,7 +194,15 @@ export default async function SupplierPaymentViewPage({
                       </td>
                       <td className="money text-right">{formatMoney(allocation.amount_minor, String(payment.currency_code))}</td>
                       <td className="money text-right">{formatMoney(allocation.base_carrying_amount_released, access.business.currency)}</td>
-                      <td>{status === "posted" ? "Active" : "Released by reversal"}</td>
+                      <td>
+                        {status === "posted"
+                          ? "Active"
+                          : status === "pending_approval"
+                            ? "Pending approval"
+                            : status === "draft"
+                              ? "Draft"
+                              : "Released by reversal"}
+                      </td>
                     </tr>
                   ))}
                 </tbody>

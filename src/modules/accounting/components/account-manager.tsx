@@ -7,6 +7,7 @@ import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { StatusBadge } from "@/components/status-badge";
 import { DensityToggle } from "@/components/density-toggle";
 import { useTableDensity } from "@/components/use-table-density";
@@ -31,6 +32,8 @@ import {
 import { deleteAccountAction, saveAccountAction } from "../actions";
 import { FormError } from "@/components/form-error";
 import { SelectNative } from "@/components/ui/select-native";
+import { useActionPermission } from "@/components/permissions-provider";
+import { fieldErrorProps } from "@/lib/form-errors";
 
 type AccountRow = AccountInput & {
   id: string;
@@ -58,6 +61,9 @@ export function AccountManager({
 }) {
   const router = useRouter();
   const { density } = useTableDensity(businessId);
+  const canEdit = useActionPermission("edit");
+  const canViewReports = useActionPermission("view", "reports");
+  const canDelete = useActionPermission("delete");
   const [editing, setEditing] = useState<AccountRow | null | undefined>(undefined);
   const [values, setValues] = useState<AccountInput>(emptyAccount);
   const [errors, setErrors] = useState<Record<string, string[]>>({});
@@ -104,7 +110,7 @@ export function AccountManager({
     <>
       <div className="mb-4 flex items-center justify-end gap-2">
         <DensityToggle businessId={businessId} />
-        <Button onClick={() => openEditor()}><Plus className="size-4" /> New Account</Button>
+        <Button permission="create" onClick={() => openEditor()}><Plus className="size-4" /> New Account</Button>
       </div>
       <div className="space-y-5">
         {accountTypes.map((type) => {
@@ -135,19 +141,25 @@ export function AccountManager({
                           </Link>
                         </td>
                         <td>
-                          <DropdownMenu>
-                            <DropdownMenuTrigger asChild><Button variant="ghost" size="icon" aria-label={`Actions for ${account.name}`}><MoreHorizontal className="size-4" /></Button></DropdownMenuTrigger>
-                            <DropdownMenuContent align="end">
-                              <DropdownMenuItem permission="edit" onSelect={() => openEditor(account)}><Pencil className="size-4" /> Edit</DropdownMenuItem>
-                              <DropdownMenuItem asChild>
-                                <Link href={`/b/${businessId}/reports/general-ledger?accountId=${account.id}`}>
-                                  <BookOpenText className="size-4" /> General Ledger
-                                </Link>
-                              </DropdownMenuItem>
-                              <DropdownMenuSeparator />
-                              <DropdownMenuItem permission="delete" disabled={account.isSystem} title={account.isSystem ? "System accounts cannot be deleted" : undefined} className="text-danger focus:text-danger" onSelect={() => { setServerError(""); setDeleting(account); }}><Trash2 className="size-4" /> Delete</DropdownMenuItem>
-                            </DropdownMenuContent>
-                          </DropdownMenu>
+                          {(canEdit || canViewReports || (!account.isSystem && canDelete)) ? (
+                            <DropdownMenu>
+                              <DropdownMenuTrigger asChild><Button variant="ghost" size="icon" aria-label={`Actions for ${account.name}`}><MoreHorizontal className="size-4" /></Button></DropdownMenuTrigger>
+                              <DropdownMenuContent align="end">
+                                <DropdownMenuItem permission="edit" onSelect={() => openEditor(account)}><Pencil className="size-4" /> Edit</DropdownMenuItem>
+                                <DropdownMenuItem permission="view" permissionModule="reports" asChild>
+                                  <Link href={`/b/${businessId}/reports/general-ledger?accountId=${account.id}`}>
+                                    <BookOpenText className="size-4" /> General Ledger
+                                  </Link>
+                                </DropdownMenuItem>
+                                {!account.isSystem && canDelete && (
+                                  <>
+                                    {(canEdit || canViewReports) && <DropdownMenuSeparator />}
+                                    <DropdownMenuItem permission="delete" className="text-danger focus:text-danger" onSelect={() => { setServerError(""); setDeleting(account); }}><Trash2 className="size-4" /> Delete</DropdownMenuItem>
+                                  </>
+                                )}
+                              </DropdownMenuContent>
+                            </DropdownMenu>
+                          ) : null}
                         </td>
                       </tr>
                     ))}
@@ -164,13 +176,22 @@ export function AccountManager({
           <DialogTitle>{editing ? "Edit account" : "New account"}</DialogTitle>
           <DialogDescription>Set the account name, type, and reporting subtype.</DialogDescription>
           <div className="mt-5 grid gap-4 sm:grid-cols-2">
-            <div className="space-y-1.5 sm:col-span-2"><Label htmlFor="account-name">Name</Label><Input id="account-name" value={values.name} onChange={(event) => setValues((current) => ({ ...current, name: event.target.value }))} aria-invalid={!!errors.name} />{errors.name && <p className="field-error">{errors.name[0]}</p>}</div>
+            <div className="space-y-1.5 sm:col-span-2"><Label htmlFor="account-name">Name</Label><Input id="account-name" value={values.name} onChange={(event) => setValues((current) => ({ ...current, name: event.target.value }))} {...fieldErrorProps("name", errors.name)} />{errors.name && <p className="field-error">{errors.name[0]}</p>}</div>
             <div className="space-y-1.5"><Label htmlFor="account-type">Type</Label><SelectNative id="account-type"  value={values.type} disabled={!!editing?.isSystem} onChange={(event) => { const type = event.target.value as AccountInput["type"]; setValues((current) => ({ ...current, type, subtype: accountSubtypesByType[type][0] })); }}>{accountTypes.map((type) => <option key={type} value={type}>{accountTypeLabels[type]}</option>)}</SelectNative></div>
             <div className="space-y-1.5"><Label htmlFor="account-subtype">Subtype</Label><SelectNative id="account-subtype"  value={values.subtype} disabled={!!editing?.isSystem} onChange={(event) => setValues((current) => ({ ...current, subtype: event.target.value as AccountInput["subtype"] }))}>{accountSubtypesByType[values.type].map((subtype) => <option key={subtype} value={subtype}>{accountSubtypeLabels[subtype]}</option>)}</SelectNative></div>
-            <label className="flex min-h-9 items-center gap-2 text-sm sm:col-span-2"><input type="checkbox" checked={values.isActive} disabled={!!editing?.isSystem} onChange={(event) => setValues((current) => ({ ...current, isActive: event.target.checked }))} className="size-4 accent-[var(--primary)]" /> Active account</label>
+            <label className="flex min-h-9 cursor-pointer items-center gap-2 text-sm sm:col-span-2">
+              <Checkbox
+                checked={values.isActive}
+                disabled={!!editing?.isSystem}
+                onCheckedChange={(checked) =>
+                  setValues((current) => ({ ...current, isActive: Boolean(checked) }))
+                }
+              />
+              <span>Active account</span>
+            </label>
           </div>
           {serverError && <FormError message={serverError} />}
-          <div className="mt-5 flex justify-end gap-2"><Button variant="ghost" onClick={() => setEditing(undefined)}>Cancel</Button><Button permission={"save"} onClick={save} disabled={pending}>{editing ? "Save changes" : "Create account"}</Button></div>
+          <div className="mt-5 flex justify-end gap-2"><Button variant="ghost" onClick={() => setEditing(undefined)}>Cancel</Button><Button permission={editing ? "edit" : "create"} onClick={save} disabled={pending}>{editing ? "Save changes" : "Create account"}</Button></div>
         </DialogContent>
       </DialogRoot>
 

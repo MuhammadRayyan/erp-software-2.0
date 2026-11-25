@@ -5,6 +5,9 @@ import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { LoaderCircle, RotateCcw, Save, Variable, Eye } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { formatMajorMoney } from "@/core/format";
+import { useActionPermission } from "@/components/permissions-provider";
+import { useConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
@@ -18,25 +21,19 @@ import {
 } from "../email-template-types";
 import { saveEmailTemplateAction, resetEmailTemplateAction } from "../actions";
 
-const SAMPLE_DATA: Record<string, string> = {
-  customerName: "Acme Industrial Supplies LLC",
-  documentNumber: "INV-2026-088",
-  businessName: "Gulf Apex Trading Ltd",
-  total: "AED 12,450.00",
-  balance: "AED 12,450.00",
-  documentDate: "15 Oct 2026",
-  dueDate: "14 Nov 2026",
-  currency: "AED",
-};
-
 export function EmailTemplateManager({
   businessId,
   initialTemplates,
+  currency = "AED",
+  businessName = "Gulf Apex Trading Ltd",
 }: {
   businessId: string;
   initialTemplates: EmailTemplate[];
+  currency?: string;
+  businessName?: string;
 }) {
   const router = useRouter();
+  const canEdit = useActionPermission("edit");
   const [selectedType, setSelectedType] = useState<string>("sales-invoice");
 
   // Map of template_type -> { subject, body }
@@ -63,11 +60,22 @@ export function EmailTemplateManager({
   const [saving, setSaving] = useState(false);
   const [resetting, setResetting] = useState(false);
   const [error, setError] = useState("");
+  const { ask, dialog: confirmDialog } = useConfirmDialog();
 
   const currentTemplate = templatesState[selectedType] || { subject: "", body: "" };
   const currentDef = SUPPORTED_TEMPLATE_TYPES.find((t) => t.type === selectedType);
 
-  const sampleInterpolation = interpolateEmailTemplate(currentTemplate, SAMPLE_DATA);
+  const sampleData: Record<string, string> = {
+    customerName: "Acme Industrial Supplies LLC",
+    documentNumber: "INV-2026-088",
+    businessName,
+    total: formatMajorMoney("12450", currency),
+    balance: formatMajorMoney("12450", currency),
+    documentDate: "15 Oct 2026",
+    dueDate: "14 Nov 2026",
+    currency,
+  };
+  const sampleInterpolation = interpolateEmailTemplate(currentTemplate, sampleData);
 
   function handleSubjectChange(value: string) {
     setTemplatesState((prev) => ({
@@ -121,28 +129,37 @@ export function EmailTemplateManager({
     router.refresh();
   }
 
-  async function handleReset() {
-    if (!confirm(`Reset template for "${currentDef?.name}" to factory default?`)) return;
-    setResetting(true);
-    setError("");
-    const res = await resetEmailTemplateAction(businessId, selectedType);
-    setResetting(false);
+  function handleReset() {
+    ask({
+      title: `Reset ${currentDef?.name || "email"} template?`,
+      description: `Reset template for "${currentDef?.name}" back to factory default?`,
+      confirmLabel: "Reset template",
+      tone: "warning",
+      onConfirm: async () => {
+        setResetting(true);
+        setError("");
+        try {
+          const res = await resetEmailTemplateAction(businessId, selectedType);
+          if (res.error) {
+            setError(res.error);
+            throw new Error(res.error);
+          }
 
-    if (res.error) {
-      setError(res.error);
-      return;
-    }
+          const fallback = DEFAULT_TEMPLATES[selectedType];
+          if (fallback) {
+            setTemplatesState((prev) => ({
+              ...prev,
+              [selectedType]: fallback,
+            }));
+          }
 
-    const fallback = DEFAULT_TEMPLATES[selectedType];
-    if (fallback) {
-      setTemplatesState((prev) => ({
-        ...prev,
-        [selectedType]: fallback,
-      }));
-    }
-
-    toast.success("Template reset to factory default.");
-    router.refresh();
+          toast.success("Template reset to factory default.");
+          router.refresh();
+        } finally {
+          setResetting(false);
+        }
+      },
+    });
   }
 
   return (
@@ -190,8 +207,9 @@ export function EmailTemplateManager({
                   <button
                     key={v.key}
                     type="button"
-                    onClick={() => insertVariable(v.key)}
-                    className="inline-flex items-center gap-1 rounded border border-border bg-surface px-2 py-0.5 text-[11px] font-mono font-medium text-foreground hover:border-primary hover:text-primary transition-colors"
+                    disabled={!canEdit}
+                    onClick={() => canEdit && insertVariable(v.key)}
+                    className="inline-flex items-center gap-1 rounded border border-border bg-surface px-2 py-0.5 text-[11px] font-mono font-medium text-foreground hover:border-primary hover:text-primary transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                     title={`${v.label} (e.g. ${v.example})`}
                   >
                     <span>{v.key}</span>
@@ -205,6 +223,7 @@ export function EmailTemplateManager({
               <Input
                 id="subject"
                 value={currentTemplate.subject}
+                disabled={!canEdit}
                 onChange={(e) => handleSubjectChange(e.target.value)}
                 onFocus={() => setActiveFocusField("subject")}
                 placeholder="Subject line with {{document_number}}, etc."
@@ -217,6 +236,7 @@ export function EmailTemplateManager({
                 id="body"
                 rows={10}
                 value={currentTemplate.body}
+                disabled={!canEdit}
                 onChange={(e) => handleBodyChange(e.target.value)}
                 onFocus={() => setActiveFocusField("body")}
                 placeholder="Write your email message using dynamic variables..."
@@ -226,6 +246,7 @@ export function EmailTemplateManager({
 
             <div className="flex items-center justify-between pt-2 border-t border-border">
               <Button
+                permission="edit"
                 variant="ghost"
                 size="sm"
                 onClick={handleReset}
@@ -235,7 +256,7 @@ export function EmailTemplateManager({
                 <RotateCcw className="size-3.5" /> Reset to Default
               </Button>
 
-              <Button permission={"save"} onClick={handleSave} disabled={saving || resetting} className="gap-1.5">
+              <Button permission="edit" onClick={handleSave} disabled={saving || resetting} className="gap-1.5">
                 {saving ? <LoaderCircle className="size-4 animate-spin" /> : <Save className="size-4" />}
                 Save Template
               </Button>
@@ -274,12 +295,13 @@ export function EmailTemplateManager({
               </div>
 
               <div className="rounded-lg bg-surface-muted/50 p-2.5 text-[11px] text-muted-foreground border border-border/50">
-                Note: In production sends, attached PDF documents (e.g. {SAMPLE_DATA.documentNumber}.pdf) are attached directly to outbound messages.
+                Note: In production sends, attached PDF documents (e.g. {sampleData.documentNumber}.pdf) are attached directly to outbound messages.
               </div>
             </div>
           </div>
         </div>
       </div>
+      {confirmDialog}
     </div>
   );
 }
