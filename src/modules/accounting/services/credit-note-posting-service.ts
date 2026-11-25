@@ -34,8 +34,17 @@ export function buildJournalForCreditNote(
   ).lines;
 
   const settings = sqlite
-    .prepare("SELECT accounts_receivable_account_id, vat_output_account_id FROM business_accounting_settings WHERE id = 'default'")
-    .get() as { accounts_receivable_account_id: string; vat_output_account_id: string } | undefined;
+    .prepare(`
+      SELECT accounts_receivable_account_id, vat_output_account_id,
+        realized_fx_gain_account_id, realized_fx_loss_account_id
+      FROM business_accounting_settings WHERE id = 'default'
+    `)
+    .get() as {
+      accounts_receivable_account_id: string;
+      vat_output_account_id: string;
+      realized_fx_gain_account_id: string | null;
+      realized_fx_loss_account_id: string | null;
+    } | undefined;
 
   if (!settings?.accounts_receivable_account_id) {
     throw new Error("Accounts Receivable account is not configured.");
@@ -91,11 +100,32 @@ export function buildJournalForCreditNote(
     }
   }
 
+  // Sales and VAT reverse at the invoice rate, while AR releases the invoice's
+  // remaining carrying amount. Any difference is foreign-exchange, not
+  // revenue: book it to realized FX gain/loss so Sales stays accurate.
   const debitTotal = lines.reduce((sum, line) => sum + (line.debitMinor ?? 0), 0);
   const adjustment = note.baseCarryingAmountReleased - debitTotal;
-  
-  if (adjustment !== 0 && lines[0]?.debitMinor) {
-    lines[0].debitMinor += adjustment;
+  if (adjustment !== 0) {
+    if (!settings.realized_fx_gain_account_id || !settings.realized_fx_loss_account_id) {
+      throw new Error("Realized FX Gain/Loss accounts are not configured.");
+    }
+    if (adjustment > 0) {
+      lines.push({
+        accountId: settings.realized_fx_loss_account_id,
+        description: `FX difference on ${note.creditNoteNumber}`,
+        debitMinor: adjustment,
+        customerId: note.customerId,
+        reference: note.creditNoteNumber,
+      });
+    } else {
+      lines.push({
+        accountId: settings.realized_fx_gain_account_id,
+        description: `FX difference on ${note.creditNoteNumber}`,
+        creditMinor: -adjustment,
+        customerId: note.customerId,
+        reference: note.creditNoteNumber,
+      });
+    }
   }
 
   lines.push({

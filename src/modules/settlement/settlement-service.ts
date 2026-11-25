@@ -1,12 +1,13 @@
 import { randomUUID } from "node:crypto";
 import { allocateNumber } from "@/modules/accounting/services/numbering-service";
-import { reverseTransaction } from "@/modules/accounting/services/posting-service";
+import { postTransaction, reverseTransaction } from "@/modules/accounting/services/posting-service";
 import { assertDateNotLocked } from "@/modules/accounting/services/financial-lock-service";
 import { parseCurrencyAmountToMinor, convertToBase } from "@/modules/currency/conversion";
 import { calculateSettlementAllocation } from "@/modules/currency/settlement";
 import { resolveRateSnapshot } from "@/modules/currency/validation";
 import { getBaseCurrency } from "@/modules/currency/currency";
 import { releaseStatementMatchesForSource } from "@/modules/banking/matching-service";
+import { getBusinessTodayIso } from "@/core/format";
 
 export type SettlementConfig = {
   partyType: "customer" | "supplier";
@@ -251,7 +252,8 @@ export function postPendingSettlement(
     const payment = sqlite.prepare(`
       SELECT id, ${config.paymentNumberColumn} AS payment_number, ${config.partyIdColumn} AS party_id,
         date, bank_account_id, amount_minor, base_amount_minor,
-        released_carrying_amount_minor, realized_fx_amount_minor, document_status
+        released_carrying_amount_minor, realized_fx_amount_minor, document_status,
+        currency_code, exchange_rate_to_base, exchange_rate_date, exchange_rate_source
       FROM ${config.paymentTable}
       WHERE id = ?
     `).get(paymentId) as any;
@@ -264,18 +266,65 @@ export function postPendingSettlement(
 
     assertDateNotLocked(sqlite, payment.date, config.partyType === "customer" ? "Receipt" : "Payment");
 
-    // Re-verify planned allocations do not exceed current open invoice balances
+    // Re-verify planned allocations against current open balances and
+    // recompute the carrying release: other settlements may have posted since
+    // this one was created, which changes each document's carrying amount.
     const plannedAllocations = sqlite.prepare(`
-      SELECT ${config.documentIdColumn} AS document_id, foreign_amount_allocated
+      SELECT id, ${config.documentIdColumn} AS document_id, foreign_amount_allocated,
+        base_carrying_amount_released, settlement_base_amount
       FROM ${config.allocationTable}
       WHERE ${config.allocationPaymentIdColumn} = ?
-    `).all(paymentId) as { document_id: string; foreign_amount_allocated: number }[];
+    `).all(paymentId) as {
+      id: string;
+      document_id: string;
+      foreign_amount_allocated: number;
+      base_carrying_amount_released: number;
+      settlement_base_amount: number;
+    }[];
 
+    const rate = resolveRateSnapshot(sqlite, {
+      currencyCode: payment.currency_code,
+      exchangeRateToBase: payment.exchange_rate_to_base,
+      exchangeRateDate: payment.exchange_rate_date,
+      exchangeRateSource: payment.exchange_rate_source,
+      relevantDate: payment.date,
+      enforceVatPolicy: false,
+    });
+    let releasedDelta = 0;
+    let fxDelta = 0;
+    const updateAllocation = sqlite.prepare(`
+      UPDATE ${config.allocationTable}
+      SET base_carrying_amount_released = ?, settlement_base_amount = ?, realized_fx_amount = ?
+      WHERE id = ?
+    `);
     for (const alloc of plannedAllocations) {
       const open = getOpenState(sqlite, config, alloc.document_id);
       if (!open || alloc.foreign_amount_allocated > open.foreign_open_minor) {
         throw new Error("A linked invoice no longer has enough open balance for this allocation.");
       }
+      const recalculated = calculateSettlementAllocation({
+        foreignAmountAllocated: alloc.foreign_amount_allocated,
+        foreignOpenBefore: open.foreign_open_minor,
+        baseCarryingBefore: open.base_carrying_minor,
+        rate,
+      });
+      releasedDelta += recalculated.baseCarryingAmountReleased - alloc.base_carrying_amount_released;
+      fxDelta += recalculated.realizedFxAmount - (alloc.settlement_base_amount - alloc.base_carrying_amount_released);
+      updateAllocation.run(
+        recalculated.baseCarryingAmountReleased,
+        recalculated.settlementBaseAmount,
+        recalculated.realizedFxAmount,
+        alloc.id,
+      );
+    }
+    if (releasedDelta !== 0 || fxDelta !== 0) {
+      payment.released_carrying_amount_minor += releasedDelta;
+      payment.realized_fx_amount_minor += fxDelta;
+      sqlite.prepare(`
+        UPDATE ${config.paymentTable}
+        SET released_carrying_amount_minor = ?, realized_fx_amount_minor = ?
+        WHERE id = ?
+      `).run(payment.released_carrying_amount_minor, payment.realized_fx_amount_minor, paymentId);
     }
 
     const now = new Date().toISOString();
@@ -426,6 +475,71 @@ export function deleteDraftSettlement(
   return sqlite.transaction(execute)();
 }
 
+function creditAllocationSourceType(config: SettlementConfig) {
+  return config.partyType === "customer" ? "receipt_credit_allocation" : "supplier_payment_credit_allocation";
+}
+
+/**
+ * Applying an unallocated receipt/payment to a foreign-currency document later
+ * releases the document's carrying amount while the credit was booked at the
+ * payment's rate. The base difference is realized FX and must move between the
+ * AR/AP control account and FX gain/loss, or the ledger drifts from the
+ * subledger. Customer: positive = gain (Dr AR / Cr gain). Supplier: positive =
+ * loss (Dr loss / Cr AP).
+ */
+function postCreditAllocationFx(
+  sqlite: any,
+  config: SettlementConfig,
+  input: { allocationId: string; paymentNumber: string; partyId: string; documentNumber: string; date: string; realizedFxMinor: number },
+) {
+  if (input.realizedFxMinor === 0) return;
+  const settings = sqlite.prepare(`
+    SELECT accounts_receivable_account_id, accounts_payable_account_id,
+      realized_fx_gain_account_id, realized_fx_loss_account_id
+    FROM business_accounting_settings WHERE id = 'default'
+  `).get() as {
+    accounts_receivable_account_id: string | null;
+    accounts_payable_account_id: string | null;
+    realized_fx_gain_account_id: string | null;
+    realized_fx_loss_account_id: string | null;
+  } | undefined;
+  const controlAccountId = config.partyType === "customer"
+    ? settings?.accounts_receivable_account_id
+    : settings?.accounts_payable_account_id;
+  if (!controlAccountId) {
+    throw new Error(`${config.partyType === "customer" ? "Accounts Receivable" : "Accounts Payable"} account is not configured.`);
+  }
+  if (!settings?.realized_fx_gain_account_id || !settings.realized_fx_loss_account_id) {
+    throw new Error("Realized FX Gain/Loss accounts are not configured.");
+  }
+  const amount = Math.abs(input.realizedFxMinor);
+  const isGain = config.partyType === "customer" ? input.realizedFxMinor > 0 : input.realizedFxMinor < 0;
+  const description = `Realized FX on applying ${input.paymentNumber} to ${input.documentNumber}`;
+  const party = config.partyType === "customer" ? { customerId: input.partyId } : { supplierId: input.partyId };
+  const controlIsDebit = config.partyType === "customer" ? isGain : !isGain;
+  postTransaction(sqlite, {
+    sourceType: creditAllocationSourceType(config),
+    sourceId: input.allocationId,
+    date: input.date,
+    description,
+    lines: [
+      {
+        accountId: controlAccountId,
+        description,
+        ...(controlIsDebit ? { debitMinor: amount } : { creditMinor: amount }),
+        ...party,
+        reference: input.paymentNumber,
+      },
+      {
+        accountId: isGain ? settings.realized_fx_gain_account_id : settings.realized_fx_loss_account_id,
+        description,
+        ...(controlIsDebit ? { creditMinor: amount } : { debitMinor: amount }),
+        reference: input.paymentNumber,
+      },
+    ],
+  });
+}
+
 export function applySettlementCredit(
   sqlite: any,
   config: SettlementConfig,
@@ -476,7 +590,7 @@ export function applySettlementCredit(
     }
 
     const invoice = sqlite.prepare(`
-      SELECT id, currency_code, ${config.documentNumberColumn} AS doc_number
+      SELECT id, currency_code, invoice_date, ${config.documentNumberColumn} AS doc_number
       FROM ${config.documentTable}
       WHERE id = ? AND ${config.partyIdColumn} = ? AND document_status = 'posted'
     `).get(data.documentId, payment.party_id) as any;
@@ -512,6 +626,17 @@ export function applySettlementCredit(
       allocationCalc.baseCarryingAmountReleased, allocationCalc.settlementBaseAmount, allocationCalc.realizedFxAmount
     );
 
+    // The application happens when both documents exist: date it on the later one.
+    const allocationDate = String(invoice.invoice_date) > String(payment.date) ? String(invoice.invoice_date) : String(payment.date);
+    postCreditAllocationFx(sqlite, config, {
+      allocationId: allocId,
+      paymentNumber: payment.payment_number,
+      partyId: payment.party_id,
+      documentNumber: invoice.doc_number,
+      date: allocationDate,
+      realizedFxMinor: allocationCalc.realizedFxAmount,
+    });
+
     return { ok: true, allocationId: allocId, allocatedMinor: allocAmountMinor };
   };
 
@@ -539,7 +664,7 @@ export function voidSettlement(
       throw new Error("Only a posted payment can be reversed.");
     }
     assertDateNotLocked(sqlite, payment.date, config.partyType === "customer" ? "Receipt void" : "Payment void");
-    assertDateNotLocked(sqlite, now.slice(0, 10), config.partyType === "customer" ? "Receipt void" : "Payment void");
+    assertDateNotLocked(sqlite, getBusinessTodayIso(), config.partyType === "customer" ? "Receipt void" : "Payment void");
 
     releaseStatementMatchesForSource(sqlite, config.partyType === "customer" ? "receipt" : "supplier_payment", paymentId,
       "Cannot reverse a payment included in a completed bank reconciliation.");
@@ -549,9 +674,26 @@ export function voidSettlement(
       originalSourceId: paymentId,
       reversalSourceType: config.partyType === "customer" ? "receipt_void" : "supplier_payment_void",
       reversalSourceId: paymentId,
-      date: now.slice(0, 10),
+      date: getBusinessTodayIso(),
       description: `Reverse ${config.partyType === "customer" ? "Receipt" : "Payment"} ${payment.payment_number}`,
     });
+
+    // Reverse realized FX booked when this payment's credit was later applied.
+    const creditFxEntries = sqlite.prepare(`
+      SELECT je.source_id FROM journal_entries je
+      INNER JOIN ${config.allocationTable} a ON a.id = je.source_id
+      WHERE je.source_type = ? AND a.${config.allocationPaymentIdColumn} = ?
+    `).all(creditAllocationSourceType(config), paymentId) as { source_id: string }[];
+    for (const entry of creditFxEntries) {
+      reverseTransaction(sqlite, {
+        originalSourceType: creditAllocationSourceType(config),
+        originalSourceId: entry.source_id,
+        reversalSourceType: `${creditAllocationSourceType(config)}_void`,
+        reversalSourceId: entry.source_id,
+        date: getBusinessTodayIso(),
+        description: `Reverse FX on credit applied from ${payment.payment_number}`,
+      });
+    }
 
     sqlite.prepare(`
       UPDATE ${config.paymentTable}

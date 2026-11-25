@@ -67,7 +67,7 @@ flowchart LR
 
 - **Exact Integer Precision**:
   - Monetary amounts are stored as signed minor-unit integers (`*_minor`; e.g., `1` AED = `100` fils; 3-decimal GCC currencies such as BHD/KWD/OMR use `1000` units).
-  - Quantities use `*_micros` (`1e-6` precision), paired with `decimal.js` (`decimal.js` `10.6.0`) primitives for exchange conversion, tax splitting, and proportional allocations.
+  - Quantities are stored in `*_micros` columns at the app quantity scale of 10,000 (4 decimal places, `QUANTITY_SCALE` in `src/modules/accounting/calculations/money.ts`; despite the column name this is not `1e-6`), paired with `decimal.js` (`decimal.js` `10.6.0`) primitives for exchange conversion, tax splitting, and proportional allocations.
 - **Double-Entry Integrity & Lock Dates**: All posted financial documents emit balanced journal entries ($\sum \text{Debits} = \sum \text{Credits}$), verified against GL reconciliation (`src/core/db/reconciliation.ts`). Financial and VAT lock dates guard backdated posting/voiding/edits.
 - **Multi-Currency FX**: Unified base-per-foreign conversion model with immutable posted snapshots and base currency fallback via `resolveBaseCurrencyCode()` ([currency-fallback.ts](../src/modules/reports/currency-fallback.ts)).
 - **UAE Regulatory & Compliance Features**:

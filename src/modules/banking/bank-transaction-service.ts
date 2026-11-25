@@ -1,7 +1,7 @@
 import { assertSavePermission, assertMutationPermission } from "@/core/permissions/mutation-permissions";
 import { randomUUID } from "node:crypto";
 import { getBusinessDb } from "@/core/db/business";
-import { getCurrencyMinorUnit, minorToDecimalString } from "@/core/format";
+import { getCurrencyMinorUnit, minorToDecimalString, getBusinessTodayIso } from "@/core/format";
 import { addMinor, splitTaxInclusive } from "@/modules/accounting/calculations/money";
 import { parseCurrencyAmountToMinor } from "@/modules/currency/conversion";
 import { allocateNumber } from "@/modules/accounting/services/numbering-service";
@@ -250,16 +250,16 @@ export function voidBankTransaction(businessId: string, userId: string, transact
     if (!transaction) throw new Error("Bank Transaction not found.");
     if (transaction.document_status !== "posted") throw new Error("Only a posted Bank Transaction can be voided.");
     assertDateNotLocked(context.sqlite, transaction.date, "Bank transaction");
-    assertDateNotLocked(context.sqlite, now.slice(0, 10), "Bank transaction void");
+    assertDateNotLocked(context.sqlite, getBusinessTodayIso(), "Bank transaction void");
     assertVatSourceUnlocked(context.sqlite, "bank_transaction", transactionId, transaction.tax_date);
     releaseStatementMatchesForSource(context.sqlite, "bank_transaction", transactionId,
       "Cannot void a Bank Transaction included in a completed reconciliation.");
     reverseTransaction(context.sqlite, {
       originalSourceType: "bank_transaction", originalSourceId: transactionId,
       reversalSourceType: "bank_transaction_void", reversalSourceId: transactionId,
-      date: now.slice(0, 10), description: `Reverse Bank Transaction ${transaction.transaction_number}`,
+      date: getBusinessTodayIso(), description: `Reverse Bank Transaction ${transaction.transaction_number}`,
     });
-    reverseTaxEntries(context.sqlite, { originalSourceType: "bank_transaction", sourceId: transactionId, reversalSourceType: "bank_transaction_void", taxDate: transaction.tax_date });
+    reverseTaxEntries(context.sqlite, { originalSourceType: "bank_transaction", sourceId: transactionId, reversalSourceType: "bank_transaction_void", taxDate: getBusinessTodayIso() });
     context.sqlite.prepare("UPDATE bank_transactions SET document_status = 'void', statement_line_id = NULL, voided_at = ?, updated_at = ? WHERE id = ?")
       .run(now, now, transactionId);
   }).immediate();

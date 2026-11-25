@@ -13,6 +13,17 @@ import {
 } from "./manager-extractor";
 import { decodeProtobuf } from "./manager-protobuf";
 import { recordActivity } from "@/modules/activity-log/activity-log-service";
+import Decimal from "decimal.js";
+import { addMinor, calculateTax, parseQuantityToMicros } from "@/modules/accounting/calculations/money";
+import { minorToCurrencyInput } from "@/modules/currency/conversion";
+import { getBaseCurrency } from "@/modules/currency/currency";
+import type { RateSnapshot } from "@/modules/currency/validation";
+import { postSalesInvoice } from "@/modules/accounting/services/invoice-posting-service";
+import { postPurchaseInvoice } from "@/modules/accounting/services/purchase-invoice-posting-service";
+import { postReceipt } from "@/modules/accounting/services/receipt-posting-service";
+import { postSupplierPayment } from "@/modules/accounting/services/supplier-payment-posting-service";
+import { postTransaction, type JournalLineInput } from "@/modules/accounting/services/posting-service";
+import { replaceTaxEntries } from "@/modules/tax/tax-entry-service";
 
 export interface ManagerInspectionSummary {
   businessName: string;
@@ -46,11 +57,244 @@ export interface ManagerImportOptions {
   documentStatus?: "posted" | "draft";
 }
 
+/** What the import did to the ledger (counts only; no business data). */
+export interface ManagerImportLedgerStats {
+  invoicesPosted: number;
+  invoicesLeftAsDraft: number;
+  billsPosted: number;
+  billsLeftAsDraft: number;
+  receiptsPosted: number;
+  receiptsLeftAsDraft: number;
+  receiptsSkipped: number;
+  paymentsPosted: number;
+  paymentsLeftAsDraft: number;
+  paymentsSkipped: number;
+  transfersPosted: number;
+  transfersSkipped: number;
+  payslipsPosted: number;
+  payslipsLeftAsDraft: number;
+  journalsPosted: number;
+  journalsSkipped: number;
+  journalLinesWithUnmappedAccount: number;
+  /** Invoice/bill lines whose Manager tax code was mapped to a business tax code by rate. */
+  taxLinesMapped: number;
+  /** Invoice/bill lines with no resolvable Manager tax code, defaulted to UAE standard 5%. */
+  taxLinesDefaulted: number;
+}
+
 export interface ManagerImportResult {
   businessId: string;
   businessName: string;
   summary: ManagerInspectionSummary;
+  ledger: ManagerImportLedgerStats;
 }
+
+// ---------------------------------------------------------------------------
+// Exact amount / quantity conversion helpers (exported for unit tests)
+// ---------------------------------------------------------------------------
+
+const ImportDecimal = Decimal.clone({ precision: 60, rounding: Decimal.ROUND_HALF_UP });
+
+function toImportDecimal(value: number | string, label: string) {
+  if (typeof value === "number" && !Number.isFinite(value)) {
+    throw new Error(`${label} is not a finite number.`);
+  }
+  // Number#toString yields the shortest round-trip decimal, so values decoded
+  // from Manager's bcl.Decimal (e.g. 12.35) are recovered exactly.
+  const decimal = new ImportDecimal(typeof value === "number" ? value.toString() : value.trim());
+  if (!decimal.isFinite()) throw new Error(`${label} is not a finite number.`);
+  return decimal;
+}
+
+function decimalToSafeInteger(value: Decimal, label: string) {
+  const rounded = value.toDecimalPlaces(0, Decimal.ROUND_HALF_UP);
+  const number = rounded.toNumber();
+  if (!Number.isSafeInteger(number)) throw new Error(`${label} is too large.`);
+  return number;
+}
+
+/** Converts a (signed) Manager decimal amount to integer minor units of a currency with `minorUnit` decimals, HALF_UP. */
+export function managerAmountToMinor(value: number | string, minorUnit: number, label = "Amount") {
+  if (!Number.isInteger(minorUnit) || minorUnit < 0 || minorUnit > 6) {
+    throw new Error("Currency minor unit must be between 0 and 6.");
+  }
+  return decimalToSafeInteger(
+    toImportDecimal(value, label).mul(new ImportDecimal(10).pow(minorUnit)),
+    label,
+  );
+}
+
+/** Converts a Manager quantity to the app's quantity scale (QUANTITY_SCALE = 10,000, i.e. 4 decimals). */
+export function managerQuantityToScaled(value: number | string) {
+  const absolute = toImportDecimal(value, "Quantity").abs().toDecimalPlaces(4, Decimal.ROUND_HALF_UP);
+  return parseQuantityToMicros(absolute.toFixed(4));
+}
+
+export type ImportTaxCode = { id: string; rateBasisPoints: number };
+
+export type ImportLineInput = {
+  quantity: number | string;
+  unitPrice: number | string;
+  taxCode: ImportTaxCode;
+};
+
+export type ComputedImportLine<T extends ImportLineInput> = {
+  source: T;
+  quantityMicros: number;
+  unitPriceMinor: number;
+  discountMinor: number;
+  netAmountMinor: number;
+  taxAmountMinor: number;
+  grossAmountMinor: number;
+  taxCodeId: string;
+};
+
+/**
+ * Computes stored line amounts with exact decimal math, mirroring the app's
+ * tax-exclusive line calculator (per-line HALF_UP tax via calculateTax).
+ *
+ * The line net is quantity x unit price evaluated exactly and rounded once to
+ * the currency's minor unit, so Manager's document totals are preserved even
+ * when the unit price has more decimals than the currency. Negative lines
+ * (Manager discount / adjustment lines) cannot be stored as negative lines, so
+ * they are applied as fixed line discounts, first against lines with the same
+ * tax code, then against any other line. Any discount that cannot be absorbed
+ * is reported in `unappliedDiscountMinor` (the document must not be posted).
+ */
+export function computeImportedDocumentLines<T extends ImportLineInput>(lines: readonly T[], minorUnit: number) {
+  const computed: ComputedImportLine<T>[] = [];
+  const discountPools = new Map<string, number>();
+
+  for (const line of lines) {
+    const quantity = toImportDecimal(line.quantity, "Quantity");
+    const unitPrice = toImportDecimal(line.unitPrice, "Unit price");
+    const rawMinor = managerAmountToMinor(quantity.mul(unitPrice).toString(), minorUnit, "Line amount");
+    if (rawMinor < 0) {
+      discountPools.set(line.taxCode.id, addMinor([discountPools.get(line.taxCode.id) ?? 0, -rawMinor]));
+      continue;
+    }
+    let quantityMicros = managerQuantityToScaled(line.quantity);
+    let unitPriceMinor = Math.abs(managerAmountToMinor(line.unitPrice, minorUnit, "Unit price"));
+    if (quantityMicros <= 0) {
+      // A zero quantity cannot be stored; keep the line informational at zero value.
+      quantityMicros = 10_000;
+      unitPriceMinor = 0;
+    }
+    computed.push({
+      source: line,
+      quantityMicros,
+      unitPriceMinor,
+      discountMinor: 0,
+      netAmountMinor: rawMinor,
+      taxAmountMinor: 0,
+      grossAmountMinor: 0,
+      taxCodeId: line.taxCode.id,
+    });
+  }
+
+  let unappliedDiscountMinor = 0;
+  for (const [taxCodeId, poolMinor] of discountPools) {
+    let remaining = poolMinor;
+    // Same tax code first, then the largest lines, so VAT moves as little as possible.
+    const targets = [...computed].sort((a, b) =>
+      Number(b.taxCodeId === taxCodeId) - Number(a.taxCodeId === taxCodeId) || b.netAmountMinor - a.netAmountMinor);
+    for (const target of targets) {
+      if (remaining <= 0) break;
+      const take = Math.min(remaining, target.netAmountMinor);
+      if (take <= 0) continue;
+      target.netAmountMinor -= take;
+      target.discountMinor += take;
+      remaining -= take;
+    }
+    unappliedDiscountMinor += remaining;
+  }
+
+  for (const line of computed) {
+    line.taxAmountMinor = calculateTax(line.netAmountMinor, line.source.taxCode.rateBasisPoints);
+    line.grossAmountMinor = addMinor([line.netAmountMinor, line.taxAmountMinor]);
+  }
+
+  const subtotalMinor = addMinor(computed.map((line) => line.netAmountMinor));
+  const taxMinor = addMinor(computed.map((line) => line.taxAmountMinor));
+  return {
+    lines: computed,
+    subtotalMinor,
+    taxMinor,
+    totalMinor: addMinor([subtotalMinor, taxMinor]),
+    unappliedDiscountMinor,
+  };
+}
+
+/**
+ * Converts Manager journal lines to single-sided minor-unit lines and enforces
+ * that the entry balances. A line carrying both a debit and a credit is netted
+ * to one side (not dropped); a line that nets to zero carries no amount and is
+ * omitted. Throws (naming the journal number) when debits and credits differ.
+ */
+export function convertManagerJournalLines<T extends { debit: number | string; credit: number | string }>(
+  entryNumber: string,
+  lines: readonly T[],
+  minorUnit: number,
+) {
+  const converted: Array<{ source: T; debitMinor: number; creditMinor: number }> = [];
+  for (const line of lines) {
+    const netMinor = managerAmountToMinor(line.debit, minorUnit, "Debit") - managerAmountToMinor(line.credit, minorUnit, "Credit");
+    if (netMinor === 0) continue;
+    converted.push({
+      source: line,
+      debitMinor: netMinor > 0 ? netMinor : 0,
+      creditMinor: netMinor < 0 ? -netMinor : 0,
+    });
+  }
+  const debitTotal = addMinor(converted.map((line) => line.debitMinor));
+  const creditTotal = addMinor(converted.map((line) => line.creditMinor));
+  if (debitTotal !== creditTotal) {
+    throw new Error(
+      `Manager.io journal entry ${entryNumber} is not balanced (debits ${minorToCurrencyInput(debitTotal, minorUnit)} vs credits ${minorToCurrencyInput(creditTotal, minorUnit)}); import aborted.`,
+    );
+  }
+  return { lines: converted, totalMinor: debitTotal };
+}
+
+type BusinessTaxCodeRow = {
+  id: string;
+  rate_basis_points: number;
+  direction: "sales" | "purchases" | "both";
+  vat_category: string | null;
+  is_recoverable: number;
+  is_active: number;
+};
+
+/** Picks the business tax code for a Manager rate: 5% -> standard, 0% -> zero-rated (sales) / out-of-scope. */
+export function pickBusinessTaxCode(
+  codes: readonly BusinessTaxCodeRow[],
+  direction: "sales" | "purchases",
+  rateBasisPoints: number,
+  preferNoVat = false,
+): ImportTaxCode | null {
+  const categoryRank = (category: string | null) => {
+    if (rateBasisPoints > 0) return category === "standard" ? 0 : 99;
+    const order = preferNoVat
+      ? ["out_of_scope", "zero_rated", "exempt"]
+      : ["zero_rated", "out_of_scope", "exempt"];
+    const index = order.indexOf(category ?? "");
+    return index === -1 ? 99 : index;
+  };
+  const candidates = codes
+    .filter((code) => code.is_active
+      && code.rate_basis_points === rateBasisPoints
+      && (code.direction === "both" || code.direction === direction)
+      && categoryRank(code.vat_category) < 99)
+    .sort((a, b) =>
+      categoryRank(a.vat_category) - categoryRank(b.vat_category)
+      || (direction === "purchases" ? b.is_recoverable - a.is_recoverable : 0)
+      || Number(a.direction === "both") - Number(b.direction === "both")
+      || a.id.localeCompare(b.id));
+  const code = candidates[0];
+  return code ? { id: code.id, rateBasisPoints: code.rate_basis_points } : null;
+}
+
+const KNOWN_THREE_DECIMAL_CURRENCIES = new Set(["BHD", "IQD", "JOD", "KWD", "LYD", "OMR", "TND"]);
 
 /**
  * Validates SQLite header and opens a temporary readonly instance.
@@ -189,6 +433,15 @@ export function importManagerBackupToNewBusiness(
 
   const nameToUse = options.overrideBusinessName?.trim() || extracted.business.name;
 
+  // Reject unbalanced manual journals before any business is created, so a bad
+  // backup never leaves a half-imported workspace behind. (The ledger currency
+  // precision is re-checked inside the import transaction against the real
+  // currencies table.)
+  const preflightMinorUnit = KNOWN_THREE_DECIMAL_CURRENCIES.has(extracted.business.currency) ? 3 : 2;
+  for (const je of extracted.journalEntries) {
+    convertManagerJournalLines(je.entryNumber, je.lines, preflightMinorUnit);
+  }
+
   // 1. Create new isolated business workspace (automatically runs all latest business migrations)
   const { id: businessId, directoryKey } = createBusiness(
     {
@@ -215,7 +468,29 @@ export function importManagerBackupToNewBusiness(
   const employeeMap = new Map(extracted.employees.map((e) => [e.id, e]));
   const defaultCustomerId = extracted.customers[0]?.id || "default-customer";
   const defaultSupplierId = extracted.suppliers[0]?.id || "default-supplier";
-  const defaultBankAccountId = extracted.bankAccounts[0]?.id || "acct-bank-1200";
+  const defaultBankAccountId = extracted.bankAccounts[0]?.id || "acct-bank-1010";
+  const sqlite = context.sqlite;
+  const ledgerStats: ManagerImportLedgerStats = {
+    invoicesPosted: 0,
+    invoicesLeftAsDraft: 0,
+    billsPosted: 0,
+    billsLeftAsDraft: 0,
+    receiptsPosted: 0,
+    receiptsLeftAsDraft: 0,
+    receiptsSkipped: 0,
+    paymentsPosted: 0,
+    paymentsLeftAsDraft: 0,
+    paymentsSkipped: 0,
+    transfersPosted: 0,
+    transfersSkipped: 0,
+    payslipsPosted: 0,
+    payslipsLeftAsDraft: 0,
+    journalsPosted: 0,
+    journalsSkipped: 0,
+    journalLinesWithUnmappedAccount: 0,
+    taxLinesMapped: 0,
+    taxLinesDefaulted: 0,
+  };
 
   try {
     // Enable SQLite turbo pragmas for high-throughput bulk insertion
@@ -350,6 +625,7 @@ export function importManagerBackupToNewBusiness(
           'acct-sales-4000', 'acct-inventory-1210', 'acct-cost-sales-5000', 1, ?, ?
         )
       `);
+      const itemMinorUnit = getBaseCurrency(sqlite).minor_unit;
       const usedSkus = new Set<string>();
       for (let i = 0; i < extracted.inventoryItems.length; i++) {
         const item = extracted.inventoryItems[i];
@@ -366,8 +642,8 @@ export function importManagerBackupToNewBusiness(
           item.name,
           null,
           item.unitOfMeasure || "Units",
-          Math.max(0, Math.round((item.salesUnitPrice || 0) * 100)),
-          Math.max(0, Math.round((item.purchaseUnitPrice || 0) * 100)),
+          Math.max(0, managerAmountToMinor(item.salesUnitPrice || 0, itemMinorUnit, "Item sales price")),
+          Math.max(0, managerAmountToMinor(item.purchaseUnitPrice || 0, itemMinorUnit, "Item purchase price")),
           now,
           now,
         );
@@ -428,8 +704,65 @@ export function importManagerBackupToNewBusiness(
         );
       }
 
-      // 4.10 Insert Sales Quotes
-      const insertQuote = context.sqlite.prepare(`
+      // 4.10 Resolve currency precision, base-rate snapshot and tax codes used by every document below
+      const ledgerCurrency = extracted.business.currency;
+      const baseCurrency = getBaseCurrency(sqlite);
+      const currencyRow = sqlite
+        .prepare("SELECT code, minor_unit FROM currencies WHERE code = ?")
+        .get(ledgerCurrency) as { code: string; minor_unit: number } | undefined;
+      if (!currencyRow || currencyRow.code !== baseCurrency.code) {
+        throw new Error(`Manager.io import requires the business base currency (${baseCurrency.code}); found ${ledgerCurrency}.`);
+      }
+      const minorUnit = currencyRow.minor_unit;
+      const toMinor = (value: number, label: string) => managerAmountToMinor(value || 0, minorUnit, label);
+      const rateFor = (date: string): RateSnapshot => ({
+        currencyCode: baseCurrency.code,
+        exchangeRateToBase: "1",
+        exchangeRateDate: date,
+        exchangeRateSource: "Base",
+        currencyMinorUnit: baseCurrency.minor_unit,
+        baseCurrencyCode: baseCurrency.code,
+        baseMinorUnit: baseCurrency.minor_unit,
+      });
+
+      const businessTaxCodes = sqlite
+        .prepare("SELECT id, rate_basis_points, direction, vat_category, is_recoverable, is_active FROM tax_codes")
+        .all() as BusinessTaxCodeRow[];
+      const requireTaxCode = (direction: "sales" | "purchases", rateBasisPoints: number, preferNoVat = false) => {
+        const code = pickBusinessTaxCode(businessTaxCodes, direction, rateBasisPoints, preferNoVat);
+        if (!code) {
+          throw new Error(`No active ${direction} tax code at ${rateBasisPoints / 100}% exists to map imported Manager.io lines.`);
+        }
+        return code;
+      };
+      const defaultSalesTax = requireTaxCode("sales", 500);
+      const defaultPurchaseTax = requireTaxCode("purchases", 500);
+      const managerTaxRates = new Map(extracted.taxCodes.map((code) => [code.id, code.rate]));
+      const resolveLineTax = (direction: "sales" | "purchases", ref: string | null | undefined): ImportTaxCode => {
+        if (ref === null) {
+          // Manager line explicitly has no tax code: not reportable VAT.
+          ledgerStats.taxLinesMapped += 1;
+          return requireTaxCode(direction, 0, true);
+        }
+        const rate = ref ? managerTaxRates.get(ref) : undefined;
+        if (typeof rate === "number" && Number.isFinite(rate) && rate >= 0) {
+          ledgerStats.taxLinesMapped += 1;
+          return requireTaxCode(direction, managerAmountToMinor(rate, 2, "Tax rate"));
+        }
+        // Legacy line formats carry no known tax field, or the Manager tax code /
+        // its rate could not be resolved: fall back to UAE standard rate (5%).
+        ledgerStats.taxLinesDefaulted += 1;
+        return direction === "sales" ? defaultSalesTax : defaultPurchaseTax;
+      };
+
+      const accountingSettings = sqlite
+        .prepare("SELECT default_bank_account_id FROM business_accounting_settings WHERE id = 'default'")
+        .get() as { default_bank_account_id: string | null } | undefined;
+      const fallbackBankAccountId = accountingSettings?.default_bank_account_id ?? null;
+      const isPostingImport = docStatus === "posted";
+
+      // 4.11 Insert Sales Quotes (non-posting documents)
+      const insertQuote = sqlite.prepare(`
         INSERT OR IGNORE INTO sales_quotes (
           id, quote_number, customer_id, project_id, quote_date, expiry_date,
           reference, document_status, amounts_include_tax,
@@ -446,17 +779,20 @@ export function importManagerBackupToNewBusiness(
           ?, ?, ?
         )
       `);
-      const insertQuoteLine = context.sqlite.prepare(`
+      const insertQuoteLine = sqlite.prepare(`
         INSERT INTO sales_quote_lines (
           id, quote_id, description, quantity_micros, unit_price_minor,
           discount_type, discount_value, sales_account_id, tax_code_id, project_id, item_id,
           net_amount_minor, tax_amount_minor, gross_amount_minor, position
         ) VALUES (
           ?, ?, ?, ?, ?,
-          'none', '0', 'acct-sales-4000', 'tax-uae-vat-5', NULL, NULL,
+          ?, ?, 'acct-sales-4000', ?, NULL, NULL,
           ?, ?, ?, ?
         )
       `);
+      const discountType = (line: { discountMinor: number }) => (line.discountMinor > 0 ? "fixed" : "none");
+      const discountValue = (line: { discountMinor: number }) =>
+        line.discountMinor > 0 ? minorToCurrencyInput(line.discountMinor, minorUnit) : "0";
 
       const usedQuoteNumbers = new Set<string>();
       for (let i = 0; i < extracted.salesQuotes.length; i++) {
@@ -470,65 +806,29 @@ export function importManagerBackupToNewBusiness(
         const targetCustId =
           (sq.customerId && customerMap.has(sq.customerId) && sq.customerId) || defaultCustomerId;
         const qDate = sq.issueDate || now.split("T")[0];
-
-        let subtotalMinor = 0;
-        let taxMinor = 0;
-        const computedLines = sq.lines.map((l, lineIdx) => {
-          const qty = l.quantity > 0 ? l.quantity : 1;
-          const unitPrice = l.unitPrice >= 0 ? l.unitPrice : 0;
-          const net = Math.round(qty * unitPrice * 100);
-          const tax = Math.round(net * 0.05);
-          subtotalMinor += net;
-          taxMinor += tax;
-          return {
-            id: randomUUID(),
-            description: l.description || "Quote Line Item",
-            quantityMicros: Math.round(qty * 1_000_000),
-            unitPriceMinor: Math.round(unitPrice * 100),
-            netAmountMinor: net,
-            taxAmountMinor: tax,
-            grossAmountMinor: net + tax,
-            position: lineIdx + 1,
-          };
-        });
-
-        const totalMinor = subtotalMinor + taxMinor;
-        insertQuote.run(
-          sq.id,
-          qNum,
-          targetCustId,
-          qDate,
-          qDate,
-          subtotalMinor,
-          taxMinor,
-          totalMinor,
-          extracted.business.currency,
-          qDate,
-          subtotalMinor,
-          taxMinor,
-          totalMinor,
-          userId,
-          now,
-          now,
+        const doc = computeImportedDocumentLines(
+          sq.lines.map((l) => ({ ...l, taxCode: defaultSalesTax })),
+          minorUnit,
         );
 
-        for (const cl of computedLines) {
+        insertQuote.run(
+          sq.id, qNum, targetCustId, qDate, qDate,
+          doc.subtotalMinor, doc.taxMinor, doc.totalMinor,
+          ledgerCurrency, qDate,
+          doc.subtotalMinor, doc.taxMinor, doc.totalMinor,
+          userId, now, now,
+        );
+        doc.lines.forEach((cl, lineIdx) => {
           insertQuoteLine.run(
-            cl.id,
-            sq.id,
-            cl.description,
-            cl.quantityMicros,
-            cl.unitPriceMinor,
-            cl.netAmountMinor,
-            cl.taxAmountMinor,
-            cl.grossAmountMinor,
-            cl.position,
+            randomUUID(), sq.id, cl.source.description || "Quote Line Item",
+            cl.quantityMicros, cl.unitPriceMinor, discountType(cl), discountValue(cl), cl.taxCodeId,
+            cl.netAmountMinor, cl.taxAmountMinor, cl.grossAmountMinor, lineIdx + 1,
           );
-        }
+        });
       }
 
-      // 4.11 Insert Sales Orders
-      const insertOrder = context.sqlite.prepare(`
+      // 4.12 Insert Sales Orders (non-posting documents)
+      const insertOrder = sqlite.prepare(`
         INSERT OR IGNORE INTO sales_orders (
           id, order_number, customer_id, sales_quote_id, project_id,
           order_date, delivery_date, reference, document_status, amounts_include_tax,
@@ -545,14 +845,14 @@ export function importManagerBackupToNewBusiness(
           ?, ?, ?, ?
         )
       `);
-      const insertOrderLine = context.sqlite.prepare(`
+      const insertOrderLine = sqlite.prepare(`
         INSERT INTO sales_order_lines (
           id, order_id, description, quantity_micros, unit_price_minor,
           discount_type, discount_value, sales_account_id, tax_code_id, project_id, item_id,
           net_amount_minor, tax_amount_minor, gross_amount_minor, position
         ) VALUES (
           ?, ?, ?, ?, ?,
-          'none', '0', 'acct-sales-4000', 'tax-uae-vat-5', NULL, NULL,
+          ?, ?, 'acct-sales-4000', ?, NULL, NULL,
           ?, ?, ?, ?
         )
       `);
@@ -569,70 +869,30 @@ export function importManagerBackupToNewBusiness(
         const targetCustId =
           (so.customerId && customerMap.has(so.customerId) && so.customerId) || defaultCustomerId;
         const oDate = so.orderDate || now.split("T")[0];
-
-        let subtotalMinor = 0;
-        let taxMinor = 0;
-        const computedLines = so.lines.map((l, lineIdx) => {
-          const qty = l.quantity > 0 ? l.quantity : 1;
-          const unitPrice = l.unitPrice >= 0 ? l.unitPrice : 0;
-          const net = Math.round(qty * unitPrice * 100);
-          const tax = Math.round(net * 0.05);
-          subtotalMinor += net;
-          taxMinor += tax;
-          return {
-            id: randomUUID(),
-            description: l.description || "Order Line Item",
-            quantityMicros: Math.round(qty * 1_000_000),
-            unitPriceMinor: Math.round(unitPrice * 100),
-            netAmountMinor: net,
-            taxAmountMinor: tax,
-            grossAmountMinor: net + tax,
-            position: lineIdx + 1,
-          };
-        });
-
-        const totalMinor = subtotalMinor + taxMinor;
-        const orderStatus = docStatus === "posted" ? "active" : "draft";
+        const doc = computeImportedDocumentLines(
+          so.lines.map((l) => ({ ...l, taxCode: defaultSalesTax })),
+          minorUnit,
+        );
+        const orderStatus = isPostingImport ? "active" : "draft";
 
         insertOrder.run(
-          so.id,
-          orderNum,
-          targetCustId,
-          so.salesQuoteId || null,
-          oDate,
-          oDate,
-          orderStatus,
-          subtotalMinor,
-          taxMinor,
-          totalMinor,
-          extracted.business.currency,
-          oDate,
-          subtotalMinor,
-          taxMinor,
-          totalMinor,
-          so.notes || null,
-          userId,
-          now,
-          now,
+          so.id, orderNum, targetCustId, so.salesQuoteId || null, oDate, oDate, orderStatus,
+          doc.subtotalMinor, doc.taxMinor, doc.totalMinor,
+          ledgerCurrency, oDate,
+          doc.subtotalMinor, doc.taxMinor, doc.totalMinor,
+          so.notes || null, userId, now, now,
         );
-
-        for (const cl of computedLines) {
+        doc.lines.forEach((cl, lineIdx) => {
           insertOrderLine.run(
-            cl.id,
-            so.id,
-            cl.description,
-            cl.quantityMicros,
-            cl.unitPriceMinor,
-            cl.netAmountMinor,
-            cl.taxAmountMinor,
-            cl.grossAmountMinor,
-            cl.position,
+            randomUUID(), so.id, cl.source.description || "Order Line Item",
+            cl.quantityMicros, cl.unitPriceMinor, discountType(cl), discountValue(cl), cl.taxCodeId,
+            cl.netAmountMinor, cl.taxAmountMinor, cl.grossAmountMinor, lineIdx + 1,
           );
-        }
+        });
       }
 
-      // 4.12 Insert Purchase Invoices (Bills)
-      const insertBill = context.sqlite.prepare(`
+      // 4.13 Insert Purchase Invoices (Bills) and post them through the app's posting services
+      const insertBill = sqlite.prepare(`
         INSERT OR IGNORE INTO purchase_invoices (
           id, internal_number, supplier_id, project_id, supplier_invoice_number,
           invoice_date, tax_date, due_date, reference, purchase_order_id,
@@ -649,7 +909,7 @@ export function importManagerBackupToNewBusiness(
           ?, ?, ?, ?, 0
         )
       `);
-      const insertBillLine = context.sqlite.prepare(`
+      const insertBillLine = sqlite.prepare(`
         INSERT INTO purchase_invoice_lines (
           id, purchase_invoice_id, description, quantity_micros, unit_price_minor,
           expense_account_id, tax_code_id, project_id, item_id,
@@ -657,13 +917,15 @@ export function importManagerBackupToNewBusiness(
           discount_type, discount_value
         ) VALUES (
           ?, ?, ?, ?, ?,
-          ?, 'tax-uae-vat-5', ?, ?,
           ?, ?, ?, ?,
-          'none', '0'
+          ?, ?, ?, ?,
+          ?, ?
         )
       `);
 
-      const billIdMap = new Set<string>();
+      // Open (unsettled) balance of each posted bill / invoice, used to cap allocations.
+      const billOpenMinor = new Map<string, { supplierId: string; openMinor: number }>();
+      const billSupplier = new Map<string, string>();
       const usedBillNumbers = new Set<string>();
       for (let i = 0; i < extracted.purchaseInvoices.length; i++) {
         const bill = extracted.purchaseInvoices[i];
@@ -673,90 +935,86 @@ export function importManagerBackupToNewBusiness(
         }
         usedBillNumbers.add(billNum.toLowerCase());
 
-        const targetSuppId =
-          (bill.supplierId && supplierMap.has(bill.supplierId) && bill.supplierId) || defaultSupplierId;
+        const supplierResolved = Boolean(bill.supplierId && supplierMap.has(bill.supplierId));
+        const targetSuppId = supplierResolved ? bill.supplierId : defaultSupplierId;
         const bDate = bill.issueDate || now.split("T")[0];
-        const postedAtVal = docStatus === "posted" ? bDate : null;
 
-        let subtotalMinor = 0;
-        let taxMinor = 0;
-        const computedLines = bill.lines.map((l, lineIdx) => {
-          const qty = l.quantity > 0 ? l.quantity : 1;
-          const unitPrice = l.unitPrice >= 0 ? l.unitPrice : 0;
-          const net = Math.round(qty * unitPrice * 100);
-          const tax = Math.round(net * 0.05);
-          subtotalMinor += net;
-          taxMinor += tax;
-          const linePrjId = (l.projectId && projectMap.has(l.projectId) && l.projectId) || null;
-          const lineItemId = (l.itemId && itemMap.has(l.itemId) && l.itemId) || null;
-          const lineExpenseAccId =
-            (l.itemId && accountMap.has(l.itemId) && l.itemId) || "acct-operating-expenses-6000";
-          return {
-            id: randomUUID(),
-            description: l.description || "Purchase Line Item",
-            quantityMicros: Math.round(qty * 1_000_000),
-            unitPriceMinor: Math.round(unitPrice * 100),
-            netAmountMinor: net,
-            taxAmountMinor: tax,
-            grossAmountMinor: net + tax,
-            position: lineIdx + 1,
-            projectId: linePrjId,
-            itemId: lineItemId,
-            expenseAccountId: lineExpenseAccId,
-          };
-        });
-
-        const totalMinor = subtotalMinor + taxMinor;
+        const doc = computeImportedDocumentLines(
+          bill.lines.map((l) => {
+            const accountRef = l.accountId ?? l.itemId;
+            return {
+              ...l,
+              taxCode: resolveLineTax("purchases", l.taxCodeId),
+              lineProjectId: (l.projectId && projectMap.has(l.projectId) && l.projectId) || null,
+              lineItemId: (l.itemId && itemMap.has(l.itemId) && l.itemId) || null,
+              expenseAccountId: (accountRef && accountMap.has(accountRef) && accountRef) || "acct-operating-expenses-6000",
+            };
+          }),
+          minorUnit,
+        );
+        const lines = doc.lines.map((cl) => ({ ...cl, id: randomUUID() }));
         const billPrjId =
-          computedLines.find((l) => l.projectId)?.projectId ||
+          lines.find((l) => l.source.lineProjectId)?.source.lineProjectId ||
           (bill.projectId && projectMap.has(bill.projectId) && bill.projectId) ||
           null;
 
-        insertBill.run(
-          bill.id,
-          billNum,
-          targetSuppId,
-          billPrjId,
-          billNum,
-          bDate,
-          bDate,
-          bDate,
-          docStatus,
-          subtotalMinor,
-          taxMinor,
-          totalMinor,
-          extracted.business.currency,
-          bDate,
-          subtotalMinor,
-          taxMinor,
-          totalMinor,
-          userId,
-          now,
-          now,
-          postedAtVal,
-        );
-        billIdMap.add(bill.id);
+        // Only documents the app itself could post are imported as posted; the
+        // rest (zero value, unknown supplier, unabsorbable credit lines) stay as
+        // drafts for review instead of becoming posted documents without a ledger.
+        const postable = isPostingImport && supplierResolved && doc.totalMinor > 0 && doc.unappliedDiscountMinor === 0;
+        if (isPostingImport && !postable) ledgerStats.billsLeftAsDraft += 1;
 
-        for (const cl of computedLines) {
+        insertBill.run(
+          bill.id, billNum, targetSuppId, billPrjId, billNum,
+          bDate, bDate, bDate,
+          "draft", doc.subtotalMinor, doc.taxMinor, doc.totalMinor,
+          ledgerCurrency, bDate,
+          doc.subtotalMinor, doc.taxMinor, doc.totalMinor,
+          userId, now, now, null,
+        );
+        billSupplier.set(bill.id, targetSuppId);
+
+        lines.forEach((cl, lineIdx) => {
           insertBillLine.run(
-            cl.id,
-            bill.id,
-            cl.description,
-            cl.quantityMicros,
-            cl.unitPriceMinor,
-            cl.expenseAccountId,
-            cl.projectId,
-            cl.itemId,
-            cl.netAmountMinor,
-            cl.taxAmountMinor,
-            cl.grossAmountMinor,
-            cl.position,
+            cl.id, bill.id, cl.source.description || "Purchase Line Item",
+            cl.quantityMicros, cl.unitPriceMinor,
+            cl.source.expenseAccountId, cl.taxCodeId, cl.source.lineProjectId, cl.source.lineItemId,
+            cl.netAmountMinor, cl.taxAmountMinor, cl.grossAmountMinor, lineIdx + 1,
+            discountType(cl), discountValue(cl),
           );
+        });
+
+        if (postable) {
+          const rate = rateFor(bDate);
+          const postingLines = lines.map((cl) => ({
+            id: cl.id,
+            expenseAccountId: cl.source.expenseAccountId,
+            taxCodeId: cl.taxCodeId,
+            projectId: cl.source.lineProjectId ?? billPrjId,
+            itemId: cl.source.lineItemId,
+            netAmountMinor: cl.netAmountMinor,
+            taxAmountMinor: cl.taxAmountMinor,
+            grossAmountMinor: cl.grossAmountMinor,
+          }));
+          postPurchaseInvoice(sqlite, {
+            id: bill.id, internalNumber: billNum, supplierId: targetSuppId,
+            invoiceDate: bDate, totalMinor: doc.totalMinor, rate,
+          }, postingLines);
+          replaceTaxEntries(sqlite, {
+            sourceType: "purchase_invoice", sourceId: bill.id, sourceNumber: billNum,
+            partyName: supplierMap.get(targetSuppId)?.name ?? null,
+            taxDate: bDate, direction: "purchases", rate,
+          }, postingLines);
+          sqlite
+            .prepare("UPDATE purchase_invoices SET document_status = 'posted', posted_at = ? WHERE id = ?")
+            .run(bDate, bill.id);
+          billOpenMinor.set(bill.id, { supplierId: targetSuppId, openMinor: doc.totalMinor });
+          ledgerStats.billsPosted += 1;
         }
       }
 
-      // 4.13 Insert Sales Invoices
-      const insertInvoice = context.sqlite.prepare(`
+      // 4.14 Insert Sales Invoices and post them through the app's posting services
+      const insertInvoice = sqlite.prepare(`
         INSERT OR IGNORE INTO sales_invoices (
           id, invoice_number, customer_id, project_id,
           invoice_date, tax_date, supply_emirate, due_date, reference,
@@ -775,7 +1033,7 @@ export function importManagerBackupToNewBusiness(
           ?, ?, ?, ?, 0
         )
       `);
-      const insertInvoiceLine = context.sqlite.prepare(`
+      const insertInvoiceLine = sqlite.prepare(`
         INSERT INTO sales_invoice_lines (
           id, invoice_id, description, quantity_micros, unit_price_minor,
           sales_account_id, tax_code_id, project_id, item_id,
@@ -783,13 +1041,14 @@ export function importManagerBackupToNewBusiness(
           discount_type, discount_value
         ) VALUES (
           ?, ?, ?, ?, ?,
-          ?, 'tax-uae-vat-5', ?, ?,
           ?, ?, ?, ?,
-          'none', '0'
+          ?, ?, ?, ?,
+          ?, ?
         )
       `);
 
-      const invoiceIdMap = new Set<string>();
+      const invoiceOpenMinor = new Map<string, { customerId: string; openMinor: number }>();
+      const invoiceCustomer = new Map<string, string>();
       const usedInvNumbers = new Set<string>();
       for (let i = 0; i < extracted.salesInvoices.length; i++) {
         const inv = extracted.salesInvoices[i];
@@ -799,89 +1058,82 @@ export function importManagerBackupToNewBusiness(
         }
         usedInvNumbers.add(invNum.toLowerCase());
 
-        const targetCustId =
-          (inv.customerId && customerMap.has(inv.customerId) && inv.customerId) || defaultCustomerId;
+        const customerResolved = Boolean(inv.customerId && customerMap.has(inv.customerId));
+        const targetCustId = customerResolved ? inv.customerId : defaultCustomerId;
         const iDate = inv.issueDate || now.split("T")[0];
-        const postedAtVal = docStatus === "posted" ? iDate : null;
 
-        let subtotalMinor = 0;
-        let taxMinor = 0;
-        const computedLines = inv.lines.map((l, lineIdx) => {
-          const qty = l.quantity > 0 ? l.quantity : 1;
-          const unitPrice = l.unitPrice >= 0 ? l.unitPrice : 0;
-          const net = Math.round(qty * unitPrice * 100);
-          const tax = Math.round(net * 0.05);
-          subtotalMinor += net;
-          taxMinor += tax;
-          const linePrjId = (l.projectId && projectMap.has(l.projectId) && l.projectId) || null;
-          const lineItemId = (l.itemId && itemMap.has(l.itemId) && l.itemId) || null;
-          const lineSalesAccId =
-            (l.itemId && accountMap.has(l.itemId) && l.itemId) || "acct-sales-4000";
-          return {
-            id: randomUUID(),
-            description: l.description || "Invoice Line Item",
-            quantityMicros: Math.round(qty * 1_000_000),
-            unitPriceMinor: Math.round(unitPrice * 100),
-            netAmountMinor: net,
-            taxAmountMinor: tax,
-            grossAmountMinor: net + tax,
-            position: lineIdx + 1,
-            projectId: linePrjId,
-            itemId: lineItemId,
-            salesAccountId: lineSalesAccId,
-          };
-        });
-
-        const totalMinor = subtotalMinor + taxMinor;
+        const doc = computeImportedDocumentLines(
+          inv.lines.map((l) => {
+            const accountRef = l.accountId ?? l.itemId;
+            return {
+              ...l,
+              taxCode: resolveLineTax("sales", l.taxCodeId),
+              lineProjectId: (l.projectId && projectMap.has(l.projectId) && l.projectId) || null,
+              lineItemId: (l.itemId && itemMap.has(l.itemId) && l.itemId) || null,
+              salesAccountId: (accountRef && accountMap.has(accountRef) && accountRef) || "acct-sales-4000",
+            };
+          }),
+          minorUnit,
+        );
+        const lines = doc.lines.map((cl) => ({ ...cl, id: randomUUID() }));
         const invPrjId =
-          computedLines.find((l) => l.projectId)?.projectId ||
+          lines.find((l) => l.source.lineProjectId)?.source.lineProjectId ||
           (inv.projectId && projectMap.has(inv.projectId) && inv.projectId) ||
           null;
 
-        insertInvoice.run(
-          inv.id,
-          invNum,
-          targetCustId,
-          invPrjId,
-          iDate,
-          iDate,
-          iDate,
-          docStatus,
-          subtotalMinor,
-          taxMinor,
-          totalMinor,
-          extracted.business.currency,
-          iDate,
-          subtotalMinor,
-          taxMinor,
-          totalMinor,
-          userId,
-          now,
-          now,
-          postedAtVal,
-        );
-        invoiceIdMap.add(inv.id);
+        const postable = isPostingImport && customerResolved && doc.totalMinor > 0 && doc.unappliedDiscountMinor === 0;
+        if (isPostingImport && !postable) ledgerStats.invoicesLeftAsDraft += 1;
 
-        for (const cl of computedLines) {
+        insertInvoice.run(
+          inv.id, invNum, targetCustId, invPrjId,
+          iDate, iDate, iDate,
+          "draft",
+          doc.subtotalMinor, doc.taxMinor, doc.totalMinor,
+          ledgerCurrency, iDate,
+          doc.subtotalMinor, doc.taxMinor, doc.totalMinor,
+          userId, now, now, null,
+        );
+        invoiceCustomer.set(inv.id, targetCustId);
+
+        lines.forEach((cl, lineIdx) => {
           insertInvoiceLine.run(
-            cl.id,
-            inv.id,
-            cl.description,
-            cl.quantityMicros,
-            cl.unitPriceMinor,
-            cl.salesAccountId,
-            cl.projectId,
-            cl.itemId,
-            cl.netAmountMinor,
-            cl.taxAmountMinor,
-            cl.grossAmountMinor,
-            cl.position,
+            cl.id, inv.id, cl.source.description || "Invoice Line Item",
+            cl.quantityMicros, cl.unitPriceMinor,
+            cl.source.salesAccountId, cl.taxCodeId, cl.source.lineProjectId, cl.source.lineItemId,
+            cl.netAmountMinor, cl.taxAmountMinor, cl.grossAmountMinor, lineIdx + 1,
+            discountType(cl), discountValue(cl),
           );
+        });
+
+        if (postable) {
+          const rate = rateFor(iDate);
+          const postingLines = lines.map((cl) => ({
+            id: cl.id,
+            salesAccountId: cl.source.salesAccountId,
+            taxCodeId: cl.taxCodeId,
+            projectId: cl.source.lineProjectId ?? invPrjId,
+            netAmountMinor: cl.netAmountMinor,
+            taxAmountMinor: cl.taxAmountMinor,
+          }));
+          postSalesInvoice(sqlite, {
+            id: inv.id, invoiceNumber: invNum, customerId: targetCustId,
+            invoiceDate: iDate, totalMinor: doc.totalMinor, rate,
+          }, postingLines);
+          replaceTaxEntries(sqlite, {
+            sourceType: "sales_invoice", sourceId: inv.id, sourceNumber: invNum,
+            partyName: customerMap.get(targetCustId)?.name ?? null,
+            taxDate: iDate, direction: "sales", supplyEmirate: "dubai", rate,
+          }, postingLines);
+          sqlite
+            .prepare("UPDATE sales_invoices SET document_status = 'posted', posted_at = ? WHERE id = ?")
+            .run(iDate, inv.id);
+          invoiceOpenMinor.set(inv.id, { customerId: targetCustId, openMinor: doc.totalMinor });
+          ledgerStats.invoicesPosted += 1;
         }
       }
 
-      // 4.14 Insert Customer Receipts & Allocations
-      const insertReceipt = context.sqlite.prepare(`
+      // 4.15 Insert Customer Receipts, allocate to the invoices they pay, and post them
+      const insertReceipt = sqlite.prepare(`
         INSERT OR IGNORE INTO receipts (
           id, receipt_number, customer_id, date, bank_account_id,
           amount_minor, currency_code, exchange_rate_to_base, exchange_rate_date, exchange_rate_source,
@@ -892,71 +1144,79 @@ export function importManagerBackupToNewBusiness(
           ?, ?, ?, ?, ?,
           ?, ?, '1', ?, 'Base',
           ?, ?, 0,
-          NULL, ?, 'posted',
+          NULL, ?, ?,
           ?, ?, ?
         )
       `);
-      const insertReceiptAlloc = context.sqlite.prepare(`
+      const insertReceiptAlloc = sqlite.prepare(`
         INSERT OR IGNORE INTO receipt_allocations (
           id, receipt_id, sales_invoice_id, amount_minor,
           foreign_amount_allocated, base_carrying_amount_released, settlement_base_amount, realized_fx_amount
         ) VALUES (?, ?, ?, ?, ?, ?, ?, 0)
       `);
+      const resolveBank = (accountId: string | undefined) =>
+        (accountId && bankMap.has(accountId) && accountId) || null;
 
       const usedReceiptNumbers = new Set<string>();
       for (let i = 0; i < extracted.receipts.length; i++) {
         const r = extracted.receipts[i];
+        const amountMinor = toMinor(r.amount, "Receipt amount");
+        if (amountMinor <= 0) {
+          // No positive amount could be decoded: nothing to record (previously a fake 0.01 receipt).
+          ledgerStats.receiptsSkipped += 1;
+          continue;
+        }
         let rNum = r.receiptNumber?.trim() || `RCV-${i + 1}`;
         if (usedReceiptNumbers.has(rNum.toLowerCase())) {
           rNum = `${rNum}-${i + 1}`;
         }
         usedReceiptNumbers.add(rNum.toLowerCase());
 
-        const targetCustId =
-          (r.customerId && customerMap.has(r.customerId) && r.customerId) || defaultCustomerId;
-        const targetBankId =
-          (r.accountId && bankMap.has(r.accountId) && r.accountId) || defaultBankAccountId;
+        const allocatedInvoiceCustomer = r.allocations
+          .map((alloc) => invoiceCustomer.get(alloc.invoiceId))
+          .find((customerId): customerId is string => Boolean(customerId && customerMap.has(customerId)));
+        const resolvedCustId =
+          (r.customerId && customerMap.has(r.customerId) && r.customerId) || allocatedInvoiceCustomer || null;
+        const resolvedBankId = resolveBank(r.accountId);
+        const postable = isPostingImport && Boolean(resolvedCustId) && Boolean(resolvedBankId);
+        const targetCustId = resolvedCustId ?? defaultCustomerId;
+        const targetBankId = resolvedBankId ?? fallbackBankAccountId ?? defaultBankAccountId;
         const rDate = r.receiptDate || now.split("T")[0];
-        const amountMinor = Math.max(1, Math.round((r.amount || 0) * 100));
+        if (isPostingImport && !postable) ledgerStats.receiptsLeftAsDraft += 1;
 
         insertReceipt.run(
-          r.id,
-          rNum,
-          targetCustId,
-          rDate,
-          targetBankId,
-          amountMinor,
-          extracted.business.currency,
-          rDate,
-          amountMinor,
-          amountMinor,
-          r.description || "Customer Receipt",
-          userId,
-          now,
-          rDate,
+          r.id, rNum, targetCustId, rDate, targetBankId,
+          amountMinor, ledgerCurrency, rDate,
+          amountMinor, amountMinor,
+          r.description || "Customer Receipt", postable ? "posted" : "draft",
+          userId, now, postable ? rDate : null,
         );
 
-        // Insert allocations if linked sales invoices exist
+        // Allocate only to posted invoices of the same customer, capped at their open balance;
+        // anything left stays as unallocated customer credit on the receipt.
+        let remainingMinor = amountMinor;
         for (const alloc of r.allocations) {
-          if (invoiceIdMap.has(alloc.invoiceId)) {
-            const allocMinor = Math.round(alloc.amount * 100);
-            if (allocMinor > 0) {
-              insertReceiptAlloc.run(
-                randomUUID(),
-                r.id,
-                alloc.invoiceId,
-                allocMinor,
-                allocMinor,
-                allocMinor,
-                allocMinor,
-              );
-            }
-          }
+          const open = invoiceOpenMinor.get(alloc.invoiceId);
+          if (!open || open.customerId !== targetCustId || remainingMinor <= 0) continue;
+          const allocMinor = Math.min(toMinor(alloc.amount, "Allocation amount"), open.openMinor, remainingMinor);
+          if (allocMinor <= 0) continue;
+          insertReceiptAlloc.run(randomUUID(), r.id, alloc.invoiceId, allocMinor, allocMinor, allocMinor, allocMinor);
+          if (postable) open.openMinor -= allocMinor;
+          remainingMinor -= allocMinor;
+        }
+
+        if (postable) {
+          postReceipt(sqlite, {
+            id: r.id, receiptNumber: rNum, customerId: targetCustId, date: rDate,
+            bankAccountId: targetBankId, baseAmountMinor: amountMinor,
+            releasedCarryingAmountMinor: amountMinor, realizedFxAmountMinor: 0,
+          });
+          ledgerStats.receiptsPosted += 1;
         }
       }
 
-      // 4.15 Insert Supplier Payments & Allocations
-      const insertPayment = context.sqlite.prepare(`
+      // 4.16 Insert Supplier Payments, allocate to the bills they pay, and post them
+      const insertPayment = sqlite.prepare(`
         INSERT OR IGNORE INTO supplier_payments (
           id, payment_number, supplier_id, date, bank_account_id,
           amount_minor, currency_code, exchange_rate_to_base, exchange_rate_date, exchange_rate_source,
@@ -967,11 +1227,11 @@ export function importManagerBackupToNewBusiness(
           ?, ?, ?, ?, ?,
           ?, ?, '1', ?, 'Base',
           ?, ?, 0,
-          NULL, ?, 'posted',
+          NULL, ?, ?,
           ?, ?, ?
         )
       `);
-      const insertPaymentAlloc = context.sqlite.prepare(`
+      const insertPaymentAlloc = sqlite.prepare(`
         INSERT OR IGNORE INTO supplier_payment_allocations (
           id, payment_id, purchase_invoice_id, amount_minor,
           foreign_amount_allocated, base_carrying_amount_released, settlement_base_amount, realized_fx_amount
@@ -981,57 +1241,60 @@ export function importManagerBackupToNewBusiness(
       const usedPaymentNumbers = new Set<string>();
       for (let i = 0; i < extracted.payments.length; i++) {
         const p = extracted.payments[i];
+        const amountMinor = toMinor(p.amount, "Payment amount");
+        if (amountMinor <= 0) {
+          ledgerStats.paymentsSkipped += 1;
+          continue;
+        }
         let pNum = p.paymentNumber?.trim() || `PAY-${i + 1}`;
         if (usedPaymentNumbers.has(pNum.toLowerCase())) {
           pNum = `${pNum}-${i + 1}`;
         }
         usedPaymentNumbers.add(pNum.toLowerCase());
 
-        const targetSuppId =
-          (p.supplierId && supplierMap.has(p.supplierId) && p.supplierId) || defaultSupplierId;
-        const targetBankId =
-          (p.accountId && bankMap.has(p.accountId) && p.accountId) || defaultBankAccountId;
+        const allocatedBillSupplier = p.allocations
+          .map((alloc) => billSupplier.get(alloc.invoiceId))
+          .find((supplierId): supplierId is string => Boolean(supplierId && supplierMap.has(supplierId)));
+        const resolvedSuppId =
+          (p.supplierId && supplierMap.has(p.supplierId) && p.supplierId) || allocatedBillSupplier || null;
+        const resolvedBankId = resolveBank(p.accountId);
+        const postable = isPostingImport && Boolean(resolvedSuppId) && Boolean(resolvedBankId);
+        const targetSuppId = resolvedSuppId ?? defaultSupplierId;
+        const targetBankId = resolvedBankId ?? fallbackBankAccountId ?? defaultBankAccountId;
         const pDate = p.paymentDate || now.split("T")[0];
-        const amountMinor = Math.max(1, Math.round((p.amount || 0) * 100));
+        if (isPostingImport && !postable) ledgerStats.paymentsLeftAsDraft += 1;
 
         insertPayment.run(
-          p.id,
-          pNum,
-          targetSuppId,
-          pDate,
-          targetBankId,
-          amountMinor,
-          extracted.business.currency,
-          pDate,
-          amountMinor,
-          amountMinor,
-          p.description || "Supplier Payment",
-          userId,
-          now,
-          pDate,
+          p.id, pNum, targetSuppId, pDate, targetBankId,
+          amountMinor, ledgerCurrency, pDate,
+          amountMinor, amountMinor,
+          p.description || "Supplier Payment", postable ? "posted" : "draft",
+          userId, now, postable ? pDate : null,
         );
 
-        // Insert allocations if linked purchase invoices exist
+        let remainingMinor = amountMinor;
         for (const alloc of p.allocations) {
-          if (billIdMap.has(alloc.invoiceId)) {
-            const allocMinor = Math.round(alloc.amount * 100);
-            if (allocMinor > 0) {
-              insertPaymentAlloc.run(
-                randomUUID(),
-                p.id,
-                alloc.invoiceId,
-                allocMinor,
-                allocMinor,
-                allocMinor,
-                allocMinor,
-              );
-            }
-          }
+          const open = billOpenMinor.get(alloc.invoiceId);
+          if (!open || open.supplierId !== targetSuppId || remainingMinor <= 0) continue;
+          const allocMinor = Math.min(toMinor(alloc.amount, "Allocation amount"), open.openMinor, remainingMinor);
+          if (allocMinor <= 0) continue;
+          insertPaymentAlloc.run(randomUUID(), p.id, alloc.invoiceId, allocMinor, allocMinor, allocMinor, allocMinor);
+          if (postable) open.openMinor -= allocMinor;
+          remainingMinor -= allocMinor;
+        }
+
+        if (postable) {
+          postSupplierPayment(sqlite, {
+            id: p.id, paymentNumber: pNum, supplierId: targetSuppId, date: pDate,
+            bankAccountId: targetBankId, baseAmountMinor: amountMinor,
+            releasedCarryingAmountMinor: amountMinor, realizedFxAmountMinor: 0,
+          });
+          ledgerStats.paymentsPosted += 1;
         }
       }
 
-      // 4.16 Insert Bank Transfers
-      const insertTransfer = context.sqlite.prepare(`
+      // 4.17 Insert Bank Transfers (always posted documents) with their ledger journal
+      const insertTransfer = sqlite.prepare(`
         INSERT OR IGNORE INTO bank_transfers (
           id, transfer_number, from_bank_account_id, to_bank_account_id,
           date, amount_minor, reference, description, document_status,
@@ -1039,35 +1302,37 @@ export function importManagerBackupToNewBusiness(
         ) VALUES (?, ?, ?, ?, ?, ?, NULL, ?, 'posted', ?, ?, ?)
       `);
 
-      const availableBanks = extracted.bankAccounts;
+      let transferSeq = 0;
       for (let i = 0; i < extracted.bankTransfers.length; i++) {
         const tr = extracted.bankTransfers[i];
-        const fromId = availableBanks.find((b) => b.id === tr.fromAccountId)?.id || availableBanks[0]?.id;
-        let toId = availableBanks.find((b) => b.id === tr.toAccountId)?.id;
-        if (!toId || toId === fromId) {
-          toId = availableBanks.find((b) => b.id !== fromId)?.id;
+        const fromId = resolveBank(tr.fromAccountId);
+        const toId = resolveBank(tr.toAccountId);
+        const amountMinor = toMinor(tr.amount, "Transfer amount");
+        // Never invent the account pair or the amount: an unresolvable transfer is skipped.
+        if (!fromId || !toId || fromId === toId || amountMinor <= 0) {
+          ledgerStats.transfersSkipped += 1;
+          continue;
         }
-
-        if (fromId && toId && fromId !== toId) {
-          const amountMinor = Math.max(1, Math.round((tr.amount || 0) * 100));
-          const transferNum = `BT-${String(i + 1).padStart(4, "0")}`;
-          insertTransfer.run(
-            tr.id,
-            transferNum,
-            fromId,
-            toId,
-            tr.transferDate || now.split("T")[0],
-            amountMinor,
-            tr.description || "Inter-account transfer",
-            userId,
-            now,
-            now,
-          );
-        }
+        transferSeq += 1;
+        const transferNum = `BT-${String(transferSeq).padStart(4, "0")}`;
+        const tDate = tr.transferDate || now.split("T")[0];
+        insertTransfer.run(
+          tr.id, transferNum, fromId, toId, tDate, amountMinor,
+          tr.description || "Inter-account transfer", userId, now, now,
+        );
+        postTransaction(sqlite, {
+          sourceType: "bank_transfer", sourceId: tr.id, date: tDate,
+          description: `Bank Transfer ${transferNum}`,
+          lines: [
+            { accountId: toId, description: tr.description || `Transfer from ${transferNum}`, debitMinor: amountMinor, reference: transferNum },
+            { accountId: fromId, description: tr.description || `Transfer to ${transferNum}`, creditMinor: amountMinor, reference: transferNum },
+          ],
+        });
+        ledgerStats.transfersPosted += 1;
       }
 
-      // 4.17 Insert Employees (Migration 33)
-      const insertEmployee = context.sqlite.prepare(`
+      // 4.18 Insert Employees (Migration 33)
+      const insertEmployee = sqlite.prepare(`
         INSERT OR IGNORE INTO employees (
           id, code, name, email, phone, address, designation, is_active, created_at, updated_at
         ) VALUES (?, ?, ?, NULL, NULL, ?, 'Staff', 1, ?, ?)
@@ -1084,8 +1349,8 @@ export function importManagerBackupToNewBusiness(
         );
       }
 
-      // 4.18 Insert Payslips (Migration 33)
-      const insertPayslip = context.sqlite.prepare(`
+      // 4.19 Insert Payslips (Migration 33) and post their payroll journal
+      const insertPayslip = sqlite.prepare(`
         INSERT OR IGNORE INTO payslips (
           id, payslip_number, employee_id, date, period_description,
           gross_amount_minor, deductions_minor, net_amount_minor,
@@ -1096,109 +1361,102 @@ export function importManagerBackupToNewBusiness(
           ?, ?, ?, ?, ?, ?
         )
       `);
-      const defaultEarningsAccountId = (context.sqlite.prepare(`
+      const defaultEarningsAccountId = (sqlite.prepare(`
         SELECT id FROM accounts WHERE id = 'acct-salaries-expense-6100' OR (type = 'expense' AND is_active = 1)
         ORDER BY (id = 'acct-salaries-expense-6100') DESC, created_at ASC LIMIT 1
       `).get() as { id: string } | undefined)?.id || "acct-salaries-expense-6100";
 
-      const defaultDeductionsAccountId = (context.sqlite.prepare(`
+      const defaultDeductionsAccountId = (sqlite.prepare(`
         SELECT id FROM accounts WHERE id = 'acct-payroll-payable-2200' OR (type = 'liability' AND is_active = 1)
         ORDER BY (id = 'acct-payroll-payable-2200') DESC, created_at ASC LIMIT 1
       `).get() as { id: string } | undefined)?.id || "acct-payroll-payable-2200";
+      const payrollPayableAccountId = defaultDeductionsAccountId;
 
-      const insertEarningsLine = context.sqlite.prepare(`
+      const insertEarningsLine = sqlite.prepare(`
         INSERT INTO payslip_lines (
           id, payslip_id, item_id, type, description, account_id, amount_minor, position
         ) VALUES (?, ?, NULL, 'earnings', 'Basic Salary', ?, ?, 1)
       `);
-      const insertDeductionLine = context.sqlite.prepare(`
+      const insertDeductionLine = sqlite.prepare(`
         INSERT INTO payslip_lines (
           id, payslip_id, item_id, type, description, account_id, amount_minor, position
         ) VALUES (?, ?, NULL, 'deduction', 'Payroll Deductions', ?, ?, 2)
       `);
+      const linkPayslipJournal = sqlite.prepare(
+        "UPDATE payslips SET document_status = 'posted', posted_at = ?, journal_entry_id = ? WHERE id = ?",
+      );
       const defaultEmpId = extracted.employees[0]?.id || "default-emp";
       for (let i = 0; i < extracted.payslips.length; i++) {
         const slip = extracted.payslips[i];
-        const targetEmpId =
-          (slip.employeeId && employeeMap.has(slip.employeeId) && slip.employeeId) ||
-          defaultEmpId;
-        const rawGrossMinor = Math.round(slip.grossAmount * 100);
-        const rawNetMinor = Math.round(slip.netAmount * 100);
+        const employeeResolved = Boolean(slip.employeeId && employeeMap.has(slip.employeeId));
+        const targetEmpId = employeeResolved ? slip.employeeId : defaultEmpId;
+        const rawGrossMinor = toMinor(slip.grossAmount, "Payslip gross amount");
+        const rawNetMinor = toMinor(slip.netAmount, "Payslip net amount");
         const deductionsMinor = Math.max(0, rawGrossMinor - rawNetMinor);
         const grossMinor = Math.max(rawGrossMinor, rawNetMinor + deductionsMinor);
         const netMinor = grossMinor - deductionsMinor;
-        const postedAtVal = docStatus === "posted" ? slip.date : null;
+        const postable = isPostingImport && employeeResolved && grossMinor > 0;
+        if (isPostingImport && !postable) ledgerStats.payslipsLeftAsDraft += 1;
 
         insertPayslip.run(
-          slip.id,
-          slip.payslipNumber,
-          targetEmpId,
-          slip.date,
-          slip.periodDescription || null,
-          grossMinor,
-          deductionsMinor,
-          netMinor,
-          docStatus,
-          slip.notes || null,
-          userId,
-          now,
-          postedAtVal,
-          now,
+          slip.id, slip.payslipNumber, targetEmpId, slip.date, slip.periodDescription || null,
+          grossMinor, deductionsMinor, netMinor,
+          "draft", slip.notes || null, userId, now, null, now,
         );
 
         if (grossMinor > 0) {
-          insertEarningsLine.run(
-            randomUUID(),
-            slip.id,
-            defaultEarningsAccountId,
-            grossMinor,
-          );
+          insertEarningsLine.run(randomUUID(), slip.id, defaultEarningsAccountId, grossMinor);
         }
         if (deductionsMinor > 0) {
-          insertDeductionLine.run(
-            randomUUID(),
-            slip.id,
-            defaultDeductionsAccountId,
-            deductionsMinor,
-          );
+          insertDeductionLine.run(randomUUID(), slip.id, defaultDeductionsAccountId, deductionsMinor);
+        }
+
+        if (postable) {
+          const employeeName = employeeMap.get(targetEmpId)?.name || "Employee";
+          const journalLines: JournalLineInput[] = [
+            { accountId: defaultEarningsAccountId, description: `[Earnings] Basic Salary (${employeeName})`, debitMinor: grossMinor },
+          ];
+          if (deductionsMinor > 0) {
+            journalLines.push({ accountId: defaultDeductionsAccountId, description: `[Deduction] Payroll Deductions (${employeeName})`, creditMinor: deductionsMinor });
+          }
+          if (netMinor > 0) {
+            journalLines.push({ accountId: payrollPayableAccountId, description: `Net Salary Payable (${employeeName})`, creditMinor: netMinor });
+          }
+          const journal = postTransaction(sqlite, {
+            sourceType: "payslip", sourceId: slip.id, date: slip.date,
+            description: `Payroll: ${slip.payslipNumber} - ${employeeName}`,
+            lines: journalLines,
+          });
+          linkPayslipJournal.run(slip.date, journal.id, slip.id);
+          ledgerStats.payslipsPosted += 1;
         }
       }
 
-      // 4.19 Insert Journal Entries & Lines
-      const insertJournal = context.sqlite.prepare(`
-        INSERT OR IGNORE INTO journal_entries (
-          id, entry_number, date, source_type, source_id, description, status, created_at, posted_at
-        ) VALUES (?, ?, ?, 'general', ?, ?, 'posted', ?, ?)
-      `);
-      const insertJournalLine = context.sqlite.prepare(`
-        INSERT INTO journal_lines (
-          id, journal_entry_id, account_id, description, debit_minor, credit_minor,
-          customer_id, supplier_id, project_id, reference, position
-        ) VALUES (?, ?, ?, ?, ?, ?, NULL, NULL, NULL, NULL, ?)
-      `);
-
+      // 4.20 Insert Manual Journal Entries through the validating posting service
       for (const je of extracted.journalEntries) {
-        insertJournal.run(je.id, je.entryNumber, je.date, je.id, je.narration, now, je.date);
-        for (let lIdx = 0; lIdx < je.lines.length; lIdx++) {
-          const line = je.lines[lIdx];
-          const debitMinor = Math.round(line.debit * 100);
-          const creditMinor = Math.round(line.credit * 100);
-          // Check constraint: one side only (>0 on one side, 0 on the other)
-          if ((debitMinor > 0 && creditMinor === 0) || (creditMinor > 0 && debitMinor === 0)) {
-            const accId =
-              (line.accountId && accountMap.has(line.accountId) && line.accountId) ||
-              "acct-operating-expenses-6000";
-            insertJournalLine.run(
-              randomUUID(),
-              je.id,
-              accId,
-              line.description || je.narration,
+        const converted = convertManagerJournalLines(je.entryNumber, je.lines, minorUnit);
+        if (converted.totalMinor === 0) {
+          ledgerStats.journalsSkipped += 1;
+          continue;
+        }
+        postTransaction(sqlite, {
+          sourceType: "general",
+          sourceId: je.id,
+          date: je.date,
+          description: `${je.narration} (Manager.io ${je.entryNumber})`,
+          lines: converted.lines.map(({ source, debitMinor, creditMinor }) => {
+            const mapped = Boolean(source.accountId && accountMap.has(source.accountId));
+            if (!mapped) ledgerStats.journalLinesWithUnmappedAccount += 1;
+            return {
+              accountId: mapped ? source.accountId : "acct-operating-expenses-6000",
+              description: source.description || je.narration,
               debitMinor,
               creditMinor,
-              lIdx + 1,
-            );
-          }
-        }
+              reference: je.entryNumber,
+            };
+          }),
+        });
+        ledgerStats.journalsPosted += 1;
       }
     })();
 
@@ -1229,6 +1487,7 @@ export function importManagerBackupToNewBusiness(
         payments: extracted.payments.length,
         employees: extracted.employees.length,
         payslips: extracted.payslips.length,
+        ledger: ledgerStats,
       },
       sqlite: context.sqlite,
     });
@@ -1264,6 +1523,7 @@ export function importManagerBackupToNewBusiness(
       businessId,
       businessName: nameToUse,
       summary,
+      ledger: ledgerStats,
     };
   } catch (err) {
     try {

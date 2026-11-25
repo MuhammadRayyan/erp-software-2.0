@@ -103,6 +103,16 @@ export function saveOpeningBalances(
       .prepare("SELECT id FROM journal_entries WHERE source_type = 'opening_balance' AND source_id = 'default'")
       .get() as { id: string } | undefined;
 
+    for (const line of balances) {
+      const debit = line.debitMinor ?? 0;
+      const credit = line.creditMinor ?? 0;
+      if (!Number.isSafeInteger(debit) || !Number.isSafeInteger(credit) || debit < 0 || credit < 0) {
+        throw new Error("Opening balances must be non-negative amounts.");
+      }
+      if (debit > 0 && credit > 0) {
+        throw new Error("An opening balance line can have a debit or a credit, not both.");
+      }
+    }
     const activeLines = balances.filter((b) => (b.debitMinor ?? 0) > 0 || (b.creditMinor ?? 0) > 0);
 
     // Calculate totals
@@ -110,20 +120,17 @@ export function saveOpeningBalances(
     const totalCredit = activeLines.reduce((sum, l) => sum + (l.creditMinor || 0), 0);
     const diff = totalDebit - totalCredit;
 
-    // Auto-balance into Retained Earnings or Owner Equity if out of balance
+    // Any difference goes to a dedicated, clearly named "Opening Balance
+    // Equity" account so it stays visible on the balance sheet until the
+    // accountant clears it, instead of silently landing in whichever equity
+    // account happens to sort first.
     const finalLines = [...activeLines];
     if (diff !== 0) {
-      const equityAccount = sqlite
-        .prepare("SELECT id FROM accounts WHERE type = 'equity' AND is_active = 1 ORDER BY id LIMIT 1")
-        .get() as { id: string } | undefined;
-      if (equityAccount) {
-        if (diff > 0) {
-          // Credits needed
-          finalLines.push({ accountId: equityAccount.id, debitMinor: 0, creditMinor: diff });
-        } else {
-          // Debits needed
-          finalLines.push({ accountId: equityAccount.id, debitMinor: -diff, creditMinor: 0 });
-        }
+      const equityAccountId = ensureOpeningBalanceEquityAccount(sqlite);
+      if (diff > 0) {
+        finalLines.push({ accountId: equityAccountId, debitMinor: 0, creditMinor: diff });
+      } else {
+        finalLines.push({ accountId: equityAccountId, debitMinor: -diff, creditMinor: 0 });
       }
     }
 
@@ -167,4 +174,16 @@ export function saveOpeningBalances(
       );
     });
   })();
+}
+
+export const OPENING_BALANCE_EQUITY_ACCOUNT_ID = "acct-opening-balance-equity";
+
+function ensureOpeningBalanceEquityAccount(sqlite: ReturnType<typeof getBusinessDb>["sqlite"]) {
+  const now = new Date().toISOString();
+  sqlite.prepare(`
+    INSERT OR IGNORE INTO accounts (id, name, type, subtype, is_system, is_active, created_at, updated_at)
+    VALUES (?, 'Opening Balance Equity', 'equity', 'equity', 1, 1, ?, ?)
+  `).run(OPENING_BALANCE_EQUITY_ACCOUNT_ID, now, now);
+  sqlite.prepare("UPDATE accounts SET is_active = 1 WHERE id = ?").run(OPENING_BALANCE_EQUITY_ACCOUNT_ID);
+  return OPENING_BALANCE_EQUITY_ACCOUNT_ID;
 }

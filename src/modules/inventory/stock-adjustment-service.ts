@@ -35,6 +35,7 @@ import {
   unitCostMinorToMicros,
   valueAtAverageCostMinor,
 } from "./inventory-valuation";
+import { getBusinessTodayIso } from "@/core/format";
 
 export type { InventoryDocumentIntent, InventoryDocumentStatus } from "./inventory-document";
 
@@ -424,7 +425,7 @@ export function voidStockAdjustment(
       throw new Error("Only a posted Stock Adjustment can be voided.");
     }
     assertDateNotLocked(context.sqlite, adjustment.date, "Stock adjustment");
-    assertDateNotLocked(context.sqlite, now.slice(0, 10), "Stock adjustment void");
+    assertDateNotLocked(context.sqlite, getBusinessTodayIso(), "Stock adjustment void");
     assertInventorySourceIsLatest(
       context.sqlite,
       "stock_adjustment",
@@ -470,7 +471,7 @@ export function voidStockAdjustment(
       originalSourceId: adjustmentId,
       reversalSourceType: "stock_adjustment_void",
       reversalSourceId: adjustmentId,
-      date: now.slice(0, 10),
+      date: getBusinessTodayIso(),
       description: `Void Stock Adjustment ${adjustment.adjustment_number}`,
     });
     context.sqlite.prepare(`

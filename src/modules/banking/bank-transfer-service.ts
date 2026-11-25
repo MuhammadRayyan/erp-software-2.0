@@ -1,7 +1,7 @@
 import { assertMutationPermission } from "@/core/permissions/mutation-permissions";
 import { randomUUID } from "node:crypto";
 import { getBusinessDb } from "@/core/db/business";
-import { getCurrencyMinorUnit } from "@/core/format";
+import { getCurrencyMinorUnit, getBusinessTodayIso } from "@/core/format";
 import { parseCurrencyAmountToMinor } from "@/modules/currency/conversion";
 import { allocateNumber } from "@/modules/accounting/services/numbering-service";
 import { postTransaction, reverseTransaction } from "@/modules/accounting/services/posting-service";
@@ -87,13 +87,13 @@ export function voidBankTransfer(businessId: string, userId: string, transferId:
     if (!transfer) throw new Error("Bank Transfer not found.");
     if (transfer.document_status !== "posted") throw new Error("Only a posted Bank Transfer can be voided.");
     assertDateNotLocked(context.sqlite, transfer.date, "Bank transfer");
-    assertDateNotLocked(context.sqlite, now.slice(0, 10), "Bank transfer void");
+    assertDateNotLocked(context.sqlite, getBusinessTodayIso(), "Bank transfer void");
     releaseStatementMatchesForSource(context.sqlite, "bank_transfer", transferId,
       "Cannot void a Bank Transfer included in a completed reconciliation.");
     reverseTransaction(context.sqlite, {
       originalSourceType: "bank_transfer", originalSourceId: transferId,
       reversalSourceType: "bank_transfer_void", reversalSourceId: transferId,
-      date: now.slice(0, 10), description: `Reverse Bank Transfer ${transfer.transfer_number}`,
+      date: getBusinessTodayIso(), description: `Reverse Bank Transfer ${transfer.transfer_number}`,
     });
     context.sqlite.prepare("UPDATE bank_transfers SET document_status = 'void', voided_at = ? WHERE id = ?")
       .run(now, transferId);

@@ -1291,19 +1291,19 @@ export function voidInvoice(businessId: string, userId: string, invoiceId: strin
   const now = new Date().toISOString();
   context.sqlite.transaction(() => {
     assertDateNotLocked(context.sqlite, invoice.invoiceDate, "Sales invoice void");
-    assertDateNotLocked(context.sqlite, now.slice(0, 10), "Sales invoice void");
+    assertDateNotLocked(context.sqlite, getBusinessTodayIso(), "Sales invoice void");
     assertVatSourceUnlocked(context.sqlite, "sales_invoice", invoiceId, invoice.taxDate);
     reverseTransaction(context.sqlite, {
       originalSourceType: "sales_invoice",
       originalSourceId: invoiceId,
       reversalSourceType: "sales_invoice_void",
       reversalSourceId: invoiceId,
-      date: now.slice(0, 10),
+      date: getBusinessTodayIso(),
       description: `Void Sales Invoice ${invoice.invoiceNumber}`,
     });
     reverseTaxEntries(context.sqlite, {
       originalSourceType: "sales_invoice", sourceId: invoiceId,
-      reversalSourceType: "sales_invoice_void", taxDate: invoice.taxDate,
+      reversalSourceType: "sales_invoice_void", taxDate: getBusinessTodayIso(),
     });
     context.sqlite
       .prepare("UPDATE sales_invoices SET document_status = 'void', voided_at = ?, updated_at = ? WHERE id = ?")

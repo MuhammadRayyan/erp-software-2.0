@@ -1,6 +1,7 @@
 import { assertMutationPermission } from "@/core/permissions/mutation-permissions";
 import { getBusinessDb } from "@/core/db/business";
 import { getBusinessProfile } from "@/modules/business-profile/business-profile-service";
+import { getBusinessTodayIso } from "@/core/format";
 
 export interface WpsExportOptions {
   /** YYYY-MM e.g. "2026-11" */
@@ -131,8 +132,11 @@ export function generateWpsSifFile(
     });
   }
 
-  const targetYm = options.salaryMonth || new Date().toISOString().slice(0, 7);
-  const bounds = monthBounds(targetYm);
+  // With no explicit filter, export only the current (Gulf time) month rather
+  // than every posted payslip ever.
+  const hasExplicitFilter = Boolean(options.payslipIds?.length || options.periodDescription || options.salaryMonth);
+  const filterYm = options.salaryMonth || (hasExplicitFilter ? undefined : getBusinessTodayIso().slice(0, 7));
+  const filterBounds = filterYm ? monthBounds(filterYm) : undefined;
 
   // Load candidate posted payslips
   let sql = `
@@ -162,9 +166,9 @@ export function generateWpsSifFile(
   } else if (options.periodDescription) {
     sql += ` AND p.period_description = ?`;
     params.push(options.periodDescription);
-  } else if (options.salaryMonth) {
+  } else if (filterBounds) {
     sql += ` AND p.date BETWEEN ? AND ?`;
-    params.push(bounds.start, bounds.end);
+    params.push(filterBounds.start, filterBounds.end);
   }
 
   sql += ` ORDER BY e.name ASC, p.date ASC`;
@@ -184,6 +188,35 @@ export function generateWpsSifFile(
   }[];
 
   const includedRows = payslipRows.filter((row) => Boolean(row.wps_enabled));
+
+  // The SCR salary month must describe the payslips in the file: take it from
+  // the filter, or from the payslips themselves when they share one month.
+  const payslipMonths = [...new Set(includedRows.map((row) => row.date.slice(0, 7)))].sort();
+  if (!filterYm && payslipMonths.length > 1) {
+    errors.push({
+      scope: "payslips",
+      message: `Selected payslips span several months (${payslipMonths.join(", ")}). Export one salary month per SIF file.`,
+    });
+  }
+  const targetYm = filterYm || payslipMonths[0] || getBusinessTodayIso().slice(0, 7);
+  const bounds = monthBounds(targetYm);
+
+  // One salary record per employee per file; duplicates would pay twice.
+  const seenEmployees = new Map<string, string>();
+  for (const row of includedRows) {
+    const previous = seenEmployees.get(row.employee_id);
+    if (previous) {
+      errors.push({
+        scope: "employee",
+        employeeId: row.employee_id,
+        employeeName: row.employee_name,
+        payslipNumber: row.payslip_number,
+        message: `${row.employee_name} has more than one payslip in this file (${previous}, ${row.payslip_number}).`,
+      });
+    } else {
+      seenEmployees.set(row.employee_id, row.payslip_number);
+    }
+  }
 
   if (includedRows.length === 0) {
     errors.push({
@@ -264,7 +297,7 @@ export function generateWpsSifFile(
     const fixedMinor = row.net_amount_minor - variableMinor;
 
     const slipYm = row.date.slice(0, 7);
-    const slipBounds = monthBounds(options.salaryMonth || slipYm);
+    const slipBounds = monthBounds(filterYm || slipYm);
     const days = daysInclusive(slipBounds.start, slipBounds.end);
 
     edrRows.push({
@@ -291,13 +324,14 @@ export function generateWpsSifFile(
   const employerMolId = padNumericDigits(rawEmployerMol, 13) || "0000000000000";
   const employerRoutingCode = rawEmployerRouting || "000000000";
 
-  const now = new Date();
-  const createdDate = now.toISOString().slice(0, 10);
-  const hh = String(now.getUTCHours()).padStart(2, "0");
-  const mm = String(now.getUTCMinutes()).padStart(2, "0");
-  const ss = String(now.getUTCSeconds()).padStart(2, "0");
-  const yy = String(now.getUTCFullYear()).slice(-2);
-  const dateCompact = `${yy}${String(now.getUTCMonth() + 1).padStart(2, "0")}${String(now.getUTCDate()).padStart(2, "0")}`;
+  // File creation date/time is reported in Gulf Standard Time (UTC+4, no DST).
+  const gulf = new Date(Date.now() + 4 * 60 * 60 * 1000);
+  const createdDate = gulf.toISOString().slice(0, 10);
+  const hh = String(gulf.getUTCHours()).padStart(2, "0");
+  const mm = String(gulf.getUTCMinutes()).padStart(2, "0");
+  const ss = String(gulf.getUTCSeconds()).padStart(2, "0");
+  const yy = String(gulf.getUTCFullYear()).slice(-2);
+  const dateCompact = `${yy}${String(gulf.getUTCMonth() + 1).padStart(2, "0")}${String(gulf.getUTCDate()).padStart(2, "0")}`;
 
   const employerRef = (options.employerReference || `PAY-${targetYm}`)
     .replace(/[,;\r\n]+/g, " ")

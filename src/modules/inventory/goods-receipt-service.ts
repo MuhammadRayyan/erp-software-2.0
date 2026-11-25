@@ -30,15 +30,68 @@ import {
   deleteSourceMovements,
   getStockBalance,
   insertInventoryMovement,
+  averageUnitCostMicros,
+  proportionalValueMinor,
   receivedValueMinor,
+  unitCostMinorForValue,
   unitCostMinorToMicros,
 } from "./inventory-valuation";
+import { convertToBase } from "@/modules/currency/conversion";
+import { getBaseCurrency } from "@/modules/currency/currency";
+import { getBusinessTodayIso } from "@/core/format";
 
 export type { InventoryDocumentIntent, InventoryDocumentStatus } from "./inventory-document";
 
 type Sqlite = ReturnType<typeof getBusinessDb>["sqlite"];
 
-export type StoredLine = BaseStoredLine & { purchaseInvoiceLineId: string | null; itemId: string; unitCostMinor: number; purchaseOrderLineId: string | null; };
+export type StoredLine = BaseStoredLine & {
+  purchaseInvoiceLineId: string | null;
+  itemId: string;
+  unitCostMinor: number;
+  purchaseOrderLineId: string | null;
+  /** Exact base-currency value when costed from a Purchase Invoice line. */
+  valueMinor?: number;
+};
+
+/**
+ * The Purchase Invoice debits Inventory with each item line's base-currency
+ * net amount plus any non-recoverable VAT. Stock received against that line
+ * must carry the same value, or Cost of Sales and the GL Inventory balance
+ * drift from the stock subledger (foreign currency, discounts, rounding).
+ */
+function applyPurchaseInvoiceCosts(sqlite: Sqlite, lines: StoredLine[]) {
+  const baseMinorUnit = getBaseCurrency(sqlite).minor_unit;
+  const invoiceLine = sqlite.prepare(`
+    SELECT pil.quantity_micros, pil.net_amount_minor, pil.tax_amount_minor,
+      pi.currency_code, pi.exchange_rate_to_base, c.minor_unit AS currency_minor_unit,
+      COALESCE(tc.is_recoverable, 1) AS is_recoverable
+    FROM purchase_invoice_lines pil
+    INNER JOIN purchase_invoices pi ON pi.id = pil.purchase_invoice_id
+    LEFT JOIN currencies c ON c.code = pi.currency_code
+    LEFT JOIN tax_codes tc ON tc.id = pil.tax_code_id
+    WHERE pil.id = ?
+  `);
+  return lines.map((line) => {
+    if (!line.purchaseInvoiceLineId) return line;
+    const source = invoiceLine.get(line.purchaseInvoiceLineId) as {
+      quantity_micros: number;
+      net_amount_minor: number;
+      tax_amount_minor: number;
+      exchange_rate_to_base: string;
+      currency_minor_unit: number | null;
+      is_recoverable: number;
+    } | undefined;
+    if (!source || source.quantity_micros <= 0) return line;
+    const currencyMinorUnit = source.currency_minor_unit ?? baseMinorUnit;
+    const rate = source.exchange_rate_to_base || "1";
+    const baseNet = convertToBase(source.net_amount_minor, currencyMinorUnit, baseMinorUnit, rate);
+    const baseNonRecoverableTax = source.is_recoverable
+      ? 0
+      : convertToBase(source.tax_amount_minor, currencyMinorUnit, baseMinorUnit, rate);
+    const valueMinor = proportionalValueMinor(baseNet + baseNonRecoverableTax, line.quantityMicros, source.quantity_micros);
+    return { ...line, valueMinor, unitCostMinor: unitCostMinorForValue(valueMinor, line.quantityMicros) };
+  });
+}
 
 function prepareLines(
   sqlite: Sqlite,
@@ -125,14 +178,16 @@ function postMovements(
   lines: readonly StoredLine[],
 ) {
   for (const line of lines) {
-    const valueMinor = receivedValueMinor(line.quantityMicros, line.unitCostMinor);
+    const valueMinor = line.valueMinor ?? receivedValueMinor(line.quantityMicros, line.unitCostMinor);
     insertInventoryMovement(sqlite, {
       date: receipt.date,
       itemId: line.itemId,
       locationId: receipt.locationId,
       movementType: "goods_receipt",
       quantityDeltaMicros: line.quantityMicros,
-      unitCostMicros: unitCostMinorToMicros(line.unitCostMinor),
+      unitCostMicros: line.valueMinor === undefined
+        ? unitCostMinorToMicros(line.unitCostMinor)
+        : averageUnitCostMicros(valueMinor, line.quantityMicros),
       valueDeltaMinor: valueMinor,
       sourceType: "goods_receipt",
       sourceId: receipt.id,
@@ -229,13 +284,14 @@ export function saveGoodsReceipt(
 
   context.sqlite.transaction(() => {
     validateHeader(context.sqlite, data);
-    const lines = prepareLines(context.sqlite, data);
+    const enteredLines = prepareLines(context.sqlite, data);
     validateGoodsReceiptSources(context.sqlite, {
       supplierId: data.supplierId,
       purchaseOrderId: data.purchaseOrderId || null,
       purchaseInvoiceId: data.purchaseInvoiceId || null,
-      lines,
+      lines: enteredLines,
     }, receiptId);
+    const lines = applyPurchaseInvoiceCosts(context.sqlite, enteredLines);
 
     let receiptNumber: string;
     let wasPosted = false;
@@ -399,7 +455,7 @@ export function voidGoodsReceipt(businessId: string, userId: string, receiptId: 
       throw new Error("Only a posted Goods Receipt can be voided.");
     }
     assertDateNotLocked(context.sqlite, receipt.date, "Goods receipt void");
-    assertDateNotLocked(context.sqlite, now.slice(0, 10), "Goods receipt void");
+    assertDateNotLocked(context.sqlite, getBusinessTodayIso(), "Goods receipt void");
     assertInventorySourceIsLatest(
       context.sqlite,
       "goods_receipt",

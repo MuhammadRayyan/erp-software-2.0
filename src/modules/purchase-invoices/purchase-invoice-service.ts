@@ -763,10 +763,10 @@ export function voidPurchaseInvoice(businessId: string, userId: string, invoiceI
   const now = new Date().toISOString();
   context.sqlite.transaction(() => {
     assertDateNotLocked(context.sqlite, invoice.invoiceDate, "Purchase invoice void");
-    assertDateNotLocked(context.sqlite, now.slice(0, 10), "Purchase invoice void");
+    assertDateNotLocked(context.sqlite, getBusinessTodayIso(), "Purchase invoice void");
     assertVatSourceUnlocked(context.sqlite, "purchase_invoice", invoiceId, invoice.taxDate);
-    reverseTransaction(context.sqlite, { originalSourceType: "purchase_invoice", originalSourceId: invoiceId, reversalSourceType: "purchase_invoice_void", reversalSourceId: invoiceId, date: now.slice(0, 10), description: `Void Purchase Invoice ${invoice.internalNumber}` });
-    reverseTaxEntries(context.sqlite, { originalSourceType: "purchase_invoice", sourceId: invoiceId, reversalSourceType: "purchase_invoice_void", taxDate: invoice.taxDate });
+    reverseTransaction(context.sqlite, { originalSourceType: "purchase_invoice", originalSourceId: invoiceId, reversalSourceType: "purchase_invoice_void", reversalSourceId: invoiceId, date: getBusinessTodayIso(), description: `Void Purchase Invoice ${invoice.internalNumber}` });
+    reverseTaxEntries(context.sqlite, { originalSourceType: "purchase_invoice", sourceId: invoiceId, reversalSourceType: "purchase_invoice_void", taxDate: getBusinessTodayIso() });
     context.sqlite.prepare("UPDATE purchase_invoices SET document_status = 'void', voided_at = ?, updated_at = ? WHERE id = ?").run(now, now, invoiceId);
     if (invoice.purchaseOrderId) {
       const remainingCount = context.sqlite.prepare(

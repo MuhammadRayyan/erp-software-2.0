@@ -5,6 +5,7 @@ import { allocateNumber } from "@/modules/accounting/services/numbering-service"
 import { postTransaction, reverseTransaction } from "@/modules/accounting/services/posting-service";
 import { assertDateNotLocked } from "@/modules/accounting/services/financial-lock-service";
 import { addMinor } from "@/modules/accounting/calculations/money";
+import { getBusinessTodayIso } from "@/core/format";
 
 export interface EmployeeInput {
   id?: string;
@@ -830,12 +831,14 @@ function resolvePayrollPayableAccountId(sqlite: any): string {
   `).get() as { id: string } | undefined;
   if (byName) return byName.id;
 
-  const anyLiability = sqlite.prepare(`
-    SELECT id FROM accounts WHERE type = 'liability' ORDER BY is_system DESC, created_at ASC LIMIT 1
-  `).get() as { id: string } | undefined;
-  if (anyLiability) return anyLiability.id;
-
-  throw new Error("No liability account found for Payroll Payable in Chart of Accounts.");
+  // Never fall back to an arbitrary liability (it could be VAT Payable or
+  // AP). Create the dedicated Payroll Payable account instead.
+  const now = new Date().toISOString();
+  sqlite.prepare(`
+    INSERT OR IGNORE INTO accounts (id, name, type, subtype, is_system, is_active, created_at, updated_at)
+    VALUES ('acct-payroll-payable-2200', 'Payroll Payable', 'liability', 'current_liability', 1, 1, ?, ?)
+  `).run(now, now);
+  return "acct-payroll-payable-2200";
 }
 
 function postInternalPayslip(
@@ -956,7 +959,7 @@ export function voidPayslip(
     }
 
     assertDateNotLocked(context.sqlite, record.payslip.date, "Payslip");
-    assertDateNotLocked(context.sqlite, now.slice(0, 10), "Payslip void");
+    assertDateNotLocked(context.sqlite, getBusinessTodayIso(), "Payslip void");
 
     if (record.payslip.documentStatus === "posted") {
       reverseTransaction(context.sqlite, {
@@ -964,7 +967,7 @@ export function voidPayslip(
         originalSourceId: payslipId,
         reversalSourceType: "payslip_void",
         reversalSourceId: payslipId,
-        date: now.slice(0, 10),
+        date: getBusinessTodayIso(),
         description: `Reverse Payslip ${record.payslip.payslipNumber} (${record.employee.name})`,
       });
     }
