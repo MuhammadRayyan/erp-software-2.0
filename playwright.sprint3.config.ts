@@ -1,15 +1,14 @@
 import { defineConfig, devices } from "@playwright/test";
-import { existsSync, mkdtempSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { existsSync } from "node:fs";
 import path from "node:path";
 import { randomBytes } from "node:crypto";
+import { browserDataDir, browserServerTmpDir } from "./tests/e2e/browser-data-dir";
 
-const root = process.env.ERP_BROWSER_DATA_DIR ?? mkdtempSync(path.join(tmpdir(), "erp-browser-"));
-process.env.ERP_BROWSER_DATA_DIR = root;
-process.env.ERP_BROWSER_META = path.join(root, "fixture.json");
+const root = browserDataDir();
 const defaultDistDir = existsSync(path.resolve(process.cwd(), ".next-validate")) ? ".next-validate" : ".next";
 
 export default defineConfig({
+  globalTeardown: "./tests/e2e/global-teardown.ts",
   testDir: "./tests/e2e",
   testMatch: ["sprint-2-hardening.spec.ts", "sprint-3-modernization.spec.ts"],
   workers: 1,
@@ -30,8 +29,8 @@ export default defineConfig({
     timeout: 180_000,
     env: {
       NODE_ENV: "production",
-      ERP_DATA_DIR: root,
-      ERP_BROWSER_META: process.env.ERP_BROWSER_META,
+      ERP_DATA_DIR: root, TMPDIR: browserServerTmpDir(root),
+      ERP_BROWSER_META: path.join(root, "fixture.json"),
       NEXT_DIST_DIR: process.env.ERP_BROWSER_DIST_DIR ?? defaultDistDir,
       ERP_MIGRATION_MODE: "external",
       BETTER_AUTH_SECRET: randomBytes(48).toString("hex"),
