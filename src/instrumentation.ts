@@ -7,6 +7,15 @@ export async function register() {
     resolveBetterAuthSecret();
     getTrustedOrigins();
     await import("./sentry.server.config");
+
+    const { cleanStaleScratch } = await import("@/core/db/paths");
+    cleanStaleScratch();
+    const { startMemoryMonitor } = await import("@/core/memory-monitor");
+    const { logger } = await import("@/core/logger");
+    startMemoryMonitor((message, metadata) => {
+      logger.warn(message, { metadata });
+      Sentry.captureMessage(message, { level: "warning", extra: metadata });
+    });
   }
   if (process.env.NEXT_RUNTIME === "edge") {
     await import("./sentry.edge.config");
