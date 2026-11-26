@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { Inter } from "next/font/google";
-import { cookies } from "next/headers";
+import { cookies, headers } from "next/headers";
 import { ThemedToaster } from "@/components/ui/themed-toaster";
 import { NuqsAdapter } from "nuqs/adapters/next/app";
 import { ThemeProvider } from "@/core/theme/theme-provider";
@@ -64,6 +64,8 @@ export default async function RootLayout({ children }: Readonly<{ children: Reac
   }
 
   const fontFamily = FONT_FAMILIES[fontKey];
+  // Set by src/proxy.ts; next-themes' inline theme script needs it under the nonce CSP.
+  const nonce = (await headers()).get("x-nonce") ?? undefined;
 
   return (
     <html
@@ -80,7 +82,7 @@ export default async function RootLayout({ children }: Readonly<{ children: Reac
       </head>
       <body style={{ fontFamily }}>
         <NuqsAdapter>
-          <ThemeProvider>
+          <ThemeProvider nonce={nonce}>
             {children}
             <ThemedToaster />
           </ThemeProvider>

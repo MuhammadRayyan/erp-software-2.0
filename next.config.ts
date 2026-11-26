@@ -1,6 +1,7 @@
 import type { NextConfig } from "next";
 import { randomUUID } from "node:crypto";
 import { withSentryConfig } from "@sentry/nextjs/config";
+import { buildContentSecurityPolicy } from "./src/core/security/csp";
 
 function extractOriginHostname(raw?: string | null): string | null {
   const trimmed = raw?.trim();
@@ -67,26 +68,19 @@ const nextConfig: NextConfig = {
           { key: "X-XSS-Protection", value: "1; mode=block" },
           { key: "Permissions-Policy", value: "camera=(), microphone=(), geolocation=()" },
           {
-            key: "Content-Security-Policy",
-            value: [
-              "default-src 'self'",
-              `script-src 'self' 'unsafe-inline'${process.env.NODE_ENV !== "production" ? " 'unsafe-eval'" : ""}`,
-              "worker-src 'self' blob:",
-              "style-src 'self' 'unsafe-inline'",
-              "font-src 'self' data:",
-              "img-src 'self' data: blob:",
-              // ws:/wss: are only needed for the development HMR socket.
-              `connect-src 'self' https://*.ingest.de.sentry.io https://*.sentry.io${process.env.NODE_ENV !== "production" ? " ws: wss:" : ""}`,
-              "object-src 'self' blob:",
-              "frame-src 'self' blob: data:",
-              "frame-ancestors 'self'",
-              "base-uri 'self'",
-              "form-action 'self'",
-            ].join("; "),
-          },
-          {
             key: "Strict-Transport-Security",
             value: "max-age=31536000; includeSubDomains; preload",
+          },
+        ],
+      },
+      {
+        // Pages get a per-request nonce CSP from src/proxy.ts. Routes the proxy
+        // does not run on (API, monitoring tunnel) get the nonce-less policy.
+        source: "/(api|monitoring)/:path*",
+        headers: [
+          {
+            key: "Content-Security-Policy",
+            value: buildContentSecurityPolicy({ isDev: process.env.NODE_ENV !== "production" }),
           },
         ],
       },

@@ -145,6 +145,18 @@ test("Email Settings & Unified Domain Configuration Suite", async (t) => {
     const sanitized = sanitizeEmailSettingsForClient(updated);
     assert.equal(sanitized.smtpPass, null, "Cleartext password must be removed for client");
     assert.equal(sanitized.hasPassword, true, "hasPassword must indicate presence of saved credential");
+
+    // 2e. The password is encrypted at rest, never stored in plaintext
+    const { sqlite: businessSqlite } = getBusinessDb(testBusinessId, testUserId);
+    const storedPass = () => (businessSqlite.prepare("SELECT smtp_pass FROM email_settings WHERE id = 'default'").get() as { smtp_pass: string }).smtp_pass;
+    assert.ok(storedPass().startsWith("enc:v1:"), "smtp_pass is stored encrypted");
+    assert.ok(!storedPass().includes("secret-smtp-password-123"));
+
+    // 2f. A legacy plaintext password still works and is encrypted on first read
+    businessSqlite.prepare("UPDATE email_settings SET smtp_pass = 'legacy-plain-pass' WHERE id = 'default'").run();
+    assert.equal(getEmailSettings(testBusinessId, testUserId).smtpPass, "legacy-plain-pass");
+    assert.ok(storedPass().startsWith("enc:v1:"), "legacy plaintext is upgraded to encrypted storage");
+    assert.equal(getEmailSettings(testBusinessId, testUserId).smtpPass, "legacy-plain-pass");
   });
 
   // -------------------------------------------------------------

@@ -1,5 +1,5 @@
 import crypto, { randomUUID } from "node:crypto";
-import { eq, like } from "drizzle-orm";
+import { eq, inArray, like } from "drizzle-orm";
 import { hashPassword } from "better-auth/crypto";
 import { getSystemDb, getSystemSqlite } from "@/core/db/system";
 import {
@@ -12,6 +12,35 @@ import {
 } from "@/core/db/system-schema";
 import { recordActivity } from "@/modules/activity-log/activity-log-service";
 import { getAppBaseUrl } from "@/core/config/app-url";
+
+type TokenKind = "invite" | "reset-password";
+
+/**
+ * Invite and reset tokens are stored only as a SHA-256 hash, so a copy of the
+ * system database (backup, snapshot) cannot be used to take over an account.
+ * The raw token exists only in the emailed/copied link.
+ */
+export function tokenIdentifier(kind: TokenKind, token: string) {
+  return `${kind}:sha256:${crypto.createHash("sha256").update(token.trim()).digest("hex")}`;
+}
+
+/** Hashed identifier first; the plain form matches links issued before hashing was introduced. */
+function tokenIdentifierCandidates(kind: TokenKind, token: string) {
+  return [tokenIdentifier(kind, token), `${kind}:${token.trim()}`];
+}
+
+function findTokenRow(kind: TokenKind, token: string) {
+  const db = getSystemDb();
+  for (const identifier of tokenIdentifierCandidates(kind, token)) {
+    const row = db.select().from(verifications).where(eq(verifications.identifier, identifier)).get();
+    if (row) return row;
+  }
+  return undefined;
+}
+
+function deleteToken(kind: TokenKind, token: string) {
+  getSystemDb().delete(verifications).where(inArray(verifications.identifier, tokenIdentifierCandidates(kind, token))).run();
+}
 
 
 export interface InvitationPayload {
@@ -31,7 +60,7 @@ export interface PasswordResetPayload {
  */
 export function createInvitationToken(userId: string, businessId: string, email: string): string {
   const token = crypto.randomBytes(32).toString("hex");
-  const identifier = `invite:${token}`;
+  const identifier = tokenIdentifier("invite", token);
   const now = Date.now();
   const expiresAt = now + 7 * 24 * 60 * 60 * 1000; // 7 days
 
@@ -93,8 +122,7 @@ export function verifyInvitationToken(token: string) {
   }
 
   const db = getSystemDb();
-  const identifier = `invite:${token.trim()}`;
-  const row = db.select().from(verifications).where(eq(verifications.identifier, identifier)).get();
+  const row = findTokenRow("invite", token);
 
   if (!row) {
     return { valid: false, error: "Invitation link is invalid or has expired." };
@@ -207,7 +235,7 @@ export async function completeInvitation(token: string, name: string, password: 
       .run();
 
     // 4. Invalidate invitation token
-    db.delete(verifications).where(eq(verifications.identifier, `invite:${token.trim()}`)).run();
+    deleteToken("invite", token);
   })();
 
   recordActivity(businessId, {
@@ -244,7 +272,7 @@ export function createPasswordResetToken(email: string, businessId?: string): { 
   }
 
   const token = crypto.randomBytes(32).toString("hex");
-  const identifier = `reset-password:${token}`;
+  const identifier = tokenIdentifier("reset-password", token);
   const now = Date.now();
   const expiresAt = now + 24 * 60 * 60 * 1000; // 24 hours
 
@@ -305,8 +333,7 @@ export function verifyPasswordResetToken(token: string) {
   }
 
   const db = getSystemDb();
-  const identifier = `reset-password:${token.trim()}`;
-  const row = db.select().from(verifications).where(eq(verifications.identifier, identifier)).get();
+  const row = findTokenRow("reset-password", token);
 
   if (!row) {
     return { valid: false, error: "Password reset link is invalid or has already been used." };
@@ -395,7 +422,7 @@ export async function completePasswordReset(token: string, newPassword: string) 
     db.delete(sessions).where(eq(sessions.userId, userId)).run();
 
     // 4. Invalidate reset token
-    db.delete(verifications).where(eq(verifications.identifier, `reset-password:${token.trim()}`)).run();
+    deleteToken("reset-password", token);
   })();
 
   if (businessId) {

@@ -111,6 +111,14 @@ async function launchBrowser(): Promise<Browser> {
       headless: true,
       executablePath: resolveBrowserExecutablePath(),
       args: [
+        // Chromium's sandbox cannot start in the production container: the host
+        // (Ubuntu 24.04) blocks unprivileged user namespaces via AppArmor and the
+        // setuid fallback is blocked by no-new-privileges (verified 26 Nov 2026).
+        // Enabling it would need a weaker seccomp/AppArmor profile for the whole
+        // container. Compensating controls instead: JavaScript is disabled for
+        // template pages, every network request is intercepted and blocked,
+        // DNS prefetch/background networking are off, and the container runs
+        // read-only, non-root, with all capabilities dropped.
         "--no-sandbox",
         "--disable-setuid-sandbox",
         "--disable-dev-shm-usage",
