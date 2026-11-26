@@ -141,7 +141,7 @@ export function ReceiptTable({
       itemLabel="receipts"
       noResultsMessage="No receipts match these filters"
       noResultsSubtext="Try a different receipt number, customer, bank account, date range, or status."
-      minWidth="min-w-[900px]"
+      minWidth="min-w-table-xl"
       getRowHref={(r) => `/b/${businessId}/sales/receipts/${r.id}`}
       exportConfig={{
         filename: "receipts",

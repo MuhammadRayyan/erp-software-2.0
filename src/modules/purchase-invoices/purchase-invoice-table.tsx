@@ -447,7 +447,7 @@ export function PurchaseInvoiceTable({
           table={table}
           density={density}
           framed={false}
-          minWidth="min-w-[640px]"
+          minWidth="min-w-table-md"
           getRowHref={(bill: Row) => `/b/${businessId}/purchases/invoices/${bill.id}`}
           noResultsMessage="No purchase invoices match"
           onClearFilters={clearFilters}

@@ -246,7 +246,7 @@ export function InventoryItemTable({
           table={table}
           density={density}
           framed={false}
-          minWidth="min-w-[940px]"
+          minWidth="min-w-table-xl"
           noResultsMessage="No inventory items match"
           onClearFilters={clearFilters}
           getRowHref={(row: InventoryItemRow) => `/b/${businessId}/inventory/items/${row.id}`}

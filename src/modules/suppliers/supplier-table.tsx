@@ -295,7 +295,7 @@ export function SupplierTable({
           table={table}
           density={density}
           framed={false}
-          minWidth="min-w-[720px]"
+          minWidth="min-w-table-lg"
           getRowHref={(s: SupplierRow) => `/b/${businessId}/suppliers/${s.id}`}
           noResultsMessage="No suppliers match these filters"
           noResultsSubtext="Clear the search or active-status filter."

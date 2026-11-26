@@ -158,7 +158,7 @@ export default async function GoodsReceiptViewPage({
             </div>
           </dl>
           <div className="mt-6 overflow-x-auto">
-            <table className="data-table min-w-[760px]">
+            <table className="data-table min-w-table-lg">
               <thead>
                 <tr>
                   <th>Item</th>

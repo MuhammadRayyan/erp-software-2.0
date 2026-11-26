@@ -301,7 +301,7 @@ export function ProjectTable({
         table={table}
         density={density}
         framed={false}
-        minWidth="min-w-[860px]" 
+        minWidth="min-w-table-xl" 
         noResultsMessage="No projects match these filters" 
         onClearFilters={clearFilters}
         getRowHref={(row: any) => `/b/${row.businessId}/projects/${row.id}`}

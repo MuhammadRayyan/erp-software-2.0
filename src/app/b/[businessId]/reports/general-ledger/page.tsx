@@ -89,7 +89,7 @@ export default async function GeneralLedgerPage({
       </form>
       {rows.length ? (
         <div className="data-panel overflow-x-auto">
-          <table className="data-table min-w-[1050px]">
+          <table className="data-table min-w-table-2xl">
             <thead>
               <tr>
                 <th>Account</th>

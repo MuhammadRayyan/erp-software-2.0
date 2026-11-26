@@ -176,7 +176,7 @@ export default async function DebitNoteViewPage({
             </dl>
           </div>
           <div className="mt-6 overflow-x-auto">
-            <table className="data-table min-w-[700px]">
+            <table className="data-table min-w-table-lg">
               <thead>
                 <tr>
                   <th>Description</th>

@@ -389,7 +389,7 @@ export function SalesQuoteTable({
           table={table}
           density={density}
           framed={false}
-          minWidth="min-w-[780px]" 
+          minWidth="min-w-table-lg" 
           noResultsMessage="No sales quotes match" 
           onClearFilters={clearFilters}
           getRowHref={(row: Row) => `/b/${row.businessId}/sales/quotes/${row.id}`}

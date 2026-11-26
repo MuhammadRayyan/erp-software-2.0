@@ -28,7 +28,7 @@ export default async function JournalEntryPage({ params }: { params: Promise<{ b
       <div className="text-right text-sm"><p className="text-muted-foreground">Source</p>{sourceHref ? <Link href={sourceHref} className="font-medium text-primary hover:underline">{journalSourceLabel(record.entry.source_type)} {sourceReference}</Link> : <p className="font-medium">{journalSourceLabel(record.entry.source_type)} {sourceReference}</p>}</div>
     </div>
     <section className="data-panel overflow-x-auto">
-      <table className="data-table min-w-[800px]">
+      <table className="data-table min-w-table-lg">
         <thead><tr><th>Account</th><th>Description</th><th>Project</th><th className="text-right!">Debit</th><th className="text-right!">Credit</th></tr></thead>
         <tbody>{record.lines.map((line) => <tr key={line.id}>
           <td><span className="font-medium">{line.name}</span></td>

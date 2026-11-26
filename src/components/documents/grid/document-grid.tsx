@@ -333,7 +333,7 @@ export function DocumentGrid<TLine = any>({
           shouldVirtualize && "max-h-[540px] overflow-y-auto"
         )}
       >
-        <table className="line-item-table w-full min-w-[780px] table-fixed border-collapse text-left">
+        <table className="line-item-table w-full min-w-table-lg table-fixed border-collapse text-left">
           <colgroup>
             {visibleColumns.map((col) => {
               const widthStyle: React.CSSProperties = {

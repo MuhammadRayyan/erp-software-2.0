@@ -19,7 +19,7 @@ function Metric({ label, value, currency, emphasis = false }: { label: string; v
 
 function DocumentTable({ businessId, rows, kind, currency }: { businessId: string; rows: ProjectDocumentRow[]; kind: "sales/invoices" | "sales/credit-notes" | "purchases/orders" | "purchases/invoices"; currency: string }) {
   if (!rows.length) return <p className="py-6 text-center text-sm text-muted-foreground">No related documents.</p>;
-  return <div className="overflow-x-auto"><table className="data-table min-w-[900px]"><thead><tr><th>Document</th><th>Date</th><th>Customer / Supplier</th><th>Status</th><th className="text-right!">Native project net</th><th className="text-right!">Base project net</th><th className="text-right!">Base document total</th></tr></thead><tbody>{rows.map((row) => <tr key={row.id}><td><Link href={`/b/${businessId}/${kind}/${row.id}`} className="tabular font-medium text-primary hover:underline">{row.number}</Link></td><td>{formatDate(row.date)}</td><td>{row.party}</td><td className="capitalize">{row.status.replaceAll("_", " ")}</td><td className="money text-right">{formatMoney(row.foreignNetMinor, row.currencyCode)}</td><td className="money text-right">{formatMoney(row.netMinor, currency)}</td><td className="money text-right">{formatMoney(row.totalMinor, currency)}</td></tr>)}</tbody></table></div>;
+  return <div className="overflow-x-auto"><table className="data-table min-w-table-xl"><thead><tr><th>Document</th><th>Date</th><th>Customer / Supplier</th><th>Status</th><th className="text-right!">Native project net</th><th className="text-right!">Base project net</th><th className="text-right!">Base document total</th></tr></thead><tbody>{rows.map((row) => <tr key={row.id}><td><Link href={`/b/${businessId}/${kind}/${row.id}`} className="tabular font-medium text-primary hover:underline">{row.number}</Link></td><td>{formatDate(row.date)}</td><td>{row.party}</td><td className="capitalize">{row.status.replaceAll("_", " ")}</td><td className="money text-right">{formatMoney(row.foreignNetMinor, row.currencyCode)}</td><td className="money text-right">{formatMoney(row.netMinor, currency)}</td><td className="money text-right">{formatMoney(row.totalMinor, currency)}</td></tr>)}</tbody></table></div>;
 }
 
 export default async function ProjectViewPage({ params, searchParams }: { params: Promise<{ businessId: string; projectId: string }>; searchParams: Promise<{ notice?: string }> }) {
@@ -196,7 +196,7 @@ export default async function ProjectViewPage({ params, searchParams }: { params
       {operational.receipts.length > 0 && (
         <div className="data-panel mt-3 overflow-x-auto">
           <div className="border-b border-border px-4 py-3 text-sm font-semibold">Attributable Receipts</div>
-          <table className="data-table min-w-[620px]">
+          <table className="data-table min-w-table-md">
             <thead>
               <tr>
                 <th>Receipt</th>
@@ -236,7 +236,7 @@ export default async function ProjectViewPage({ params, searchParams }: { params
       {operational.payments.length > 0 && (
         <div className="data-panel mt-3 overflow-x-auto">
           <div className="border-b border-border px-4 py-3 text-sm font-semibold">Attributable Supplier Payments</div>
-          <table className="data-table min-w-[620px]">
+          <table className="data-table min-w-table-md">
             <thead>
               <tr>
                 <th>Payment</th>

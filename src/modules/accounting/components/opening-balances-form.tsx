@@ -198,7 +198,7 @@ export function OpeningBalancesForm({
                 <h2 className="text-sm font-semibold">{typeLabels[type]}</h2>
               </div>
               <div className="overflow-x-auto">
-                <table className="data-table min-w-[650px]">
+                <table className="data-table min-w-table-md">
                   <thead>
                     <tr>
                       <th>Account Name</th>

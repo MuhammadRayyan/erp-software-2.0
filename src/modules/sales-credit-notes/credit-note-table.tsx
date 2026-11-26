@@ -364,7 +364,7 @@ export function CreditNoteTable({
           table={table}
           density={density}
           framed={false}
-          minWidth="min-w-[900px]" 
+          minWidth="min-w-table-xl" 
           noResultsMessage="No credit notes match" 
           onClearFilters={clearFilters}
           getRowHref={(row: Row) => `/b/${row.businessId}/sales/credit-notes/${row.id}`}

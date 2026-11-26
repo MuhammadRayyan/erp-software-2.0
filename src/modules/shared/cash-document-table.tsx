@@ -82,7 +82,7 @@ export function CashDocumentTable<TRow extends { id: string }>({
   itemLabel,
   noResultsMessage,
   noResultsSubtext,
-  minWidth = "min-w-[960px]",
+  minWidth = "min-w-table-2xl",
   getRowHref,
   exportConfig,
   footer,

@@ -104,7 +104,7 @@ export function ReportDrilldownButton({
               </div>
             ) : result && result.rows.length > 0 ? (
               <div className="data-panel overflow-x-auto">
-                <table className="data-table min-w-[720px]">
+                <table className="data-table min-w-table-lg">
                   <thead>
                     <tr>
                       <th>Date</th>

@@ -129,7 +129,7 @@ export default async function BankTransactionsReportPage({
       {total > 0 ? (
         <div className="data-panel">
           <div className="overflow-x-auto">
-            <table className="data-table min-w-[1080px]">
+            <table className="data-table min-w-table-2xl">
               <thead>
                 <tr>
                   <th>Account</th>

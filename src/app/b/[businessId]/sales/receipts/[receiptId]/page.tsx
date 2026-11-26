@@ -154,7 +154,7 @@ export default async function ReceiptViewPage({
             </div>
             {record.allocations.length > 0 ? (
               <div className="mt-3 overflow-x-auto rounded-md border border-border">
-                <table className="data-table min-w-[680px]">
+                <table className="data-table min-w-table-md">
                   <thead>
                     <tr>
                       <th>Sales Invoice</th>

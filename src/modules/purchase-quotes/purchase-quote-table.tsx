@@ -356,7 +356,7 @@ export function PurchaseQuoteTable({
           table={table}
           density={density}
           framed={false}
-          minWidth="min-w-[780px]"
+          minWidth="min-w-table-lg"
           noResultsMessage="No purchase quotes match"
           onClearFilters={clearFilters}
           getRowHref={(row: Row) => `/b/${row.businessId}/purchases/quotes/${row.id}`}

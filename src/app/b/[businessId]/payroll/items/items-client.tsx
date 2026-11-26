@@ -323,7 +323,7 @@ export function ItemsClient({ businessId, items, accounts }: ItemsClientProps) {
           table={table}
           density={density}
           framed={false}
-          minWidth="min-w-[760px]"
+          minWidth="min-w-table-lg"
           onRowClick={canEdit ? (item) => {
             setSelectedItem(item);
             setDialogOpen(true);
