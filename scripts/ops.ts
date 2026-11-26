@@ -6,7 +6,7 @@ import path from "node:path";
 import Database from "better-sqlite3";
 import { migrateDatabases } from "../src/core/db/migrate";
 import { checkDatabases } from "../src/core/db/check";
-import { DATA_ROOT, SYSTEM_DB_PATH } from "../src/core/db/paths";
+import { DATA_ROOT, SCRATCH_DIRECTORY_NAME, SYSTEM_DB_PATH } from "../src/core/db/paths";
 import { closeAllBusinessConnections } from "../src/core/db/business";
 import { resolveBetterAuthSecret } from "../src/core/auth/auth-config";
 import { getTrustedOrigins } from "../src/core/config/app-url";
@@ -17,6 +17,8 @@ import { version } from "../package.json";
 function files(root: string): string[] {
   return readdirSync(root, { withFileTypes: true }).flatMap(entry => {
     const file = path.join(root, entry.name);
+    // Scratch space holds only transient upload/import files; never snapshot it.
+    if (root === DATA_ROOT && entry.name === SCRATCH_DIRECTORY_NAME) return [];
     if (entry.isSymbolicLink()) throw new Error("Backup symlinks are not supported.");
     return entry.isDirectory() ? files(file) : [file];
   });
@@ -82,7 +84,7 @@ async function main() {
       const staging = mkdtempSync(path.join(tmpdir(), "erp-snapshot-"));
       if (staging.startsWith(DATA_ROOT + path.sep)) throw new Error("Use a dedicated data directory outside the temporary directory root.");
       try {
-        cpSync(DATA_ROOT, staging, { recursive: true });
+        cpSync(DATA_ROOT, staging, { recursive: true, filter: source => source !== path.join(DATA_ROOT, SCRATCH_DIRECTORY_NAME) });
         for (const source of sourceFiles.filter(file => !/\.sqlite-(wal|shm|journal)$/.test(file) && path.relative(DATA_ROOT, file) !== "manifest.json")) {
           const relative = path.relative(DATA_ROOT, source), target = path.join(destination, relative);
           mkdirSync(path.dirname(target), { recursive: true });
