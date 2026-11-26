@@ -54,7 +54,7 @@
     "next-themes": "0.4.6",
     "nodemailer": "10.2.1",
     "nuqs": "^2.10.3",
-    "puppeteer": "^25.7.0",
+    "puppeteer-core": "^25.19.0",
     "react": "19.2.8",
     "react-dom": "19.2.8",
     "react-hook-form": "7.85.0",
@@ -80,9 +80,9 @@
     "tsx": "4.23.11",
     "typescript": "6.0.3"
   },
-  "_comment_puppeteer": "Kept for custom-html template rendering path",
+  "_comment_puppeteer": "puppeteer-core renders custom-HTML templates with the system Chromium (PUPPETEER_EXECUTABLE_PATH)",
   "engines": {
-    "node": "22.x"
+    "node": "24.x"
   },
   "packageManager": "npm@10.9.4"
 }

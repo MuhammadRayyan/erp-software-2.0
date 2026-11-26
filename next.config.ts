@@ -45,7 +45,7 @@ const nextConfig: NextConfig = {
   ...(process.env.NEXT_DIST_DIR === ".next-validate"
     ? { typescript: { tsconfigPath: "tsconfig.validate.json" } }
     : {}),
-  serverExternalPackages: ["better-sqlite3", "puppeteer", "yazl"],
+  serverExternalPackages: ["better-sqlite3", "puppeteer-core", "yazl"],
   experimental: {
     cpus: 2,
     serverActions: {

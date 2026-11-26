@@ -1,4 +1,5 @@
-import type { Browser } from "puppeteer";
+import { existsSync } from "node:fs";
+import type { Browser } from "puppeteer-core";
 
 const DEFAULT_IDLE_CLOSE_MS = 60_000;
 const DEFAULT_MAX_CONCURRENT_RENDERS = 4;
@@ -73,6 +74,26 @@ function registerShutdownHooks(state: BrowserPoolState) {
   process.once("SIGINT", shutdown);
 }
 
+// puppeteer-core never downloads a browser: production sets
+// PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium; elsewhere use a system install.
+const SYSTEM_BROWSER_PATHS = [
+  "/usr/bin/chromium",
+  "/usr/bin/chromium-browser",
+  "/usr/bin/google-chrome-stable",
+  "/usr/bin/google-chrome",
+  "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+];
+
+export function resolveBrowserExecutablePath(): string {
+  const configured = process.env.PUPPETEER_EXECUTABLE_PATH?.trim();
+  if (configured) return configured;
+  const found = SYSTEM_BROWSER_PATHS.find((candidate) => existsSync(candidate));
+  if (found) return found;
+  throw new Error(
+    "No Chromium found for HTML PDF rendering. Install chromium or set PUPPETEER_EXECUTABLE_PATH to a Chrome/Chromium binary.",
+  );
+}
+
 async function launchBrowser(): Promise<Browser> {
   const state = getPoolState();
   if (state.browser?.connected) {
@@ -85,10 +106,10 @@ async function launchBrowser(): Promise<Browser> {
   registerShutdownHooks(state);
 
   state.launching = (async () => {
-    const { default: puppeteer } = await import("puppeteer");
+    const { default: puppeteer } = await import("puppeteer-core");
     const browser = await puppeteer.launch({
       headless: true,
-      executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || undefined,
+      executablePath: resolveBrowserExecutablePath(),
       args: [
         "--no-sandbox",
         "--disable-setuid-sandbox",
