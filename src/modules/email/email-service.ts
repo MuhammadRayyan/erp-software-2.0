@@ -7,6 +7,7 @@ import { getBusinessDb } from "@/core/db/business";
 import { recordActivity } from "@/modules/activity-log/activity-log-service";
 import { sentEmails } from "@/core/db/business-schema";
 import { getEmailDriver, joinMailboxes } from "./email-driver";
+import { openSecret } from "@/core/security/secret-box";
 import type {
   EmailRecipient,
   SendEmailInput,
@@ -184,7 +185,7 @@ export async function sendEmail(
           smtpPort: settingsRow.smtp_port,
           smtpSecure: Boolean(settingsRow.smtp_secure),
           smtpUser: settingsRow.smtp_user,
-          smtpPass: settingsRow.smtp_pass,
+          smtpPass: openSecret(settingsRow.smtp_pass),
           isActive: Boolean(settingsRow.is_active),
         }
       : null,

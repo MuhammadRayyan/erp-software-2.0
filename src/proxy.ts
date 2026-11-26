@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
+import { buildContentSecurityPolicy, createCspNonce } from "@/core/security/csp";
 
 const PROTECTED_PREFIXES = ["/b/", "/b", "/businesses", "/super-admin", "/admin"];
 
@@ -19,14 +20,23 @@ export function proxy(request: NextRequest) {
     return NextResponse.redirect(loginUrl);
   }
 
+  // Per-request nonce: Next.js reads it from the request CSP header and adds it
+  // to its scripts; the same policy goes on the response for the browser.
+  const nonce = createCspNonce();
+  const contentSecurityPolicy = buildContentSecurityPolicy({ nonce, isDev: process.env.NODE_ENV !== "production" });
+
   const requestHeaders = new Headers(request.headers);
   requestHeaders.set("x-pathname", pathname);
+  requestHeaders.set("x-nonce", nonce);
+  requestHeaders.set("Content-Security-Policy", contentSecurityPolicy);
 
-  return NextResponse.next({
+  const response = NextResponse.next({
     request: {
       headers: requestHeaders,
     },
   });
+  response.headers.set("Content-Security-Policy", contentSecurityPolicy);
+  return response;
 }
 
 export const config = {

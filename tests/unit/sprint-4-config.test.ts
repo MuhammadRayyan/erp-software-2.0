@@ -6,35 +6,42 @@ import test from "node:test";
 import { pathToFileURL } from "node:url";
 import ts from "typescript";
 
-test("Sprint 4: next.config.ts strips 'unsafe-eval' in production CSP and preserves it in non-production", async () => {
-  const originalNodeEnv = process.env.NODE_ENV;
-  const mod = await import("../../next.config");
-  const config = mod.default;
-  assert.ok(typeof config.headers === "function", "next.config.ts must export async headers()");
+test("CSP: pages use a per-request nonce with no 'unsafe-inline' scripts; production omits 'unsafe-eval'", async () => {
+  const { buildContentSecurityPolicy, createCspNonce } = await import("../../src/core/security/csp");
+  const nonce = createCspNonce();
+  assert.notEqual(nonce, createCspNonce(), "nonces must be unique per request");
+  assert.ok(Buffer.from(nonce, "base64").length === 16, "nonce carries 128 random bits");
 
-  try {
-    (process.env as Record<string, string | undefined>).NODE_ENV = "production";
-    const prodRuleSets = await config.headers();
-    const prodHeaders = prodRuleSets.flatMap((entry) => entry.headers);
-    const prodCsp = prodHeaders.find((h) => h.key === "Content-Security-Policy")?.value ?? "";
-    assert.ok(prodCsp.includes("script-src 'self' 'unsafe-inline'"), "production CSP keeps expected script-src");
-    assert.ok(!prodCsp.includes("'unsafe-eval'"), "production CSP must omit 'unsafe-eval'");
-    assert.ok(prodCsp.includes("object-src 'self' blob:"), "production CSP must permit blob: <object> PDF previews");
-    assert.ok(prodCsp.includes("frame-src 'self' blob: data:"), "production CSP keeps blob:/data: frame-src fallback");
+  const prodCsp = buildContentSecurityPolicy({ nonce, isDev: false });
+  assert.ok(prodCsp.includes(`script-src 'self' 'nonce-${nonce}' 'strict-dynamic'`), "production page CSP uses the nonce");
+  assert.ok(!/script-src[^;]*'unsafe-inline'/.test(prodCsp), "inline scripts are never allowed without the nonce");
+  assert.ok(!prodCsp.includes("'unsafe-eval'"), "production CSP must omit 'unsafe-eval'");
+  assert.ok(prodCsp.includes("object-src 'self' blob:"), "production CSP must permit blob: <object> PDF previews");
+  assert.ok(prodCsp.includes("frame-src 'self' blob: data:"), "production CSP keeps blob:/data: frame-src fallback");
 
-    (process.env as Record<string, string | undefined>).NODE_ENV = "development";
-    const devRuleSets = await config.headers();
-    const devHeaders = devRuleSets.flatMap((entry) => entry.headers);
-    const devCsp = devHeaders.find((h) => h.key === "Content-Security-Policy")?.value ?? "";
-    assert.ok(devCsp.includes("'unsafe-eval'"), "development CSP retains 'unsafe-eval' for React/Next dev tooling");
-    assert.ok(devCsp.includes("object-src 'self' blob:"), "development CSP also permits blob: <object> PDF previews");
-  } finally {
-    if (originalNodeEnv === undefined) {
-      delete (process.env as Record<string, string | undefined>).NODE_ENV;
-    } else {
-      (process.env as Record<string, string | undefined>).NODE_ENV = originalNodeEnv;
-    }
-  }
+  const devCsp = buildContentSecurityPolicy({ nonce, isDev: true });
+  assert.ok(devCsp.includes("'unsafe-eval'"), "development CSP retains 'unsafe-eval' for React/Next dev tooling");
+  assert.ok(devCsp.includes("ws: wss:"), "development CSP allows the HMR socket");
+});
+
+test("CSP: proxy sets the same nonce policy on the request (for Next.js) and the response (for the browser)", async () => {
+  const { NextRequest } = await import("next/server");
+  const { proxy } = await import("../../src/proxy");
+  const response = proxy(new NextRequest("http://localhost:3000/login"));
+  const csp = response.headers.get("Content-Security-Policy") ?? "";
+  const nonce = /'nonce-([^']+)'/.exec(csp)?.[1];
+  assert.ok(nonce, "response CSP carries a nonce");
+  assert.equal(response.headers.get("x-middleware-request-x-nonce"), nonce, "request header x-nonce matches");
+  assert.equal(response.headers.get("x-middleware-request-content-security-policy"), csp, "request CSP matches the response CSP");
+});
+
+test("CSP: next.config only sets the nonce-less policy on routes the proxy does not cover", async () => {
+  const config = (await import("../../next.config")).default;
+  const rules = await config.headers!();
+  const withCsp = rules.filter((rule) => rule.headers.some((header) => header.key === "Content-Security-Policy"));
+  assert.deepEqual(withCsp.map((rule) => rule.source), ["/(api|monitoring)/:path*"]);
+  const value = withCsp[0].headers.find((header) => header.key === "Content-Security-Policy")!.value;
+  assert.ok(!value.includes("'unsafe-inline'") || !/script-src[^;]*'unsafe-inline'/.test(value));
 });
 
 test("Sprint 4: next.config.ts routes NEXT_DIST_DIR=.next-validate to tsconfig.validate.json", async () => {

@@ -2,6 +2,7 @@ import { assertMutationPermission } from "@/core/permissions/mutation-permission
 import { getBusinessDb } from "@/core/db/business";
 import { createNodemailerTransporter, formatMailbox } from "./email-driver";
 import { resolvePublicSmtpHost } from "./smtp-host-guard";
+import { isSealedSecret, openSecret, sealSecret } from "@/core/security/secret-box";
 import type {
   BusinessEmailSettings,
   SaveEmailSettingsInput,
@@ -36,8 +37,10 @@ function mapRow(row: EmailSettingsRow): BusinessEmailSettings {
     smtpPort: row.smtp_port,
     smtpSecure: Boolean(row.smtp_secure),
     smtpUser: row.smtp_user,
-    smtpPass: row.smtp_pass,
-    hasPassword: Boolean(row.smtp_pass),
+    // Stored encrypted (enc:v1:…). An undecryptable value (secret rotated, backup from
+    // another instance) reads as "no password" so the user is asked to re-enter it.
+    smtpPass: openSecret(row.smtp_pass),
+    hasPassword: Boolean(openSecret(row.smtp_pass)),
     isActive: Boolean(row.is_active),
     lastTestedAt: row.last_tested_at,
     lastTestStatus: (row.last_test_status as BusinessEmailSettings["lastTestStatus"]) ?? null,
@@ -86,6 +89,14 @@ export function getEmailSettings(businessId: string, userId?: string): BusinessE
   }
 
   if (row) {
+    // Upgrade a legacy plaintext password to encrypted storage on first read.
+    if (row.smtp_pass && !isSealedSecret(row.smtp_pass)) {
+      try {
+        sqlite.prepare("UPDATE email_settings SET smtp_pass = ? WHERE id = 'default'").run(sealSecret(row.smtp_pass));
+      } catch {
+        // Read-only or locked database: retry on the next read.
+      }
+    }
     return mapRow(row);
   }
 
@@ -160,7 +171,7 @@ export function saveEmailSettings(
       smtpPort,
       smtpSecure,
       smtpUser,
-      smtpPass,
+      sealSecret(smtpPass),
       isActive,
       existing.lastTestedAt,
       existing.lastTestStatus,
@@ -276,7 +287,7 @@ export async function verifyAndSendTestEmail(
         port,
         secure ? 1 : 0,
         user,
-        pass,
+        sealSecret(pass),
         now,
         now,
         now,
@@ -323,7 +334,7 @@ export async function verifyAndSendTestEmail(
         port,
         secure ? 1 : 0,
         user,
-        pass,
+        sealSecret(pass),
         now,
         friendlyError,
         now,

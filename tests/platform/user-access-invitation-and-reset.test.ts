@@ -27,6 +27,7 @@ import {
   completePasswordReset,
   createPasswordResetToken,
   generateInvitationLink,
+  tokenIdentifier,
   verifyInvitationToken,
   verifyPasswordResetToken,
 } from "../../src/core/permissions/invitation-service";
@@ -135,9 +136,20 @@ test("User Access Control, Invitation Lifecycle, Password Reset & Email Suite", 
     const verRow = db
       .select()
       .from(verifications)
-      .where(eq(verifications.identifier, `invite:${inviteTokenSarah}`))
+      .where(eq(verifications.identifier, tokenIdentifier("invite", inviteTokenSarah)))
       .get();
     assert.ok(verRow, "Verification row must exist in DB");
+    const leaked = db.select().from(verifications).all().filter((row) => row.identifier.includes(inviteTokenSarah));
+    assert.equal(leaked.length, 0, "the raw invite token is never stored; only its SHA-256 hash");
+
+    // A link issued before hashing was introduced (plain identifier) still verifies.
+    const legacyToken = "a".repeat(64);
+    db.insert(verifications).values({
+      id: `legacy-${Date.now()}`, identifier: `invite:${legacyToken}`, value: verRow.value,
+      expiresAt: new Date(Date.now() + 60_000), createdAt: new Date(), updatedAt: new Date(),
+    }).run();
+    assert.equal(verifyInvitationToken(legacyToken).valid, true, "legacy plain invite links keep working until they expire");
+    db.delete(verifications).where(eq(verifications.identifier, `invite:${legacyToken}`)).run();
   });
 
   // -------------------------------------------------------------
@@ -166,7 +178,7 @@ test("User Access Control, Invitation Lifecycle, Password Reset & Email Suite", 
     const oldVer = db
       .select()
       .from(verifications)
-      .where(eq(verifications.identifier, `invite:${inviteTokenSarah}`))
+      .where(eq(verifications.identifier, tokenIdentifier("invite", inviteTokenSarah)))
       .get();
     assert.equal(oldVer, undefined, "Old token should be pruned");
 
@@ -177,7 +189,7 @@ test("User Access Control, Invitation Lifecycle, Password Reset & Email Suite", 
     const newVer = db
       .select()
       .from(verifications)
-      .where(eq(verifications.identifier, `invite:${inviteTokenSarah}`))
+      .where(eq(verifications.identifier, tokenIdentifier("invite", inviteTokenSarah)))
       .get();
     assert.ok(newVer, "New token must exist");
   });
