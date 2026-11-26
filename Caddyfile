@@ -1,5 +1,13 @@
 # Canonical HTTPS entry point. Upstream retries are not a zero-downtime guarantee.
 {$APP_DOMAIN:erp-portal.rapidtss.com} {
+    # Access log on the caddy_data volume, capped at about 60 MB. Caddy redacts
+    # Cookie, Set-Cookie and Authorization headers by default.
+    log {
+        output file /data/access.log {
+            roll_size 10MiB
+            roll_keep 5
+        }
+    }
     encode gzip zstd
     request_body {
         max_size 55MB

@@ -130,4 +130,25 @@ expected="$revision" curl --fail --silent --show-error --retry 8 --retry-delay 2
 printf '%s\n' "$image" > "$release/deployed-image.txt"
 if [[ -f "$root/.invalidate-sessions" ]]; then rm -- "$root/.invalidate-sessions"; fi
 success=true
+
+# Housekeeping after a verified release. Best effort: it never fails or rolls
+# back a deployment that has already succeeded. Keeps the running image, the
+# newest rollback tags and the newest backups and release directories.
+prune_host() {
+  local keep_rollbacks="${ERP_KEEP_ROLLBACKS:-3}" keep_backups="${ERP_KEEP_BACKUPS:-10}"
+  docker images --format '{{.Repository}}:{{.Tag}}' modern-erp | grep ':rollback-' | sort -r \
+    | tail -n "+$((keep_rollbacks + 1))" | xargs -r docker rmi || true
+  # Release images are pulled by digest; drop every reference except the one now running.
+  # An image still tagged as a kept rollback only loses its digest reference.
+  docker images --digests --format '{{.Repository}}@{{.Digest}}' "${image%@*}" | grep -v '@<none>$' \
+    | grep -vxF "$image" | xargs -r docker rmi || true
+  docker image prune -f || true
+  docker builder prune -f || true
+  # Snapshots are written by root inside the operation container.
+  find "$root/backups" -mindepth 1 -maxdepth 1 -type d -printf '%f\n' | sort -r \
+    | tail -n "+$((keep_backups + 1))" | sed "s#^#$root/backups/#" | xargs -r sudo -n rm -rf -- || true
+  find "$root/releases" -mindepth 1 -maxdepth 1 -type d -printf '%T@ %f\n' | sort -rn | awk '{print $2}' \
+    | grep -vxF "$revision" | tail -n "+$keep_backups" | sed "s#^#$root/releases/#" | xargs -r rm -rf -- || true
+}
+prune_host > "$root/.last-prune.log" 2>&1 || echo "Host housekeeping skipped; see $root/.last-prune.log" >&2
 echo "Verified release $revision deployed from $image. Previous image retained: $previous. Backup: $backup"
