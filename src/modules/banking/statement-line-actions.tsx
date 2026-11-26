@@ -86,7 +86,7 @@ export function StatementLineActions({
   const paymentHref = `/b/${businessId}/purchases/payments/new?bankAccountId=${accountId}&amount=${formattedAmount}&date=${transactionDate ?? ""}&reference=${encodeURIComponent(reference ?? "")}&description=${encodeURIComponent(description ?? "")}`;
 
   return (
-    <div className="min-w-[220px]">
+    <div className="min-w-55">
       <div className="flex flex-wrap items-center gap-1.5">
         {matchedRule ? (
           <Button

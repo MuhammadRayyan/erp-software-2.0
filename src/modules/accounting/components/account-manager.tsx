@@ -123,7 +123,7 @@ export function AccountManager({
                 <span className="ml-2 text-xs text-muted-foreground">{rows.length}</span>
               </div>
               <div className="overflow-x-auto">
-                <table className="data-table min-w-[650px]" data-density={density}>
+                <table className="data-table min-w-table-md" data-density={density}>
                   <thead><tr><th>Account</th><th>Subtype</th><th>Status</th><th className="text-right!">Balance</th><th className="w-12"><span className="sr-only">Actions</span></th></tr></thead>
                   <tbody>
                     {rows.map((account) => (

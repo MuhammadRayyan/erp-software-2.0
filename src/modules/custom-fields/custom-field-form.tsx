@@ -214,7 +214,7 @@ export function CustomFieldsManager({
                 </div>
               ) : (
                 <div className="data-panel overflow-x-auto">
-                  <table className="data-table min-w-[760px]">
+                  <table className="data-table min-w-table-lg">
                     <thead>
                       <tr>
                         <th>Name</th>

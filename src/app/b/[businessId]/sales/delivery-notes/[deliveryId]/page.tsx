@@ -159,7 +159,7 @@ export default async function DeliveryNoteViewPage({
             </div>
           </dl>
           <div className="mt-6 overflow-x-auto">
-            <table className="data-table min-w-[700px]">
+            <table className="data-table min-w-table-lg">
               <thead>
                 <tr>
                   <th>Item</th>

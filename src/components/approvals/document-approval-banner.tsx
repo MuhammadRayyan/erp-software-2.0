@@ -173,7 +173,7 @@ export function DocumentApprovalBanner({
       {showReject && (
         <form onSubmit={onReject} className="flex flex-wrap items-center gap-2 pt-2 border-t border-warning/25" noValidate>
           <Input
-            className="flex-1 min-w-[220px]"
+            className="flex-1 min-w-55"
             placeholder="Reason for returning to draft…"
             value={rejectNote}
             onChange={(e) => {

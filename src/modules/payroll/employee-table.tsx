@@ -324,7 +324,7 @@ export function EmployeeTable({
           table={table}
           density={density}
           framed={false}
-          minWidth="min-w-[850px]"
+          minWidth="min-w-table-xl"
           noResultsMessage="No employees found matching your criteria"
           noResultsSubtext="Try adjusting your search query or status filter."
           onClearFilters={clearFilters}

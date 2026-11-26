@@ -90,7 +90,7 @@ export default async function CustomerStatementPage({
 
         {rows.length ? (
           <div className="overflow-x-auto">
-            <table className="data-table min-w-[850px]">
+            <table className="data-table min-w-table-xl">
               <thead>
                 <tr>
                   <th>Date</th>

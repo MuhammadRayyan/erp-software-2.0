@@ -203,7 +203,7 @@ export function InventoryLocationTable({
           table={table}
           density={density}
           framed={false}
-          minWidth="min-w-[680px]"
+          minWidth="min-w-table-md"
           noResultsMessage="No locations match"
           onClearFilters={clearFilters}
           getRowHref={(row: InventoryLocationRow) => `/b/${businessId}/inventory/locations/${row.id}`}

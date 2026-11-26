@@ -2,6 +2,22 @@
 
 @custom-variant dark (&:where(.dark, .dark *));
 
+/*
+ * Table width tokens. Use `min-w-table-{sm,md,lg,xl,2xl}` on `.data-table`
+ * (or pass it as DataTable's `minWidth`) instead of arbitrary `min-w-[NNNpx]`.
+ * Tables must sit inside a horizontal scroll container (`.data-panel` or
+ * `overflow-x-auto`) so only the table region scrolls on narrow screens.
+ * rem-based so tables grow with the user's text-scale preference.
+ * Guarded by tests/unit/table-width-tokens.test.ts.
+ */
+@theme {
+  --container-table-sm: 32.5rem;  /* 520px: 4–5 short columns */
+  --container-table-md: 40rem;    /* 640px */
+  --container-table-lg: 47.5rem;  /* 760px: typical document line table */
+  --container-table-xl: 56.25rem; /* 900px */
+  --container-table-2xl: 67.5rem; /* 1080px: wide registers and reports */
+}
+
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);

@@ -64,7 +64,7 @@ export function TemplateSelector({ currentType, businessId }: { currentType: str
         <SelectNative
           value={currentType}
           onChange={(e) => selectType(e.target.value)}
-          className="h-9 text-sm min-w-[200px]"
+          className="h-9 text-sm min-w-50"
         >
           <optgroup label="Sales Documents">
             {SUPPORTED_DOCUMENT_TYPES.filter((t) => t.category === "Sales").map((t) => (

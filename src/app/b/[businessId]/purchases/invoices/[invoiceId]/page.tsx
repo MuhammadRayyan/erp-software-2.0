@@ -265,7 +265,7 @@ export default async function PurchaseInvoiceViewPage({
         </div>
 
         <div className="mt-6 overflow-x-auto">
-          <table className={`data-table ${showLineProjects ? "min-w-[940px]" : "min-w-[800px]"}`}>
+          <table className={`data-table ${showLineProjects ? "min-w-table-xl" : "min-w-table-lg"}`}>
             <thead>
               <tr>
                 <th>Item / Description</th>
@@ -346,7 +346,7 @@ export default async function PurchaseInvoiceViewPage({
           <h2 className="text-sm font-semibold">Goods Receipts</h2>
           {record.goodsReceipts.length ? (
             <div className="mt-3 overflow-x-auto rounded-md border border-border">
-              <table className="data-table min-w-[520px]">
+              <table className="data-table min-w-table-sm">
                 <thead><tr><th>Receipt</th><th>Date</th><th>Status</th></tr></thead>
                 <tbody>
                   {record.goodsReceipts.map((receipt) => (
@@ -368,7 +368,7 @@ export default async function PurchaseInvoiceViewPage({
           <h2 className="text-sm font-semibold">Payments</h2>
           {record.payments.length ? (
             <div className="mt-3 overflow-x-auto rounded-md border border-border">
-              <table className="data-table min-w-[560px]">
+              <table className="data-table min-w-table-sm">
                 <thead><tr><th>Payment</th><th>Date</th><th>Reference</th><th className="text-right!">Allocated</th></tr></thead>
                 <tbody>
                   {record.payments.map((payment) => (

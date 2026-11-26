@@ -319,7 +319,7 @@ export function DebitNoteTable({
           table={table}
           density={density}
           framed={false}
-          minWidth="min-w-[760px]" 
+          minWidth="min-w-table-lg" 
           noResultsMessage="No debit notes match" 
           onClearFilters={clearFilters}
           getRowHref={(row: Row) => `/b/${row.businessId}/purchases/debit-notes/${row.id}`}

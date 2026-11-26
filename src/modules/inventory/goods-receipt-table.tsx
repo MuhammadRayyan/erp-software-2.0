@@ -238,7 +238,7 @@ export function GoodsReceiptTable({
           table={table}
           density={density}
           framed={false}
-          minWidth="min-w-[800px]"
+          minWidth="min-w-table-lg"
           noResultsMessage="No goods receipts match"
           onClearFilters={clearFilters}
           getRowHref={(row: GoodsReceiptRow) => `/b/${businessId}/purchases/goods-receipts/${row.id}`}

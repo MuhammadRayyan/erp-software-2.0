@@ -736,7 +736,7 @@ export function ActivityLogClient({
         <div className="flex flex-wrap items-center gap-2 pt-1 border-t border-border/60">
           {/* User selector for Admin */}
           {isAdmin && (
-            <div className="flex items-center gap-1.5 min-w-[170px]">
+            <div className="flex items-center gap-1.5 min-w-44">
               <User className="size-3.5 text-muted-foreground" />
               <SelectNative
                 value={selectedUser}
@@ -757,7 +757,7 @@ export function ActivityLogClient({
           )}
 
           {/* Entity Type selector */}
-          <div className="flex items-center gap-1.5 min-w-[160px]">
+          <div className="flex items-center gap-1.5 min-w-40">
             <Layers className="size-3.5 text-muted-foreground" />
             <SelectNative
               value={selectedEntityType}

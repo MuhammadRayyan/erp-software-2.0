@@ -57,7 +57,7 @@ export default async function TrialBalancePage({
         <Button type="submit" variant="secondary">Apply</Button>
       </form>
       <div className="data-panel overflow-x-auto">
-        <table className="data-table min-w-[620px]">
+        <table className="data-table min-w-table-md">
           <thead>
             <tr>
               <th>Account</th>

@@ -35,7 +35,7 @@ interface DataTableProps {
 
 export function DataTable({
   table,
-  minWidth = "min-w-[800px]",
+  minWidth = "min-w-table-lg",
   density,
   pinFirstColumn = false,
   maxHeight,
@@ -132,7 +132,7 @@ export function DataTable({
 
                 const isSticky = pinFirstColumn && index === 0;
                 let classes = meta?.className || "";
-                if (meta?.numeric) classes += " col-numeric whitespace-nowrap min-w-[118px]";
+                if (meta?.numeric) classes += " col-numeric whitespace-nowrap min-w-30";
                 if (meta?.wrap) classes += " col-wrap";
                 else classes += " truncate";
                 if (isSticky) classes += " sticky-col";
@@ -207,7 +207,7 @@ export function DataTable({
 
                   const isSticky = pinFirstColumn && index === 0;
                   let classes = meta?.className || "";
-                  if (meta?.numeric) classes += " col-numeric whitespace-nowrap min-w-[118px]";
+                  if (meta?.numeric) classes += " col-numeric whitespace-nowrap min-w-30";
                   if (meta?.wrap) classes += " col-wrap";
                   else classes += " truncate";
                   if (isSticky) classes += " sticky-col";

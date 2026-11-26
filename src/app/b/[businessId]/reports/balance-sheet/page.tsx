@@ -231,7 +231,7 @@ export default async function BalanceSheetReportPage({
       />
 
       <div className="data-panel overflow-x-auto p-6">
-        <table className="w-full min-w-[600px] text-sm">
+        <table className="w-full min-w-table-md text-sm">
           <thead>
             <tr className="border-b border-border text-xs uppercase tracking-wider text-muted-foreground">
               <th className="pb-3 text-left font-semibold">Account</th>

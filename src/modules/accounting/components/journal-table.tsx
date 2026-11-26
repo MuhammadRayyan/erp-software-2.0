@@ -210,7 +210,7 @@ export function JournalTable({
           table={table}
           density={density}
           framed={false}
-          minWidth="min-w-[760px]"
+          minWidth="min-w-table-lg"
           noResultsMessage="No journal entries match"
           onClearFilters={clearFilters}
           getRowHref={(row: JournalEntryRow) => `/b/${businessId}/accounting/journal/${row.id}`}

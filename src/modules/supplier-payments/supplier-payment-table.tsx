@@ -141,7 +141,7 @@ export function SupplierPaymentTable({
       itemLabel="payments"
       noResultsMessage="No supplier payments match these filters"
       noResultsSubtext="Try a different payment number, supplier, bank account, date range, or status."
-      minWidth="min-w-[1000px]"
+      minWidth="min-w-table-2xl"
       getRowHref={(p) => `/b/${businessId}/purchases/payments/${p.id}`}
       exportConfig={{
         filename: "supplier-payments",

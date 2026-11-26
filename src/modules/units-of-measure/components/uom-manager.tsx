@@ -113,7 +113,7 @@ export function UomManager({
           <span className="text-xs text-muted-foreground">{units.length} units configured</span>
         </div>
         <div className="overflow-x-auto">
-          <table className="data-table min-w-[500px]">
+          <table className="data-table min-w-table-sm">
             <thead>
               <tr>
                 <th className="w-24">Code</th>
