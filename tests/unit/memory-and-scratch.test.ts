@@ -44,4 +44,14 @@ test("health shows memory only to direct (in-container) callers, never through t
   }))).json();
   assert.equal(proxied.status, "ok");
   assert.equal(proxied.memory, undefined);
+
+  // Next.js sets X-Forwarded-For to the socket address on direct calls.
+  for (const loopback of ["127.0.0.1", "::1", "::ffff:127.0.0.1"]) {
+    const local = await (await GET(new Request("http://127.0.0.1:3000/api/health", { headers: { "x-forwarded-for": loopback } }))).json();
+    assert.ok(local.memory, `direct call from ${loopback} sees memory`);
+  }
+  const mixed = await (await GET(new Request("http://127.0.0.1:3000/api/health", {
+    headers: { "x-forwarded-for": "203.0.113.7, 127.0.0.1" },
+  }))).json();
+  assert.equal(mixed.memory, undefined, "any non-loopback hop hides memory");
 });
