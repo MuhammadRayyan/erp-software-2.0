@@ -128,9 +128,10 @@ jobs:
           provenance: false
           tags: erp-verified:${{ github.sha }}
           build-args: APP_REVISION=${{ github.sha }}
-          # Layer cache shared across runs; main's cache is readable from PRs.
+          # Layer cache: written only by main (PR caches are visible to that PR alone,
+          # so exporting them costs minutes for nothing); every run reads main's.
           cache-from: type=gha,scope=erp-image-arm64
-          cache-to: type=gha,scope=erp-image-arm64,mode=max
+          cache-to: ${{ github.ref == 'refs/heads/main' && 'type=gha,scope=erp-image-arm64,mode=max' || '' }}
       - name: Test the final production image
         run: bash scripts/ci-image-smoke.sh erp-verified:"$GITHUB_SHA" "$GITHUB_SHA"
       - name: Extract release metadata and production dependency inventory
