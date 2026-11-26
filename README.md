@@ -18,7 +18,7 @@ Superseded point-in-time reviews, specs, and sprint planning artifacts are prese
 
 ## Requirements & Local Setup
 
-- **Runtime:** Node `22` (see [.nvmrc](.nvmrc)) and npm with locked dependencies (`package-lock.json`).
+- **Runtime:** Node `24` LTS (see [.nvmrc](.nvmrc)) and npm with locked dependencies (`package-lock.json`).
 - **Bootstrap:**
   ```bash
   npm ci

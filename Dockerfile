@@ -4,12 +4,10 @@
 # ==============================================================================
 
 # Stage 1: Build & Dependencies
-FROM node:22-bookworm-slim@sha256:de170b39439eb0e5a3444ad7d60b015614a381e10fecae2e30ec9e735122f38d AS builder
+FROM node:24-bookworm-slim@sha256:873f586f3794f52281bd039bf02c048a0be08fde619338f9941bad1eb6b34530 AS builder
 WORKDIR /app
 
 ENV NEXT_TELEMETRY_DISABLED=1
-ENV PUPPETEER_SKIP_DOWNLOAD=true
-ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true
 
 # Install native compilation toolchain for better-sqlite3
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -19,7 +17,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 COPY package.json package-lock.json ./
-RUN npm ci --legacy-peer-deps --include=dev
+RUN npm ci --include=dev
 
 # Declared after dependency install so a new revision does not invalidate the
 # cached npm ci layer.
@@ -31,12 +29,12 @@ ENV NODE_ENV=production
 
 RUN npm run build:ops \
     && node .ops/ops.cjs release-info > .ops/release.json \
-    && npm sbom --package-lock-only --legacy-peer-deps --omit=dev --sbom-format cyclonedx --sbom-type application > .ops/production-dependencies.cdx.json \
+    && npm sbom --package-lock-only --omit=dev --sbom-format cyclonedx --sbom-type application > .ops/production-dependencies.cdx.json \
     && ERP_DATA_DIR=/tmp/erp-build node .ops/ops.cjs migrate \
     && NEXT_PHASE=phase-production-build ERP_DATA_DIR=/tmp/erp-build npm run build
 
 # Stage 2: Minimal Production Runner
-FROM node:22-bookworm-slim@sha256:de170b39439eb0e5a3444ad7d60b015614a381e10fecae2e30ec9e735122f38d AS runner
+FROM node:24-bookworm-slim@sha256:873f586f3794f52281bd039bf02c048a0be08fde619338f9941bad1eb6b34530 AS runner
 WORKDIR /app
 
 # Install runtime libraries for headless Chromium (PDF rendering) and SQLite
@@ -47,8 +45,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
     && rm -rf /var/lib/apt/lists/*
 
-ENV PUPPETEER_SKIP_DOWNLOAD=true
-ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true
+# puppeteer-core never downloads a browser; it uses the system Chromium.
 ENV PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium
 ENV XDG_CONFIG_HOME=/tmp/chromium-config
 ENV XDG_CACHE_HOME=/tmp/chromium-cache

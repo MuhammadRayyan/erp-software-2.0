@@ -17,7 +17,7 @@ The owner workstation already has approved private OCI profile ERP_OPERATIONS in
 
 Use the existing local SSH key with BatchMode=yes, ConnectTimeout=10, and StrictHostKeyChecking=yes. Never disable host-key verification. Inspect container status, public HTTPS /api/health, and bounded logs without printing environment values, cookies, private keys or customer records. Health exposes status/revision; detailed integrity/reconciliation is checked with the bundled tools.
 
-For application acceptance, use the README's Node 22/npm commands and isolated default browser configuration, not the old development-server workflow in historical notes. The [flow/cleanup report](../../../docs/history/FLOW_VERIFICATION_AND_CLEANUP_2026-10-26.md) records historical service checks and local browser scenarios, preserved data and quarantined artifacts. These results do not authorize production mutations or imply that local workflow edits have been deployed.
+For application acceptance, use the README's Node 24/npm commands and isolated default browser configuration, not the old development-server workflow in historical notes. The [flow/cleanup report](../../../docs/history/FLOW_VERIFICATION_AND_CLEANUP_2026-10-26.md) records historical service checks and local browser scenarios, preserved data and quarantined artifacts. These results do not authorize production mutations or imply that local workflow edits have been deployed.
 
 ## Normal release flow
 
