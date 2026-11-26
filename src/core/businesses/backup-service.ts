@@ -1,8 +1,7 @@
 import { assertActiveUser } from "@/core/auth/active-user";
 import { assertBusinessAdministrator } from "@/core/permissions/mutation-permissions";
 import { createHash, randomUUID } from "node:crypto";
-import { createReadStream, existsSync, mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { createReadStream, existsSync, mkdirSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import Database from "better-sqlite3";
 import { eq } from "drizzle-orm";
@@ -12,7 +11,7 @@ import { collectStreamToBuffer, createStreamingZipStream } from "@/lib/streaming
 import { closeBusinessConnection, getBusinessDb, openBusinessDatabase } from "@/core/db/business";
 import { detectAndValidateBusinessBaseline } from "@/core/db/migrations/business-baseline";
 import { sqliteTableExists, validateSqliteSchema } from "@/core/db/migrations/schema-validation";
-import { getBusinessPaths } from "@/core/db/paths";
+import { getBusinessPaths, makeScratchDirectory } from "@/core/db/paths";
 import { enforceReferenceSchemaObjects } from "@/core/db/schema-objects";
 import { businesses, memberships } from "@/core/db/system-schema";
 import { getSystemDb } from "@/core/db/system";
@@ -202,7 +201,7 @@ export async function importBusinessBackup(buffer: ArrayBuffer | Buffer, userId:
   }
 
   // Open uploaded file in read-only mode first and run PRAGMA integrity_check and schema validation
-  const tempDir = mkdtempSync(path.join(tmpdir(), "erp-backup-validate-"));
+  const tempDir = makeScratchDirectory("erp-backup-validate-");
   const tempDbPath = path.join(tempDir, "validate.sqlite");
   try {
     writeFileSync(tempDbPath, database);

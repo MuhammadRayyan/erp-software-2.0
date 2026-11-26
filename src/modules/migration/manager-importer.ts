@@ -1,11 +1,11 @@
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { rmSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import Database from "better-sqlite3";
 import { randomUUID } from "node:crypto";
 import { createBusiness } from "@/core/businesses/business-service";
 import { openBusinessDatabase, closeBusinessConnection } from "@/core/db/business";
 import { applyStandardSqlitePragmas } from "@/core/db/pragmas";
+import { makeScratchDirectory } from "@/core/db/paths";
 import {
   extractManagerData,
   type ManagerExtractedData,
@@ -306,7 +306,7 @@ function openTempManagerDb(buffer: ArrayBuffer | Buffer): { db: Database.Databas
     throw new Error("Invalid Manager.io backup file: missing SQLite format 3 header.");
   }
 
-  const tempDir = mkdtempSync(path.join(tmpdir(), "manager-import-"));
+  const tempDir = makeScratchDirectory("manager-import-");
   const tempPath = path.join(tempDir, "source.manager");
   writeFileSync(tempPath, buf);
 

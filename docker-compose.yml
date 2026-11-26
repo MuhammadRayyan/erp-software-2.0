@@ -21,7 +21,9 @@ services:
     mem_limit: 3g
     pids_limit: 256
     tmpfs:
-      - /tmp:size=1024m,mode=1777
+      # RAM-backed and counted against mem_limit: only Chromium's small temp files live here.
+      # Large uploads and imports use the disk-backed /app/data/.scratch.
+      - /tmp:size=256m,mode=1777
     volumes:
       - /opt/modern-erp/data:/app/data
       - next_cache:/app/.next/cache
