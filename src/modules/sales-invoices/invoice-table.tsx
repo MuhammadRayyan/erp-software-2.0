@@ -444,7 +444,7 @@ export function InvoiceTable({
         table={table}
         density={density}
         framed={false}
-        minWidth="min-w-[1100px]"
+        minWidth="min-w-table-2xl"
         getRowHref={(inv: InvoiceRow) => `/b/${businessId}/sales/invoices/${inv.id}`}
         noResultsMessage="No invoices match these filters"
         noResultsSubtext="Try a different invoice number, customer, date range, or status."

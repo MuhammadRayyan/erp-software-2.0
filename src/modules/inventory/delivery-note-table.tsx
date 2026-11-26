@@ -238,7 +238,7 @@ export function DeliveryNoteTable({
           table={table}
           density={density}
           framed={false}
-          minWidth="min-w-[800px]"
+          minWidth="min-w-table-lg"
           noResultsMessage="No delivery notes match"
           onClearFilters={clearFilters}
           getRowHref={(row: DeliveryNoteRow) => `/b/${businessId}/sales/delivery-notes/${row.id}`}

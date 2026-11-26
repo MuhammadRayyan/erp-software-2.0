@@ -454,10 +454,10 @@ export function PayslipForm({
           <table className="line-item-table w-full">
             <thead>
               <tr>
-                <th className="w-[26%] min-w-[160px]">Predefined Item</th>
-                <th className="min-w-[160px]">Description</th>
-                <th className="w-[26%] min-w-[160px]">GL Account</th>
-                <th className="w-32 min-w-[110px] col-numeric text-right!">Amount ({currency})</th>
+                <th className="w-[26%] min-w-40">Predefined Item</th>
+                <th className="min-w-40">Description</th>
+                <th className="w-[26%] min-w-40">GL Account</th>
+                <th className="w-32 min-w-28 col-numeric text-right!">Amount ({currency})</th>
                 <th className="w-10 text-center"><span className="sr-only">Actions</span></th>
               </tr>
             </thead>
@@ -562,10 +562,10 @@ export function PayslipForm({
           <table className="line-item-table w-full">
             <thead>
               <tr>
-                <th className="w-[26%] min-w-[160px]">Predefined Item</th>
-                <th className="min-w-[160px]">Description</th>
-                <th className="w-[26%] min-w-[160px]">GL Account</th>
-                <th className="w-32 min-w-[110px] col-numeric text-right!">Amount ({currency})</th>
+                <th className="w-[26%] min-w-40">Predefined Item</th>
+                <th className="min-w-40">Description</th>
+                <th className="w-[26%] min-w-40">GL Account</th>
+                <th className="w-32 min-w-28 col-numeric text-right!">Amount ({currency})</th>
                 <th className="w-10 text-center"><span className="sr-only">Actions</span></th>
               </tr>
             </thead>
@@ -653,7 +653,7 @@ export function PayslipForm({
             Balanced GL Posting: debits salary expense accounts, credits payroll payable & advances.
           </div>
 
-          <div className="space-y-1.5 min-w-[280px]">
+          <div className="space-y-1.5 min-w-70">
             <div className="flex justify-between text-sm text-foreground">
               <span>Gross Earnings:</span>
               <span className="font-medium money">

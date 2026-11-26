@@ -234,7 +234,7 @@ export function SentEmailTable({
           table={table}
           density={density}
           framed={false}
-          minWidth="min-w-[860px]"
+          minWidth="min-w-table-xl"
           noResultsMessage="No sent emails match"
           onClearFilters={clearFilters}
           getRowHref={(row: SentEmailRow) => `/b/${businessId}/emails/${row.id}`}

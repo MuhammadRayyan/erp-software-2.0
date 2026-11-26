@@ -217,7 +217,7 @@ export default async function PurchaseQuoteViewPage({
         </div>
 
         <div className="mt-6 overflow-x-auto">
-          <table className={`data-table ${showLineProjects ? "min-w-[1020px]" : "min-w-[880px]"}`}>
+          <table className={`data-table ${showLineProjects ? "min-w-table-2xl" : "min-w-table-xl"}`}>
             <thead>
               <tr>
                 <th>Item / Description</th>

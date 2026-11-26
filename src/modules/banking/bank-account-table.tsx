@@ -253,7 +253,7 @@ export function BankAccountTable({
           table={table}
           density={density}
           framed={false}
-          minWidth="min-w-[900px]"
+          minWidth="min-w-table-xl"
           noResultsMessage="No accounts match"
           onClearFilters={clearFilters}
           getRowHref={(row: BankAccountRow) => `/b/${businessId}/banking/accounts/${row.id}`}

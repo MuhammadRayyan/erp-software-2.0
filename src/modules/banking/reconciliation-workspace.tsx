@@ -321,7 +321,7 @@ export function ReconciliationWorkspace({
         </div>
         {cleared.length ? (
           <div className="data-panel overflow-x-auto">
-            <table className="data-table min-w-[760px]">
+            <table className="data-table min-w-table-lg">
               <thead><tr><th>Date</th><th>Statement line</th><th>Matched to</th><th className="text-right!">Amount</th><th><span className="sr-only">Actions</span></th></tr></thead>
               <tbody>
                 {cleared.map((line) => (

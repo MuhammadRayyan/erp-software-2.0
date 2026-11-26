@@ -553,7 +553,7 @@ export function PdcsClient({
           table={table}
           density={density}
           framed={false}
-          minWidth="min-w-[980px]"
+          minWidth="min-w-table-2xl"
           noResultsMessage={initialPdcs.length === 0 ? "No post-dated cheques recorded yet." : "No post-dated cheques match"}
           noResultsSubtext={initialPdcs.length === 0 ? "Register a cheque to start tracking maturity and clearing." : "Try adjusting your search or filter criteria."}
           onClearFilters={hasActiveFilter ? clearFilters : undefined}

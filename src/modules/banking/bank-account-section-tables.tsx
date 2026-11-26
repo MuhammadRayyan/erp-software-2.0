@@ -295,7 +295,7 @@ export function BankAccountTransactionsTable({
           table={table}
           density={density}
           framed={false}
-          minWidth="min-w-[1050px]"
+          minWidth="min-w-table-2xl"
           getRowHref={(row) => row.sourceHref}
           noResultsMessage="No bank transactions match"
           onClearFilters={hasActiveFilter ? resetFilters : undefined}
@@ -560,7 +560,7 @@ export function BankAccountImportedTable({
           table={table}
           density={density}
           framed={false}
-          minWidth="min-w-[980px]"
+          minWidth="min-w-table-2xl"
           noResultsMessage="No statement lines match"
           onClearFilters={hasActiveFilter ? resetFilters : undefined}
         />

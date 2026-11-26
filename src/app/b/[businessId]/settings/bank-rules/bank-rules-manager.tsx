@@ -239,7 +239,7 @@ export function BankRulesManager({
       ) : (
         <div className="data-panel overflow-hidden border border-border rounded-lg bg-surface-raised">
           <div className="overflow-x-auto">
-            <table className="data-table min-w-[850px] w-full text-left text-xs">
+            <table className="data-table min-w-table-xl w-full text-left text-xs">
               <thead className="bg-surface border-b border-border text-muted-foreground uppercase tracking-wider text-[10px]">
                 <tr>
                   <th className="py-2.5 px-3 font-semibold">Rule Name</th>

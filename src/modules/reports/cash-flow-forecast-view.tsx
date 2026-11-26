@@ -389,7 +389,7 @@ export function CashFlowForecastView({ businessId, data, currency }: Props) {
       {/* Tab 1: Daily Forecast Ledger */}
       {activeTab === "timeline" && (
         <div className="data-panel overflow-x-auto">
-          <table className="data-table min-w-[850px]">
+          <table className="data-table min-w-table-xl">
             <thead>
               <tr>
                 <th>Date</th>
@@ -482,7 +482,7 @@ export function CashFlowForecastView({ businessId, data, currency }: Props) {
               No outstanding receivables invoices found.
             </div>
           ) : (
-            <table className="data-table min-w-[850px]">
+            <table className="data-table min-w-table-xl">
               <thead>
                 <tr>
                   <th>Customer</th>
@@ -548,7 +548,7 @@ export function CashFlowForecastView({ businessId, data, currency }: Props) {
               No outstanding purchase bills found.
             </div>
           ) : (
-            <table className="data-table min-w-[850px]">
+            <table className="data-table min-w-table-xl">
               <thead>
                 <tr>
                   <th>Supplier</th>
@@ -609,7 +609,7 @@ export function CashFlowForecastView({ businessId, data, currency }: Props) {
       {/* Tab 4: Liquid Accounts */}
       {activeTab === "accounts" && (
         <div className="data-panel overflow-x-auto">
-          <table className="data-table min-w-[700px]">
+          <table className="data-table min-w-table-lg">
             <thead>
               <tr>
                 <th>Account Name</th>

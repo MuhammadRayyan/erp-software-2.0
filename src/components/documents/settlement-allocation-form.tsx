@@ -615,7 +615,7 @@ export function SettlementAllocationForm({
           </div>
         ) : (
           <div className="mt-4 overflow-x-auto rounded-lg border border-border">
-            <table className="data-table min-w-[760px]">
+            <table className="data-table min-w-table-lg">
               <thead>
                 <tr>
                   <th>{copy.docNumberHeader}</th>

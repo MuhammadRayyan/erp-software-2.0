@@ -299,7 +299,7 @@ export function PurchaseOrderTable({
         table={table}
         density={density}
         framed={false}
-        minWidth="min-w-[780px]" 
+        minWidth="min-w-table-lg" 
         noResultsMessage="No purchase orders match" 
         onClearFilters={clearFilters}
         getRowHref={(row: Row) => `/b/${row.businessId}/purchases/orders/${row.id}`}

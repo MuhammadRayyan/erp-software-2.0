@@ -87,7 +87,7 @@ export default async function VatTransactionsPage({
     </form>
 
     <div className="data-panel overflow-x-auto">
-      <table className="data-table min-w-[1120px]">
+      <table className="data-table min-w-table-2xl">
         <thead><tr><th>Tax date</th><th>Document</th><th>Party</th><th>Tax code</th><th>Category</th><th>Emirate</th><th className="text-right!">Net</th><th className="text-right!">VAT</th><th className="text-right!">Recoverable</th></tr></thead>
         <tbody>{rows.length ? rows.map((row) => <tr key={row.id}>
           <td>{row.tax_date}</td>

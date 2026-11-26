@@ -280,7 +280,7 @@ export function CustomerTable({
           table={table}
           density={density}
           framed={false}
-          minWidth="min-w-[800px]"
+          minWidth="min-w-table-lg"
           getRowHref={(c: CustomerRow) => `/b/${businessId}/customers/${c.id}`}
           noResultsMessage="No customers match these filters"
           noResultsSubtext="Clear the search or active-status filter."

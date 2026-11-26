@@ -396,7 +396,7 @@ export function ApprovalsClient({
               table={table}
               density={density}
               framed={false}
-              minWidth="min-w-[920px]"
+              minWidth="min-w-table-xl"
               getRowHref={(row) => row.entityUrl}
               noResultsMessage={hasActiveFilter ? "No approval requests match" : "No pending approval requests"}
               noResultsSubtext={

@@ -113,7 +113,7 @@ export function ProjectStakeholders({
 
       {customers.length ? (
         <div className="overflow-x-auto">
-          <table className="data-table min-w-[780px]">
+          <table className="data-table min-w-table-lg">
             <thead>
               <tr>
                 <th>Client / Stakeholder</th>

@@ -312,7 +312,7 @@ export default async function OverviewPage({
                 </div>
                 {recentInvoices.length ? (
                   <div className="overflow-x-auto">
-                    <table className="data-table min-w-[760px]">
+                    <table className="data-table min-w-table-lg">
                       <thead>
                         <tr>
                           <th>Invoice</th>
@@ -420,7 +420,7 @@ export default async function OverviewPage({
                   </div>
                   {pdcSummary.upcomingCheques.length > 0 ? (
                     <div className="overflow-x-auto">
-                      <table className="data-table min-w-[640px]">
+                      <table className="data-table min-w-table-md">
                         <thead>
                           <tr>
                             <th>PDC #</th>

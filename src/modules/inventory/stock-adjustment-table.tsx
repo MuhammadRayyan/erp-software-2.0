@@ -229,7 +229,7 @@ export function StockAdjustmentTable({
           table={table}
           density={density}
           framed={false}
-          minWidth="min-w-[780px]"
+          minWidth="min-w-table-lg"
           noResultsMessage="No stock adjustments match"
           onClearFilters={clearFilters}
           getRowHref={(row: StockAdjustmentRow) => `/b/${businessId}/inventory/adjustments/${row.id}`}

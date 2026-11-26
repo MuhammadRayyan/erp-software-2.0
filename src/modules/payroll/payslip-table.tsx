@@ -323,7 +323,7 @@ export function PayslipTable({
           table={table}
           density={density}
           framed={false}
-          minWidth="min-w-[850px]"
+          minWidth="min-w-table-xl"
           noResultsMessage="No payslips match these filters"
           noResultsSubtext="Create your first payslip or click 'Generate Pay Run'."
           onClearFilters={clearFilters}

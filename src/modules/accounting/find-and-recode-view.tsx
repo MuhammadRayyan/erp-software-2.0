@@ -475,7 +475,7 @@ export function FindAndRecodeView({
             </p>
           </div>
         ) : (
-          <table className="data-table min-w-[1050px]">
+          <table className="data-table min-w-table-2xl">
             <thead>
               <tr>
                 {canPost && (
