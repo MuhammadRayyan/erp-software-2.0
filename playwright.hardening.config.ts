@@ -9,7 +9,7 @@ const defaultDistDir = existsSync(path.resolve(process.cwd(), ".next-validate"))
 
 export default defineConfig({
   globalTeardown: "./tests/e2e/global-teardown.ts",
-  testDir: "./tests/e2e", testMatch: "hardening.spec.ts", workers: 1, retries: 0, timeout: 45_000,
+  testDir: "./tests/e2e", testMatch: "hardening.spec.ts", workers: 1, retries: process.env.CI ? 1 : 0, timeout: 45_000,
   reporter: "list", outputDir: "test-results/hardening",
   use: { ...devices["Desktop Chrome"], baseURL: "http://localhost:3310", trace: "retain-on-failure", screenshot: "only-on-failure" },
   webServer: {

@@ -6,6 +6,11 @@ on:
   push:
     branches: [main]
   workflow_dispatch:
+    inputs:
+      rollback_revision:
+        description: "Roll back: full 40-character commit SHA of an earlier main release. Leave empty to verify and deploy the selected branch."
+        required: false
+        default: ""
 
 permissions:
   contents: read
@@ -15,13 +20,14 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
-  verify:
-    name: Verify source and financial regressions
+  static:
+    name: Static checks and unit tests
+    if: ${{ !inputs.rollback_revision }}
     runs-on: ubuntu-24.04-arm
-    timeout-minutes: 20
+    timeout-minutes: 15
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 22
           cache: npm
@@ -37,6 +43,27 @@ jobs:
       - run: npm run check:permissions
       - name: Production dependency security check
         run: node --import tsx scripts/check-prod-audit.ts
+
+  browser:
+    name: Browser workflow and permission tests
+    if: ${{ !inputs.rollback_revision }}
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci --legacy-peer-deps
+      - name: Resolve Playwright version
+        id: playwright
+        run: echo "version=$(node -p "require('@playwright/test/package.json').version")" >> "$GITHUB_OUTPUT"
+      - name: Cache Playwright browsers
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ runner.arch }}-${{ steps.playwright.outputs.version }}
       - name: Production build for browser verification
         env:
           NEXT_DIST_DIR: .next-validate
@@ -53,7 +80,7 @@ jobs:
           npm run test:e2e:sprint3
       - name: Browser failure evidence
         if: failure()
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: browser-failure-evidence
           path: |
@@ -62,9 +89,27 @@ jobs:
           if-no-files-found: ignore
           retention-days: 3
 
+  # Branch protection requires this check name. It passes only when every
+  # parallel verification job passed (a skipped or failed job fails it).
+  verify:
+    name: Verify source and financial regressions
+    needs: [static, browser]
+    if: ${{ !cancelled() && !inputs.rollback_revision }}
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 5
+    steps:
+      - name: Require every verification job to pass
+        env:
+          STATIC: ${{ needs.static.result }}
+          BROWSER: ${{ needs.browser.result }}
+        run: |
+          echo "static=$STATIC browser=$BROWSER"
+          [[ "$STATIC" == success && "$BROWSER" == success ]]
+
   image:
     name: Verify ARM64 production image
     needs: verify
+    if: ${{ !inputs.rollback_revision }}
     runs-on: ubuntu-24.04-arm
     timeout-minutes: 25
     permissions:
@@ -73,9 +118,19 @@ jobs:
     outputs:
       image: ${{ steps.publish.outputs.image }}
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
       - name: Build the exact checked-out release
-        run: docker build --build-arg APP_REVISION="$GITHUB_SHA" --tag erp-verified:"$GITHUB_SHA" .
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          load: true
+          provenance: false
+          tags: erp-verified:${{ github.sha }}
+          build-args: APP_REVISION=${{ github.sha }}
+          # Layer cache shared across runs; main's cache is readable from PRs.
+          cache-from: type=gha,scope=erp-image-arm64
+          cache-to: type=gha,scope=erp-image-arm64,mode=max
       - name: Test the final production image
         run: bash scripts/ci-image-smoke.sh erp-verified:"$GITHUB_SHA" "$GITHUB_SHA"
       - name: Extract release metadata and production dependency inventory
@@ -83,7 +138,7 @@ jobs:
           mkdir -p release-evidence
           docker run --rm --entrypoint cat erp-verified:"$GITHUB_SHA" tools/release.json > release-evidence/release.json
           docker run --rm --entrypoint cat erp-verified:"$GITHUB_SHA" tools/production-dependencies.cdx.json > release-evidence/production-dependencies.cdx.json
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         continue-on-error: true
         with:
           name: release-evidence-${{ github.sha }}
@@ -108,7 +163,14 @@ jobs:
   deploy:
     name: Deploy and verify production
     needs: [verify, image]
-    if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
+    # A normal release needs verified jobs; a manual rollback skips straight to
+    # deploying an image that an earlier main run already verified and published.
+    if: >-
+      !cancelled() && github.ref == 'refs/heads/main' && (
+        ((github.event_name == 'push' || github.event_name == 'workflow_dispatch') && !inputs.rollback_revision
+          && needs.verify.result == 'success' && needs.image.result == 'success')
+        || (github.event_name == 'workflow_dispatch' && inputs.rollback_revision)
+      )
     runs-on: ubuntu-24.04
     timeout-minutes: 25
     environment: production
@@ -123,9 +185,34 @@ jobs:
       SERVER_USER: ${{ secrets.SERVER_USER }}
       SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
       SERVER_KNOWN_HOSTS: ${{ vars.SERVER_KNOWN_HOSTS }}
-      RELEASE_IMAGE: ${{ needs.image.outputs.image }}
+      RELEASE_REVISION: ${{ inputs.rollback_revision || github.sha }}
+      ROLLBACK_REVISION: ${{ inputs.rollback_revision }}
+      VERIFIED_IMAGE: ${{ needs.image.outputs.image }}
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # A rollback ships that release's own compose file, Caddyfile and deploy scripts,
+          # and needs full history to confirm the revision is on main.
+          ref: ${{ env.RELEASE_REVISION }}
+          fetch-depth: ${{ inputs.rollback_revision && '0' || '1' }}
+      - name: Resolve the release image
+        env:
+          REGISTRY_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -Eeuo pipefail
+          if [[ -z "$ROLLBACK_REVISION" ]]; then
+            echo "RELEASE_IMAGE=$VERIFIED_IMAGE" >> "$GITHUB_ENV"
+            exit 0
+          fi
+          [[ "$ROLLBACK_REVISION" =~ ^[a-f0-9]{40}$ ]] || { echo "rollback_revision must be a full 40-character commit SHA" >&2; exit 1; }
+          git merge-base --is-ancestor "$ROLLBACK_REVISION" origin/main || { echo "Only revisions already on main can be rolled back to" >&2; exit 1; }
+          printf '%s' "$REGISTRY_TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
+          repository="ghcr.io/${GITHUB_REPOSITORY,,}"
+          digest="$(docker buildx imagetools inspect "$repository:$ROLLBACK_REVISION" --format '{{json .Manifest}}' | jq -r .digest)"
+          docker logout ghcr.io
+          [[ "$digest" =~ ^sha256:[a-f0-9]{64}$ ]] || { echo "No published image for $ROLLBACK_REVISION" >&2; exit 1; }
+          echo "Rolling back to $ROLLBACK_REVISION ($repository@$digest)"
+          echo "RELEASE_IMAGE=$repository@$digest" >> "$GITHUB_ENV"
       - name: Validate deployment configuration
         run: |
           set -Eeuo pipefail
@@ -143,10 +230,10 @@ jobs:
           set -Eeuo pipefail
           options=(-o BatchMode=yes -o StrictHostKeyChecking=yes -o ConnectTimeout=15 -i "$HOME/.ssh/erp_deploy")
           destination="$SERVER_USER@$SERVER_HOST"
-          ssh "${options[@]}" "$destination" "umask 077; mkdir -p /opt/modern-erp/releases/$GITHUB_SHA"
-          scp "${options[@]}" scripts/deploy.sh scripts/deploy-from-ci.sh docker-compose.yml Caddyfile "$destination:/opt/modern-erp/releases/$GITHUB_SHA/"
+          ssh "${options[@]}" "$destination" "umask 077; mkdir -p /opt/modern-erp/releases/$RELEASE_REVISION"
+          scp "${options[@]}" scripts/deploy.sh scripts/deploy-from-ci.sh docker-compose.yml Caddyfile "$destination:/opt/modern-erp/releases/$RELEASE_REVISION/"
           # A job-scoped token is streamed to a private temporary Docker config; it is never stored on the host permanently.
-          printf '%s' "$REGISTRY_TOKEN" | ssh "${options[@]}" "$destination" "bash /opt/modern-erp/releases/$GITHUB_SHA/deploy-from-ci.sh '$GITHUB_SHA' '$RELEASE_IMAGE' '$GITHUB_ACTOR'"
+          printf '%s' "$REGISTRY_TOKEN" | ssh "${options[@]}" "$destination" "bash /opt/modern-erp/releases/$RELEASE_REVISION/deploy-from-ci.sh '$RELEASE_REVISION' '$RELEASE_IMAGE' '$GITHUB_ACTOR'"
       - name: Remove runner SSH material
         if: always()
         run: rm -f -- ~/.ssh/erp_deploy

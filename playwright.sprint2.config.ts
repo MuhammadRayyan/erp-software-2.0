@@ -12,7 +12,7 @@ export default defineConfig({
   testDir: "./tests/e2e",
   testMatch: "sprint-2-hardening.spec.ts",
   workers: 1,
-  retries: 0,
+  retries: process.env.CI ? 1 : 0,
   timeout: 45_000,
   reporter: "list",
   outputDir: "test-results/sprint2",

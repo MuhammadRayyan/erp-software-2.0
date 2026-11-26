@@ -31,6 +31,9 @@ printf '{"status":"ok","revision":"%s"}\n' "$TEST_REVISION"
 MOCK
 cat > "$temporary/bin/sudo" <<'MOCK'
 #!/usr/bin/env bash
+# Ownership changes are no-ops here; rotation deletes run for real inside the test root.
+[[ "${1:-}" == -n ]] && shift
+if [[ "${1:-}" == rm ]]; then exec "$@"; fi
 exit 0
 MOCK
 if ! command -v flock >/dev/null; then printf '#!/usr/bin/env bash\nexit 0\n' > "$temporary/bin/flock"; fi
@@ -52,11 +55,23 @@ for scenario in success pull-failure backup-failure backup-timeout rehearsal-fai
   printf 'new configuration\n' > "$TEST_ROOT/releases/$TEST_REVISION/docker-compose.yml"
   printf 'new caddy\n' > "$TEST_ROOT/releases/$TEST_REVISION/Caddyfile"
   printf 'APP_DOMAIN=erp.example.invalid\n' > "$TEST_ROOT/runtime.env"
+  # Older snapshots and releases that housekeeping should rotate down to ten.
+  for day in 01 02 03 04 05 06 07 08 09 10 11 12; do
+    mkdir -p "$TEST_ROOT/backups/202601${day}T000000Z-old" "$TEST_ROOT/releases/old-release-$day"
+    touch -d "2026-01-$day" "$TEST_ROOT/releases/old-release-$day"
+  done
   status=0
   bash "$workspace/scripts/deploy.sh" "$image" "$TEST_REVISION" > "$TEST_ROOT/output.log" 2>&1 || status=$?
   if [[ "$scenario" == success ]]; then
     [[ "$status" == 0 && -f "$TEST_ROOT/releases/$TEST_REVISION/deployed-image.txt" ]]
+    grep -q '^image prune -f' "$TEST_ROOT/docker-calls.log"
+    [[ "$(find "$TEST_ROOT/backups" -mindepth 1 -maxdepth 1 -type d | wc -l)" == 10 ]]
+    [[ ! -d "$TEST_ROOT/backups/20260101T000000Z-old" && -d "$TEST_ROOT/backups/20260112T000000Z-old" ]]
+    [[ "$(find "$TEST_ROOT/releases" -mindepth 1 -maxdepth 1 -type d | wc -l)" == 10 && -d "$TEST_ROOT/releases/$TEST_REVISION" ]]
+    [[ ! -d "$TEST_ROOT/releases/old-release-01" && -d "$TEST_ROOT/releases/old-release-12" ]]
   else
+    # A failed deployment never rotates anything away.
+    [[ -d "$TEST_ROOT/backups/20260101T000000Z-old" && -d "$TEST_ROOT/releases/old-release-01" ]]
     [[ "$status" != 0 && ! -f "$TEST_ROOT/releases/$TEST_REVISION/deployed-image.txt" ]]
     if [[ "$scenario" == pull-failure ]]; then ! grep -q '^stop ' "$TEST_ROOT/docker-calls.log"; fi
     if [[ "$scenario" != pull-failure && "$scenario" != incompatible-schema ]]; then
