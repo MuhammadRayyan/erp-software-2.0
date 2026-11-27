@@ -1,7 +1,7 @@
 # UAE Manager — Architecture & Domain Specification
 
-**Application:** `modern-erp` v2.7.0 · **Updated:** 14 November 2026 (Sprints 1–4)
-**Stack:** Next.js `16.4.3` (App Router), React `19.2.8`, Node `22` (`.nvmrc`), TypeScript `6.0.3`, SQLite (`better-sqlite3` `13.0.3`), Drizzle ORM `0.45.2`, Better Auth `1.7.14`, Tailwind CSS `4.3.3`, Radix UI, `@tanstack/react-table` `^9.2.4`, `@tanstack/react-virtual` `^3.14.26`, `nuqs` `^2.10.3`, `cmdk` `^1.1.1`, `yazl` `^3.3.1`, Puppeteer `^25.7.0`, `@react-pdf/renderer` `^4.6.1`, `@sentry/nextjs` `10.75.2`.
+**Application:** `modern-erp` v2.7.0 · **Updated:** 27 November 2026
+**Stack:** Next.js `16.4.6` (App Router), React `19.2.8`, Node `24` LTS (`.nvmrc`, `engines`), TypeScript `6.0.3`, SQLite (`better-sqlite3` `13.0.3`), Drizzle ORM `0.45.2`, Better Auth `1.7.28`, Tailwind CSS `4.3.3`, Radix UI, `@tanstack/react-table` `^9.2.4`, `@tanstack/react-virtual` `^3.14.26`, `nuqs` `^2.10.3`, `cmdk` `^1.1.1`, `yazl` `^3.3.1`, `puppeteer-core` `^25.19.0` (system Chromium), `@react-pdf/renderer` `^4.6.1`, `@sentry/nextjs` `10.75.2`.
 
 ---
 
@@ -11,11 +11,11 @@ UAE Manager runs as a single modular monolith ([next.config.ts](../next.config.t
 
 ```mermaid
 flowchart LR
-  Caddy["Caddy TLS / Reverse Proxy (HSTS, Security Headers)"] --> NextApp["Next.js App Router Monolith (Node 22)"]
+  Caddy["Caddy TLS / Reverse Proxy (HSTS, Security Headers)"] --> NextApp["Next.js App Router Monolith (Node 24)"]
   NextApp --> Proxy["Request Proxy (src/proxy.ts)"]
   NextApp --> SysDB[("System SQLite\ndata/system/system.sqlite\nSchema v7 · 10 tables")]
-  NextApp --> Pool["Business DB LRU Pool (MAX_CONNECTIONS=50)"]
-  Pool --> BizDB[("Per-Business SQLite WAL\ndata/businesses/<key>/business.sqlite\nSchema v38 · 89 tables")]
+  NextApp --> Pool["Business DB LRU Pool (MAX_CONNECTIONS=12)"]
+  Pool --> BizDB[("Per-Business SQLite WAL\ndata/businesses/<key>/business.sqlite\nSchema v39 · 90 tables")]
   NextApp --> PdfPool["Pooled Headless Chrome\n(incognito, no-JS, offline interceptor)"]
   NextApp --> ZipStream["yazl Streaming ZIP\n(Backups & Batch PDFs)"]
 ```
@@ -33,11 +33,13 @@ flowchart LR
 | Store | Location | Schema Version | Verified Drizzle Footprint | Migration Source |
 | :--- | :--- | :---: | :--- | :--- |
 | **System DB** | `data/system/system.sqlite` | **7** | 10 tables, 79 columns | [system.ts](../src/core/db/migrations/system.ts) |
-| **Business DB** (per workspace) | `data/businesses/<directoryKey>/business.sqlite` | **38** | 89 tables, 1337 columns | [business-migrations.ts](../src/core/db/business-migrations.ts) |
+| **Business DB** (per workspace) | `data/businesses/<directoryKey>/business.sqlite` | **39** | 90 tables, 1343 columns | [business-migrations.ts](../src/core/db/business-migrations.ts) |
 
 - **Schema verification**: `npx tsx scripts/verify-schema-sync.ts` confirms 100% alignment and foreign-key integrity across both System and Business Drizzle definitions and SQLite tables.
 - **Shared SQLite PRAGMAs** ([pragmas.ts](../src/core/db/pragmas.ts)): `applyStandardSqlitePragmas()` enforces `journal_mode = WAL`, `busy_timeout = 5000`, `synchronous = NORMAL` by default (overridable via `ERP_SQLITE_SYNCHRONOUS=FULL`), `foreign_keys = ON`, `temp_store = MEMORY`, `cache_size = -16000`, `mmap_size = 67108864`, and `wal_autocheckpoint = 1000`.
-- **LRU Connection Pool** ([business.ts](../src/core/db/business.ts)): Caches up to `MAX_CONNECTIONS = 50` business handles, enforces `MIN_AGE_BEFORE_EVICTION_MS = 10_000` before LRU eviction so in-flight awaits are never truncated, and closes idle handles after `IDLE_TIMEOUT_MS = 300_000` (5 min) after running `checkpointAndOptimizeSqlite()` (`PRAGMA optimize` + `wal_checkpoint(TRUNCATE)`).
+- **LRU Connection Pool** ([business.ts](../src/core/db/business.ts)): Caches up to `MAX_CONNECTIONS = 12` business handles (a soft cap), enforces `MIN_AGE_BEFORE_EVICTION_MS = 10_000` before LRU eviction so in-flight awaits are never truncated, and closes idle handles after `IDLE_TIMEOUT_MS = 300_000` (5 min) after running `checkpointAndOptimizeSqlite()` (`PRAGMA optimize` + `wal_checkpoint(TRUNCATE)`).
+- **Prepared-statement memory** ([statement-cache.ts](../src/core/db/statement-cache.ts), [connection-limits.ts](../src/core/db/connection-limits.ts)): `better-sqlite3` keeps each prepared statement's native memory until its connection closes, so every connection gets a per-connection LRU statement cache (2,000 entries), and a connection that has created more than 20,000 statements (`ERP_SQLITE_RECYCLE_AFTER_STATEMENTS`) is replaced, with the old handle closed 60 s later.
+- **Scratch space** ([paths.ts](../src/core/db/paths.ts)): large temporary files (backup exports, imports) go to `<ERP_DATA_DIR>/.scratch` via `makeScratchDirectory()`, not RAM-backed `/tmp`; `cleanStaleScratch()` removes leftovers older than an hour at startup, and backups exclude the folder.
 - **Super-Admin & Document Immutability Triggers**:
   - `prevent_superadmin_deletion` (`BEFORE DELETE` on `"user"` when `OLD.is_super_admin = 1`) blocks root account removal at the database layer.
   - Posted commercial documents enforce SQLite triggers (e.g. `posted_debit_note_currency_immutable`) preventing currency/exchange-rate mutation after posting.
@@ -45,6 +47,7 @@ flowchart LR
   - **System v7** (`membership_approval_controls`): adds per-membership `requires_approval` Maker-Checker enforcement toggle.
   - **Business v37** (`roadmap_pillars_1_2_3`): adds `show_on_pdf` on custom field definitions, UAE WPS employee/company fields (`mol_person_id`, `bank_routing_code`, `iban`, `mol_establishment_id`, `wps_bank_routing_code`), PDC clearing accounts & numbering settings, `saved_reports`, and `post_dated_cheques`.
   - **Business v38** (`38_settlement_date_indexes`): composite indexes on `receipts`, `supplier_payments`, and `sales_credit_notes` date/status columns for server-paginated queries.
+  - **Business v39** (`statement_match_items`): `bank_statement_match_items`, one row per book entry matched to a statement line, so one bank deposit can clear several receipts (and vice versa).
 
 ---
 
@@ -53,12 +56,15 @@ flowchart LR
 - **Authentication & Requests**: Handled by Better Auth (`src/core/auth/`) and `src/proxy.ts`. `assertActiveUser` rejects suspended or deleted users on mutations; production refuses missing or placeholder secrets and restricts `BETTER_AUTH_TRUSTED_ORIGINS`.
 - **Permission Boundaries**:
   - Every business command invokes `assertMutationPermission`, `assertSavePermission`, or `assertBusinessAdministrator` (`src/core/permissions/`).
-  - `npm run check:permissions` (`scripts/check-permissions.mjs`) statically verifies coverage across all **160** business command functions.
+  - `npm run check:permissions` (`scripts/check-permissions.mjs`) statically verifies coverage across all **164** business command functions.
   - Super-admin workspace quotas (`max_businesses`, `max_users`) are managed in [tenant-service.ts](../src/core/admin/tenant-service.ts).
 - **Maker-Checker Approvals** (`src/modules/approvals/` & `src/modules/notifications/`): Supports per-membership `requires_approval`, configurable amount threshold rules, `pending_approval` document states, isolated approval queue transitions, and bi-directional notifications between maker and approver.
-- **Content Security Policy (CSP)** ([next.config.ts](../next.config.ts)):
-  - Emits strict security headers (`frame-ancestors 'self'`, `base-uri 'self'`, `form-action 'self'`, `worker-src 'self' blob:`, `object-src 'self' blob:`, `frame-src 'self' blob: data:` for Template Studio PDF previews, Sentry ingest allowlist on `connect-src`).
-  - `script-src 'self' 'unsafe-inline'` in production (`process.env.NODE_ENV === "production"`), appending `'unsafe-eval'` only in non-production builds for React/Next dev tooling.
+- **Content Security Policy (CSP)** ([csp.ts](../src/core/security/csp.ts), [proxy.ts](../src/proxy.ts)):
+  - Pages: `src/proxy.ts` creates a 128-bit nonce per request and sets `script-src 'self' 'nonce-…' 'strict-dynamic'` on the request (Next.js reads it and nonces its own scripts) and on the response. The root layout passes the nonce (`x-nonce`) to the theme provider's inline script. No inline script runs without the nonce, so there is no `'unsafe-inline'` for scripts. Every page renders per request, which nonces require.
+  - API and `/monitoring` responses get the same policy without a nonce (`script-src 'self'`), from [next.config.ts](../next.config.ts).
+  - Other directives: `frame-ancestors 'self'`, `base-uri 'self'`, `form-action 'self'`, `worker-src 'self' blob:`, `object-src 'self' blob:`, `frame-src 'self' blob: data:` for Template Studio PDF previews, Sentry ingest allowlist on `connect-src`. Styles keep `'unsafe-inline'` (React `style` attributes cannot carry a nonce). `'unsafe-eval'` and `ws:`/`wss:` are added only in development.
+- **Abuse limits**: public password-reset requests are rate-limited per IP and per email; business SMTP hosts must resolve to a public address (pinned per connection); backup imports enforce the business quota and cap ZIP entry count and inflated size ([zip-limits.ts](../src/core/businesses/zip-limits.ts)).
+- **Secrets at rest**: SMTP passwords are stored as `enc:v1:` AES-256-GCM values keyed by HKDF from `BETTER_AUTH_SECRET` ([secret-box.ts](../src/core/security/secret-box.ts)); legacy plaintext is upgraded on read. Invitation and password-reset tokens are stored only as `sha256` hashes ([invitation-service.ts](../src/core/permissions/invitation-service.ts)), with a fallback for tokens issued before the change.
   - [next.config.ts](../next.config.ts) also emits `Strict-Transport-Security`, `Permissions-Policy`, `X-Frame-Options`, `X-Content-Type-Options`, and `Referrer-Policy` across application routes, while [Caddyfile](../Caddyfile) layers TLS and default (`?`) fallback `X-Frame-Options`, `X-Content-Type-Options`, and `Referrer-Policy` headers on static/error responses without duplicating headers.
 
 ---
@@ -88,8 +94,10 @@ flowchart LR
   - Powered by `yazl` streaming directly into Web `ReadableStream<Uint8Array>` with consumer backpressure (`output.pause()` / `output.resume()`), `AbortSignal` early cancellation, filename sanitization/deduplication (`deduplicateArchiveFilename`), and once-only temp file cleanup.
   - Used by both atomic business SQLite `.backup()` exports ([backup-service.ts](../src/core/businesses/backup-service.ts)) and batch PDF downloads ([batch-pdf/route.ts](../src/app/api/businesses/[businessId]/documents/[documentType]/batch-pdf/route.ts), capped at 100 documents).
 - **Pooled HTML-to-PDF Rendering** ([browser-pool.ts](../src/modules/document-templates/html-templates/browser-pool.ts) & [render.ts](../src/modules/document-templates/html-templates/render.ts)):
-  - Maintains a warm Puppeteer browser singleton with `MAX_CONCURRENT_RENDERS = 4`, `IDLE_CLOSE_MS = 60_000` (`.unref()` timer), and `MAX_RENDERS_BEFORE_RECYCLE = 100`.
+  - Maintains a warm `puppeteer-core` browser singleton (defaults: 4 concurrent renders, overridden to 2 in production by `HTML_PDF_CONCURRENCY`; idle close after 60 s via an `.unref()` timer; recycle after 100 renders). The executable comes from `PUPPETEER_EXECUTABLE_PATH` or a system Chromium path; there is no bundled browser. In tests, [test-isolation.mjs](../scripts/test-isolation.mjs) falls back to Playwright's Chromium.
   - Each render opens an isolated incognito browser context with `page.setJavaScriptEnabled(false)`, aborts non-local network requests (`data:`/`about:`/`blob:` only), and enforces a `15_000ms` timeout.
+
+- **Memory monitoring** ([memory-monitor.ts](../src/core/memory-monitor.ts), [instrumentation.ts](../src/instrumentation.ts)): reads the cgroup memory limit, samples RSS every 60 s and warns (log + Sentry) above 75%; `/api/health` includes the snapshot only for requests from inside the container.
 
 ---
 

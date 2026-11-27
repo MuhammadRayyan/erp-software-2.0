@@ -1,14 +1,16 @@
 # Production releases and recovery
 
-The supported production path is a pull request to `main`, required verification, an immutable ARM64 container image, and a serialized deployment to the Oracle VM. Use Node 22 and npm with `package-lock.json`; `.nvmrc` selects the supported major. `docker-compose.yml` is the canonical production definition. `compose.prod.yaml` includes it for compatibility.
+The supported production path is a pull request to `main`, required verification, an immutable ARM64 container image, and a serialized deployment to the Oracle VM. Use Node 24 LTS and npm 11 with `package-lock.json` (strict peer dependencies; no `legacy-peer-deps`); `.nvmrc` selects the supported major. `docker-compose.yml` is the canonical production definition. `compose.prod.yaml` includes it for compatibility.
 
 ## Everyday remote work
 
 Current scope: a few businesses and 5–10 users in closed testing. The owner is keeping the repository public and deferring additional hardening/maintenance automation. Existing release gates remain enabled. This runbook does not authorize a host reboot or new infrastructure by itself.
 
 1. Create a short branch from current `main`, make the change, and open a pull request.
-2. The **Verify source and financial regressions** check validates the workflow and deployment failure recovery, performs a locked install, typechecks (with isolated `.next-validate` validation via `tsconfig.validate.json`), lints, tests (`npm test` across `tests/{unit,accounting,platform,integration}/` + `npm run test:hardening`), audits production dependencies, builds production (with production CSP omitting `'unsafe-eval'`), and runs isolated browser scenarios from `tests/e2e/`.
-3. **Verify ARM64 production image** builds the actual Linux ARM64 image and exercises its runtime validation, migrations, checks, readiness, login route, non-root user, and secret-file exclusions. A deliberately interrupted synthetic process leaves committed system/tenant WAL files; CI snapshots the read-only source, checksums the backup, confirms committed rows/attachments survived, and rehearses restoration/migration.
+2. The **Verify source and financial regressions** check is an aggregator over two parallel jobs and passes only if both succeed:
+   - **Static checks and unit tests**: validates the workflow and deployment failure recovery, performs a locked install, typechecks (with isolated `.next-validate` validation via `tsconfig.validate.json`), lints, runs `npm test` (`tests/{unit,accounting,platform,integration}/`) and `npm run test:hardening` with a cached Playwright Chromium for the PDF tests, and audits production dependencies.
+   - **Browser workflow and permission tests**: builds production and runs the isolated browser scenarios from `tests/e2e/` (one retry in CI; failure evidence uploaded as an artifact).
+3. **Verify ARM64 production image** builds (Buildx with a GitHub Actions layer cache that only `main` writes, so pull requests reuse it without uploading) the actual Linux ARM64 image and exercises its runtime validation, migrations, checks, readiness, login route, non-root user, and secret-file exclusions. A deliberately interrupted synthetic process leaves committed system/tenant WAL files; CI snapshots the read-only source, checksums the backup, confirms committed rows/attachments survived, and rehearses restoration/migration.
 4. Merge only after both required checks pass. A push to `main` repeats verification, publishes the tested image to GHCR, then deploys its exact digest. The image carries the Git revision in its labels and health response.
 5. Deployment is serialized by GitHub concurrency and a host `flock`. It pulls before maintenance, retains the prior image/assets, stops and drains the app, snapshots data, verifies checksums, rehearses restore/migration on a copy, migrates production, starts the release, and verifies every registered tenant plus public HTTPS/revision.
 
@@ -16,11 +18,13 @@ The `production` GitHub environment must allow only protected branches. Protect 
 
 `npm run test:e2e` runs the isolated Playwright acceptance configuration under `tests/e2e/` covering business/action boundaries, sales/purchase settlement flows, payroll, PDFs, keyboard/mobile behavior, comparative/drill-down reporting, UAE regulatory workflows (WPS, PDC, FTA FAF/TRN), and Maker-Checker approvals. Failure evidence is collected from `test-results/acceptance`. `test:browser:hardening` and Sprint 2/3 browser suites (`playwright.sprint2.config.ts`, `playwright.sprint3.config.ts`) remain available for focused checks. Each new release must pass the full source + image gates before promotion.
 
-The workflow uses the existing `SERVER_HOST`, `SERVER_USER`, and `SSH_PRIVATE_KEY` secrets. `SERVER_KNOWN_HOSTS` is a repository variable containing the verified public SSH host key entry, not a key obtained blindly during deployment. Third-party Actions and base images are pinned; Dependabot proposes updates.
+The workflow uses the existing `SERVER_HOST`, `SERVER_USER`, and `SSH_PRIVATE_KEY` secrets. `SERVER_KNOWN_HOSTS` is a repository variable containing the verified public SSH host key entry, not a key obtained blindly during deployment. Third-party Actions are pinned by commit SHA and the `node:24-bookworm-slim` and Caddy base images by digest; Dependabot proposes updates. A full release (merge → verified image → deployed) takes about 9–12 minutes.
 
 Each image includes `tools/release.json` with application/revision/schema versions and `tools/production-dependencies.cdx.json`, a CycloneDX inventory of locked production npm dependencies. CI validates and retains both as release evidence for 30 days. The inventory describes the production dependency graph; it is not a complete operating-system package inventory or proof that every dependency is traced into the standalone runtime.
 
 The image test also invokes the application's actual HTML-template PDF renderer in an isolated, non-root, read-only container with no network, a writable temporary filesystem and bounded memory/PIDs. Chromium's XDG config/cache directories live under `/tmp`, allowing its profile/crash-report initialization without a writable application filesystem. `node tools/verify-html-pdf.cjs` runs the same synthetic render diagnostic manually.
+
+Chromium runs with `--no-sandbox` inside the container: Ubuntu 24.04's AppArmor blocks the unprivileged user namespaces its sandbox needs, and `no-new-privileges` blocks the setuid fallback. The container boundary (non-root, read-only root filesystem, all Linux capabilities dropped) and the renderer's own isolation (JavaScript disabled, network requests outside `data:`/`about:`/`blob:` aborted) are the controls. The browser binary is Debian's `/usr/bin/chromium`, driven by `puppeteer-core`; no browser is downloaded at install time.
 
 Builds can fail. The guarantee provided by the workflow is that an unverified build is not promoted, and a deployment failure is reported as a failure. A single application instance has a short maintenance interval; measure it rather than claiming zero downtime.
 
@@ -35,19 +39,37 @@ GitHub and verified SSH access work. The owner workstation also has separately a
 
 The verified production VM (`modern-erp`, `193.123.65.48`) is A1 Flex ARM64, 1 OCPU/6 GB RAM, with a 100 GB boot volume at 10 VPUs/GB (paired in the same `me-dubai-1` tenancy with `remote-dev-desktop` at 3 OCPUs/18 GB RAM and 80 GB boot volume). No boot-volume backup policy/backups, VNIC NSGs or root alarms were returned by the scoped checks. These are separate from local application deployment snapshots. Trial credit was observed; settled billing/free-tier eligibility remains unestablished. Kernel `7.0.0-1013-oracle` (`aarch64`) is active (`REBOOT_REQUIRED=no`). See [dated operations evidence](history/TESTING_PHASE_OPERATIONS_2026-10-26.md) for historical context.
 
+## Runtime limits and monitoring
+
+`docker-compose.yml` runs the app read-only and non-root with `mem_limit: 3g`, `pids_limit: 256`, `no-new-privileges`, and `HTML_PDF_CONCURRENCY=2` for the 1-OCPU host. `/tmp` is a 256 MB RAM-backed tmpfs counted against the memory limit, so only Chromium's small temp files live there. Large temporary files (backup exports, Manager.io imports) use `<ERP_DATA_DIR>/.scratch` on disk; it is excluded from backups and leftovers older than an hour are removed at startup.
+
+The app samples its memory every 60 seconds against the container's cgroup limit and logs a warning (also sent to Sentry) above 75%, at most every 30 minutes. `/api/health` returns `status` and `revision` publicly; a request from inside the container also includes a memory snapshot:
+
+```bash
+docker exec modern-erp curl -s localhost:3000/api/health
+```
+
+Caddy writes an access log to `/data/access.log` in the Caddy volume (rotated at 10 MB, 5 files kept); `Cookie` and `Authorization` headers are redacted.
+
 ## Runtime secrets
 
 Production credentials live in `/opt/modern-erp/runtime.env`, mode 0600. They are injected at runtime and excluded from Docker's build context. The image must contain no `.env`, local keys, or business backup. Authentication refuses missing, short, and known placeholder secrets. Trusted origins come only from explicit configured origins, with HTTPS required for public production hosts.
 
 For the initial migration to this setup, copy `scripts/provision-runtime.py` to the VM and execute it there with Python 3. It generates independent random authentication and setup secrets locally, preserves supported SMTP/Sentry environment settings, tightens the old `.env` permissions, and schedules invalidation of existing sessions/verification tokens on deployment. It does not print the new values. The script intentionally refuses to overwrite an existing runtime file.
 
-This initial rotation signs users out. Later ordinary image deployments keep the same runtime secrets and do not require a secret rotation. For a future rotation, coordinate a maintenance window, update the mode-0600 runtime file locally on the VM, schedule session invalidation with the marker, deploy, and verify. Never retain a known compromised signing key as a grace-period key.
+This initial rotation signs users out.
+
+Stored SMTP passwords are encrypted with AES-256-GCM using a key derived from `BETTER_AUTH_SECRET`. Rotating that secret, or restoring a backup onto an instance with a different secret, makes stored SMTP passwords unreadable: email sending stops until an administrator re-enters the password in **Settings → Email**. Invitation and password-reset tokens are stored only as SHA-256 hashes. Later ordinary image deployments keep the same runtime secrets and do not require a secret rotation. For a future rotation, coordinate a maintenance window, update the mode-0600 runtime file locally on the VM, schedule session invalidation with the marker, deploy, and verify. Never retain a known compromised signing key as a grace-period key.
 
 Next.js Server Action encryption is separate from authentication. Each promoted image contains one consistent build key. `deploymentId` is set from the revision, and prior hashed assets are retained to help browser tabs navigate across releases. This does not make different schema versions interchangeable.
 
 ## Rollback and backups
 
-The release directory stores the deployed digest and previous configuration; the prior image is tagged locally for recovery. No automatic image pruning runs during deployment. Backup directories contain SQLite snapshots, attachments, and a SHA-256 manifest.
+The release directory stores the deployed digest and previous configuration; the prior image is tagged locally (`modern-erp:rollback-<timestamp>`) for recovery. Backup directories contain SQLite snapshots, attachments, and a SHA-256 manifest.
+
+After a verified release, `scripts/deploy.sh` runs best-effort housekeeping that never fails or rolls back the release, logging to `/opt/modern-erp/.last-prune.log`: it keeps the 3 newest rollback tags (`ERP_KEEP_ROLLBACKS`), only the running registry digest, the 10 newest backups (`ERP_KEEP_BACKUPS`) and 10 release directories (always including the current one), and prunes dangling images and build cache.
+
+To redeploy an earlier `main` release, dispatch `deploy.yml` with `rollback_revision` set to its full 40-character commit SHA. The workflow checks that the commit is on `main`, resolves its already-verified image digest from GHCR, skips the build/test jobs and runs the normal deployment (backup, rehearsal, migration, verification). It cannot roll back the database schema: an older image is refused if it is incompatible with the current schema.
 
 The stopped application's database files and SQLite sidecars are first copied to a private writable staging directory. SQLite recovers/checks that copy and consolidates each database through its backup API; the original read-only data mount is untouched. Snapshot databases use DELETE journal mode so a read-only restore source does not need new WAL/SHM sidecars. Temporary snapshot/rehearsal data is removed. Deployment bounds backup/checksum operations to 60 seconds, restoration rehearsal to 120 seconds, and migration to 300 seconds, with named-container cleanup and the same compatibility-aware failure recovery. Investigate a timeout before increasing limits for larger data.
 
@@ -91,5 +113,5 @@ Closed user acceptance testing targets disposable synthetic businesses with both
 - **Observed VM maintenance items**:
   - **OCI billing**: Trial credit was observed during operational checks; confirm billing/Always Free entitlement before trial expiration.
   - **Sentry delivery**: Historical events and monitors were read-only verified; current-release event ingestion, source maps, and notification delivery remain unverified until explicitly tested.
-  - **Docker disk retention**: `193.123.65.48` reported `~18.3 GB` reclaimable historical images and `~3.2 GB` build cache across `14` retained releases; schedule controlled image/cache pruning (`docker image prune -a --filter "until=168h"`) in a maintenance window.
+  - **Docker disk retention**: resolved; deployments now prune automatically (see Rollback and backups). Disk use was 11% of 96 GB on 27 November 2026.
 - **Owner-deferred backlog** (not automated by this repository): scheduled offsite backups / retention / backup-age alerts / replacement-host restore drill (leaving proposed 15-minute RPO / 1-hour RTO unverified), production SMTP setup, large/untrusted import staging, immutable financial audit controls, narrower deployment SSH identity, load testing, and historical Git cleanup of `manager_backup_file.manager`. See archived planning notes in [docs/history/NEXT_STEPS.md](history/NEXT_STEPS.md) and [docs/history/IMPROVEMENT_ROADMAP.md](history/IMPROVEMENT_ROADMAP.md).

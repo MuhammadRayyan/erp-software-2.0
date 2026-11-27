@@ -4,6 +4,33 @@ All notable changes since the original `erp-software-2.0-antigravity-edits` uplo
 
 Full historical task detail is retained in [history/WORKLOG.md](history/WORKLOG.md) and the remaining point-in-time archive index in [history/README.md](history/README.md).
 
+## 2026-11-26 (Platform, CI and security hardening — #40 to #46)
+
+- **Node 24 LTS and strict dependencies** (#42): Node `24.x` in `engines`, `.nvmrc`, CI and the `node:24-bookworm-slim` image (pinned by digest); `.npmrc` `legacy-peer-deps` removed. `puppeteer` replaced by `puppeteer-core` with Debian's `/usr/bin/chromium` (no browser download at install); `resolveBrowserExecutablePath()` fails with a clear error when no Chromium is found. Image size 1.74 → 1.54 GB (`COPY --chown` instead of a recursive `chown` layer; `APP_REVISION` declared after `npm ci` so the dependency layer stays cached).
+- **CI and deployment** (#41): the required check now aggregates two parallel jobs (static checks/unit tests and browser tests); Actions pinned by SHA; the image build uses a GitHub Actions layer cache written only from `main`; `workflow_dispatch` input `rollback_revision` redeploys an earlier verified `main` image by digest without rebuilding. `scripts/deploy.sh` prunes the host after a verified release (3 rollback tags, the running digest, 10 backups, 10 release folders). Caddy writes a rotated access log.
+- **Memory limits** (#43, #46): `/tmp` is a 256 MB tmpfs; backup exports and Manager.io imports use `<ERP_DATA_DIR>/.scratch` on disk, excluded from backups and cleaned at startup. A memory monitor reads the cgroup limit and warns (log + Sentry) above 75%. `/api/health` includes a memory snapshot only for requests from inside the container (Next.js sets `X-Forwarded-For` itself, so loopback-only values count as direct).
+- **Security** (#45): pages use a per-request CSP nonce with `'strict-dynamic'` (no `'unsafe-inline'` scripts); API responses keep a nonce-less policy. SMTP passwords are encrypted at rest (AES-256-GCM, key derived from `BETTER_AUTH_SECRET`; legacy plaintext upgraded on read). Invitation and password-reset tokens are stored as SHA-256 hashes. Chromium keeps `--no-sandbox` (documented in `browser-pool.ts` and `DEPLOYMENT.md`).
+- **Table widths** (#44): 140 hard-coded pixel widths across 93 files replaced by `min-w-table-sm|md|lg|xl|2xl` tokens; a unit test rejects new arbitrary pixel widths.
+- **App icon**: `src/app/icon.svg` (the logo) so browsers stop requesting a missing `/favicon.ico`.
+- **Tests and dependencies** (#40): test runs use a per-process temp root that is removed on exit, and Playwright runs remove their data folder in a global teardown. Better Auth upgraded to 1.7.28 (GHSA-fvxx-76fc-893x).
+
+## 2026-11-25 (UX — payment side sheet, reconciliation workspace, batch actions, accessibility — #39)
+
+- **Record Receipt/Payment side sheet** on invoice and bill pages and list rows, defaulting to the open balance and default bank, with the FX rate filled in.
+- **Reconciliation workspace**: statement lines and book entries side by side, multi-select split matching with a running remaining amount, and unmatch. Business schema **v39** adds `bank_statement_match_items` (backfilled) as the single source of truth for matched book entries.
+- **Batch actions** for receipts, supplier payments, payslips, customers and suppliers, sharing one batch runner.
+- **Overview**: bills due in 7 days, next VAT return, unreconciled bank lines and approvals cards; one Customize menu shows or hides every card.
+- **Accessibility**: `--input` border token (≥3:1), darker muted text (≥4.5:1), visible focus ring; field errors linked with `aria-describedby`/`aria-invalid` and focus moved to the first invalid field.
+- **Dates**: "today" and due dates use the UAE business day instead of the UTC date.
+
+## 2026-11-25 (Security — user access, backup import, SMTP, privacy — #37)
+
+- Administrators get copyable reset/invite links only for accounts whose every business they also administer; others receive links by email only.
+- Backup import enforces the business quota and caps entry count and inflated size (streaming limits, CRC checks); foreign triggers/views are rejected and tampered app triggers restored.
+- Business SMTP hosts must resolve to a public address (pinned for the connection). Public password-reset requests are rate-limited per IP and per email.
+- Permanent business deletion is owner/super-admin only. Sentry sends no local variables or default PII; replays mask all text and inputs.
+- The private Manager.io fixture is no longer tracked (it remains in Git history; see the deferred items in `DEPLOYMENT.md`).
+
 ## 2026-11-25 (Accounting correctness — GL ↔ subledger ↔ VAT tie-out)
 
 - **Reverse-charge VAT on tax-inclusive documents** (`document-line-calculator.ts`, `document-calculations.ts`): the entered price is the net and 5% VAT is self-assessed on it (VAT201 output and recoverable input). Previously it was set to 0 on both the server and the client preview.
