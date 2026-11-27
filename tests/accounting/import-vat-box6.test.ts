@@ -131,9 +131,10 @@ test("a debit note against an import reverses the output and input sides", () =>
 test("VAT201 shows Box 6 amount and VAT, Box 10 includes the recoverable import VAT, and the GL reconciles", () => {
   const report = getVatWorkingPaper(businessId, adminId, periodId);
   const box = (id: string) => [...report.vat201.outputs, ...report.vat201.inputs].find((row) => row.box === id)!;
-  // The voided bill stays in this period; its reversal is dated on the void date (business today), outside it.
-  const voidedNet = 30_000;
-  const voidedVat = 1_500;
+  // The voided bill is future-dated, so its reversal is dated on the bill's own
+  // date (a reversal never predates the original) and it nets out of this period.
+  const voidedNet = 0;
+  const voidedVat = 0;
 
   assert.deepEqual({ amount: box("6").amountMinor, vat: box("6").vatMinor }, { amount: box6Net + voidedNet, vat: box6Vat + voidedVat });
   assert.equal(report.buckets.import_output.outputVatMinor, box6Vat + voidedVat);
