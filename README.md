@@ -46,7 +46,8 @@ Automated service/unit tests run in isolated temporary directories via [scripts/
 | `npm run typecheck:validate` | Isolated validation typecheck (`tsconfig.validate.json` against `.next-validate`) |
 | `npm run lint` | ESLint across source and test trees |
 | `npm run check:permissions` | Static verification that all 159 business command functions enforce RBAC guards |
-| `npx tsx scripts/verify-schema-sync.ts` | Verify System and Business Drizzle schemas match SQLite tables & foreign keys |
+| `npm run check:schema` | Migrate a fresh temporary data directory, seed a business, and fail on any drift between the Drizzle schema and SQLite (tables, columns, indexes, UNIQUE constraints, foreign keys); runs in CI |
+| `npm run db:verify-schema` | The same comparison against the databases under `ERP_DATA_DIR` |
 | `NEXT_DIST_DIR=.next-validate npm run build` | Production validation build without overwriting `.next` or mutating `tsconfig.json` |
 
 ## Repository Rules

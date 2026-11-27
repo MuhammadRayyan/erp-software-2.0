@@ -1,5 +1,7 @@
+import "server-only";
+
 import { sql } from "drizzle-orm";
-import { check, index, integer, real, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core";
+import { check, index, integer, real, sqliteTable, text, unique, uniqueIndex } from "drizzle-orm/sqlite-core";
 import { accountSubtypes, accountTypes } from "./account-types";
 
 export { accountSubtypes, accountTypes };
@@ -22,7 +24,10 @@ export const currencies = sqliteTable(
     createdAt: text("created_at").notNull(),
     updatedAt: text("updated_at").notNull(),
   },
-  (table) => [index("currency_active_idx").on(table.isActive, table.code)],
+  (table) => [
+    index("currency_active_idx").on(table.isActive, table.code),
+    uniqueIndex("currency_single_base_idx").on(table.isBase).where(sql`${table.isBase} = 1`),
+  ],
 );
 
 export const businessCurrencySettings = sqliteTable("business_currency_settings", {
@@ -102,7 +107,11 @@ export const suppliers = sqliteTable("suppliers", {
   isActive: integer("is_active", { mode: "boolean" }).notNull().default(true),
   createdAt: text("created_at").notNull(),
   updatedAt: text("updated_at").notNull(),
-});
+}, (table) => [
+  index("supplier_einvoice_registration_idx").on(table.legalRegistrationIdentifier).where(sql`${table.legalRegistrationIdentifier} IS NOT NULL`),
+  index("supplier_einvoice_trn_idx").on(table.trn).where(sql`${table.trn} IS NOT NULL`),
+  index("supplier_einvoice_endpoint_idx").on(table.electronicAddressScheme, table.electronicAddress).where(sql`${table.electronicAddress} IS NOT NULL`),
+]);
 
 export const accounts = sqliteTable(
   "accounts",
@@ -317,7 +326,7 @@ export const projects = sqliteTable(
     updatedAt: text("updated_at").notNull(),
   },
   (table) => [
-    uniqueIndex("project_code_idx").on(table.code),
+    unique("project_code_idx").on(table.code),
     index("project_customer_idx").on(table.customerId),
     index("project_status_idx").on(table.status),
   ],
@@ -382,7 +391,7 @@ export const projectAttachments = sqliteTable(
   },
   (table) => [
     index("project_attachments_project_idx").on(table.projectId),
-    uniqueIndex("project_attachment_storage_path_idx").on(table.storagePath),
+    unique("project_attachment_storage_path_idx").on(table.storagePath),
   ],
 );
 
@@ -421,7 +430,7 @@ export const inventoryLocations = sqliteTable(
     createdAt: text("created_at").notNull(),
     updatedAt: text("updated_at").notNull(),
   },
-  (table) => [uniqueIndex("inventory_location_code_idx").on(table.code)],
+  (table) => [unique("inventory_location_code_idx").on(table.code)],
 );
 
 export const salesInvoices = sqliteTable(
@@ -476,10 +485,13 @@ export const salesInvoices = sqliteTable(
   },
   (table) => [
     uniqueIndex("sales_invoice_number_idx").on(table.invoiceNumber),
+    unique().on(table.invoiceNumber), // inline UNIQUE in CREATE TABLE (duplicates sales_invoice_number_idx)
     index("sales_invoice_customer_idx").on(table.customerId),
     index("sales_invoice_project_idx").on(table.projectId),
     index("sales_invoice_status_date_idx").on(table.documentStatus, table.invoiceDate),
     index("sales_invoice_customer_status_idx").on(table.customerId, table.documentStatus),
+    index("sales_invoice_currency_idx").on(table.currencyCode, table.documentStatus),
+    index("sales_invoices_quote_idx").on(table.quoteId).where(sql`${table.quoteId} IS NOT NULL`),
   ],
 );
 
@@ -530,9 +542,8 @@ export const journalEntries = sqliteTable(
     postedAt: text("posted_at").notNull(),
   },
   (table) => [
-    uniqueIndex("journal_entry_number_idx").on(table.entryNumber),
-    uniqueIndex("journal_source_idx").on(table.sourceType, table.sourceId),
-    index("journal_date_idx").on(table.date),
+    unique("journal_entry_number_idx").on(table.entryNumber),
+    unique("journal_source_idx").on(table.sourceType, table.sourceId),
     index("journal_entries_date_status_idx").on(table.date, table.status),
   ],
 );
@@ -558,7 +569,6 @@ export const journalLines = sqliteTable(
   },
   (table) => [
     index("journal_lines_entry_idx").on(table.journalEntryId),
-    index("journal_lines_account_idx").on(table.accountId),
     index("journal_lines_account_entry_idx").on(table.accountId, table.journalEntryId),
     index("journal_lines_customer_idx").on(table.customerId),
     index("journal_lines_supplier_idx").on(table.supplierId),
@@ -603,10 +613,11 @@ export const receipts = sqliteTable(
     voidedAt: text("voided_at"),
   },
   (table) => [
-    uniqueIndex("receipt_number_idx").on(table.receiptNumber),
+    unique("receipt_number_idx").on(table.receiptNumber),
     index("receipt_customer_idx").on(table.customerId),
     index("receipt_date_idx").on(table.date),
     index("receipt_status_date_idx").on(table.documentStatus, table.date),
+    index("receipt_currency_idx").on(table.currencyCode, table.documentStatus),
   ],
 );
 
@@ -627,7 +638,7 @@ export const receiptAllocations = sqliteTable(
     realizedFxAmount: integer("realized_fx_amount").notNull(),
   },
   (table) => [
-    uniqueIndex("receipt_invoice_allocation_idx").on(table.receiptId, table.salesInvoiceId),
+    unique("receipt_invoice_allocation_idx").on(table.receiptId, table.salesInvoiceId),
     index("receipt_allocation_invoice_idx").on(table.salesInvoiceId),
     check("receipt_allocation_positive", sql`${table.amountMinor} > 0`),
   ],
@@ -671,9 +682,11 @@ export const purchaseOrders = sqliteTable(
     purchaseQuoteId: text("purchase_quote_id"),
   },
   (table) => [
-    uniqueIndex("purchase_order_number_idx").on(table.orderNumber),
+    unique("purchase_order_number_idx").on(table.orderNumber),
     index("purchase_order_supplier_idx").on(table.supplierId),
     index("purchase_order_project_idx").on(table.projectId),
+    index("purchase_orders_quote_idx").on(table.purchaseQuoteId).where(sql`${table.purchaseQuoteId} IS NOT NULL`),
+    index("purchase_order_status_date_idx").on(table.status, table.date),
   ],
 );
 
@@ -738,14 +751,15 @@ export const purchaseInvoices = sqliteTable(
   
     amountsIncludeTax: integer("amounts_include_tax", { mode: "boolean" }).notNull().default(false),},
   (table) => [
-    uniqueIndex("purchase_invoice_number_idx").on(table.internalNumber),
+    unique("purchase_invoice_number_idx").on(table.internalNumber),
     index("purchase_invoice_supplier_idx").on(table.supplierId),
     index("purchase_invoice_order_idx").on(table.purchaseOrderId),
     index("purchase_invoice_project_idx").on(table.projectId),
-    uniqueIndex("purchase_invoice_inbound_source_idx").on(table.inboundEInvoiceDocumentId),
+    uniqueIndex("purchase_invoice_inbound_source_idx").on(table.inboundEInvoiceDocumentId).where(sql`${table.inboundEInvoiceDocumentId} IS NOT NULL`),
     index("purchase_invoice_supplier_document_idx").on(table.supplierId, table.supplierInvoiceNumber, table.documentStatus),
     index("purchase_invoice_status_date_idx").on(table.documentStatus, table.invoiceDate),
     index("purchase_invoice_supplier_status_idx").on(table.supplierId, table.documentStatus),
+    index("purchase_invoice_currency_idx").on(table.currencyCode, table.documentStatus),
   ],
 );
 
@@ -801,10 +815,11 @@ export const supplierPayments = sqliteTable(
     voidedAt: text("voided_at"),
   },
   (table) => [
-    uniqueIndex("supplier_payment_number_idx").on(table.paymentNumber),
+    unique("supplier_payment_number_idx").on(table.paymentNumber),
     index("supplier_payment_supplier_idx").on(table.supplierId),
     index("supplier_payment_date_idx").on(table.date),
     index("supplier_payment_status_date_idx").on(table.documentStatus, table.date),
+    index("supplier_payment_currency_idx").on(table.currencyCode, table.documentStatus),
   ],
 );
 
@@ -821,7 +836,7 @@ export const supplierPaymentAllocations = sqliteTable(
     realizedFxAmount: integer("realized_fx_amount").notNull(),
   },
   (table) => [
-    uniqueIndex("supplier_payment_invoice_allocation_idx").on(table.paymentId, table.purchaseInvoiceId),
+    unique("supplier_payment_invoice_allocation_idx").on(table.paymentId, table.purchaseInvoiceId),
     index("supplier_payment_allocation_invoice_idx").on(table.purchaseInvoiceId),
     check("supplier_payment_allocation_positive", sql`${table.amountMinor} > 0`),
   ],
@@ -874,7 +889,7 @@ export const salesCreditNotes = sqliteTable(
     customerAddress: text("customer_address"),
   },
   (table) => [
-    uniqueIndex("sales_credit_note_number_idx").on(table.creditNoteNumber),
+    unique("sales_credit_note_number_idx").on(table.creditNoteNumber),
     index("sales_credit_note_customer_idx").on(table.customerId),
     index("sales_credit_note_invoice_idx").on(table.sourceInvoiceId),
     index("sales_credit_note_project_idx").on(table.projectId),
@@ -918,7 +933,7 @@ export const salesCreditNoteAllocations = sqliteTable(
     baseCarryingAmountReleased: integer("base_carrying_amount_released").notNull(),
   },
   (table) => [
-    uniqueIndex("sales_credit_note_invoice_allocation_idx").on(table.creditNoteId, table.salesInvoiceId),
+    unique("sales_credit_note_invoice_allocation_idx").on(table.creditNoteId, table.salesInvoiceId),
     index("sales_credit_note_allocation_invoice_idx").on(table.salesInvoiceId),
     check("sales_credit_note_allocation_positive", sql`${table.amountMinor} > 0`),
   ],
@@ -945,10 +960,11 @@ export const goodsReceipts = sqliteTable(
     voidedAt: text("voided_at"),
   },
   (table) => [
-    uniqueIndex("goods_receipt_number_idx").on(table.receiptNumber),
+    unique("goods_receipt_number_idx").on(table.receiptNumber),
     index("goods_receipt_supplier_idx").on(table.supplierId),
     index("goods_receipt_order_idx").on(table.purchaseOrderId),
     index("goods_receipt_invoice_idx").on(table.purchaseInvoiceId),
+    index("goods_receipt_status_date_idx").on(table.documentStatus, table.date),
   ],
 );
 
@@ -992,9 +1008,10 @@ export const deliveryNotes = sqliteTable(
     voidedAt: text("voided_at"),
   },
   (table) => [
-    uniqueIndex("delivery_note_number_idx").on(table.deliveryNumber),
+    unique("delivery_note_number_idx").on(table.deliveryNumber),
     index("delivery_note_customer_idx").on(table.customerId),
     index("delivery_note_invoice_idx").on(table.salesInvoiceId),
+    index("delivery_note_status_date_idx").on(table.documentStatus, table.date),
   ],
 );
 
@@ -1036,7 +1053,7 @@ export const stockAdjustments = sqliteTable(
     postedAt: text("posted_at"),
     voidedAt: text("voided_at"),
   },
-  (table) => [uniqueIndex("stock_adjustment_number_idx").on(table.adjustmentNumber)],
+  (table) => [unique("stock_adjustment_number_idx").on(table.adjustmentNumber)],
 );
 
 export const inventoryMovements = sqliteTable(
@@ -1183,6 +1200,7 @@ export const bankTransactions = sqliteTable(
   },
   (table) => [
     uniqueIndex("bank_transaction_number_idx").on(table.transactionNumber),
+    unique().on(table.transactionNumber), // inline UNIQUE in CREATE TABLE (duplicates bank_transaction_number_idx)
     uniqueIndex("bank_transaction_statement_line_idx").on(table.statementLineId).where(sql`${table.statementLineId} IS NOT NULL`),
     index("bank_transaction_account_idx").on(table.bankAccountId),
     index("bank_transaction_account_date_status_idx").on(table.bankAccountId, table.date, table.documentStatus),
@@ -1234,6 +1252,7 @@ export const bankTransfers = sqliteTable(
   },
   (table) => [
     uniqueIndex("bank_transfer_number_idx").on(table.transferNumber),
+    unique().on(table.transferNumber), // inline UNIQUE in CREATE TABLE (duplicates bank_transfer_number_idx)
     index("bank_transfer_from_idx").on(table.fromBankAccountId),
     index("bank_transfer_to_idx").on(table.toBankAccountId),
     check("bank_transfer_positive_amount", sql`${table.amountMinor} > 0`),
@@ -1311,6 +1330,7 @@ export const vatPeriods = sqliteTable(
   },
   (table) => [
     uniqueIndex("vat_period_reference_idx").on(table.periodReference),
+    unique().on(table.periodReference), // inline UNIQUE in CREATE TABLE (duplicates vat_period_reference_idx)
     index("vat_period_date_idx").on(table.startDate, table.endDate),
     index("vat_period_status_idx").on(table.status),
   ],
@@ -1353,6 +1373,7 @@ export const taxEntries = sqliteTable(
   },
   (table) => [
     uniqueIndex("tax_entry_source_line_idx").on(table.sourceType, table.sourceId, table.sourceLineId),
+    unique().on(table.sourceType, table.sourceId, table.sourceLineId), // inline UNIQUE in CREATE TABLE (duplicates tax_entry_source_line_idx)
     index("tax_entry_date_idx").on(table.taxDate),
     index("tax_entry_source_idx").on(table.sourceType, table.sourceId),
     index("tax_entry_bucket_idx").on(table.direction, table.vatCategory, table.taxDate),
@@ -1419,6 +1440,7 @@ export const vatDataReview = sqliteTable(
   },
   (table) => [
     uniqueIndex("vat_data_review_source_issue_idx").on(table.sourceType, table.sourceId, table.sourceLineId, table.issueType),
+    unique().on(table.sourceType, table.sourceId, table.sourceLineId, table.issueType), // inline UNIQUE in CREATE TABLE (duplicates vat_data_review_source_issue_idx)
     index("vat_data_review_date_idx").on(table.taxDate, table.status),
     index("vat_data_review_source_idx").on(table.sourceType, table.sourceId),
   ],
@@ -1565,7 +1587,14 @@ export const inboundEInvoiceDocuments = sqliteTable(
     archivedAt: text("archived_at"),
   },
   (table) => [
-    uniqueIndex("inbound_einvoice_provider_document_idx").on(table.providerKey, table.environment, table.providerDocumentId),
+    uniqueIndex("inbound_einvoice_provider_document_idx").on(table.providerKey, table.environment, table.providerDocumentId).where(sql`${table.providerDocumentId} IS NOT NULL`),
+    uniqueIndex("inbound_einvoice_uuid_seller_idx").on(
+      table.documentUuid,
+      sql`COALESCE(${table.sellerEndpointScheme}, '')`,
+      sql`COALESCE(${table.sellerEndpointId}, '')`,
+      sql`COALESCE(${table.sellerTrn}, '')`,
+      sql`COALESCE(${table.sellerLegalRegistrationIdentifier}, '')`,
+    ),
     uniqueIndex("inbound_einvoice_raw_hash_idx").on(table.rawHash),
     index("inbound_einvoice_status_received_idx").on(table.status, table.receivedAt),
     index("inbound_einvoice_supplier_number_idx").on(table.supplierId, table.documentNumber),
@@ -1658,7 +1687,7 @@ export const inboundEInvoiceEvents = sqliteTable(
     createdAt: text("created_at").notNull(),
   },
   (table) => [
-    uniqueIndex("inbound_einvoice_provider_event_idx").on(table.providerKey, table.providerEventId),
+    uniqueIndex("inbound_einvoice_provider_event_idx").on(table.providerKey, table.providerEventId).where(sql`${table.providerEventId} IS NOT NULL`),
     index("inbound_einvoice_event_document_idx").on(table.inboundDocumentId, table.createdAt),
   ],
 );
@@ -1847,8 +1876,9 @@ export const salesQuotes = sqliteTable(
     uniqueIndex("sales_quote_number_idx").on(table.quoteNumber),
     index("sales_quote_customer_idx").on(table.customerId),
     index("sales_quote_project_idx").on(table.projectId),
-    index("sales_quote_root_idx").on(table.rootQuoteId),
-    index("sales_quote_base_number_idx").on(table.baseQuoteNumber),
+    index("sales_quotes_root_idx").on(table.rootQuoteId),
+    index("sales_quotes_base_number_idx").on(table.baseQuoteNumber),
+    index("sales_quote_status_date_idx").on(table.documentStatus, table.quoteDate),
   ],
 );
 
@@ -1923,6 +1953,7 @@ export const salesOrders = sqliteTable(
     uniqueIndex("sales_order_number_idx").on(table.orderNumber),
     index("sales_order_customer_idx").on(table.customerId),
     index("sales_order_project_idx").on(table.projectId),
+    index("sales_order_status_date_idx").on(table.documentStatus, table.orderDate),
   ],
 );
 
@@ -1995,6 +2026,7 @@ export const debitNotes = sqliteTable(
     uniqueIndex("debit_note_number_idx").on(table.debitNoteNumber),
     index("debit_note_supplier_idx").on(table.supplierId),
     index("debit_note_project_idx").on(table.projectId),
+    index("debit_note_status_date_idx").on(table.documentStatus, table.debitNoteDate),
   ],
 );
 
@@ -2034,7 +2066,7 @@ export const formDefaults = sqliteTable("form_defaults", {
   formType: text("form_type").notNull(), // 'sales-invoice', 'purchase-order', etc.
   payloadJson: text("payload_json").notNull(), // JSON representation of the form default values
   updatedAt: text("updated_at").notNull(),
-});
+}, (table) => [uniqueIndex("form_defaults_form_type_idx").on(table.formType)]);
 
 export const purchaseQuotes = sqliteTable(
   "purchase_quotes",
@@ -2073,11 +2105,12 @@ export const purchaseQuotes = sqliteTable(
     updatedAt: text("updated_at").notNull(),
   },
   (table) => [
-    uniqueIndex("purchase_quote_number_idx").on(table.quoteNumber),
+    unique("purchase_quote_number_idx").on(table.quoteNumber),
     index("purchase_quote_supplier_idx").on(table.supplierId),
     index("purchase_quote_project_idx").on(table.projectId),
     index("purchase_quote_root_idx").on(table.rootQuoteId),
     index("purchase_quote_base_number_idx").on(table.baseQuoteNumber),
+    index("purchase_quote_status_date_idx").on(table.documentStatus, table.quoteDate),
   ],
 );
 
@@ -2224,7 +2257,7 @@ export const payslips = sqliteTable(
     updatedAt: text("updated_at").notNull(),
   },
   (table) => [
-    uniqueIndex("payslip_number_idx").on(table.payslipNumber),
+    unique("payslip_number_idx").on(table.payslipNumber),
     index("payslip_employee_idx").on(table.employeeId),
     index("payslip_date_idx").on(table.date),
     index("payslip_journal_entry_idx").on(table.journalEntryId),
@@ -2326,6 +2359,7 @@ export const postDatedCheques = sqliteTable(
   },
   (table) => [
     uniqueIndex("pdc_number_idx").on(table.pdcNumber),
+    unique().on(table.pdcNumber), // inline UNIQUE in CREATE TABLE (duplicates pdc_number_idx)
     index("pdc_status_maturity_idx").on(table.status, table.maturityDate),
     index("pdc_direction_idx").on(table.direction, table.status),
     index("pdc_customer_idx").on(table.customerId),
@@ -2346,6 +2380,7 @@ export const approvalRules = sqliteTable(
   },
   (table) => [
     uniqueIndex("approval_rules_entity_type_idx").on(table.entityType),
+    unique().on(table.entityType), // inline UNIQUE in CREATE TABLE (duplicates approval_rules_entity_type_idx)
   ],
 );
 

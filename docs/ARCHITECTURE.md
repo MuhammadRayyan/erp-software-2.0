@@ -32,10 +32,12 @@ flowchart LR
 ### Multi-Tenant SQLite Split
 | Store | Location | Schema Version | Verified Drizzle Footprint | Migration Source |
 | :--- | :--- | :---: | :--- | :--- |
-| **System DB** | `data/system/system.sqlite` | **7** | 10 tables, 79 columns | [system.ts](../src/core/db/migrations/system.ts) |
-| **Business DB** (per workspace) | `data/businesses/<directoryKey>/business.sqlite` | **38** | 89 tables, 1337 columns | [business-migrations.ts](../src/core/db/business-migrations.ts) |
+| **System DB** | `data/system/system.sqlite` | **7** | 10 tables, 79 columns, 10 indexes | [system.ts](../src/core/db/migrations/system.ts) |
+| **Business DB** (per workspace) | `data/businesses/<directoryKey>/business.sqlite` | **40** | 90 tables, 1343 columns, 194 indexes | [business-migrations.ts](../src/core/db/business-migrations.ts) |
 
-- **Schema verification**: `npx tsx scripts/verify-schema-sync.ts` confirms 100% alignment and foreign-key integrity across both System and Business Drizzle definitions and SQLite tables.
+- **Migrations are hand-written TypeScript** (no `drizzle-kit`): the migrated database is the source of truth and the Drizzle schema files mirror it for typed queries.
+- **Schema verification**: `npm run check:schema` (CI static job) migrates a fresh temporary data directory, seeds a business, and fails if the Drizzle definitions differ from SQLite in tables, columns, indexes (name, column order, unique, partial) or inline UNIQUE constraints, or if foreign keys are violated. `npm run db:verify-schema` runs the same comparison against `ERP_DATA_DIR`.
+- **Server-only modules**: every `src/core/db/*.ts` file except the client-shared constants in `account-types.ts` imports `server-only`, so Next.js fails the build if one reaches a client bundle. Plain Node entry points (tests, `db:*` scripts, Playwright fixtures) preload `scripts/server-only-node.mjs`, and `scripts/build-ops.mjs` aliases the package for the ops bundle.
 - **Shared SQLite PRAGMAs** ([pragmas.ts](../src/core/db/pragmas.ts)): `applyStandardSqlitePragmas()` enforces `journal_mode = WAL`, `busy_timeout = 5000`, `synchronous = NORMAL` by default (overridable via `ERP_SQLITE_SYNCHRONOUS=FULL`), `foreign_keys = ON`, `temp_store = MEMORY`, `cache_size = -16000`, `mmap_size = 67108864`, and `wal_autocheckpoint = 1000`.
 - **LRU Connection Pool** ([business.ts](../src/core/db/business.ts)): Caches up to `MAX_CONNECTIONS = 50` business handles, enforces `MIN_AGE_BEFORE_EVICTION_MS = 10_000` before LRU eviction so in-flight awaits are never truncated, and closes idle handles after `IDLE_TIMEOUT_MS = 300_000` (5 min) after running `checkpointAndOptimizeSqlite()` (`PRAGMA optimize` + `wal_checkpoint(TRUNCATE)`).
 - **Super-Admin & Document Immutability Triggers**:

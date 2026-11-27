@@ -10,7 +10,7 @@ export default defineConfig({
   reporter: [["list"], ["json", { outputFile: "test-results/acceptance/browser-summary.json" }]],
   webServer: {
     ...hardening.webServer,
-    command: "node --import tsx scripts/prepare-acceptance-fixture.ts && npm run start -- -p 3310",
+    command: "node --import tsx --import ./scripts/server-only-node.mjs scripts/prepare-acceptance-fixture.ts && npm run start -- -p 3310",
     env: {
       ...(hardening.webServer as { env: Record<string, string> }).env,
       SENTRY_DSN: "http://synthetic@127.0.0.1:9/1",

@@ -31,7 +31,7 @@ System tables store users/sessions/account and business membership data (`requir
 
 Membership and active-account checks select a trusted business directory; the filesystem key is validated. Separate files reduce accidental query crossover but do not replace permissions or isolate a compromised process. Connections use WAL, foreign keys, **synchronous NORMAL** under WAL (configurable to `FULL` via `ERP_SQLITE_SYNCHRONOUS`), bounded cache/mmap/temp_store PRAGMAs (`cache_size = -16000`, `mmap_size = 67108864`, `temp_store = MEMORY`, `wal_autocheckpoint = 1000`), idle `optimize` + `wal_checkpoint(TRUNCATE)` cleanup, and a 5-second busy timeout. The tenant cache caps at 50 with idle eviction. WAL improves concurrency, but writes serialize per file, lock errors remain possible, and synchronous SQLite/report work can delay the Node event loop. Active SQLite files must stay on local storage. A second app replica is not a routine scaling change for this topology.
 
-Explicit migrations validate ordered history/schema/foreign keys. Production uses external migration mode under the deployment lock and checks every registered tenant. Never use `drizzle-kit push` against real data.
+Explicit migrations validate ordered history/schema/foreign keys. Production uses external migration mode under the deployment lock and checks every registered tenant. Never use `drizzle-kit push` against real data (drizzle-kit has since been removed; schema changes are hand-written migrations).
 
 ## Financial and access boundaries
 

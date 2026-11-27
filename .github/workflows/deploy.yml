@@ -52,6 +52,8 @@ jobs:
       - run: npm run lint
       - run: npm test
       - run: npm run check:permissions
+      - name: Drizzle schema matches freshly migrated databases
+        run: npm run check:schema
       - name: Production dependency security check
         run: node --import tsx scripts/check-prod-audit.ts
 

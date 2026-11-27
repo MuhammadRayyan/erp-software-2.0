@@ -1,3 +1,5 @@
+import "server-only";
+
 import { getSystemDb, getSystemSqlite, migrateSystemDatabase } from "./system";
 import { businesses } from "./system-schema";
 import { openBusinessDatabase } from "./business";
