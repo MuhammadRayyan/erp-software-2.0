@@ -1,12 +1,14 @@
 "use server";
 
-import { revalidatePath } from "next/cache";
-import { redirect } from "next/navigation";
-import { z } from "zod";
-import { requireSavePermission, requirePermission } from "@/core/permissions/require-module";
-import { deleteGoodsReceipt, saveGoodsReceipt, voidGoodsReceipt, type InventoryDocumentIntent } from "./goods-receipt-service";
 import { goodsReceiptInputSchema } from "./goods-receipt-input";
-import { inventoryErrorMessage } from "./inventory-error";
+import { deleteGoodsReceipt, saveGoodsReceipt, voidGoodsReceipt, type InventoryDocumentIntent } from "./goods-receipt-service";
+import { saveStockDocumentAction, stockDocumentCommandAction } from "@/modules/documents/engine/document-action-helpers";
+
+const target = (businessId: string) => ({
+  label: "Goods Receipt",
+  basePath: `/b/${businessId}/purchases/goods-receipts`,
+  schema: goodsReceiptInputSchema,
+});
 
 export async function saveGoodsReceiptAction(
   businessId: string,
@@ -14,42 +16,13 @@ export async function saveGoodsReceiptAction(
   input: unknown,
   intent: InventoryDocumentIntent
 ) {
-  const { user } = await requireSavePermission(businessId, "inventory", receiptId, intent);
-  const parsed = goodsReceiptInputSchema.safeParse(input);
-  if (!parsed.success) {
-    return { error: "Check the Goods Receipt fields and lines.", fieldErrors: z.flattenError(parsed.error).fieldErrors };
-  }
-  let id: string;
-  try {
-    id = saveGoodsReceipt(businessId, user.id, parsed.data, intent, receiptId ?? undefined);
-  } catch (error) {
-    return { error: inventoryErrorMessage(error, "The Goods Receipt could not be saved.") };
-  }
-  revalidatePath(`/b/${businessId}/purchases/goods-receipts`);
-  if (receiptId) revalidatePath(`/b/${businessId}/purchases/goods-receipts/${receiptId}`);
-  revalidatePath(`/b/${businessId}/purchases/goods-receipts/${id}`);
-  redirect(`/b/${businessId}/purchases/goods-receipts/${id}?notice=${intent === "post" ? "Goods Receipt posted" : "Draft saved"}`);
+  return saveStockDocumentAction(target(businessId), businessId, receiptId, input, intent, (userId, data, id) => saveGoodsReceipt(businessId, userId, data, intent, id));
 }
 
 export async function voidGoodsReceiptAction(businessId: string, receiptId: string) {
-  const { user } = await requirePermission(businessId, "inventory", "delete");
-  try {
-    voidGoodsReceipt(businessId, user.id, receiptId);
-    revalidatePath(`/b/${businessId}/purchases/goods-receipts`);
-    revalidatePath(`/b/${businessId}/purchases/goods-receipts/${receiptId}`);
-    return {};
-  } catch (error) {
-    return { error: inventoryErrorMessage(error, "The Goods Receipt could not be voided.") };
-  }
+  return stockDocumentCommandAction(target(businessId), businessId, receiptId, "void", (userId) => voidGoodsReceipt(businessId, userId, receiptId));
 }
 
 export async function deleteGoodsReceiptAction(businessId: string, receiptId: string) {
-  const { user } = await requirePermission(businessId, "inventory", "delete");
-  try {
-    deleteGoodsReceipt(businessId, user.id, receiptId);
-    revalidatePath(`/b/${businessId}/purchases/goods-receipts`);
-    return {};
-  } catch (error) {
-    return { error: inventoryErrorMessage(error, "The Goods Receipt could not be deleted.") };
-  }
+  return stockDocumentCommandAction(target(businessId), businessId, receiptId, "delete", (userId) => deleteGoodsReceipt(businessId, userId, receiptId));
 }

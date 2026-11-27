@@ -1,38 +1,31 @@
-import { assertSavePermission, assertMutationPermission } from "@/core/permissions/mutation-permissions";
 import type { BaseStoredLine } from "@/modules/documents/document-types";
-import { randomUUID } from "node:crypto";
 import { getBusinessDb } from "@/core/db/business";
 import {
   addMinor,
-  parseQuantityToMicros,
   quantityMicrosToInput,
 } from "@/modules/accounting/calculations/money";
-import { allocateNumber } from "@/modules/accounting/services/numbering-service";
 import {
   postTransaction,
   reverseTransaction,
   type JournalLineInput,
 } from "@/modules/accounting/services/posting-service";
-import { assertDateNotLocked } from "@/modules/accounting/services/financial-lock-service";
 import {
   effectiveProjectId,
   validateProjectReferences,
 } from "@/modules/projects/project-validation";
+import { buildDocumentListWhere } from "@/modules/documents/engine/document-sql";
+import {
+  deleteStockDocument,
+  saveStockDocument,
+  voidStockDocument,
+  type StockDocumentConfig,
+  type StockDocumentHeader,
+} from "@/modules/documents/engine/stock-document-engine";
 import { deliveryNoteInputSchema, type DeliveryNoteInput } from "./delivery-note-input";
 import { validateDeliveryNoteSource } from "./delivery-note-validation";
-import {
-  assertInventoryPostingOrder,
-  assertInventorySourceIsLatest,
-  EDIT_INVENTORY_CHRONOLOGY_ERROR,
-  VOID_INVENTORY_CHRONOLOGY_ERROR,
-} from "./inventory-chronology";
-import type {
-  InventoryDocumentIntent,
-  InventoryDocumentStatus,
-} from "./inventory-document";
+import type { InventoryDocumentIntent } from "./inventory-document";
 import {
   averageUnitCostMicros,
-  deleteSourceMovements,
   getStockBalance,
   insertInventoryMovement,
   issueValueMinor,
@@ -60,82 +53,11 @@ type ItemAccounts = {
   cost_of_sales_account_id: string;
 };
 
-function validateHeader(
-  sqlite: Sqlite,
-  data: ReturnType<typeof deliveryNoteInputSchema.parse>,
-) {
-  const customer = sqlite.prepare("SELECT id FROM customers WHERE id = ?").get(data.customerId);
-  if (!customer) throw new Error("Choose a customer.");
-  const location = sqlite
-    .prepare("SELECT id FROM inventory_locations WHERE id = ? AND is_active = 1")
-    .get(data.locationId);
-  if (!location) throw new Error("Choose an active inventory location.");
-  validateProjectReferences(sqlite, {
-    headerProjectId: data.projectId,
-    lineProjectIds: data.lines.map((line) => line.projectId),
-    customerId: data.customerId,
-    customerFacing: true,
-  });
-}
-
-function prepareLines(
-  sqlite: Sqlite,
-  data: ReturnType<typeof deliveryNoteInputSchema.parse>,
-) {
-  const itemIds = new Set(
-    (sqlite.prepare("SELECT id FROM inventory_items WHERE is_active = 1").all() as { id: string }[])
-      .map((item) => item.id),
-  );
-  return data.lines.map((line, position): StoredLine => {
-    if (!itemIds.has(line.itemId)) throw new Error("Choose an active inventory item.");
-    return {
-        id: randomUUID(),
-        itemId: line.itemId,
-        description: line.description,
-        quantityMicros: parseQuantityToMicros(line.quantity),
-        unitPriceMinor: 0,
-        netAmountMinor: 0,
-        taxCodeId: "",
-        taxAmountMinor: 0,
-        grossAmountMinor: 0,
-        projectId: line.projectId || null,
-        salesInvoiceLineId: line.salesInvoiceLineId || null,
-        lineIndex: position,
-      };
-  });
-}
-
-function insertLines(sqlite: Sqlite, deliveryId: string, lines: readonly StoredLine[]) {
-  const insert = sqlite.prepare(`
-    INSERT INTO delivery_note_lines (
-      id, delivery_note_id, item_id, description, quantity_micros,
-      project_id, sales_invoice_line_id, position
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-  `);
-  for (const line of lines) {
-    insert.run(
-      line.id,
-      deliveryId,
-      line.itemId,
-      line.description,
-      line.quantityMicros,
-      line.projectId,
-      line.salesInvoiceLineId,
-      line.lineIndex,
-    );
-  }
-}
+type DeliveryNoteData = ReturnType<typeof deliveryNoteInputSchema.parse>;
 
 function postDelivery(
   sqlite: Sqlite,
-  delivery: {
-    id: string;
-    number: string;
-    date: string;
-    locationId: string;
-    projectId: string | null;
-    createdAt: string;
-  },
+  delivery: StockDocumentHeader,
   lines: readonly StoredLine[],
   replace: boolean,
 ) {
@@ -232,27 +154,89 @@ function postDelivery(
   });
 }
 
+export const deliveryNoteDocument: StockDocumentConfig<DeliveryNoteData, StoredLine> = {
+  sourceType: "delivery_note",
+  label: "Delivery Note",
+  pluralLabel: "Delivery Notes",
+  lockLabel: "Delivery note",
+  schema: deliveryNoteInputSchema,
+  table: "delivery_notes",
+  numberColumn: "delivery_number",
+  numbering: "deliveryNote",
+  lines: {
+    table: "delivery_note_lines",
+    parentColumn: "delivery_note_id",
+    columns: {
+      item_id: (line) => line.itemId,
+      description: (line) => line.description,
+      quantity_micros: (line) => line.quantityMicros,
+      project_id: (line) => line.projectId,
+      sales_invoice_line_id: (line) => line.salesInvoiceLineId,
+      position: (line) => line.lineIndex,
+    },
+  },
+  direction: "out",
+  movementType: "delivery",
+  missingMovementMessage: "The original Delivery movement could not be found.",
+  headerColumns: (data) => ({
+    customer_id: data.customerId,
+    sales_invoice_id: data.salesInvoiceId || null,
+    date: data.date,
+    location_id: data.locationId,
+    reference: data.reference || null,
+    project_id: data.projectId || null,
+    notes: data.notes || null,
+  }),
+  validateHeader(sqlite, data) {
+    const customer = sqlite.prepare("SELECT id FROM customers WHERE id = ?").get(data.customerId);
+    if (!customer) throw new Error("Choose a customer.");
+    const location = sqlite
+      .prepare("SELECT id FROM inventory_locations WHERE id = ? AND is_active = 1")
+      .get(data.locationId);
+    if (!location) throw new Error("Choose an active inventory location.");
+    validateProjectReferences(sqlite, {
+      headerProjectId: data.projectId,
+      lineProjectIds: data.lines.map((line) => line.projectId),
+      customerId: data.customerId,
+      customerFacing: true,
+    });
+  },
+  prepareLine: (line, base) => ({
+    ...base,
+    unitPriceMinor: 0,
+    netAmountMinor: 0,
+    taxCodeId: "",
+    taxAmountMinor: 0,
+    grossAmountMinor: 0,
+    salesInvoiceLineId: line.salesInvoiceLineId || null,
+  }),
+  validateSources(sqlite, data, lines, deliveryId) {
+    validateDeliveryNoteSource(sqlite, {
+      customerId: data.customerId,
+      salesInvoiceId: data.salesInvoiceId || null,
+      lines,
+    }, deliveryId);
+  },
+  post: (sqlite, header, lines, replace) => postDelivery(sqlite, header, lines, replace),
+  afterVoidMovements(sqlite, delivery) {
+    reverseTransaction(sqlite, {
+      originalSourceType: "delivery_note",
+      originalSourceId: delivery.id,
+      reversalSourceType: "delivery_note_void",
+      reversalSourceId: delivery.id,
+      date: getBusinessTodayIso(),
+      description: `Void Delivery Note ${delivery.number}`,
+    });
+  },
+};
+
 export function listDeliveryNotes(
   businessId: string, 
   userId: string, 
   filters?: { customerId?: string; from?: string; to?: string }
 ) {
   const { sqlite } = getBusinessDb(businessId, userId);
-  const where: string[] = [];
-  const params: string[] = [];
-  if (filters?.customerId) {
-    where.push("dn.customer_id = ?");
-    params.push(filters.customerId);
-  }
-  if (filters?.from) {
-    where.push("dn.date >= ?");
-    params.push(filters.from);
-  }
-  if (filters?.to) {
-    where.push("dn.date <= ?");
-    params.push(filters.to);
-  }
-  const whereClause = where.length > 0 ? `WHERE ${where.join(" AND ")}` : "";
+  const { whereClause, params } = buildDocumentListWhere("dn", { partyId: filters?.customerId, from: filters?.from, to: filters?.to }, { party: "customer_id", date: "date" });
 
   return sqlite.prepare(`
     SELECT dn.*, c.name AS customer_name, l.code AS location_code,
@@ -313,222 +297,15 @@ export function saveDeliveryNote(
   intent: InventoryDocumentIntent,
   deliveryId?: string,
 ) {
-  assertSavePermission(businessId, userId, "inventory", deliveryId, intent);
-  const data = deliveryNoteInputSchema.parse(input);
-  const context = getBusinessDb(businessId, userId);
-  const now = new Date().toISOString();
-  const id = deliveryId ?? randomUUID();
-
-  context.sqlite.transaction(() => {
-    validateHeader(context.sqlite, data);
-    const lines = prepareLines(context.sqlite, data);
-    validateDeliveryNoteSource(context.sqlite, {
-      customerId: data.customerId,
-      salesInvoiceId: data.salesInvoiceId || null,
-      lines,
-    }, deliveryId);
-
-    let number: string;
-    let wasPosted = false;
-    let shouldPost = intent === "post";
-    if (deliveryId) {
-      const current = context.sqlite.prepare(`
-        SELECT delivery_number, document_status, date
-        FROM delivery_notes
-        WHERE id = ?
-      `).get(deliveryId) as {
-        delivery_number: string;
-        document_status: InventoryDocumentStatus;
-        date: string;
-      } | undefined;
-      if (!current) throw new Error("Delivery Note not found.");
-      if (current.document_status === "void") {
-        throw new Error("A void Delivery Note cannot be edited.");
-      }
-      number = current.delivery_number;
-      wasPosted = current.document_status === "posted";
-      shouldPost = wasPosted || intent === "post";
-      if (wasPosted) {
-        assertDateNotLocked(context.sqlite, current.date, "Delivery note");
-        assertInventorySourceIsLatest(
-          context.sqlite,
-          "delivery_note",
-          deliveryId,
-          EDIT_INVENTORY_CHRONOLOGY_ERROR,
-        );
-      }
-    } else {
-      number = allocateNumber(context.sqlite, "deliveryNote");
-    }
-
-    if (shouldPost) assertMutationPermission(businessId, userId, "inventory", "post");
-    if (shouldPost) {
-      assertDateNotLocked(context.sqlite, data.date, "Delivery note");
-      assertInventoryPostingOrder(
-        context.sqlite,
-        data.date,
-        lines.map((line) => ({ itemId: line.itemId, locationId: data.locationId })),
-        wasPosted ? { sourceType: "delivery_note", sourceId: id } : undefined,
-      );
-    }
-    if (wasPosted) deleteSourceMovements(context.sqlite, "delivery_note", id);
-
-    if (deliveryId) {
-      context.sqlite.prepare(`
-        UPDATE delivery_notes
-        SET customer_id = ?, sales_invoice_id = ?, date = ?, location_id = ?,
-          reference = ?, project_id = ?, notes = ?, updated_at = ?
-        WHERE id = ?
-      `).run(
-        data.customerId,
-        data.salesInvoiceId || null,
-        data.date,
-        data.locationId,
-        data.reference || null,
-        data.projectId || null,
-        data.notes || null,
-        now,
-        deliveryId,
-      );
-      context.sqlite.prepare("DELETE FROM delivery_note_lines WHERE delivery_note_id = ?").run(deliveryId);
-    } else {
-      context.sqlite.prepare(`
-        INSERT INTO delivery_notes (
-          id, delivery_number, customer_id, sales_invoice_id, date, location_id,
-          reference, project_id, notes, document_status, created_by, created_at,
-          updated_at, posted_at, voided_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'draft', ?, ?, ?, NULL, NULL)
-      `).run(
-        id,
-        number,
-        data.customerId,
-        data.salesInvoiceId || null,
-        data.date,
-        data.locationId,
-        data.reference || null,
-        data.projectId || null,
-        data.notes || null,
-        userId,
-        now,
-        now,
-      );
-    }
-
-    insertLines(context.sqlite, id, lines);
-    if (shouldPost) {
-      postDelivery(context.sqlite, {
-        id,
-        number,
-        date: data.date,
-        locationId: data.locationId,
-        projectId: data.projectId || null,
-        createdAt: now,
-      }, lines, wasPosted);
-      context.sqlite.prepare(`
-        UPDATE delivery_notes
-        SET document_status = 'posted', posted_at = COALESCE(posted_at, ?)
-        WHERE id = ?
-      `).run(now, id);
-    }
-  }).immediate();
-
-  return id;
+  return saveStockDocument(deliveryNoteDocument, businessId, userId, input, intent, deliveryId);
 }
 
 export function voidDeliveryNote(businessId: string, userId: string, deliveryId: string) {
-  assertMutationPermission(businessId, userId, "inventory", "delete");
-  const context = getBusinessDb(businessId, userId);
-  const now = new Date().toISOString();
-
-  context.sqlite.transaction(() => {
-    const delivery = context.sqlite.prepare(`
-      SELECT delivery_number, date, location_id, project_id, document_status
-      FROM delivery_notes
-      WHERE id = ?
-    `).get(deliveryId) as {
-      delivery_number: string;
-      date: string;
-      location_id: string;
-      project_id: string | null;
-      document_status: InventoryDocumentStatus;
-    } | undefined;
-    if (!delivery) throw new Error("Delivery Note not found.");
-    if (delivery.document_status !== "posted") {
-      throw new Error("Only a posted Delivery Note can be voided.");
-    }
-    assertDateNotLocked(context.sqlite, delivery.date, "Delivery note void");
-    assertDateNotLocked(context.sqlite, getBusinessTodayIso(), "Delivery note void");
-    assertInventorySourceIsLatest(
-      context.sqlite,
-      "delivery_note",
-      deliveryId,
-      VOID_INVENTORY_CHRONOLOGY_ERROR,
-    );
-
-    const lines = context.sqlite.prepare(`
-      SELECT dnl.id, dnl.item_id, dnl.quantity_micros, dnl.project_id,
-        im.unit_cost_micros, im.value_delta_minor
-      FROM delivery_note_lines dnl
-      LEFT JOIN inventory_movements im
-        ON im.source_type = 'delivery_note' AND im.source_line_id = dnl.id
-      WHERE dnl.delivery_note_id = ?
-      ORDER BY dnl.position
-    `).all(deliveryId) as {
-      id: string;
-      item_id: string;
-      quantity_micros: number;
-      project_id: string | null;
-      unit_cost_micros: number | null;
-      value_delta_minor: number | null;
-    }[];
-
-    for (const [position, line] of lines.entries()) {
-      if (line.unit_cost_micros == null || line.value_delta_minor == null) {
-        throw new Error("The original Delivery movement could not be found.");
-      }
-      insertInventoryMovement(context.sqlite, {
-        date: delivery.date,
-        itemId: line.item_id,
-        locationId: delivery.location_id,
-        movementType: "delivery",
-        quantityDeltaMicros: line.quantity_micros,
-        unitCostMicros: line.unit_cost_micros,
-        valueDeltaMinor: -line.value_delta_minor,
-        sourceType: "delivery_note_void",
-        sourceId: deliveryId,
-        sourceLineId: line.id,
-        projectId: line.project_id ?? delivery.project_id,
-        description: `Void ${delivery.delivery_number}`,
-        createdAt: new Date(Date.parse(now) + position).toISOString(),
-      });
-    }
-    reverseTransaction(context.sqlite, {
-      originalSourceType: "delivery_note",
-      originalSourceId: deliveryId,
-      reversalSourceType: "delivery_note_void",
-      reversalSourceId: deliveryId,
-      date: getBusinessTodayIso(),
-      description: `Void Delivery Note ${delivery.delivery_number}`,
-    });
-    context.sqlite.prepare(`
-      UPDATE delivery_notes
-      SET document_status = 'void', voided_at = ?, updated_at = ?
-      WHERE id = ?
-    `).run(now, now, deliveryId);
-  }).immediate();
+  voidStockDocument(deliveryNoteDocument, businessId, userId, deliveryId);
 }
 
 export function deleteDeliveryNote(businessId: string, userId: string, deliveryId: string) {
-  assertMutationPermission(businessId, userId, "inventory", "delete");
-  const { sqlite } = getBusinessDb(businessId, userId);
-  const row = sqlite
-    .prepare("SELECT document_status FROM delivery_notes WHERE id = ?")
-    .get(deliveryId) as { document_status: string } | undefined;
-  if (!row) throw new Error("Delivery Note not found.");
-  if (row.document_status !== "draft") {
-    throw new Error("Only draft Delivery Notes can be deleted.");
-  }
-  sqlite.prepare("DELETE FROM delivery_notes WHERE id = ?").run(deliveryId);
+  deleteStockDocument(deliveryNoteDocument, businessId, userId, deliveryId);
 }
 
 export function deliveryNoteToInput(
