@@ -39,7 +39,7 @@ const noVat = "tax-out-of-scope";
 for (const [rateDate, rateToBase] of [["2035-01-01", "3.600000"], ["2035-02-01", "3.700000"], ["2035-03-01", "3.650000"]]) {
   saveExchangeRate(businessId, adminId, { currencyCode: "USD", rateDate, rateToBase, source: "Manual", sourceReference: `aging ${rateDate}` });
 }
-const usd = (rate: string, date: string) => ({ currencyCode: "USD", exchangeRateToBase: rate, exchangeRateDate: date, exchangeRateSource: "Manual" });
+const usd = (rate: string, date: string) => ({ currencyCode: "USD", exchangeRateToBase: rate, exchangeRateDate: date, exchangeRateSource: "Manual" as const });
 
 function assertTiesOut(asOf: string) {
   const ar = getReceivablesAging(businessId, adminId, asOf);
