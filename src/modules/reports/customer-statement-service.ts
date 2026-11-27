@@ -84,8 +84,16 @@ export function getCustomerStatement(
       0 AS base_debit_minor, scn.base_total_minor AS base_credit_minor
     FROM sales_credit_notes scn
     WHERE scn.customer_id = ? AND scn.document_status = 'posted'
+    UNION ALL
+    SELECT cr.date, cr.refund_number AS entry_number,
+      'customer_refund' AS source_type, cr.id AS source_id,
+      'Customer Refund ' || cr.refund_number AS description, cr.reference,
+      cr.currency_code, cr.amount_minor AS debit_minor, 0 AS credit_minor,
+      cr.released_carrying_amount_minor AS base_debit_minor, 0 AS base_credit_minor
+    FROM customer_refunds cr
+    WHERE cr.customer_id = ? AND cr.document_status = 'posted'
     ORDER BY date, entry_number
-  `).all(customerId, customerId, customerId) as Omit<CustomerStatementRow, "balanceMinor">[];
+  `).all(customerId, customerId, customerId, customerId) as Omit<CustomerStatementRow, "balanceMinor">[];
 
   const filtered = options.currencyCode
     ? rows.filter((row) => row.currency_code === options.currencyCode!.toUpperCase())
@@ -301,7 +309,13 @@ export function getCustomerAging(
     WHERE customer_id = ? AND document_status = 'posted' AND date <= ? AND currency_code = ?
   `).get(customerId, targetAsOf, targetCurrency) as { total: number };
 
-  const totalCustomerBalance = totalInvoiced.total - totalReceipts.total - totalCredits.total;
+  const totalRefunds = sqlite.prepare(`
+    SELECT COALESCE(SUM(amount_minor), 0) AS total
+    FROM customer_refunds
+    WHERE customer_id = ? AND document_status = 'posted' AND date <= ? AND currency_code = ?
+  `).get(customerId, targetAsOf, targetCurrency) as { total: number };
+
+  const totalCustomerBalance = totalInvoiced.total - totalReceipts.total - totalCredits.total + totalRefunds.total;
 
   if (totalCustomerBalance < sumInvoiceRemaining) {
     let unallocated = sumInvoiceRemaining - totalCustomerBalance;
@@ -367,10 +381,15 @@ export function getCustomerAccountingSummary(
     SELECT COALESCE(SUM(base_total_minor), 0) AS total FROM sales_credit_notes
     WHERE customer_id = ? AND document_status = 'posted'
   `).get(customerId) as { total: number };
+  const refunds = sqlite.prepare(`
+    SELECT COALESCE(SUM(released_carrying_amount_minor), 0) AS total FROM customer_refunds
+    WHERE customer_id = ? AND document_status = 'posted'
+  `).get(customerId) as { total: number };
   return {
     totalInvoicedMinor: invoices.total,
     totalReceivedMinor: receipts.total,
     totalCreditedMinor: credits.total,
-    outstandingMinor: invoices.total - receipts.total - credits.total,
+    totalRefundedMinor: refunds.total,
+    outstandingMinor: invoices.total - receipts.total - credits.total + refunds.total,
   };
 }

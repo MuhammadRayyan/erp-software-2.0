@@ -35,40 +35,6 @@ const {
 } = await import("../../src/modules/tax/vat-period-service");
 const { getVatTransactionDetail, getVatWorkingPaper } = await import("../../src/modules/tax/vat-report-service");
 
-test("Phase 6 migration flags ambiguous historical zero-rate data without guessing", () => {
-  const legacy = new Database(":memory:");
-  const phase5Migrations = businessMigrations.filter((migration) => migration.version <= 5);
-  runMigrations(legacy, { label: "Phase 6 historical fixture", migrations: phase5Migrations });
-  const now = new Date().toISOString();
-  legacy.prepare(`
-    INSERT INTO customers (id, name, email, phone, tax_reference, status, created_at, updated_at)
-    VALUES ('legacy-customer', 'Legacy Customer', NULL, NULL, NULL, 'active', ?, ?)
-  `).run(now, now);
-  legacy.prepare(`
-    INSERT INTO sales_invoices (
-      id, invoice_number, customer_id, invoice_date, due_date, reference, document_status,
-      subtotal_minor, tax_minor, total_minor, created_by, created_at, updated_at, posted_at, voided_at
-    ) VALUES ('legacy-invoice', 'LEG-0001', 'legacy-customer', '2026-03-31', '2026-04-30',
-      'Historical migration fixture', 'posted', 20000, 500, 20500, 'legacy-user', ?, ?, ?, NULL)
-  `).run(now, now, now);
-  const insertLine = legacy.prepare(`
-    INSERT INTO sales_invoice_lines (
-      id, invoice_id, description, quantity_micros, unit_price_minor, sales_account_id,
-      tax_code_id, net_amount_minor, tax_amount_minor, gross_amount_minor, position
-    ) VALUES (?, 'legacy-invoice', ?, 1000000, 10000, 'acct-sales-4000', ?, 10000, ?, ?, ?)
-  `);
-  insertLine.run("legacy-zero-line", "Historically ambiguous zero-rate line", "tax-no-vat", 0, 10000, 0);
-  insertLine.run("legacy-standard-line", "Safely classifiable standard line", "tax-uae-vat-5", 500, 10500, 1);
-
-  runMigrations(legacy, { label: "Phase 6 historical fixture", migrations: businessMigrations });
-
-  const entries = legacy.prepare("SELECT vat_category, supply_emirate FROM tax_entries WHERE source_id = 'legacy-invoice'").all() as { vat_category: string; supply_emirate: string | null }[];
-  assert.deepEqual(entries, [{ vat_category: "standard", supply_emirate: null }]);
-  const reviews = legacy.prepare("SELECT issue_type FROM vat_data_review WHERE source_id = 'legacy-invoice' ORDER BY issue_type").all() as { issue_type: string }[];
-  assert.deepEqual(reviews.map((row) => row.issue_type), ["ambiguous_zero_rate", "missing_emirate"]);
-  legacy.close();
-});
-
 const seeded = await seedDemoData();
 const businessId = seeded.business.id;
 const adminId = seeded.admin.id;
@@ -260,7 +226,7 @@ test("Phase 6 UAE VAT working papers and explicit period controls", async (suite
     assert.deepEqual({ net: abuDhabi.netMinor, vat: abuDhabi.vatMinor }, { net: 50000, vat: 2500 });
     const drillDown = getVatTransactionDetail(businessId, adminId, { periodId, bucket: "standard_sales" });
     assert.equal(drillDown.reduce((sum, row) => sum + row.net_amount_minor, 0), report.buckets.standard_sales.netMinor);
-    assert.deepEqual(report.reconciliation, { outputGlMinor: 8000, inputGlMinor: 8000, outputDifferenceMinor: 0, inputDifferenceMinor: 0 });
+    assert.deepEqual(report.reconciliation, { outputGlMinor: 9000, inputGlMinor: 8000, outputDifferenceMinor: 0, inputDifferenceMinor: 0 });
 
     const outputLine = sqlite.prepare(`
       SELECT jl.id, jl.credit_minor FROM journal_lines jl
@@ -353,4 +319,38 @@ test("Phase 6 UAE VAT working papers and explicit period controls", async (suite
     assert.equal((imported.prepare("SELECT COUNT(*) AS count FROM vat_period_snapshots").get() as { count: number }).count, expectedSnapshots);
     assert.equal((imported.prepare("SELECT status FROM vat_periods WHERE id = ?").get(periodId) as { status: string }).status, "filed_externally");
   });
+});
+
+test("Phase 6 migration flags ambiguous historical zero-rate data without guessing", () => {
+  const legacy = new Database(":memory:");
+  const phase5Migrations = businessMigrations.filter((migration) => migration.version <= 5);
+  runMigrations(legacy, { label: "Phase 6 historical fixture", migrations: phase5Migrations });
+  const now = new Date().toISOString();
+  legacy.prepare(`
+    INSERT INTO customers (id, name, email, phone, tax_reference, status, created_at, updated_at)
+    VALUES ('legacy-customer', 'Legacy Customer', NULL, NULL, NULL, 'active', ?, ?)
+  `).run(now, now);
+  legacy.prepare(`
+    INSERT INTO sales_invoices (
+      id, invoice_number, customer_id, invoice_date, due_date, reference, document_status,
+      subtotal_minor, tax_minor, total_minor, created_by, created_at, updated_at, posted_at, voided_at
+    ) VALUES ('legacy-invoice', 'LEG-0001', 'legacy-customer', '2026-03-31', '2026-04-30',
+      'Historical migration fixture', 'posted', 20000, 500, 20500, 'legacy-user', ?, ?, ?, NULL)
+  `).run(now, now, now);
+  const insertLine = legacy.prepare(`
+    INSERT INTO sales_invoice_lines (
+      id, invoice_id, description, quantity_micros, unit_price_minor, sales_account_id,
+      tax_code_id, net_amount_minor, tax_amount_minor, gross_amount_minor, position
+    ) VALUES (?, 'legacy-invoice', ?, 1000000, 10000, 'acct-sales-4000', ?, 10000, ?, ?, ?)
+  `);
+  insertLine.run("legacy-zero-line", "Historically ambiguous zero-rate line", "tax-no-vat", 0, 10000, 0);
+  insertLine.run("legacy-standard-line", "Safely classifiable standard line", "tax-uae-vat-5", 500, 10500, 1);
+
+  runMigrations(legacy, { label: "Phase 6 historical fixture", migrations: businessMigrations });
+
+  const entries = legacy.prepare("SELECT vat_category, supply_emirate FROM tax_entries WHERE source_id = 'legacy-invoice'").all() as { vat_category: string; supply_emirate: string | null }[];
+  assert.deepEqual(entries, [{ vat_category: "standard", supply_emirate: null }]);
+  const reviews = legacy.prepare("SELECT issue_type FROM vat_data_review WHERE source_id = 'legacy-invoice' ORDER BY issue_type").all() as { issue_type: string }[];
+  assert.deepEqual(reviews.map((row) => row.issue_type), ["ambiguous_zero_rate", "missing_emirate"]);
+  legacy.close();
 });

@@ -1,46 +1,56 @@
-import { assertSavePermission, assertMutationPermission } from "@/core/permissions/mutation-permissions";
-import { createDocumentRevision, deleteDraftRevision } from "@/core/versioning/revision-engine";
-import { randomUUID } from "node:crypto";
 import { asc, eq } from "drizzle-orm";
 import { getBusinessDb } from "@/core/db/business";
 import { purchaseQuoteLines, purchaseQuotes, suppliers } from "@/core/db/business-schema";
-import { allocateNumber } from "@/modules/accounting/services/numbering-service";
 import { purchaseQuoteInputSchema, type PurchaseQuoteInput } from "./purchase-quote-input";
-import { effectiveProjectId, validateProjectReferences } from "@/modules/projects/project-validation";
-import { convertDocumentLinesToBase } from "@/modules/currency/conversion";
-import { resolveRateSnapshot } from "@/modules/currency/validation";
-import { calculateLines, totalsForLines, type StoredLine } from "@/modules/accounting/services/document-line-calculator";
-import { recordActivity } from "@/modules/activity-log/activity-log-service";
-import { getCustomFieldValuesForEntities, saveLineCustomFieldValuesInTransaction } from "@/modules/custom-fields/custom-field-service";
+import { getCustomFieldValuesForEntities } from "@/modules/custom-fields/custom-field-service";
+import { buildDocumentListWhere, decoratePricedLine, loadLineLookups, withProjectNames } from "@/modules/documents/engine/document-sql";
+import {
+  cancelTradeDocument,
+  closeTradeDocument,
+  createTradeDocumentRevision,
+  deleteTradeDocument,
+  issueTradeDocument,
+  listTradeDocumentRevisions,
+  saveTradeDocument,
+  type TradeDocumentConfig,
+} from "@/modules/documents/engine/trade-document-engine";
 
 export type PurchaseQuoteStatus = "draft" | "pending_approval" | "sent" | "accepted" | "rejected" | "superseded" | "cancelled";
 export type PurchaseQuoteIntent = "draft" | "issue";
 
-function insertLines(sqlite: ReturnType<typeof getBusinessDb>["sqlite"], quoteId: string, lines: StoredLine[]) {
-  const statement = sqlite.prepare(`INSERT INTO purchase_quote_lines
-    (id, quote_id, item_id, description, quantity_micros, unit_price_minor, discount_type, discount_value, expense_account_id,
-     tax_code_id, project_id, net_amount_minor, tax_amount_minor, gross_amount_minor, position)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
-  for (const line of lines) {
-    statement.run(
-      line.id,
-      quoteId,
-      line.itemId,
-      line.description,
-      line.quantityMicros,
-      line.unitPriceMinor,
-      line.discountType || "none",
-      line.discountValue || "0",
-      line.expenseAccountId,
-      line.taxCodeId,
-      line.projectId,
-      line.netAmountMinor,
-      line.taxAmountMinor,
-      line.grossAmountMinor,
-      line.lineIndex,
-    );
-  }
-}
+export const purchaseQuoteDocument: TradeDocumentConfig = {
+  entityType: "purchase_quote",
+  label: "purchase quote",
+  module: "purchases",
+  numbering: "purchaseQuote",
+  schema: purchaseQuoteInputSchema,
+  table: "purchase_quotes",
+  numberColumn: "quote_number",
+  statusColumn: "document_status",
+  dateColumn: "quote_date",
+  expected: { column: "expiry_date", field: "expiryDate", empty: "" },
+  numberDetailKey: "quoteNumber",
+  party: { table: "suppliers", column: "supplier_id", field: "supplierId", inactiveMessage: "Choose an active supplier." },
+  lines: {
+    table: "purchase_quote_lines",
+    parentColumn: "quote_id",
+    accountColumn: "expense_account_id",
+    accountField: "expenseAccountId",
+    calculation: { accountTypeFilter: "expense", taxDirection: "purchases" },
+    customFieldEntity: "purchase_quote_line",
+  },
+  statuses: { open: "sent", closed: "accepted" },
+  messages: {
+    lockedStatuses: ["accepted", "cancelled", "superseded"],
+    notEditable: "Closed, superseded, or cancelled purchase quotes cannot be edited.",
+    issueOnlyDraft: "Only a draft purchase quote can be issued.",
+    closeOnlyOpen: "Only an issued purchase quote can be accepted.",
+    cancelClosed: "An accepted purchase quote cannot be cancelled.",
+  },
+  activity: { saveIssueVerb: "Issued", issueVerb: "Issued", closeVerb: "Accepted / closed", revisionSource: "purchase quote", revisionSourceIdKey: "sourceQuoteId" },
+  revision: { headerTable: "purchase_quotes", lineTable: "purchase_quote_lines", headerIdColumn: "id", lineHeaderIdColumn: "quote_id", documentNumberColumn: "quote_number" },
+  newRevisionFamily: true,
+};
 
 export function listPurchaseQuotes(
   businessId: string,
@@ -48,24 +58,7 @@ export function listPurchaseQuotes(
   filters?: { supplierId?: string; from?: string; to?: string; onlyLatest?: boolean },
 ) {
   const { sqlite } = getBusinessDb(businessId, userId);
-  const where: string[] = [];
-  const params: string[] = [];
-  if (filters?.onlyLatest) {
-    where.push("pq.is_latest_revision = 1");
-  }
-  if (filters?.supplierId) {
-    where.push("pq.supplier_id = ?");
-    params.push(filters.supplierId);
-  }
-  if (filters?.from) {
-    where.push("pq.quote_date >= ?");
-    params.push(filters.from);
-  }
-  if (filters?.to) {
-    where.push("pq.quote_date <= ?");
-    params.push(filters.to);
-  }
-  const whereClause = where.length ? `WHERE ${where.join(" AND ")}` : "";
+  const { whereClause, params } = buildDocumentListWhere("pq", { ...filters, partyId: filters?.supplierId }, { party: "supplier_id", date: "quote_date" });
   const rows = sqlite.prepare(`SELECT pq.*, s.name AS supplier_name,
     pq.quote_date AS date, pq.expiry_date AS expected_date, pq.document_status AS documentStatus,
     COALESCE(pq.revision_number, 0) AS revision_number,
@@ -84,13 +77,7 @@ export function listPurchaseQuotes(
       created_by: string; created_at: string; updated_at: string;
       order_count: number; project_id: string | null; project_ids: string | null;
     }[];
-  const projects = sqlite.prepare("SELECT id, name FROM projects").all() as { id: string; name: string }[];
-  const projectById = new Map(projects.map((project) => [project.id, project.name]));
-  return rows.map((row) => ({
-    ...row,
-    projectIds: row.project_ids?.split(",").filter(Boolean) ?? [],
-    projectNames: (row.project_ids?.split(",").filter(Boolean) ?? []).map((id) => projectById.get(id) ?? id),
-  }));
+  return withProjectNames(sqlite, rows);
 }
 
 export function getPurchaseQuote(businessId: string, userId: string, quoteId: string) {
@@ -99,313 +86,45 @@ export function getPurchaseQuote(businessId: string, userId: string, quoteId: st
     .innerJoin(suppliers, eq(suppliers.id, purchaseQuotes.supplierId)).where(eq(purchaseQuotes.id, quoteId)).get();
   if (!header) return null;
   const lines = context.db.select().from(purchaseQuoteLines).where(eq(purchaseQuoteLines.quoteId, quoteId)).orderBy(asc(purchaseQuoteLines.position)).all();
-  const accounts = context.sqlite.prepare("SELECT id, name FROM accounts").all() as { id: string; name: string }[];
-  const taxes = context.sqlite.prepare("SELECT id, name, rate_basis_points FROM tax_codes").all() as { id: string; name: string; rate_basis_points: number }[];
-  const accountById = new Map(accounts.map((row) => [row.id, row]));
-  const taxById = new Map(taxes.map((row) => [row.id, row]));
-  const projects = context.sqlite.prepare("SELECT id, code, name FROM projects").all() as { id: string; code: string; name: string }[];
-  const projectById = new Map(projects.map((project) => [project.id, project]));
-  const itemRows = context.sqlite.prepare("SELECT id, sku, name, unit_name FROM inventory_items").all() as { id: string; sku: string | null; name: string; unit_name: string }[];
-  const itemById = new Map(itemRows.map((item) => [item.id, item]));
-
+  const lookups = loadLineLookups(context.sqlite);
   const linkedOrders = context.sqlite
     .prepare("SELECT id, order_number, status FROM purchase_orders WHERE purchase_quote_id = ? ORDER BY created_at DESC")
     .all(quoteId) as { id: string; order_number: string; status: string }[];
-
-  const lineCustomFieldsMap = getCustomFieldValuesForEntities(businessId, userId, "purchase_quote_line", lines.map((l) => l.id));
-
+  const customFields = getCustomFieldValuesForEntities(businessId, userId, "purchase_quote_line", lines.map((l) => l.id));
   return {
     ...header,
-    project: header.quote.projectId ? projectById.get(header.quote.projectId) ?? null : null,
-    lines: lines.map((line) => ({
-      ...line,
-      item: line.itemId ? itemById.get(line.itemId) ?? null : null,
-      expenseAccount: line.expenseAccountId ? accountById.get(line.expenseAccountId) ?? null : null,
-      taxCode: taxById.get(line.taxCodeId) ?? null,
-      project: effectiveProjectId(line.projectId, header.quote.projectId) ? projectById.get(effectiveProjectId(line.projectId, header.quote.projectId)!) ?? null : null,
-      customFields: lineCustomFieldsMap.get(line.id) ?? {},
-    })),
+    project: header.quote.projectId ? lookups.projectById.get(header.quote.projectId) ?? null : null,
+    lines: lines.map((line) => decoratePricedLine(line, lookups, { headerProjectId: header.quote.projectId, customFields, accountKey: "expenseAccount", accountId: line.expenseAccountId })),
     linkedOrders,
   };
 }
 
 export function savePurchaseQuote(businessId: string, userId: string, input: PurchaseQuoteInput, intent: PurchaseQuoteIntent, quoteId?: string) {
-  assertSavePermission(businessId, userId, "purchases", quoteId, intent);
-  const data = purchaseQuoteInputSchema.parse(input);
-  const context = getBusinessDb(businessId, userId);
-  const supplier = context.db.select().from(suppliers).where(eq(suppliers.id, data.supplierId)).get();
-  if (!supplier || !supplier.isActive) throw new Error("Choose an active supplier.");
-  const rate = resolveRateSnapshot(context.sqlite, {
-    currencyCode: input.currencyCode ?? supplier.defaultCurrencyCode ?? data.currencyCode,
-    exchangeRateToBase: data.exchangeRateToBase,
-    exchangeRateDate: data.exchangeRateDate,
-    exchangeRateSource: data.exchangeRateSource,
-    relevantDate: data.date,
-    enforceVatPolicy: false,
-  });
-  validateProjectReferences(context.sqlite, { headerProjectId: data.projectId, lineProjectIds: data.lines.map((line) => line.projectId) });
-  const lines = calculateLines(context.sqlite, data.lines, rate.currencyMinorUnit, {
-    accountTypeFilter: "expense",
-    taxDirection: "purchases",
-    supportItems: true,
-    accountFieldOnLine: "expenseAccountId",
-    amountsIncludeTax: data.amountsIncludeTax,
-  });
-  const amounts = totalsForLines(lines);
-  const base = convertDocumentLinesToBase(lines, rate);
-  const now = new Date().toISOString();
-  const id = quoteId ?? randomUUID();
-  let recordedNumber = "";
-
-  context.sqlite.transaction(() => {
-    let oldLineIds: string[] = [];
-    if (quoteId) {
-      oldLineIds = (context.sqlite.prepare("SELECT id FROM purchase_quote_lines WHERE quote_id = ?").all(quoteId) as { id: string }[]).map((r) => r.id);
-      const current = context.db.select().from(purchaseQuotes).where(eq(purchaseQuotes.id, quoteId)).get();
-      if (!current) throw new Error("Purchase quote not found.");
-      if (current.documentStatus === "accepted" || current.documentStatus === "cancelled" || current.documentStatus === "superseded") {
-        throw new Error("Closed, superseded, or cancelled purchase quotes cannot be edited.");
-      }
-      recordedNumber = current.quoteNumber;
-      const nextStatus = current.documentStatus === "sent" || intent === "issue" ? "sent" : "draft";
-      if (nextStatus !== "draft") assertMutationPermission(businessId, userId, "purchases", "approve");
-      context.sqlite.prepare(`
-        UPDATE purchase_quotes SET
-          supplier_id = ?, project_id = ?, quote_date = ?, expiry_date = ?, reference = ?,
-          document_status = ?, amounts_include_tax = ?, subtotal_minor = ?, tax_minor = ?, total_minor = ?,
-          currency_code = ?, exchange_rate_to_base = ?, exchange_rate_date = ?, exchange_rate_source = ?,
-          base_subtotal_minor = ?, base_tax_minor = ?, base_total_minor = ?, notes = ?, terms = ?, updated_at = ?
-        WHERE id = ?
-      `).run(
-        data.supplierId,
-        data.projectId || null,
-        data.date,
-        data.expiryDate || "",
-        data.reference || null,
-        nextStatus,
-        data.amountsIncludeTax ? 1 : 0,
-        amounts.subtotalMinor,
-        amounts.taxMinor,
-        amounts.totalMinor,
-        rate.currencyCode,
-        rate.exchangeRateToBase,
-        rate.exchangeRateDate,
-        rate.exchangeRateSource,
-        base.baseSubtotalMinor,
-        base.baseTaxMinor,
-        base.baseTotalMinor,
-        data.notes || null,
-        data.terms || null,
-        now,
-        quoteId,
-      );
-      context.sqlite.prepare("DELETE FROM purchase_quote_lines WHERE quote_id = ?").run(quoteId);
-    } else {
-      const quoteNumber = allocateNumber(context.sqlite, "purchaseQuote");
-      recordedNumber = quoteNumber;
-      const status = intent === "issue" ? "sent" : "draft";
-      context.sqlite.prepare(`
-        INSERT INTO purchase_quotes (
-          id, quote_number, base_quote_number, root_quote_id, revision_number, is_latest_revision,
-          supplier_id, project_id, quote_date, expiry_date, reference, document_status,
-          amounts_include_tax, subtotal_minor, tax_minor, total_minor,
-          currency_code, exchange_rate_to_base, exchange_rate_date, exchange_rate_source,
-          base_subtotal_minor, base_tax_minor, base_total_minor, notes, terms,
-          created_by, created_at, updated_at
-        ) VALUES (?, ?, ?, ?, 0, 1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-      `).run(
-        id,
-        quoteNumber,
-        quoteNumber,
-        id,
-        data.supplierId,
-        data.projectId || null,
-        data.date,
-        data.expiryDate || "",
-        data.reference || null,
-        status,
-        data.amountsIncludeTax ? 1 : 0,
-        amounts.subtotalMinor,
-        amounts.taxMinor,
-        amounts.totalMinor,
-        rate.currencyCode,
-        rate.exchangeRateToBase,
-        rate.exchangeRateDate,
-        rate.exchangeRateSource,
-        base.baseSubtotalMinor,
-        base.baseTaxMinor,
-        base.baseTotalMinor,
-        data.notes || null,
-        data.terms || null,
-        userId,
-        now,
-        now,
-      );
-    }
-    insertLines(context.sqlite, id, lines);
-    saveLineCustomFieldValuesInTransaction(context.sqlite, "purchase_quote_line", lines.map((l) => ({ lineId: l.id, customFields: l.customFields })), oldLineIds);
-  }).immediate();
-
-  try {
-    recordActivity(businessId, {
-      userId,
-      action: quoteId ? (intent === "issue" ? "posted" : "updated") : (intent === "issue" ? "posted" : "created"),
-      entityType: "purchase_quote",
-      entityId: id,
-      entityNumber: recordedNumber,
-      summary: `${quoteId ? (intent === "issue" ? "Issued" : "Updated") : (intent === "issue" ? "Issued" : "Created")} purchase quote ${recordedNumber}`,
-      details: { quoteNumber: recordedNumber, totalMinor: amounts.totalMinor, currency: rate.currencyCode, supplierId: data.supplierId },
-      sqlite: context.sqlite,
-    });
-  } catch (e) {
-    console.error("[ActivityLog] purchase_quote save failed:", e);
-  }
-
-  return id;
+  return saveTradeDocument(purchaseQuoteDocument, businessId, userId, input, intent, quoteId);
 }
 
 export function issuePurchaseQuote(businessId: string, userId: string, quoteId: string) {
-  assertMutationPermission(businessId, userId, "purchases", "approve");
-  const context = getBusinessDb(businessId, userId);
-  const quote = context.db.select().from(purchaseQuotes).where(eq(purchaseQuotes.id, quoteId)).get();
-  if (!quote) throw new Error("Purchase quote not found.");
-  if (quote.documentStatus !== "draft") throw new Error("Only a draft purchase quote can be issued.");
-  const now = new Date().toISOString();
-  context.db.update(purchaseQuotes).set({ documentStatus: "sent", updatedAt: now }).where(eq(purchaseQuotes.id, quoteId)).run();
-
-  try {
-    recordActivity(businessId, {
-      userId,
-      action: "posted",
-      entityType: "purchase_quote",
-      entityId: quoteId,
-      entityNumber: quote.quoteNumber,
-      summary: `Issued purchase quote ${quote.quoteNumber}`,
-      details: { quoteNumber: quote.quoteNumber, previousStatus: "draft", newStatus: "sent" },
-      sqlite: context.sqlite,
-    });
-  } catch (e) {
-    console.error("[ActivityLog] purchase_quote issue failed:", e);
-  }
+  issueTradeDocument(purchaseQuoteDocument, businessId, userId, quoteId);
 }
 
 export function closePurchaseQuote(businessId: string, userId: string, quoteId: string) {
-  assertMutationPermission(businessId, userId, "purchases", "edit");
-  const context = getBusinessDb(businessId, userId);
-  const quote = context.db.select().from(purchaseQuotes).where(eq(purchaseQuotes.id, quoteId)).get();
-  if (!quote) throw new Error("Purchase quote not found.");
-  if (quote.documentStatus !== "sent") throw new Error("Only an issued purchase quote can be accepted.");
-  const now = new Date().toISOString();
-  context.db.update(purchaseQuotes).set({ documentStatus: "accepted", updatedAt: now }).where(eq(purchaseQuotes.id, quoteId)).run();
-
-  try {
-    recordActivity(businessId, {
-      userId,
-      action: "posted",
-      entityType: "purchase_quote",
-      entityId: quoteId,
-      entityNumber: quote.quoteNumber,
-      summary: `Accepted / closed purchase quote ${quote.quoteNumber}`,
-      details: { quoteNumber: quote.quoteNumber, previousStatus: quote.documentStatus, newStatus: "accepted" },
-      sqlite: context.sqlite,
-    });
-  } catch (e) {
-    console.error("[ActivityLog] purchase_quote close failed:", e);
-  }
+  closeTradeDocument(purchaseQuoteDocument, businessId, userId, quoteId);
 }
 
 export function cancelPurchaseQuote(businessId: string, userId: string, quoteId: string) {
-  assertMutationPermission(businessId, userId, "purchases", "delete");
-  const context = getBusinessDb(businessId, userId);
-  const quote = context.db.select().from(purchaseQuotes).where(eq(purchaseQuotes.id, quoteId)).get();
-  if (!quote) throw new Error("Purchase quote not found.");
-  if (quote.documentStatus === "cancelled") throw new Error("Purchase quote has already been cancelled.");
-  if (quote.documentStatus === "accepted") throw new Error("An accepted purchase quote cannot be cancelled.");
-  const now = new Date().toISOString();
-  context.db.update(purchaseQuotes).set({ documentStatus: "cancelled", updatedAt: now }).where(eq(purchaseQuotes.id, quoteId)).run();
-
-  try {
-    recordActivity(businessId, {
-      userId,
-      action: "voided",
-      entityType: "purchase_quote",
-      entityId: quoteId,
-      entityNumber: quote.quoteNumber,
-      summary: `Cancelled purchase quote ${quote.quoteNumber}`,
-      details: { quoteNumber: quote.quoteNumber, previousStatus: quote.documentStatus, newStatus: "cancelled" },
-      sqlite: context.sqlite,
-    });
-  } catch (e) {
-    console.error("[ActivityLog] purchase_quote cancel failed:", e);
-  }
+  cancelTradeDocument(purchaseQuoteDocument, businessId, userId, quoteId);
 }
 
-const revisionConfig = {
-  headerTable: "purchase_quotes",
-  lineTable: "purchase_quote_lines",
-  headerIdColumn: "id",
-  lineHeaderIdColumn: "quote_id",
-  documentNumberColumn: "quote_number",
-};
-
 export function deletePurchaseQuote(businessId: string, userId: string, quoteId: string) {
-  assertMutationPermission(businessId, userId, "purchases", "delete");
-  const context = getBusinessDb(businessId, userId);
-  const quote = context.sqlite.prepare("SELECT quote_number FROM purchase_quotes WHERE id = ?").get(quoteId) as { quote_number: string } | undefined;
-  deleteDraftRevision(context.sqlite, revisionConfig, quoteId);
-
-  if (quote) {
-    try {
-      recordActivity(businessId, {
-        userId,
-        action: "deleted",
-        entityType: "purchase_quote",
-        entityId: quoteId,
-        entityNumber: quote.quote_number,
-        summary: `Deleted draft purchase quote ${quote.quote_number}`,
-        sqlite: context.sqlite,
-      });
-    } catch (e) {
-      console.error("[ActivityLog] purchase_quote delete failed:", e);
-    }
-  }
+  deleteTradeDocument(purchaseQuoteDocument, businessId, userId, quoteId);
 }
 
 export function createPurchaseQuoteRevision(businessId: string, userId: string, sourceQuoteId: string): string {
-  assertMutationPermission(businessId, userId, "purchases", "create");
-  const context = getBusinessDb(businessId, userId);
-  const newId = createDocumentRevision(context.sqlite, revisionConfig, userId, sourceQuoteId);
-  const rev = context.sqlite.prepare("SELECT quote_number, revision_number FROM purchase_quotes WHERE id = ?").get(newId) as { quote_number: string; revision_number: number } | undefined;
-  if (rev) {
-    try {
-      recordActivity(businessId, {
-        userId,
-        action: "created",
-        entityType: "purchase_quote",
-        entityId: newId,
-        entityNumber: rev.quote_number,
-        summary: `Created revision ${rev.revision_number} (${rev.quote_number}) from purchase quote`,
-        details: { quoteNumber: rev.quote_number, revisionNumber: rev.revision_number, sourceQuoteId },
-        sqlite: context.sqlite,
-      });
-    } catch (e) {
-      console.error("[ActivityLog] purchase_quote revision failed:", e);
-    }
-  }
-  return newId;
+  return createTradeDocumentRevision(purchaseQuoteDocument, businessId, userId, sourceQuoteId);
 }
 
 export function listPurchaseQuoteRevisions(businessId: string, userId: string, quoteId: string) {
-  const context = getBusinessDb(businessId, userId);
-  const current = context.db.select().from(purchaseQuotes).where(eq(purchaseQuotes.id, quoteId)).get();
-  if (!current) return [];
-  const rootId = current.rootQuoteId || current.id;
-  const revisions = context.sqlite.prepare(`
-    SELECT id, quote_number, revision_number, is_latest_revision, document_status, total_minor, currency_code, quote_date, created_at
-    FROM purchase_quotes
-    WHERE root_quote_id = ? OR id = ?
-    ORDER BY revision_number DESC
-  `).all(rootId, rootId) as {
+  return listTradeDocumentRevisions(purchaseQuoteDocument, businessId, userId, quoteId, "quote_date") as {
     id: string;
     quote_number: string;
     revision_number: number;
@@ -416,5 +135,4 @@ export function listPurchaseQuoteRevisions(businessId: string, userId: string, q
     quote_date: string;
     created_at: string;
   }[];
-  return revisions;
 }

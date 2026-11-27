@@ -1,3 +1,5 @@
+import "server-only";
+
 import { existsSync } from "node:fs";
 import Database from "better-sqlite3";
 import { businessMigrations } from "./business-migrations";

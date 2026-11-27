@@ -1,20 +1,26 @@
-import Link from "next/link";
 import { requireModule } from "@/core/permissions/require-module";
-import { formatDate, formatMoney } from "@/core/format";
+import { formatDate } from "@/core/format";
 import { getCurrencySettings } from "@/modules/currency/exchange-rate";
-import { getAccountsPayable } from "@/modules/reports/report-service";
+import { getPayablesAging } from "@/modules/reports/aging-service";
+import { AgingReportView } from "@/modules/reports/aging-report-view";
 import { BackLink } from "@/components/back-link";
 
-export default async function AccountsPayablePage({ params }: { params: Promise<{ businessId: string }> }) {
+export default async function AccountsPayablePage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ businessId: string }>;
+  searchParams: Promise<{ asOf?: string }>;
+}) {
   const { businessId } = await params;
+  const query = await searchParams;
   const { user, access } = await requireModule(businessId, "reports");
-  const rows = getAccountsPayable(businessId, user.id);
+  const report = getPayablesAging(businessId, user.id, query.asOf);
   const settings = getCurrencySettings(businessId, user.id);
   const minorUnits = new Map(settings.currencies.map((currency) => [currency.code, currency.minor_unit]));
-  const totalBase = rows.reduce((sum, row) => sum + row.base_carrying_minor, 0);
   return <div className="page-container">
     <BackLink href={`/b/${businessId}/reports`}>Reports</BackLink>
-    <div className="page-header"><div><h1 className="page-title">Accounts Payable</h1><p className="page-description">Foreign open amounts stay in document currency; carrying amounts and totals are shown in {access.business.currency}.</p></div></div>
-    {rows.length ? <div className="data-panel overflow-x-auto"><table className="data-table min-w-table-xl"><thead><tr><th>Supplier</th><th>Document</th><th>Due</th><th>Age</th><th className="text-right!">Foreign open</th><th className="text-right!">Base carrying</th></tr></thead><tbody>{rows.map((row) => <tr key={row.document_id}><td><div className="flex items-center gap-2"><Link href={`/b/${businessId}/suppliers/${row.supplier_id}`} className="font-medium text-primary hover:underline">{row.supplier_name}</Link><Link href={`/b/${businessId}/reports/supplier-statement?supplierId=${row.supplier_id}`} className="text-xs text-muted-foreground hover:text-foreground hover:underline">Statement</Link></div></td><td className="tabular"><Link href={`/b/${businessId}/purchases/invoices/${row.document_id}`} className="font-medium text-primary hover:underline">{row.document_number}</Link></td><td>{formatDate(row.due_date)}</td><td>{row.age_bucket}</td><td className="money text-right">{formatMoney(row.foreign_open_minor, row.currency_code, minorUnits.get(row.currency_code) ?? 2)}</td><td className="money text-right font-medium">{formatMoney(row.base_carrying_minor, access.business.currency)}</td></tr>)}</tbody><tfoot><tr className="border-t border-border-strong bg-surface font-semibold"><td className="h-11 px-3" colSpan={5}>Total base carrying amount</td><td className="money h-11 px-3 text-right">{formatMoney(totalBase, access.business.currency)}</td></tr></tfoot></table></div> : <div className="rounded-lg border border-border bg-surface py-10 text-center"><p className="font-medium">No outstanding payables</p><p className="mt-1 text-sm text-muted-foreground">Posted purchase invoices with a remaining foreign or base carrying balance appear here.</p></div>}
+    <div className="page-header"><div><h1 className="page-title">Accounts Payable</h1><p className="page-description">Aged as of {formatDate(report.asOfDate)}. Foreign open amounts stay in document currency; carrying amounts and totals are shown in {access.business.currency}.</p></div></div>
+    <AgingReportView businessId={businessId} side="payable" report={report} baseCurrency={access.business.currency} minorUnits={minorUnits} />
   </div>;
 }

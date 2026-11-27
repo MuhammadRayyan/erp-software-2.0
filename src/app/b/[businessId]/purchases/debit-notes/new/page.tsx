@@ -8,6 +8,7 @@ import { getActiveTaxCodes } from "@/modules/accounting/services/tax-code-servic
 import { quantityMicrosToInput } from "@/modules/accounting/calculations/money";
 import { minorToCurrencyInput } from "@/modules/currency/conversion";
 import { getPurchaseInvoice, listPurchaseInvoices } from "@/modules/purchase-invoices/purchase-invoice-service";
+import { getDebitableBillAmount } from "@/modules/debit-notes/debit-note-service";
 import { listActiveSuppliers } from "@/modules/suppliers/supplier-service";
 import { listProjectOptions } from "@/modules/projects/project-service";
 import { DebitNoteForm } from "@/modules/debit-notes/debit-note-form";
@@ -36,7 +37,11 @@ export default async function NewDebitNotePage({
   const settings = getAccountingSettings(businessId, user.id);
   const projects = listProjectOptions(businessId, user.id);
   const allInvoices = listPurchaseInvoices(businessId, user.id);
-  const eligibleInvoices = allInvoices.filter((inv) => inv.document_status === "posted");
+  // Paid bills can be debited too: the part above the open balance becomes supplier credit.
+  const eligibleInvoices = allInvoices
+    .filter((inv) => inv.document_status === "posted")
+    .map((inv) => ({ ...inv, balanceMinor: getDebitableBillAmount(businessId, user.id, inv.id) }))
+    .filter((inv) => inv.balanceMinor > 0);
   const currencySettings = getCurrencySettings(businessId, user.id);
 
   const selectedSupplierId =

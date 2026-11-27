@@ -11,6 +11,7 @@ import {
   splitTaxInclusive,
 } from "@/modules/accounting/calculations/money";
 import { parseCurrencyAmountToMinor } from "@/modules/currency/conversion";
+import { isSelfAssessedVatCategory } from "@/modules/tax/uae-vat-config";
 
 export interface DocumentLineTaxOption {
   id: string;
@@ -64,7 +65,7 @@ export function previewDocumentLine(
 
     if (amountsIncludeTax) {
       grossMinor = discountedTotalMinor;
-      if (vatCategory === "reverse_charge") {
+      if (isSelfAssessedVatCategory(vatCategory)) {
         // Supplier charges no VAT: the price is the net; VAT is self-assessed on it.
         netMinor = grossMinor;
         taxMinor = calculateTax(netMinor, rate);
@@ -76,7 +77,7 @@ export function previewDocumentLine(
     } else {
       netMinor = discountedTotalMinor;
       taxMinor = calculateTax(netMinor, rate);
-      grossMinor = vatCategory === "reverse_charge" ? netMinor : netMinor + taxMinor;
+      grossMinor = isSelfAssessedVatCategory(vatCategory) ? netMinor : netMinor + taxMinor;
     }
     return { netMinor, taxMinor, grossMinor };
   } catch {

@@ -1,33 +1,26 @@
-import { assertSavePermission, assertMutationPermission } from "@/core/permissions/mutation-permissions";
 import type { BaseStoredLine } from "@/modules/documents/document-types";
-import { randomUUID } from "node:crypto";
 import { getBusinessDb } from "@/core/db/business";
 import {
   minorToInput,
   parseMoneyToMinor,
-  parseQuantityToMicros,
   quantityMicrosToInput,
 } from "@/modules/accounting/calculations/money";
-import { allocateNumber } from "@/modules/accounting/services/numbering-service";
 import {
   effectiveProjectId,
   validateProjectReferences,
 } from "@/modules/projects/project-validation";
+import { buildDocumentListWhere } from "@/modules/documents/engine/document-sql";
 import {
-  assertInventoryPostingOrder,
-  assertInventorySourceIsLatest,
-  EDIT_INVENTORY_CHRONOLOGY_ERROR,
-  VOID_INVENTORY_CHRONOLOGY_ERROR,
-} from "./inventory-chronology";
-import { assertDateNotLocked } from "@/modules/accounting/services/financial-lock-service";
-import type {
-  InventoryDocumentIntent,
-  InventoryDocumentStatus,
-} from "./inventory-document";
+  deleteStockDocument,
+  saveStockDocument,
+  voidStockDocument,
+  type StockDocumentConfig,
+  type StockDocumentHeader,
+} from "@/modules/documents/engine/stock-document-engine";
+import type { InventoryDocumentIntent } from "./inventory-document";
 import { goodsReceiptInputSchema, type GoodsReceiptInput } from "./goods-receipt-input";
 import { validateGoodsReceiptSources } from "./goods-receipt-validation";
 import {
-  deleteSourceMovements,
   getStockBalance,
   insertInventoryMovement,
   averageUnitCostMicros,
@@ -38,7 +31,6 @@ import {
 } from "./inventory-valuation";
 import { convertToBase } from "@/modules/currency/conversion";
 import { getBaseCurrency } from "@/modules/currency/currency";
-import { getBusinessTodayIso } from "@/core/format";
 
 export type { InventoryDocumentIntent, InventoryDocumentStatus } from "./inventory-document";
 
@@ -52,6 +44,8 @@ export type StoredLine = BaseStoredLine & {
   /** Exact base-currency value when costed from a Purchase Invoice line. */
   valueMinor?: number;
 };
+
+type GoodsReceiptData = ReturnType<typeof goodsReceiptInputSchema.parse>;
 
 /**
  * The Purchase Invoice debits Inventory with each item line's base-currency
@@ -93,88 +87,9 @@ function applyPurchaseInvoiceCosts(sqlite: Sqlite, lines: StoredLine[]) {
   });
 }
 
-function prepareLines(
-  sqlite: Sqlite,
-  data: ReturnType<typeof goodsReceiptInputSchema.parse>,
-) {
-  const itemIds = new Set(
-    (sqlite.prepare("SELECT id FROM inventory_items WHERE is_active = 1").all() as { id: string }[])
-      .map((item) => item.id),
-  );
-  return data.lines.map((line, position): StoredLine => {
-    if (!itemIds.has(line.itemId)) throw new Error("Choose an active inventory item.");
-    return {
-        id: randomUUID(),
-        itemId: line.itemId,
-        description: line.description,
-        quantityMicros: parseQuantityToMicros(line.quantity),
-        unitPriceMinor: 0,
-        netAmountMinor: 0,
-        taxCodeId: "",
-        taxAmountMinor: 0,
-        grossAmountMinor: 0,
-        unitCostMinor: parseMoneyToMinor(line.unitCost, "Unit cost"),
-        projectId: line.projectId || null,
-        purchaseOrderLineId: line.purchaseOrderLineId || null,
-        purchaseInvoiceLineId: line.purchaseInvoiceLineId || null,
-        lineIndex: position,
-      };
-  });
-}
-
-function validateHeader(
-  sqlite: Sqlite,
-  data: ReturnType<typeof goodsReceiptInputSchema.parse>,
-) {
-  const supplier = sqlite
-    .prepare("SELECT id FROM suppliers WHERE id = ? AND is_active = 1")
-    .get(data.supplierId);
-  if (!supplier) throw new Error("Choose an active supplier.");
-
-  const location = sqlite
-    .prepare("SELECT id FROM inventory_locations WHERE id = ? AND is_active = 1")
-    .get(data.locationId);
-  if (!location) throw new Error("Choose an active inventory location.");
-
-  validateProjectReferences(sqlite, {
-    headerProjectId: data.projectId,
-    lineProjectIds: data.lines.map((line) => line.projectId),
-  });
-}
-
-function insertLines(sqlite: Sqlite, receiptId: string, lines: readonly StoredLine[]) {
-  const insert = sqlite.prepare(`
-    INSERT INTO goods_receipt_lines (
-      id, goods_receipt_id, item_id, description, quantity_micros, unit_cost_minor,
-      project_id, purchase_order_line_id, purchase_invoice_line_id, position
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-  `);
-  for (const line of lines) {
-    insert.run(
-      line.id,
-      receiptId,
-      line.itemId,
-      line.description,
-      line.quantityMicros,
-      line.unitCostMinor,
-      line.projectId,
-      line.purchaseOrderLineId,
-      line.purchaseInvoiceLineId,
-      line.lineIndex,
-    );
-  }
-}
-
 function postMovements(
   sqlite: Sqlite,
-  receipt: {
-    id: string;
-    receiptNumber: string;
-    date: string;
-    locationId: string;
-    projectId: string | null;
-    createdAt: string;
-  },
+  receipt: StockDocumentHeader,
   lines: readonly StoredLine[],
 ) {
   for (const line of lines) {
@@ -193,11 +108,123 @@ function postMovements(
       sourceId: receipt.id,
       sourceLineId: line.id,
       projectId: effectiveProjectId(line.projectId, receipt.projectId),
-      description: receipt.receiptNumber,
+      description: receipt.number,
       createdAt: new Date(Date.parse(receipt.createdAt) + line.lineIndex).toISOString(),
     });
   }
 }
+
+export const goodsReceiptDocument: StockDocumentConfig<GoodsReceiptData, StoredLine, { item_id: string; location_id: string }[]> = {
+  sourceType: "goods_receipt",
+  label: "Goods Receipt",
+  pluralLabel: "Goods Receipts",
+  lockLabel: "Goods receipt",
+  schema: goodsReceiptInputSchema,
+  table: "goods_receipts",
+  numberColumn: "receipt_number",
+  numbering: "goodsReceipt",
+  lines: {
+    table: "goods_receipt_lines",
+    parentColumn: "goods_receipt_id",
+    columns: {
+      item_id: (line) => line.itemId,
+      description: (line) => line.description,
+      quantity_micros: (line) => line.quantityMicros,
+      unit_cost_minor: (line) => line.unitCostMinor,
+      project_id: (line) => line.projectId,
+      purchase_order_line_id: (line) => line.purchaseOrderLineId,
+      purchase_invoice_line_id: (line) => line.purchaseInvoiceLineId,
+      position: (line) => line.lineIndex,
+    },
+  },
+  direction: "in",
+  movementType: "goods_receipt",
+  missingMovementMessage: "The original Goods Receipt movement could not be found.",
+  headerColumns: (data) => ({
+    supplier_id: data.supplierId,
+    purchase_order_id: data.purchaseOrderId || null,
+    purchase_invoice_id: data.purchaseInvoiceId || null,
+    date: data.date,
+    location_id: data.locationId,
+    reference: data.reference || null,
+    project_id: data.projectId || null,
+    notes: data.notes || null,
+  }),
+  validateHeader(sqlite, data) {
+    const supplier = sqlite
+      .prepare("SELECT id FROM suppliers WHERE id = ? AND is_active = 1")
+      .get(data.supplierId);
+    if (!supplier) throw new Error("Choose an active supplier.");
+
+    const location = sqlite
+      .prepare("SELECT id FROM inventory_locations WHERE id = ? AND is_active = 1")
+      .get(data.locationId);
+    if (!location) throw new Error("Choose an active inventory location.");
+
+    validateProjectReferences(sqlite, {
+      headerProjectId: data.projectId,
+      lineProjectIds: data.lines.map((line) => line.projectId),
+    });
+  },
+  prepareLine: (line, base) => ({
+    ...base,
+    unitPriceMinor: 0,
+    netAmountMinor: 0,
+    taxCodeId: "",
+    taxAmountMinor: 0,
+    grossAmountMinor: 0,
+    unitCostMinor: parseMoneyToMinor(line.unitCost, "Unit cost"),
+    purchaseOrderLineId: line.purchaseOrderLineId || null,
+    purchaseInvoiceLineId: line.purchaseInvoiceLineId || null,
+  }),
+  validateSources(sqlite, data, lines, receiptId) {
+    validateGoodsReceiptSources(sqlite, {
+      supplierId: data.supplierId,
+      purchaseOrderId: data.purchaseOrderId || null,
+      purchaseInvoiceId: data.purchaseInvoiceId || null,
+      lines,
+    }, receiptId);
+  },
+  valueLines: applyPurchaseInvoiceCosts,
+  loadPostedState(sqlite, receiptId) {
+    const oldMovements = sqlite.prepare(`
+      SELECT item_id, location_id
+      FROM inventory_movements
+      WHERE source_type = 'goods_receipt' AND source_id = ?
+    `).all(receiptId) as { item_id: string; location_id: string }[];
+    if (!oldMovements.length) {
+      throw new Error("The posted Goods Receipt movements could not be found.");
+    }
+    return oldMovements;
+  },
+  /** Re-posting must not leave any item/location the receipt touched with negative stock. */
+  afterMovementsRemoved(sqlite, oldMovements, lines, data) {
+    const affected = new Set(
+      oldMovements.map((movement) => `${movement.item_id}\u0000${movement.location_id}`),
+    );
+    const incoming = new Map<string, number>();
+    for (const line of lines) {
+      const key = `${line.itemId}\u0000${data.locationId}`;
+      incoming.set(key, (incoming.get(key) ?? 0) + line.quantityMicros);
+      affected.add(key);
+    }
+    for (const key of affected) {
+      const [itemId, locationId] = key.split("\u0000");
+      const nextQuantity = getStockBalance(sqlite, itemId, locationId).quantityMicros
+        + (incoming.get(key) ?? 0);
+      if (nextQuantity < 0) {
+        throw new Error("Cannot edit this Goods Receipt because some received stock has already been consumed.");
+      }
+    }
+  },
+  post: (sqlite, header, lines) => postMovements(sqlite, header, lines),
+  beforeVoidLine(sqlite, line, receipt) {
+    const balance = getStockBalance(sqlite, line.item_id, receipt.location_id);
+    if (balance.quantityMicros < line.quantity_micros) {
+      throw new Error("Cannot void this Goods Receipt because the stock has already been consumed.");
+    }
+  },
+};
 
 export function listGoodsReceipts(
   businessId: string,
@@ -205,21 +232,7 @@ export function listGoodsReceipts(
   filters?: { supplierId?: string; from?: string; to?: string }
 ) {
   const { sqlite } = getBusinessDb(businessId, userId);
-  const where: string[] = [];
-  const params: string[] = [];
-  if (filters?.supplierId) {
-    where.push("gr.supplier_id = ?");
-    params.push(filters.supplierId);
-  }
-  if (filters?.from) {
-    where.push("gr.date >= ?");
-    params.push(filters.from);
-  }
-  if (filters?.to) {
-    where.push("gr.date <= ?");
-    params.push(filters.to);
-  }
-  const whereClause = where.length > 0 ? `WHERE ${where.join(" AND ")}` : "";
+  const { whereClause, params } = buildDocumentListWhere("gr", { partyId: filters?.supplierId, from: filters?.from, to: filters?.to }, { party: "supplier_id", date: "date" });
 
   return sqlite.prepare(`
     SELECT gr.*, s.name AS supplier_name, l.code AS location_code,
@@ -276,253 +289,15 @@ export function saveGoodsReceipt(
   intent: InventoryDocumentIntent,
   receiptId?: string,
 ) {
-  assertSavePermission(businessId, userId, "inventory", receiptId, intent);
-  const data = goodsReceiptInputSchema.parse(input);
-  const context = getBusinessDb(businessId, userId);
-  const now = new Date().toISOString();
-  const id = receiptId ?? randomUUID();
-
-  context.sqlite.transaction(() => {
-    validateHeader(context.sqlite, data);
-    const enteredLines = prepareLines(context.sqlite, data);
-    validateGoodsReceiptSources(context.sqlite, {
-      supplierId: data.supplierId,
-      purchaseOrderId: data.purchaseOrderId || null,
-      purchaseInvoiceId: data.purchaseInvoiceId || null,
-      lines: enteredLines,
-    }, receiptId);
-    const lines = applyPurchaseInvoiceCosts(context.sqlite, enteredLines);
-
-    let receiptNumber: string;
-    let wasPosted = false;
-    let shouldPost = intent === "post";
-    let oldMovements: { item_id: string; location_id: string }[] = [];
-
-    if (receiptId) {
-      const current = context.sqlite.prepare(`
-        SELECT receipt_number, document_status, date
-        FROM goods_receipts
-        WHERE id = ?
-      `).get(receiptId) as {
-        receipt_number: string;
-        document_status: InventoryDocumentStatus;
-        date: string;
-      } | undefined;
-      if (!current) throw new Error("Goods Receipt not found.");
-      if (current.document_status === "void") {
-        throw new Error("A void Goods Receipt cannot be edited.");
-      }
-
-      receiptNumber = current.receipt_number;
-      wasPosted = current.document_status === "posted";
-      shouldPost = wasPosted || intent === "post";
-      if (wasPosted) {
-        assertDateNotLocked(context.sqlite, current.date, "Goods receipt");
-        assertInventorySourceIsLatest(
-          context.sqlite,
-          "goods_receipt",
-          receiptId,
-          EDIT_INVENTORY_CHRONOLOGY_ERROR,
-        );
-        oldMovements = context.sqlite.prepare(`
-          SELECT item_id, location_id
-          FROM inventory_movements
-          WHERE source_type = 'goods_receipt' AND source_id = ?
-        `).all(receiptId) as { item_id: string; location_id: string }[];
-        if (!oldMovements.length) {
-          throw new Error("The posted Goods Receipt movements could not be found.");
-        }
-      }
-    } else {
-      receiptNumber = allocateNumber(context.sqlite, "goodsReceipt");
-    }
-
-    if (shouldPost) assertMutationPermission(businessId, userId, "inventory", "post");
-    if (shouldPost) {
-      assertDateNotLocked(context.sqlite, data.date, "Goods receipt");
-      assertInventoryPostingOrder(
-        context.sqlite,
-        data.date,
-        lines.map((line) => ({ itemId: line.itemId, locationId: data.locationId })),
-        wasPosted ? { sourceType: "goods_receipt", sourceId: id } : undefined,
-      );
-    }
-
-    if (wasPosted) {
-      deleteSourceMovements(context.sqlite, "goods_receipt", id);
-      const affected = new Set(
-        oldMovements.map((movement) => `${movement.item_id}\u0000${movement.location_id}`),
-      );
-      const incoming = new Map<string, number>();
-      for (const line of lines) {
-        const key = `${line.itemId}\u0000${data.locationId}`;
-        incoming.set(key, (incoming.get(key) ?? 0) + line.quantityMicros);
-        affected.add(key);
-      }
-      for (const key of affected) {
-        const [itemId, locationId] = key.split("\u0000");
-        const nextQuantity = getStockBalance(context.sqlite, itemId, locationId).quantityMicros
-          + (incoming.get(key) ?? 0);
-        if (nextQuantity < 0) {
-          throw new Error("Cannot edit this Goods Receipt because some received stock has already been consumed.");
-        }
-      }
-    }
-
-    if (receiptId) {
-      context.sqlite.prepare(`
-        UPDATE goods_receipts
-        SET supplier_id = ?, purchase_order_id = ?, purchase_invoice_id = ?, date = ?,
-          location_id = ?, reference = ?, project_id = ?, notes = ?, updated_at = ?
-        WHERE id = ?
-      `).run(
-        data.supplierId,
-        data.purchaseOrderId || null,
-        data.purchaseInvoiceId || null,
-        data.date,
-        data.locationId,
-        data.reference || null,
-        data.projectId || null,
-        data.notes || null,
-        now,
-        receiptId,
-      );
-      context.sqlite.prepare("DELETE FROM goods_receipt_lines WHERE goods_receipt_id = ?").run(receiptId);
-    } else {
-      context.sqlite.prepare(`
-        INSERT INTO goods_receipts (
-          id, receipt_number, supplier_id, purchase_order_id, purchase_invoice_id, date,
-          location_id, reference, project_id, notes, document_status, created_by,
-          created_at, updated_at, posted_at, voided_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'draft', ?, ?, ?, NULL, NULL)
-      `).run(
-        id,
-        receiptNumber,
-        data.supplierId,
-        data.purchaseOrderId || null,
-        data.purchaseInvoiceId || null,
-        data.date,
-        data.locationId,
-        data.reference || null,
-        data.projectId || null,
-        data.notes || null,
-        userId,
-        now,
-        now,
-      );
-    }
-
-    insertLines(context.sqlite, id, lines);
-    if (shouldPost) {
-      postMovements(context.sqlite, {
-        id,
-        receiptNumber,
-        date: data.date,
-        locationId: data.locationId,
-        projectId: data.projectId || null,
-        createdAt: now,
-      }, lines);
-      context.sqlite.prepare(`
-        UPDATE goods_receipts
-        SET document_status = 'posted', posted_at = COALESCE(posted_at, ?)
-        WHERE id = ?
-      `).run(now, id);
-    }
-  }).immediate();
-
-  return id;
+  return saveStockDocument(goodsReceiptDocument, businessId, userId, input, intent, receiptId);
 }
 
 export function voidGoodsReceipt(businessId: string, userId: string, receiptId: string) {
-  assertMutationPermission(businessId, userId, "inventory", "delete");
-  const context = getBusinessDb(businessId, userId);
-  const now = new Date().toISOString();
-
-  context.sqlite.transaction(() => {
-    const receipt = context.sqlite.prepare(`
-      SELECT receipt_number, date, location_id, project_id, document_status
-      FROM goods_receipts
-      WHERE id = ?
-    `).get(receiptId) as {
-      receipt_number: string;
-      date: string;
-      location_id: string;
-      project_id: string | null;
-      document_status: InventoryDocumentStatus;
-    } | undefined;
-    if (!receipt) throw new Error("Goods Receipt not found.");
-    if (receipt.document_status !== "posted") {
-      throw new Error("Only a posted Goods Receipt can be voided.");
-    }
-    assertDateNotLocked(context.sqlite, receipt.date, "Goods receipt void");
-    assertDateNotLocked(context.sqlite, getBusinessTodayIso(), "Goods receipt void");
-    assertInventorySourceIsLatest(
-      context.sqlite,
-      "goods_receipt",
-      receiptId,
-      VOID_INVENTORY_CHRONOLOGY_ERROR,
-    );
-
-    const lines = context.sqlite.prepare(`
-      SELECT grl.id, grl.item_id, grl.quantity_micros, grl.project_id,
-        im.unit_cost_micros, im.value_delta_minor
-      FROM goods_receipt_lines grl
-      LEFT JOIN inventory_movements im
-        ON im.source_type = 'goods_receipt' AND im.source_line_id = grl.id
-      WHERE grl.goods_receipt_id = ?
-      ORDER BY grl.position
-    `).all(receiptId) as {
-      id: string;
-      item_id: string;
-      quantity_micros: number;
-      project_id: string | null;
-      unit_cost_micros: number | null;
-      value_delta_minor: number | null;
-    }[];
-
-    for (const [position, line] of lines.entries()) {
-      if (line.unit_cost_micros == null || line.value_delta_minor == null) {
-        throw new Error("The original Goods Receipt movement could not be found.");
-      }
-      const balance = getStockBalance(context.sqlite, line.item_id, receipt.location_id);
-      if (balance.quantityMicros < line.quantity_micros) {
-        throw new Error("Cannot void this Goods Receipt because the stock has already been consumed.");
-      }
-      insertInventoryMovement(context.sqlite, {
-        date: receipt.date,
-        itemId: line.item_id,
-        locationId: receipt.location_id,
-        movementType: "goods_receipt",
-        quantityDeltaMicros: -line.quantity_micros,
-        unitCostMicros: line.unit_cost_micros,
-        valueDeltaMinor: -line.value_delta_minor,
-        sourceType: "goods_receipt_void",
-        sourceId: receiptId,
-        sourceLineId: line.id,
-        projectId: line.project_id ?? receipt.project_id,
-        description: `Void ${receipt.receipt_number}`,
-        createdAt: new Date(Date.parse(now) + position).toISOString(),
-      });
-    }
-    context.sqlite.prepare(`
-      UPDATE goods_receipts
-      SET document_status = 'void', voided_at = ?, updated_at = ?
-      WHERE id = ?
-    `).run(now, now, receiptId);
-  }).immediate();
+  voidStockDocument(goodsReceiptDocument, businessId, userId, receiptId);
 }
 
 export function deleteGoodsReceipt(businessId: string, userId: string, receiptId: string) {
-  assertMutationPermission(businessId, userId, "inventory", "delete");
-  const { sqlite } = getBusinessDb(businessId, userId);
-  const row = sqlite
-    .prepare("SELECT document_status FROM goods_receipts WHERE id = ?")
-    .get(receiptId) as { document_status: string } | undefined;
-  if (!row) throw new Error("Goods Receipt not found.");
-  if (row.document_status !== "draft") {
-    throw new Error("Only draft Goods Receipts can be deleted.");
-  }
-  sqlite.prepare("DELETE FROM goods_receipts WHERE id = ?").run(receiptId);
+  deleteStockDocument(goodsReceiptDocument, businessId, userId, receiptId);
 }
 
 export function goodsReceiptToInput(

@@ -6,6 +6,7 @@ import { postTransaction, reverseTransaction } from "@/modules/accounting/servic
 import { assertDateNotLocked } from "@/modules/accounting/services/financial-lock-service";
 import { addMinor } from "@/modules/accounting/calculations/money";
 import { getBusinessTodayIso } from "@/core/format";
+import { availableGratuityProvision, isGratuityPayslipItem } from "./gratuity-accrual-service";
 
 export interface EmployeeInput {
   id?: string;
@@ -865,8 +866,31 @@ function postInternalPayslip(
     creditMinor?: number;
   }> = [];
 
+  // End-of-service gratuity paid on a final settlement is drawn from the EOSB
+  // provision built by the monthly accruals; only an excess over the booked
+  // provision is charged to the line's expense account.
+  let provision = availableGratuityProvision(sqlite, employeeId, payslipId);
+
   for (const line of lines) {
     if (line.amountMinor <= 0) continue;
+    if (line.type === "earnings" && provision.provisionAccountId && provision.availableMinor > 0
+      && line.accountId !== provision.provisionAccountId && isGratuityPayslipItem(sqlite, line.itemId)) {
+      const fromProvision = Math.min(line.amountMinor, provision.availableMinor);
+      provision = { ...provision, availableMinor: provision.availableMinor - fromProvision };
+      journalLines.push({
+        accountId: provision.provisionAccountId,
+        description: `[Earnings] ${line.description} (${employeeName}) - from EOSB provision`,
+        debitMinor: fromProvision,
+      });
+      if (line.amountMinor > fromProvision) {
+        journalLines.push({
+          accountId: line.accountId,
+          description: `[Earnings] ${line.description} (${employeeName}) - in excess of provision`,
+          debitMinor: line.amountMinor - fromProvision,
+        });
+      }
+      continue;
+    }
     if (line.type === "earnings") {
       journalLines.push({
         accountId: line.accountId,

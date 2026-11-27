@@ -155,12 +155,14 @@ export function generateFtaAuditFile(
           te.tax_code_name
         ) AS line_description
       FROM tax_entries te
-      LEFT JOIN sales_invoices si ON te.source_type IN ('sales_invoice', 'sales_invoice_void') AND te.source_id = si.id
+      LEFT JOIN sales_invoices si ON (te.source_type IN ('sales_invoice', 'sales_invoice_void') AND te.source_id = si.id)
+        OR (te.source_type IN ('sales_invoice_superseded', 'sales_invoice_amendment') AND si.id = substr(te.source_id, 1, instr(te.source_id, ':') - 1))
       LEFT JOIN sales_invoice_lines sil ON te.source_type IN ('sales_invoice', 'sales_invoice_void') AND te.source_line_id = sil.id
       LEFT JOIN customers cust ON si.customer_id = cust.id
       LEFT JOIN sales_credit_notes scn ON te.source_type IN ('sales_credit_note', 'sales_credit_note_void') AND te.source_id = scn.id
       LEFT JOIN sales_credit_note_lines scnl ON te.source_type IN ('sales_credit_note', 'sales_credit_note_void') AND te.source_line_id = scnl.id
-      LEFT JOIN purchase_invoices pi ON te.source_type IN ('purchase_invoice', 'purchase_invoice_void') AND te.source_id = pi.id
+      LEFT JOIN purchase_invoices pi ON (te.source_type IN ('purchase_invoice', 'purchase_invoice_void') AND te.source_id = pi.id)
+        OR (te.source_type IN ('purchase_invoice_superseded', 'purchase_invoice_amendment') AND pi.id = substr(te.source_id, 1, instr(te.source_id, ':') - 1))
       LEFT JOIN purchase_invoice_lines pil ON te.source_type IN ('purchase_invoice', 'purchase_invoice_void') AND te.source_line_id = pil.id
       LEFT JOIN suppliers sup ON pi.supplier_id = sup.id
       LEFT JOIN debit_notes dn ON te.source_type IN ('debit_note', 'debit_note_void') AND te.source_id = dn.id

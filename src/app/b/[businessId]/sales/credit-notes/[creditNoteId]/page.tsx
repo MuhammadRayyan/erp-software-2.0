@@ -13,6 +13,9 @@ import { Breadcrumbs } from "@/components/breadcrumbs";
 import { DocumentFlowStepper, type FlowStep } from "@/components/documents/document-flow-stepper";
 import { getDocumentViewData } from "@/modules/document-templates/document-data-extractor";
 import { DocumentViewLayout } from "@/modules/document-templates/components/document-view-layout";
+import { getNoteCreditPanelData } from "@/modules/settlement/party-credit-service";
+import { NoteCreditPanel } from "@/modules/settlement/note-credit-panel";
+import { getBusinessTodayIso } from "@/core/format";
 
 export default async function CreditNoteViewPage({ params, searchParams }: { params: Promise<{ businessId: string; creditNoteId: string }>; searchParams: Promise<{ notice?: string }> }) {
   const { businessId, creditNoteId } = await params;
@@ -23,6 +26,7 @@ export default async function CreditNoteViewPage({ params, searchParams }: { par
   const { note, customer, invoice, lines } = record;
   const currency = note.currencyCode;
   const linkedProjects = Array.from(new Map(lines.filter((line) => line.project).map((line) => [line.project!.id, line.project!] as const)).values());
+  const creditPanel = getNoteCreditPanelData(businessId, user.id, "customer", creditNoteId);
 
   const flowSteps: FlowStep[] = [
     {
@@ -96,11 +100,16 @@ export default async function CreditNoteViewPage({ params, searchParams }: { par
           </p>
           <p className="mt-1 text-sm text-muted-foreground">Credit date: {formatDate(note.date)} · Applied to <Link className="tabular text-primary hover:underline" href={`/b/${businessId}/sales/invoices/${invoice.id}`}>{invoice.invoiceNumber}</Link></p>
           {linkedProjects.length > 0 && <p className="mt-1 text-sm text-muted-foreground">Project: {linkedProjects.map((project, index) => <span key={project.id}>{index > 0 && ", "}<Link className="font-medium text-primary hover:underline" href={`/b/${businessId}/projects/${project.id}`}>{project.name}</Link></span>)}</p>}
-          <div className="mt-3 flex items-baseline gap-4"><span className="money text-xl font-semibold">{formatMoney(note.totalMinor, currency)}</span><span className="text-sm text-muted-foreground">{note.documentStatus === "posted" ? "Reduces Accounts Receivable" : "No ledger impact"}</span></div>
+          <div className="mt-3 flex items-baseline gap-4"><span className="money text-xl font-semibold">{formatMoney(note.totalMinor, currency)}</span><span className="text-sm text-muted-foreground">{note.documentStatus === "posted" ? (creditPanel && creditPanel.unallocatedMinor > 0 ? `Reduces Accounts Receivable · ${formatMoney(creditPanel.unallocatedMinor, currency)} unallocated customer credit` : "Reduces Accounts Receivable") : "No ledger impact"}</span></div>
         </div>
         <CreditNoteViewActions businessId={businessId} noteId={note.id} creditNoteNumber={note.creditNoteNumber} documentStatus={note.documentStatus} journalEntryId={record.journal?.id ?? null} emailDefaults={emailDefaults} />
       </div>
       <DocumentFlowStepper steps={flowSteps} className="no-print" />
+      {creditPanel && (
+        <div className="no-print">
+          <NoteCreditPanel businessId={businessId} side="customer" noteId={note.id} baseCurrencyCode={access.business.currency} today={getBusinessTodayIso()} {...creditPanel} />
+        </div>
+      )}
 
       <DocumentViewLayout
         data={viewBundle.data}

@@ -12,7 +12,7 @@ type PostedPurchaseInvoiceLine = { expenseAccountId: string; taxCodeId: string; 
 
 export function buildJournalForPurchaseInvoice(sqlite: Database.Database, invoice: PostedPurchaseInvoice, invoiceLines: PostedPurchaseInvoiceLine[]) {
   const convertedLines = convertDocumentLinesToBase(invoiceLines, invoice.rate).lines;
-  const settings = sqlite.prepare(`SELECT accounts_payable_account_id, input_vat_account_id FROM business_accounting_settings WHERE id = 'default'`).get() as { accounts_payable_account_id: string; input_vat_account_id: string } | undefined;
+  const settings = sqlite.prepare(`SELECT accounts_payable_account_id, input_vat_account_id, vat_output_account_id FROM business_accounting_settings WHERE id = 'default'`).get() as { accounts_payable_account_id: string; input_vat_account_id: string; vat_output_account_id: string | null } | undefined;
   if (!settings?.accounts_payable_account_id) throw new Error("Accounts Payable account is not configured.");
   if (!settings.input_vat_account_id) throw new Error("Input VAT account is not configured.");
   const taxRows = sqlite.prepare("SELECT id, vat_category, is_recoverable, sales_tax_account_id, purchase_tax_account_id FROM tax_codes").all() as { id: string; vat_category: string | null; is_recoverable: number; sales_tax_account_id: string | null; purchase_tax_account_id: string | null }[];
@@ -20,6 +20,7 @@ export function buildJournalForPurchaseInvoice(sqlite: Database.Database, invoic
   const expenseDebits = new Map<string, ProjectAmount>();
   const taxDebits = new Map<string, number>();
   const taxCredits = new Map<string, number>();
+  const importCredits = new Map<string, number>();
   for (const line of convertedLines) {
     if (!line.expenseAccountId) throw new Error("Purchase invoice line has no expense or Inventory Asset account.");
     const taxCode = taxById.get(line.taxCodeId);
@@ -35,12 +36,20 @@ export function buildJournalForPurchaseInvoice(sqlite: Database.Database, invoic
         if (!taxCode.sales_tax_account_id) throw new Error("Output VAT account is not configured for Reverse Charge.");
         addAmount(taxCredits, taxCode.sales_tax_account_id, line.baseTaxAmountMinor);
       }
+      if (taxCode?.vat_category === "import") {
+        // Imported goods: the supplier charges no UAE VAT; the business self-assesses
+        // output VAT (VAT201 Box 6) and recovers it above when recoverable (Box 10).
+        const outputAccountId = taxCode.sales_tax_account_id ?? settings.vat_output_account_id;
+        if (!outputAccountId) throw new Error("Output VAT account is not configured for Import VAT.");
+        addAmount(importCredits, outputAccountId, line.baseTaxAmountMinor);
+      }
     }
   }
   const lines: JournalLineInput[] = [];
   for (const { accountId, projectId, amountMinor: debitMinor } of expenseDebits.values()) if (debitMinor > 0) lines.push({ accountId, description: `Purchases for ${invoice.internalNumber}`, debitMinor, supplierId: invoice.supplierId, projectId, reference: invoice.internalNumber });
   for (const [accountId, debitMinor] of taxDebits) if (debitMinor > 0) lines.push({ accountId, description: `Input VAT for ${invoice.internalNumber}`, debitMinor, supplierId: invoice.supplierId, reference: invoice.internalNumber });
   for (const [accountId, creditMinor] of taxCredits) if (creditMinor > 0) lines.push({ accountId, description: `Reverse-Charge Output VAT for ${invoice.internalNumber}`, creditMinor, supplierId: invoice.supplierId, reference: invoice.internalNumber });
+  for (const [accountId, creditMinor] of importCredits) if (creditMinor > 0) lines.push({ accountId, description: `Import VAT (self-assessed) for ${invoice.internalNumber}`, creditMinor, supplierId: invoice.supplierId, reference: invoice.internalNumber });
   lines.push({ accountId: settings.accounts_payable_account_id, description: `Payable for ${invoice.internalNumber}`, creditMinor: convertedLines.reduce((sum, line) => sum + line.baseGrossAmountMinor, 0), supplierId: invoice.supplierId, reference: invoice.internalNumber });
   return lines;
 }

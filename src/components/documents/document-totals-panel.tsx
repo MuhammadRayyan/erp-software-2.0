@@ -52,7 +52,7 @@ export function DocumentTotalsPanel({
           <dt>Total</dt>
           {displayTotalMinor < subtotalMinor + taxMinor && (
             <p className="text-[11px] font-normal text-muted-foreground">
-              Reverse Charge self-accounted
+              Reverse charge / import VAT self-accounted
             </p>
           )}
         </div>

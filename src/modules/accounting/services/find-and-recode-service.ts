@@ -2,6 +2,7 @@ import { assertMutationPermission } from "@/core/permissions/mutation-permission
 import { getBusinessDb } from "@/core/db/business";
 import { addMinor, calculateTax } from "@/modules/accounting/calculations/money";
 import { assertFinancialLock } from "@/modules/accounting/services/financial-lock-service";
+import { foreignBankLedgers } from "@/modules/accounting/services/posting-service";
 import { postSalesInvoice } from "@/modules/accounting/services/invoice-posting-service";
 import { postPurchaseInvoice } from "@/modules/accounting/services/purchase-invoice-posting-service";
 import { postBankTransaction } from "@/modules/banking/bank-transaction-posting";
@@ -442,6 +443,9 @@ export function recodeSelectedLines(
     ) {
       throw new Error("Cannot recode lines directly into Accounts Receivable or Accounts Payable control accounts.");
     }
+    if (foreignBankLedgers(sqlite, [targetAccountId]).size > 0) {
+      throw new Error("Cannot recode lines into a foreign-currency bank account.");
+    }
   } else if (payload.action.type === "project") {
     if (payload.action.targetProjectId) {
       const project = sqlite
@@ -853,6 +857,11 @@ export function recodeSelectedLines(
 
       for (const lineId of lineIds) {
         if (payload.action.type === "account") {
+          const current = sqlite.prepare("SELECT currency_amount_minor FROM journal_lines WHERE id = ?")
+            .get(lineId) as { currency_amount_minor: number | null } | undefined;
+          if (current && current.currency_amount_minor !== null) {
+            throw new Error("Lines on a foreign-currency bank account cannot be recoded.");
+          }
           sqlite
             .prepare("UPDATE journal_lines SET account_id = ? WHERE id = ? AND journal_entry_id = ?")
             .run(payload.action.targetAccountId, lineId, jeId);

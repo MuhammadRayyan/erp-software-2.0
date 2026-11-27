@@ -18,6 +18,8 @@ import { buildDocumentEmailContext, buildDocumentEmailDefaults } from "@/modules
 import { DocumentFlowStepper, type FlowStep } from "@/components/documents/document-flow-stepper";
 import { Breadcrumbs } from "@/components/breadcrumbs";
 import { getCustomerUnallocatedCredit } from "@/modules/receipts/receipt-service";
+import { listPartyNoteCredits } from "@/modules/settlement/party-credit-service";
+import { ApplyNoteCreditBanner } from "@/modules/settlement/apply-note-credit-banner";
 import { ApplyCreditModal } from "@/modules/sales-invoices/apply-credit-modal";
 import { getDocumentViewData } from "@/modules/document-templates/document-data-extractor";
 import { DocumentViewLayout } from "@/modules/document-templates/components/document-view-layout";
@@ -50,6 +52,10 @@ export default async function InvoiceViewPage({ params, searchParams }: { params
     ? getCustomerUnallocatedCredit(businessId, user.id, customer.id).filter(
         (c) => c.currencyCode === currency && c.unallocatedAmountMinor > 0
       )
+    : [];
+
+  const availableNoteCredits = invoice.documentStatus === "posted" && record.balanceMinor > 0
+    ? listPartyNoteCredits(businessId, user.id, "customer", customer.id).filter((c) => c.currencyCode === currency)
     : [];
 
   const flowSteps: FlowStep[] = [
@@ -163,6 +169,14 @@ export default async function InvoiceViewPage({ params, searchParams }: { params
                 ) : (
                   <span className="text-sm text-muted-foreground">No ledger impact</span>
                 )}
+                {record.amendmentJournals.length > 0 && (
+                  <span className="text-sm text-muted-foreground">
+                    Amended {record.amendmentJournals.filter((row) => row.kind === "superseded").length}× · earlier postings{" "}
+                    {record.amendmentJournals.map((row, index) => (
+                      <span key={row.id}>{index > 0 && ", "}<Link href={`/b/${businessId}/accounting/journal/${row.id}`} className="tabular underline hover:text-foreground">{row.entryNumber}</Link>{row.kind === "reversal" ? " (reversal)" : ""}</span>
+                    ))}
+                  </span>
+                )}
               </>
             )}
           </div>
@@ -185,6 +199,18 @@ export default async function InvoiceViewPage({ params, searchParams }: { params
         documentNumber={invoice.invoiceNumber}
       >
         <DocumentFlowStepper steps={flowSteps} />
+      {availableNoteCredits.length > 0 && (
+        <ApplyNoteCreditBanner
+          businessId={businessId}
+          side="customer"
+          documentId={invoiceId}
+          documentNumber={invoice.invoiceNumber}
+          balanceMinor={record.balanceMinor}
+          currencyCode={currency}
+          minorUnit={getCurrencyMinorUnit(currency)}
+          credits={availableNoteCredits.map((c) => ({ noteId: c.noteId, number: c.number, date: c.date, currencyCode: c.currencyCode, unallocatedMinor: c.unallocatedMinor }))}
+        />
+      )}
       {availableCredits.length > 0 && (
         <ApplyCreditModal
           businessId={businessId}

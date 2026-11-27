@@ -1,4 +1,5 @@
 import { getBusinessDb } from "@/core/db/business";
+import { BANK_AMOUNT_SQL } from "./bank-currency";
 
 export type BankHistoryFilters = {
   dateFrom?: string; dateTo?: string; sourceType?: string; reconciled?: "yes" | "no";
@@ -17,6 +18,8 @@ export function getBankTransactionHistory(
   const { sqlite } = getBusinessDb(businessId, userId);
   const bank = sqlite.prepare("SELECT ledger_account_id FROM bank_accounts WHERE id = ?")
     .get(bankAccountId) as { ledger_account_id: string } | undefined;
+  // Register amounts are in the account's own currency; base_amount_minor is the
+  // GL (base-currency) movement, which differs for a foreign-currency account.
   if (!bank) throw new Error("Bank Account not found.");
   const conditions = ["je.status = 'posted'", "jl.account_id = ?"];
   const values: (string | number)[] = [bank.ledger_account_id];
@@ -40,14 +43,16 @@ export function getBankTransactionHistory(
   )`);
   if (filters.reconciled === "no") values.push(bankAccountId);
   const opening = dateFrom ? (sqlite.prepare(`
-    SELECT COALESCE(SUM(jl.debit_minor - jl.credit_minor), 0) AS balance_minor
+    SELECT COALESCE(SUM(${BANK_AMOUNT_SQL}), 0) AS balance_minor
     FROM journal_lines jl INNER JOIN journal_entries je ON je.id = jl.journal_entry_id
     WHERE je.status = 'posted' AND jl.account_id = ? AND je.date < ?
   `).get(bank.ledger_account_id, dateFrom) as { balance_minor: number }).balance_minor : 0;
   const rows = sqlite.prepare(`
     SELECT je.id AS journal_entry_id, je.entry_number, je.date, je.source_type,
       je.source_id, je.description, jl.reference,
-      SUM(jl.debit_minor) AS money_in_minor, SUM(jl.credit_minor) AS money_out_minor,
+      SUM(CASE WHEN ${BANK_AMOUNT_SQL} > 0 THEN ${BANK_AMOUNT_SQL} ELSE 0 END) AS money_in_minor,
+      SUM(CASE WHEN ${BANK_AMOUNT_SQL} < 0 THEN -${BANK_AMOUNT_SQL} ELSE 0 END) AS money_out_minor,
+      SUM(jl.debit_minor - jl.credit_minor) AS base_amount_minor,
       CASE WHEN EXISTS (
         SELECT 1 FROM bank_reconciliation_items bri INNER JOIN bank_reconciliations br
           ON br.id = bri.reconciliation_id AND br.status = 'completed'
@@ -60,7 +65,7 @@ export function getBankTransactionHistory(
   `).all(bankAccountId, ...values) as {
     journal_entry_id: string; entry_number: string; date: string; source_type: string;
     source_id: string; description: string; reference: string | null;
-    money_in_minor: number; money_out_minor: number; reconciled: number;
+    money_in_minor: number; money_out_minor: number; base_amount_minor: number; reconciled: number;
   }[];
   let running = opening;
   return rows.map((row) => {
@@ -79,9 +84,9 @@ export function getAllBankTransactionsReport(
     ? [filters.bankAccountId]
     : (sqlite.prepare("SELECT id FROM bank_accounts ORDER BY name").all() as { id: string }[]).map((row) => row.id);
   return accounts.flatMap((accountId) => {
-    const account = sqlite.prepare("SELECT name FROM bank_accounts WHERE id = ?").get(accountId) as { name: string } | undefined;
+    const account = sqlite.prepare("SELECT name, currency_code FROM bank_accounts WHERE id = ?").get(accountId) as { name: string; currency_code: string } | undefined;
     return getBankTransactionHistory(businessId, userId, accountId, filters)
-      .map((row) => ({ ...row, bank_account_id: accountId, bank_account_name: account?.name ?? "" }));
+      .map((row) => ({ ...row, bank_account_id: accountId, bank_account_name: account?.name ?? "", currency_code: account?.currency_code ?? "" }));
   }).sort((a, b) => b.date.localeCompare(a.date) || b.entry_number.localeCompare(a.entry_number));
 }
 
@@ -92,7 +97,7 @@ export function getReconciliationSummary(businessId: string, userId: string) {
       br.statement_date AS last_reconciled_date,
       br.statement_ending_balance_minor AS statement_balance_minor,
       COALESCE((
-        SELECT SUM(jl.debit_minor - jl.credit_minor)
+        SELECT SUM(${BANK_AMOUNT_SQL})
         FROM journal_lines jl INNER JOIN journal_entries je ON je.id = jl.journal_entry_id
         WHERE jl.account_id = ba.ledger_account_id AND je.status = 'posted'
           AND je.date <= COALESCE(br.statement_date, '9999-12-31')

@@ -16,6 +16,12 @@ export async function register() {
       logger.warn(message, { metadata });
       Sentry.captureMessage(message, { level: "warning", extra: metadata });
     });
+
+    // Loading puppeteer-core blocks the event loop for ~0.5 s. Do it once shortly
+    // after startup instead of during the first custom-template PDF request.
+    if (process.env.NODE_ENV === "production") {
+      setTimeout(() => void import("puppeteer-core").catch(() => undefined), 5_000).unref();
+    }
   }
   if (process.env.NEXT_RUNTIME === "edge") {
     await import("./sentry.edge.config");

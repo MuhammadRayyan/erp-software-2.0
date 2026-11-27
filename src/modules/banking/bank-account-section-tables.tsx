@@ -43,6 +43,8 @@ export type SerializedBankHistoryRow = {
   money_in_minor: number;
   money_out_minor: number;
   balance_minor: number;
+  /** GL movement in base currency (differs from the bank-currency amounts for a foreign account). */
+  base_amount_minor?: number;
   reconciled: number;
 };
 
@@ -66,6 +68,7 @@ const TRANSACTION_COLUMN_LABELS: Record<string, string> = {
   money_in_minor: "Money In",
   money_out_minor: "Money Out",
   balance_minor: "Balance",
+  base_amount_minor: "Base Amount",
   reconciled: "Reconciled",
 };
 
@@ -79,12 +82,17 @@ const IMPORTED_COLUMN_LABELS: Record<string, string> = {
 export function BankAccountTransactionsTable({
   businessId,
   currency,
+  baseCurrency,
   rows,
 }: {
   businessId: string;
+  /** The bank account's currency. */
   currency: string;
+  /** Set for a foreign-currency account to show each entry's base-currency GL amount. */
+  baseCurrency?: string;
   rows: SerializedBankHistoryRow[];
 }) {
+  const showBase = Boolean(baseCurrency && baseCurrency !== currency);
   const { density } = useTableDensity(businessId);
   const {
     query,
@@ -108,6 +116,7 @@ export function BankAccountTransactionsTable({
       money_in_minor: true,
       money_out_minor: true,
       balance_minor: true,
+      base_amount_minor: true,
       reconciled: true,
     }),
     [],
@@ -189,6 +198,13 @@ export function BankAccountTransactionsTable({
         cell: ({ row }: { row: { original: SerializedBankHistoryRow } }) =>
           formatMoney(row.original.balance_minor, currency),
       },
+      ...(showBase ? [{
+        accessorKey: "base_amount_minor",
+        header: `Base (${baseCurrency})`,
+        meta: { numeric: true, className: "text-muted-foreground" },
+        cell: ({ row }: { row: { original: SerializedBankHistoryRow } }) =>
+          formatMoney(row.original.base_amount_minor ?? 0, baseCurrency),
+      }] : []),
       {
         accessorKey: "reconciled",
         header: "Reconciled",
@@ -199,7 +215,7 @@ export function BankAccountTransactionsTable({
         ),
       },
     ],
-    [currency],
+    [currency, baseCurrency, showBase],
   );
 
   const { pagination, paginationInfo } = buildPagination(filtered.length);

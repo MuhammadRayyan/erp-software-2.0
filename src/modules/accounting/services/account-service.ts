@@ -200,10 +200,19 @@ export function getSalesAccountOptions(businessId: string, userId: string) {
   );
 }
 
+/**
+ * Active Bank/Cash ledgers. `currencyCode` is the currency of the bank account
+ * mapped to the ledger (null when none is mapped, i.e. base currency); a
+ * foreign-currency account only settles documents in its own currency.
+ */
 export function getBankAccountOptions(businessId: string, userId: string) {
-  return listAccounts(businessId, userId).filter(
-    (account) => account.isActive && ["bank", "cash"].includes(account.subtype),
-  );
+  const rows = getBusinessDb(businessId, userId).sqlite
+    .prepare("SELECT ledger_account_id, currency_code FROM bank_accounts")
+    .all() as { ledger_account_id: string; currency_code: string }[];
+  const currencyByLedger = new Map(rows.map((row) => [row.ledger_account_id, row.currency_code]));
+  return listAccounts(businessId, userId)
+    .filter((account) => account.isActive && ["bank", "cash"].includes(account.subtype))
+    .map((account) => ({ ...account, currencyCode: currencyByLedger.get(account.id) ?? null }));
 }
 
 export function getExpenseAccountOptions(businessId: string, userId: string) {

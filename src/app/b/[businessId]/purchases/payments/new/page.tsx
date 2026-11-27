@@ -84,7 +84,7 @@ export default async function NewSupplierPaymentPage({
           currencyCode: invoice.currency_code,
           minorUnit: minorUnits.get(invoice.currency_code) ?? 2,
         }))}
-        bankAccounts={bankAccounts.map(({ id, name }) => ({ id, name }))}
+        bankAccounts={bankAccounts.map(({ id, name, currencyCode }) => ({ id, name, currencyCode: currencyCode === access.business.currency ? null : currencyCode }))}
         initial={{
           supplierId,
           purchaseInvoiceId: invoiceId,

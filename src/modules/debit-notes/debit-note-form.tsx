@@ -168,7 +168,7 @@ export function DebitNoteForm({
       eligibleInvoices.map((invoice) => ({
         value: invoice.id,
         label: invoice.invoiceNumber,
-        badge: `${formatMoney(invoice.balanceMinor, invoice.currencyCode, invoice.minorUnit)} remaining`,
+        badge: `${formatMoney(invoice.balanceMinor, invoice.currencyCode, invoice.minorUnit)} debitable`,
       })),
     [eligibleInvoices],
   );
@@ -293,7 +293,7 @@ export function DebitNoteForm({
             />
             {selected && (
               <p className="text-xs text-muted-foreground">
-                Maximum debit {formatMoney(selected.balanceMinor, selected.currencyCode, selected.minorUnit)}
+                Maximum debit {formatMoney(selected.balanceMinor, selected.currencyCode, selected.minorUnit)}. Any part the bill no longer owes (e.g. already paid) becomes supplier credit you can apply or have refunded.
               </p>
             )}
             {errors.purchaseInvoiceId && (

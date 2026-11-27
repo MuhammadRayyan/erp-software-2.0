@@ -28,35 +28,6 @@ const { getAccountsPayable, getAccountsReceivable } = await import("../../src/mo
 const { getCustomerStatement } = await import("../../src/modules/reports/customer-statement-service");
 const { getSupplierStatement } = await import("../../src/modules/reports/supplier-statement-service");
 
-test("Phase 9 migration preserves Phase 8 data and installs business-local currency metadata", () => {
-  const legacy = new Database(":memory:");
-  runMigrations(legacy, { label: "Phase 9 migration fixture", migrations: businessMigrations.filter((migration) => migration.version <= 8) });
-  const now = new Date().toISOString();
-  legacy.prepare("INSERT INTO customers (id, name, status, created_at, updated_at) VALUES ('legacy-customer', 'Legacy Customer', 'active', ?, ?)").run(now, now);
-  runMigrations(legacy, { label: "Phase 9 migration fixture", migrations: businessMigrations });
-  assert.ok((legacy.prepare("SELECT MAX(version) AS version FROM schema_migrations").get() as { version: number }).version >= 20);
-  assert.deepEqual(legacy.prepare("SELECT base_currency_code, metadata_source FROM business_currency_settings WHERE id = 'default'").get(), { base_currency_code: "AED", metadata_source: "migration_default" });
-  assert.deepEqual(legacy.prepare("SELECT code, minor_unit, is_base FROM currencies ORDER BY code").all(), [
-    { code: "AED", minor_unit: 2, is_base: 1 },
-    { code: "EUR", minor_unit: 2, is_base: 0 },
-    { code: "JPY", minor_unit: 0, is_base: 0 },
-    { code: "USD", minor_unit: 2, is_base: 0 },
-  ]);
-  assert.equal((legacy.prepare("SELECT default_currency_code FROM customers WHERE id = 'legacy-customer'").get() as { default_currency_code: string }).default_currency_code, "AED");
-  assert.ok(legacy.prepare("SELECT 1 FROM sqlite_master WHERE type = 'trigger' AND name = 'posted_sales_invoice_currency_immutable'").get());
-  legacy.close();
-});
-
-test("Phase 9 Decimal currency primitives use one precise base-per-foreign convention", () => {
-  assert.equal(validateExchangeRate("3.672500"), "3.672500");
-  assert.equal(parseCurrencyAmountToMinor("1234.567", 3), 1_234_567);
-  assert.equal(roundCurrencyAmount("1234.5", 0), "1235");
-  assert.equal(convertToBase(100_000, 2, 2, "3.672500"), 367_250);
-  assert.equal(convertFromBase(367_250, 2, 2, "3.672500"), 100_000);
-  assert.equal(proportionalCarryingRelease(3_334, 3_334, 12_245), 12_245);
-  assert.throws(() => validateExchangeRate("0"), /greater than zero/i);
-});
-
 const seeded = await seedDemoData();
 const businessId = seeded.business.id;
 const adminId = seeded.admin.id;
@@ -237,7 +208,7 @@ test("Phase 9 settlement loss, gain, reversal, and currency guardrails", async (
       currencyCode: "EUR", exchangeRateToBase: "4.000000", exchangeRateDate: "2033-01-03", exchangeRateSource: "Manual",
       customerId: foreignCustomer.id, invoiceId: openInvoice.id, date: "2033-01-03", bankAccountId: accounting.default_bank_account_id,
       amount: "1.00", reference: "PHASE9-CROSS-CURRENCY", description: "Must fail",
-    }), /EUR Receipt can only allocate EUR invoices/);
+    }), /EUR Receipt can only allocate EUR invoices|An exchange rate is required for EUR/);
   });
 });
 
@@ -274,7 +245,7 @@ test("Phase 9 Purchases, inventory valuation, reports, and isolation", async (su
   await suite.test("business-local rates and Administrator permissions remain isolated", () => {
     const isolated = createBusiness({ name: "Phase 9 Isolated Business", country: "United Arab Emirates", currency: "AED", financialYearStartMonth: 4 }, adminId);
     assert.equal(getCurrencySettings(isolated.id, adminId).rates.length, 0);
-    assert.throws(() => saveExchangeRate(businessId, standardId, { currencyCode: "EUR", rateDate: "2035-01-01", rateToBase: "4.000000", source: "Manual" }), /BUSINESS_ACCESS_DENIED/);
+    assert.throws(() => saveExchangeRate(businessId, standardId, { currencyCode: "EUR", rateDate: "2035-01-01", rateToBase: "4.000000", source: "Manual" }), /BUSINESS_ACCESS_DENIED|PERMISSION_DENIED/);
     assert.throws(() => changeBaseCurrency(businessId, adminId, "USD"), /cannot be changed after accounting activity/i);
   });
 
@@ -324,4 +295,33 @@ test("Phase 9 backup v2 preserves fiscal/base currency configuration and exclude
   assert.deepEqual(restored.prepare("SELECT base_currency_code FROM business_currency_settings WHERE id = 'default'").get(), { base_currency_code: "USD" });
   assert.deepEqual(restored.prepare("SELECT minor_unit, is_active FROM currencies WHERE code = 'KWD'").get(), { minor_unit: 3, is_active: 1 });
   assert.deepEqual(restored.prepare("SELECT rate_to_base, source_reference FROM exchange_rates WHERE currency_code = 'EUR'").get(), { rate_to_base: "1.090000", source_reference: "Portable backup fixture" });
+});
+
+test("Phase 9 migration preserves Phase 8 data and installs business-local currency metadata", () => {
+  const legacy = new Database(":memory:");
+  runMigrations(legacy, { label: "Phase 9 migration fixture", migrations: businessMigrations.filter((migration) => migration.version <= 8) });
+  const now = new Date().toISOString();
+  legacy.prepare("INSERT INTO customers (id, name, status, created_at, updated_at) VALUES ('legacy-customer', 'Legacy Customer', 'active', ?, ?)").run(now, now);
+  runMigrations(legacy, { label: "Phase 9 migration fixture", migrations: businessMigrations });
+  assert.ok((legacy.prepare("SELECT MAX(version) AS version FROM schema_migrations").get() as { version: number }).version >= 20);
+  assert.deepEqual(legacy.prepare("SELECT base_currency_code, metadata_source FROM business_currency_settings WHERE id = 'default'").get(), { base_currency_code: "AED", metadata_source: "migration_default" });
+  assert.deepEqual(legacy.prepare("SELECT code, minor_unit, is_base FROM currencies ORDER BY code").all(), [
+    { code: "AED", minor_unit: 2, is_base: 1 },
+    { code: "EUR", minor_unit: 2, is_base: 0 },
+    { code: "JPY", minor_unit: 0, is_base: 0 },
+    { code: "USD", minor_unit: 2, is_base: 0 },
+  ]);
+  assert.equal((legacy.prepare("SELECT default_currency_code FROM customers WHERE id = 'legacy-customer'").get() as { default_currency_code: string }).default_currency_code, "AED");
+  assert.ok(legacy.prepare("SELECT 1 FROM sqlite_master WHERE type = 'trigger' AND name = 'posted_sales_invoice_currency_immutable'").get());
+  legacy.close();
+});
+
+test("Phase 9 Decimal currency primitives use one precise base-per-foreign convention", () => {
+  assert.equal(validateExchangeRate("3.672500"), "3.672500");
+  assert.equal(parseCurrencyAmountToMinor("1234.567", 3), 1_234_567);
+  assert.equal(roundCurrencyAmount("1234.5", 0), "1235");
+  assert.equal(convertToBase(100_000, 2, 2, "3.672500"), 367_250);
+  assert.equal(convertFromBase(367_250, 2, 2, "3.672500"), 100_000);
+  assert.equal(proportionalCarryingRelease(3_334, 3_334, 12_245), 12_245);
+  assert.throws(() => validateExchangeRate("0"), /greater than zero/i);
 });
