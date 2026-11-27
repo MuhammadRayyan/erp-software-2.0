@@ -1,4 +1,3 @@
-import { assertSavePermission, assertMutationPermission } from "@/core/permissions/mutation-permissions";
 import { asc, eq } from "drizzle-orm";
 import { getBusinessDb } from "@/core/db/business";
 import { salesOrderLines, salesOrders, customers } from "@/core/db/business-schema";
@@ -114,32 +113,26 @@ export function getSalesOrder(businessId: string, userId: string, orderId: strin
 }
 
 export function saveSalesOrder(businessId: string, userId: string, input: SalesOrderInput, intent: SalesOrderIntent, orderId?: string) {
-  assertSavePermission(businessId, userId, "sales", orderId, intent);
   return saveTradeDocument(salesOrderDocument, businessId, userId, input, intent, orderId);
 }
 
 export function issueSalesOrder(businessId: string, userId: string, orderId: string) {
-  assertMutationPermission(businessId, userId, "sales", "approve");
   issueTradeDocument(salesOrderDocument, businessId, userId, orderId);
 }
 
 export function closeSalesOrder(businessId: string, userId: string, orderId: string) {
-  assertMutationPermission(businessId, userId, "sales", "edit");
   closeTradeDocument(salesOrderDocument, businessId, userId, orderId);
 }
 
 export function cancelSalesOrder(businessId: string, userId: string, orderId: string) {
-  assertMutationPermission(businessId, userId, "sales", "delete");
   cancelTradeDocument(salesOrderDocument, businessId, userId, orderId);
 }
 
 export function deleteSalesOrder(businessId: string, userId: string, orderId: string) {
-  assertMutationPermission(businessId, userId, "sales", "delete");
   deleteTradeDocument(salesOrderDocument, businessId, userId, orderId);
 }
 
 export function createSalesOrderRevision(businessId: string, userId: string, sourceOrderId: string): string {
-  assertMutationPermission(businessId, userId, "sales", "create");
   return createTradeDocumentRevision(salesOrderDocument, businessId, userId, sourceOrderId);
 }
 

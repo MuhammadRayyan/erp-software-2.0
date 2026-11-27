@@ -1,20 +1,18 @@
-import { assertSavePermission, assertMutationPermission } from "@/core/permissions/mutation-permissions";
+import { assertMutationPermission } from "@/core/permissions/mutation-permissions";
 import { asc, eq } from "drizzle-orm";
 import { getBusinessDb } from "@/core/db/business";
 import { purchaseOrderLines, purchaseOrders, suppliers } from "@/core/db/business-schema";
 import { purchaseOrderInputSchema, type PurchaseOrderInput } from "./purchase-order-input";
 import { getCustomFieldValuesForEntities } from "@/modules/custom-fields/custom-field-service";
-import { evaluateApprovalRequirement, recordPendingApprovalInTransaction } from "@/modules/approvals/approval-policy";
 import { buildDocumentListWhere, decoratePricedLine, loadLineLookups, withProjectNames } from "@/modules/documents/engine/document-sql";
 import {
   cancelTradeDocument,
   closeTradeDocument,
   createTradeDocumentRevision,
   deleteTradeDocument,
+  issueTradeDocument,
   listTradeDocumentRevisions,
-  requireTradeDocument,
   saveTradeDocument,
-  setTradeDocumentStatus,
   type TradeDocumentConfig,
 } from "@/modules/documents/engine/trade-document-engine";
 
@@ -151,11 +149,6 @@ export function savePurchaseOrder(
   orderId?: string,
   options?: { bypassApprovalPolicy?: boolean },
 ) {
-  if (options?.bypassApprovalPolicy) {
-    assertMutationPermission(businessId, userId, "purchases", "approve");
-  } else {
-    assertSavePermission(businessId, userId, "purchases", orderId, "draft");
-  }
   return saveTradeDocument(purchaseOrderDocument, businessId, userId, input, intent, orderId, options);
 }
 
@@ -165,46 +158,7 @@ export function issuePurchaseOrder(
   orderId: string,
   intent: "issue" | "submit_approval" = "issue",
 ): PurchaseOrderStatus {
-  assertMutationPermission(businessId, userId, "purchases", "edit");
-  const { sqlite } = getBusinessDb(businessId, userId);
-  const order = requireTradeDocument(purchaseOrderDocument, sqlite, orderId);
-  if (order.status !== "draft") {
-    throw new Error("Only a draft purchase order can be issued.");
-  }
-
-  const evalResult =
-    intent === "submit_approval"
-      ? { requiresApproval: true }
-      : evaluateApprovalRequirement(businessId, userId, "purchase_order", order.base_total_minor as number, sqlite);
-
-  if (evalResult.requiresApproval) {
-    const now = new Date().toISOString();
-    sqlite.transaction(() => {
-      sqlite.prepare("UPDATE purchase_orders SET status = ?, updated_at = ? WHERE id = ?").run("pending_approval", now, orderId);
-      recordPendingApprovalInTransaction(sqlite, {
-        businessId,
-        userId,
-        entityType: "purchase_order",
-        entityId: orderId,
-        entityNumber: order.order_number as string,
-        amountMinor: order.total_minor as number,
-        baseAmountMinor: order.base_total_minor as number,
-        currencyCode: order.currency_code as string,
-        targetIntent: "issue",
-      });
-    }).immediate();
-    return "pending_approval";
-  }
-
-  assertMutationPermission(businessId, userId, "purchases", "approve");
-  setTradeDocumentStatus(purchaseOrderDocument, businessId, sqlite, userId, order, {
-    status: "issued",
-    timestampColumn: "issued_at",
-    operation: "issue",
-    action: "posted",
-    verb: "Issued",
-  });
-  return "issued";
+  return issueTradeDocument(purchaseOrderDocument, businessId, userId, orderId, intent) as PurchaseOrderStatus;
 }
 
 export function issuePendingPurchaseOrder(businessId: string, userId: string, orderId: string) {
@@ -240,22 +194,18 @@ export function revertPurchaseOrderToDraft(businessId: string, userId: string, o
 }
 
 export function closePurchaseOrder(businessId: string, userId: string, orderId: string) {
-  assertMutationPermission(businessId, userId, "purchases", "edit");
   closeTradeDocument(purchaseOrderDocument, businessId, userId, orderId);
 }
 
 export function cancelPurchaseOrder(businessId: string, userId: string, orderId: string) {
-  assertMutationPermission(businessId, userId, "purchases", "delete");
   cancelTradeDocument(purchaseOrderDocument, businessId, userId, orderId);
 }
 
 export function deletePurchaseOrder(businessId: string, userId: string, orderId: string) {
-  assertMutationPermission(businessId, userId, "purchases", "delete");
   deleteTradeDocument(purchaseOrderDocument, businessId, userId, orderId);
 }
 
 export function createPurchaseOrderRevision(businessId: string, userId: string, sourceOrderId: string): string {
-  assertMutationPermission(businessId, userId, "purchases", "create");
   return createTradeDocumentRevision(purchaseOrderDocument, businessId, userId, sourceOrderId);
 }
 

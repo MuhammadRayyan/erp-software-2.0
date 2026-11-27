@@ -274,7 +274,8 @@ function runScenario() {
   const so1 = step("SO convert from quote (draft)", () => so.saveSalesOrder(businessId, adminId, salesOrderInput(1, { reference: "Q", salesQuoteId: sq5 }), "draft"))!;
   step("SO from accepted quote rejected", () => so.saveSalesOrder(businessId, adminId, salesOrderInput(2, { salesQuoteId: sq5 }), "draft"));
   step("SO edit draft keeps quote link", () => {
-    const { salesQuoteId: _drop, ...input } = salesOrderInput(3) as Record<string, unknown>;
+    const input: Record<string, unknown> = salesOrderInput(3);
+    delete input.salesQuoteId;
     return so.saveSalesOrder(businessId, adminId, input as never, "draft", so1);
   });
   step("SO edit draft clears quote link", () => so.saveSalesOrder(businessId, adminId, salesOrderInput(4, { salesQuoteId: "" }), "draft", so1));
@@ -337,7 +338,8 @@ function runScenario() {
   const po1 = step("PO convert from quote (draft)", () => po.savePurchaseOrder(businessId, adminId, purchaseOrderInput(1, { reference: "PQ", purchaseQuoteId: pq4 }), "draft"))!;
   step("PO from accepted quote rejected", () => po.savePurchaseOrder(businessId, adminId, purchaseOrderInput(2, { purchaseQuoteId: pq4 }), "draft"));
   step("PO edit draft keeps quote link", () => {
-    const { purchaseQuoteId: _drop, ...input } = purchaseOrderInput(3) as Record<string, unknown>;
+    const input: Record<string, unknown> = purchaseOrderInput(3);
+    delete input.purchaseQuoteId;
     return po.savePurchaseOrder(businessId, adminId, input as never, "draft", po1);
   });
   step("PO delete draft restores quote", () => {

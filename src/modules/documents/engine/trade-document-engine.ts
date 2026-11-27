@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import type Database from "better-sqlite3";
 import type { z } from "zod";
 import { getBusinessDb, runImmediateTransaction } from "@/core/db/business";
-import { assertMutationPermission } from "@/core/permissions/mutation-permissions";
+import { assertMutationPermission, assertSavePermission } from "@/core/permissions/mutation-permissions";
 import type { ModuleKey } from "@/core/permissions/permissions";
 import { createDocumentRevision, deleteDraftRevision, type RevisionEngineConfig } from "@/core/versioning/revision-engine";
 import { allocateNumber, type NumberKind } from "@/modules/accounting/services/numbering-service";
@@ -25,9 +25,11 @@ import { insertLineRows, insertRow, logDocumentActivity, updateRow, type ColumnV
  * {@link TradeDocumentConfig}: its tables/columns, status vocabulary, messages
  * and a few hooks for document-specific rules.
  *
- * Entry-point permission guards stay in each document's exported service
- * functions (so `npm run check:permissions` sees them); the engine performs
- * only the conditional in-flight checks (e.g. `approve` when a save issues).
+ * Every exported command asserts its own permission against `config.module`
+ * (create/edit on save, approve to issue, edit to close, delete to cancel or
+ * delete, create to revise), plus the in-flight `approve` check when a save
+ * leaves the document issued. Document services delegate to these commands;
+ * `npm run check:permissions` verifies the delegation.
  */
 
 type Sqlite = Database.Database;
@@ -177,7 +179,10 @@ function insertTradeLines(sqlite: Sqlite, config: TradeDocumentConfig, documentI
 
 /**
  * Creates (no `documentId`) or updates a document with freshly calculated
- * lines. The caller has already asserted the save permission.
+ * lines. Requires create/edit (plus approve when saving with "issue"); a
+ * maker-checker document checks only create/edit up front because the
+ * approval policy decides whether the save issues, and an approval-bypassing
+ * save (an approver acting on a pending request) requires approve.
  */
 export function saveTradeDocument(
   config: TradeDocumentConfig,
@@ -188,6 +193,11 @@ export function saveTradeDocument(
   documentId?: string,
   options?: TradeSaveOptions,
 ) {
+  if (options?.bypassApprovalPolicy) {
+    assertMutationPermission(businessId, userId, config.module, "approve");
+  } else {
+    assertSavePermission(businessId, userId, config.module, documentId, config.approval ? "draft" : intent);
+  }
   const data = config.schema.parse(input);
   const context = getBusinessDb(businessId, userId);
   const { sqlite } = context;
@@ -334,7 +344,7 @@ export function saveTradeDocument(
 }
 
 /** Sets a document's status (and optional timestamp column) and logs the transition. */
-export function setTradeDocumentStatus(
+function applyStatusChange(
   config: TradeDocumentConfig,
   businessId: string,
   sqlite: Sqlite,
@@ -361,30 +371,66 @@ export function setTradeDocumentStatus(
   });
 }
 
-/** Loads a document header (snake_case row) or throws "<Document> not found.". */
-export function requireTradeDocument(config: TradeDocumentConfig, sqlite: Sqlite, documentId: string) {
-  return requireHeader(sqlite, config, documentId);
-}
-
-/** draft → open. The caller has asserted `approve`. */
-export function issueTradeDocument(config: TradeDocumentConfig, businessId: string, userId: string, documentId: string) {
+/**
+ * draft → open. Requires approve; a maker-checker document requires edit and
+ * goes to pending approval instead when the policy (or `submit_approval`)
+ * asks for it, requiring approve only to issue directly.
+ */
+export function issueTradeDocument(
+  config: TradeDocumentConfig,
+  businessId: string,
+  userId: string,
+  documentId: string,
+  intent: "issue" | "submit_approval" = "issue",
+): string {
+  assertMutationPermission(businessId, userId, config.module, config.approval ? "edit" : "approve");
   const { sqlite } = getBusinessDb(businessId, userId);
   const header = requireHeader(sqlite, config, documentId);
   if (header[config.statusColumn] !== "draft") throw new Error(config.messages.issueOnlyDraft);
-  setTradeDocumentStatus(config, businessId, sqlite, userId, header, {
+
+  if (config.approval) {
+    const approval = config.approval;
+    const requiresApproval =
+      intent === "submit_approval" ||
+      evaluateApprovalRequirement(businessId, userId, approval.entityType, header.base_total_minor as number, sqlite).requiresApproval;
+    if (requiresApproval) {
+      const now = new Date().toISOString();
+      sqlite.transaction(() => {
+        updateRow(sqlite, config.table, documentId, { [config.statusColumn]: approval.pendingStatus, updated_at: now });
+        recordPendingApprovalInTransaction(sqlite, {
+          businessId,
+          userId,
+          entityType: approval.entityType,
+          entityId: documentId,
+          entityNumber: header[config.numberColumn] as string,
+          amountMinor: header.total_minor as number,
+          baseAmountMinor: header.base_total_minor as number,
+          currencyCode: header.currency_code as string,
+          targetIntent: "issue",
+        });
+      }).immediate();
+      return approval.pendingStatus;
+    }
+    assertMutationPermission(businessId, userId, config.module, "approve");
+  }
+
+  applyStatusChange(config, businessId, sqlite, userId, header, {
     status: config.statuses.open,
+    timestampColumn: config.timestamps?.issued,
     operation: "issue",
     action: "posted",
     verb: config.activity.issueVerb,
   });
+  return config.statuses.open;
 }
 
-/** open → closed (accepted / completed / closed). The caller has asserted `edit`. */
+/** open → closed (accepted / completed / closed). Requires edit. */
 export function closeTradeDocument(config: TradeDocumentConfig, businessId: string, userId: string, documentId: string) {
+  assertMutationPermission(businessId, userId, config.module, "edit");
   const { sqlite } = getBusinessDb(businessId, userId);
   const header = requireHeader(sqlite, config, documentId);
   if (header[config.statusColumn] !== config.statuses.open) throw new Error(config.messages.closeOnlyOpen);
-  setTradeDocumentStatus(config, businessId, sqlite, userId, header, {
+  applyStatusChange(config, businessId, sqlite, userId, header, {
     status: config.statuses.closed,
     timestampColumn: config.timestamps?.closed,
     operation: "close",
@@ -393,14 +439,15 @@ export function closeTradeDocument(config: TradeDocumentConfig, businessId: stri
   });
 }
 
-/** Any non-closed status → cancelled. The caller has asserted `delete`. */
+/** Any non-closed status → cancelled. Requires delete. */
 export function cancelTradeDocument(config: TradeDocumentConfig, businessId: string, userId: string, documentId: string) {
+  assertMutationPermission(businessId, userId, config.module, "delete");
   const { sqlite } = getBusinessDb(businessId, userId);
   const header = requireHeader(sqlite, config, documentId);
   const status = header[config.statusColumn];
   if (status === "cancelled") throw new Error(`${label(config)} has already been cancelled.`);
   if (status === config.statuses.closed) throw new Error(config.messages.cancelClosed);
-  setTradeDocumentStatus(config, businessId, sqlite, userId, header, {
+  applyStatusChange(config, businessId, sqlite, userId, header, {
     status: "cancelled",
     timestampColumn: config.timestamps?.cancelled,
     operation: "cancel",
@@ -411,9 +458,10 @@ export function cancelTradeDocument(config: TradeDocumentConfig, businessId: str
 
 /**
  * Deletes a draft (revision). For orders the source quote returns to "sent"
- * when no other live order still references it. The caller has asserted `delete`.
+ * when no other live order still references it. Requires delete.
  */
 export function deleteTradeDocument(config: TradeDocumentConfig, businessId: string, userId: string, documentId: string) {
+  assertMutationPermission(businessId, userId, config.module, "delete");
   const { sqlite } = getBusinessDb(businessId, userId);
   const source = config.source;
   let number = "";
@@ -448,8 +496,9 @@ export function deleteTradeDocument(config: TradeDocumentConfig, businessId: str
   }
 }
 
-/** Copies a document into a new draft revision. The caller has asserted `create`. */
+/** Copies a document into a new draft revision. Requires create. */
 export function createTradeDocumentRevision(config: TradeDocumentConfig, businessId: string, userId: string, sourceDocumentId: string): string {
+  assertMutationPermission(businessId, userId, config.module, "create");
   const { sqlite } = getBusinessDb(businessId, userId);
   config.assertRevisable?.(sqlite, sourceDocumentId);
   const newId = createDocumentRevision(sqlite, config.revision, userId, sourceDocumentId);
