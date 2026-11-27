@@ -1,11 +1,10 @@
 import { test, expect } from '@playwright/test';
+import { openDemoBusiness } from './helpers/session';
 import { selectComboboxOption } from './helpers/combobox';
 
 test.describe('Evaluation Suite C: AR/AP Financial Integrity', () => {
   test.beforeEach(async ({ page }) => {
-    await page.goto('/');
-    await page.locator('article a').first().click();
-    await expect(page.getByRole('heading', { name: 'Overview' })).toBeVisible();
+    await openDemoBusiness(page);
   });
 
   test('C1 & C3: Settle-then-Void Lifecycle and Over-payment Guard', async ({ page }) => {
@@ -39,7 +38,9 @@ test.describe('Evaluation Suite C: AR/AP Financial Integrity', () => {
     await expect(page.getByText('POSTED').first()).toBeVisible({ timeout: 15000 });
     
     // C1: Over-payment Guard
-    await page.getByRole('link', { name: 'Record Receipt' }).click();
+    // "Record Receipt" opens the quick side sheet; the allocation guard lives on the full form.
+    await page.getByRole('button', { name: 'Record Receipt' }).click();
+    await page.getByRole('link', { name: 'Open full form' }).click();
     const allocInput = page.getByLabel(/Allocate amount for INV-/i).first();
     const fullAmount = await allocInput.inputValue();
     await page.locator('#amount').fill('600.00');
@@ -61,6 +62,6 @@ test.describe('Evaluation Suite C: AR/AP Financial Integrity', () => {
     // Settled invoice must hide Void and Record Receipt actions while receipt allocations exist
     await page.getByRole('button', { name: /more actions/i }).click();
     await expect(page.getByRole('menuitem', { name: /void/i })).toHaveCount(0);
-    await expect(page.getByRole('link', { name: 'Record Receipt' })).toHaveCount(0);
+    await expect(page.getByRole('button', { name: 'Record Receipt' })).toHaveCount(0);
   });
 });

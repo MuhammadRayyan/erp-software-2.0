@@ -1,13 +1,9 @@
 import { test, expect } from '@playwright/test';
+import { openDemoBusiness } from './helpers/session';
 
 test.describe('Manager.io ERP Features & Interactive Flows', () => {
   test.beforeEach(async ({ page }) => {
-    await page.goto('/');
-    // Select the first business from list
-    const businessLink = page.locator('article a').first();
-    await expect(businessLink).toBeVisible();
-    await businessLink.click();
-    await expect(page.getByRole('heading', { name: 'Overview' })).toBeVisible();
+    await openDemoBusiness(page);
   });
 
   test('1. Settings Hub displays new Manager.io modules and filters correctly', async ({ page }) => {
@@ -60,8 +56,8 @@ test.describe('Manager.io ERP Features & Interactive Flows', () => {
     await expect(termRow.getByText(/28 days from invoice date/i)).toBeVisible();
 
     // Clean up - delete term
-    page.once('dialog', (dialog) => dialog.accept());
     await termRow.getByRole('button', { name: 'Delete Term' }).click();
+    await page.getByRole('alertdialog').getByRole('button', { name: 'Delete term' }).click();
     await expect(page.getByText(testTermName)).not.toBeVisible({ timeout: 5000 });
   });
 
@@ -214,8 +210,8 @@ test.describe('Manager.io ERP Features & Interactive Flows', () => {
       // Verify BatchActionBar floating bar appears at bottom
       const batchBar = page.getByText(/of \d+ selected/i);
       await expect(batchBar).toBeVisible();
-      await expect(page.getByRole('button', { name: /Export CSV/i })).toBeVisible();
-      await expect(page.getByRole('button', { name: /Print/i })).toBeVisible();
+      await expect(page.getByRole('button', { name: /Export CSV/i }).first()).toBeVisible();
+      await expect(page.getByRole('button', { name: /Print/i }).first()).toBeVisible();
 
       // Click "Clear" button in dock
       await page.getByRole('button', { name: /Clear/i }).click();

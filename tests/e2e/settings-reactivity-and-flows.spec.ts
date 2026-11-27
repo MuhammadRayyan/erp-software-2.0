@@ -1,10 +1,9 @@
 import { test, expect } from '@playwright/test';
+import { openDemoBusiness } from './helpers/session';
 
 test.describe('Settings Reactivity, PDF Generations, and System Health Flows', () => {
   test.beforeEach(async ({ page }) => {
-    await page.goto('/');
-    await page.locator('article a').first().click();
-    await expect(page.getByRole('heading', { name: 'Overview' })).toBeVisible();
+    await openDemoBusiness(page);
   });
 
   test('1. Settings Reactivity: Numbering, Business Profile, UOM, and Payment Terms', async ({ page }) => {
@@ -86,7 +85,7 @@ test.describe('Settings Reactivity, PDF Generations, and System Health Flows', (
     await expect(page.getByText(/Diagnostic test error triggered by admin/i).first()).toBeVisible({ timeout: 10000 });
   });
 
-  test('3. Document Templates Studio & PDF Route Generation', async ({ page, request }) => {
+  test('3. Document Templates Studio & PDF Route Generation', async ({ page }) => {
     test.setTimeout(90000);
     const businessId = page.url().match(/\/b\/([^/]+)/)?.[1] || 'demo';
 
@@ -101,7 +100,7 @@ test.describe('Settings Reactivity, PDF Generations, and System Health Flows', (
     await expect(page.getByText(/Modern/i).first()).toBeVisible();
 
     // Check preview PDF endpoint directly
-    const previewRes = await request.post(`/api/businesses/${businessId}/document-templates/preview-pdf`, {
+    const previewRes = await page.request.post(`/api/businesses/${businessId}/document-templates/preview-pdf`, {
       data: {
         documentType: 'sales-invoice',
         variant: 'modern',

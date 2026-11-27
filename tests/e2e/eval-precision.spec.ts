@@ -1,11 +1,10 @@
 import { test, expect } from '@playwright/test';
+import { openDemoBusiness } from './helpers/session';
 import { selectComboboxOption } from './helpers/combobox';
 
 test.describe('Evaluation Suite G: Precision & Edge Cases', () => {
   test.beforeEach(async ({ page }) => {
-    await page.goto('/');
-    await page.locator('article a').first().click();
-    await expect(page.getByRole('heading', { name: 'Overview' })).toBeVisible();
+    await openDemoBusiness(page);
   });
 
   test('G2: Maximum Quantity Overflow Guard', async ({ page }) => {

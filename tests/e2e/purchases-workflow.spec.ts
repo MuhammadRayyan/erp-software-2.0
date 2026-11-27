@@ -1,11 +1,10 @@
 import { test, expect } from '@playwright/test';
+import { openDemoBusiness } from './helpers/session';
 import { selectComboboxOption } from './helpers/combobox';
 
 test.describe('Purchases Deep Workflow Testing', () => {
   test.beforeEach(async ({ page }) => {
-    await page.goto('/');
-    await page.locator('article a').first().click();
-    await expect(page.getByRole('heading', { name: 'Overview' })).toBeVisible();
+    await openDemoBusiness(page);
   });
 
   test('can perform a full purchase quote to payment workflow omitting optional fields', async ({ page }) => {
@@ -72,7 +71,9 @@ test.describe('Purchases Deep Workflow Testing', () => {
     await expect(page.getByText('POSTED').first()).toBeVisible();
 
     // 6. Record Payment
-    await page.getByRole('link', { name: /Record Payment/i }).click();
+    // "Record Payment" opens the quick side sheet; continue on the full form.
+    await page.getByRole('button', { name: 'Record Payment' }).click();
+    await page.getByRole('link', { name: 'Open full form' }).click();
     await expect(page.getByRole('heading', { name: /Record Supplier Payment|New Supplier Payment/i })).toBeVisible();
     await page.getByRole('button', { name: /Post Payment/i }).click();
 

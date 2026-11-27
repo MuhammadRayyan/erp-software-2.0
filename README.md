@@ -42,7 +42,7 @@ Automated service/unit tests run in isolated temporary directories via [scripts/
 | `npm run test:platform` | Auth, RBAC, multi-tenant quotas, approvals, activity logs, backups, and PDF pool |
 | `npm run test:integration` | Multi-module commercial lifecycles, audits, and Manager.io migration |
 | `npm run test:hardening` | Targeted production hardening & recovery suite |
-| `npm run test:e2e` | Isolated Playwright acceptance suite (`tests/e2e/acceptance.spec.ts` & `pillars.spec.ts`) |
+| `npm run test:e2e` | Every Playwright browser spec in `tests/e2e/` against an isolated production server (`test:e2e:gate` runs only the release-gate checks) |
 | `npm run typecheck` | Generate `.next` route types and check `tsconfig.json` |
 | `npm run typecheck:validate` | Isolated validation typecheck (`tsconfig.validate.json` against `.next-validate`) |
 | `npm run lint` | ESLint across source and test trees |

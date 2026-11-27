@@ -4,6 +4,12 @@ All notable changes since the original `erp-software-2.0-antigravity-edits` uplo
 
 Full historical task detail is retained in [history/WORKLOG.md](history/WORKLOG.md) and the remaining point-in-time archive index in [history/README.md](history/README.md).
 
+## 2026-11-27 (One Playwright config; every browser spec runs in CI)
+
+- **One config**: `playwright.config.ts` replaces the five per-suite configs. One production server on disposable data (one merged fixture, `scripts/prepare-browser-fixture.ts` + `prepare-acceptance-fixture.ts`) serves two projects: `gate` (acceptance, pillars, hardening, Sprint 2/3) and `workflows` (the 24 module specs CI never ran). `npm run test:e2e` runs all 98 tests; `npm run test:e2e:gate` runs the gate only. CI runs the suite as 4 parallel shards.
+- **Revived specs**: open the demo business by id through the shared login helper instead of a removed `auth.setup.ts` storage state and "first business in the list"; updated for the payment side sheet, confirm dialogs, submit-time form validation, `Export Page (n)` labels and signed-in API requests. Fixed a race where the bank transfer check read the database before the transfer was saved.
+- **Login rate limit**: cached role sessions persist in the run's data directory, so a worker restart after a failed test no longer cascades into "Too many requests".
+
 ## 2026-11-27 (Accounting gaps and architecture — schema v40–v43)
 
 - **Amending posted invoices**: edits reverse the original journal and VAT rows and repost (superseded/amendment entries), with before/after totals and line changes in the activity log; refused below the settled amount or in a locked period.

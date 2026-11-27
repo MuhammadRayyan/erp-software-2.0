@@ -1,10 +1,9 @@
 import { test, expect } from '@playwright/test';
+import { openDemoBusiness } from './helpers/session';
 
 test.describe('Deep UI Testing', () => {
   test.beforeEach(async ({ page }) => {
-    await page.goto('/');
-    await page.locator('article a').first().click();
-    await expect(page.getByRole('heading', { name: 'Overview' })).toBeVisible();
+    await openDemoBusiness(page);
   });
 
   test('can fill out and save a new customer', async ({ page }) => {

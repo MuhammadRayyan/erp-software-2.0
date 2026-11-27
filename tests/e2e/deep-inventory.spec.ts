@@ -1,11 +1,10 @@
 import { test, expect } from '@playwright/test';
+import { openDemoBusiness } from './helpers/session';
 import { selectComboboxOption } from './helpers/combobox';
 
 test.describe('Deep Inventory Testing', () => {
   test.beforeEach(async ({ page }) => {
-    await page.goto('/');
-    await page.locator('article a').first().click();
-    await expect(page.getByRole('heading', { name: 'Overview' })).toBeVisible();
+    await openDemoBusiness(page);
   });
 
   test('can perform inventory workflows (goods receipt -> stock adjustment -> delivery note)', async ({ page }) => {

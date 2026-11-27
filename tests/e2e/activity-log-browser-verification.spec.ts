@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import { openDemoBusiness } from './helpers/session';
 
 test.describe('Activity & Audit Log Browser Verification Suite', () => {
   let businessId = '';
@@ -9,11 +10,7 @@ test.describe('Activity & Audit Log Browser Verification Suite', () => {
       console.error(`[Browser Page Error]: ${exception.message}`);
     });
 
-    await page.goto('/');
-    const businessCard = page.locator('article a').first();
-    await expect(businessCard).toBeVisible({ timeout: 15000 });
-    await businessCard.click();
-    await expect(page.getByRole('heading', { name: 'Overview' })).toBeVisible({ timeout: 15000 });
+    await openDemoBusiness(page);
 
     const url = page.url();
     const match = url.match(/\/b\/([^/]+)/);
@@ -37,7 +34,7 @@ test.describe('Activity & Audit Log Browser Verification Suite', () => {
 
     // Verify filter toolbar
     await expect(page.getByPlaceholder(/Search by document #, customer, summary/i)).toBeVisible();
-    await expect(page.getByRole('button', { name: /Export CSV/i })).toBeVisible();
+    await expect(page.getByRole('button', { name: /Export (CSV|Page)/i })).toBeVisible();
   });
 
   test('2. Verify Automated Log Retention & Storage Lifecycle Policy controls', async ({ page }) => {
@@ -143,7 +140,7 @@ test.describe('Activity & Audit Log Browser Verification Suite', () => {
     await expect(searchInput).toHaveValue('');
 
     // Click Export CSV
-    const exportBtn = page.getByRole('button', { name: /Export CSV/i });
+    const exportBtn = page.getByRole('button', { name: /Export (CSV|Page)/i });
     if (await exportBtn.isEnabled()) {
       const downloadPromise = page.waitForEvent('download', { timeout: 10000 }).catch(() => null);
       await exportBtn.click();

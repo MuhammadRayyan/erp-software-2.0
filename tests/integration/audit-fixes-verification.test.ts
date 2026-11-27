@@ -315,7 +315,7 @@ test("Audited Architectural & Functional Fixes Verification Suite", async (suite
   });
 
   await suite.test("6. P2: Playwright configuration fallback test", async () => {
-    const configPath = path.resolve(process.cwd(), "playwright.hardening.config.ts");
+    const configPath = path.resolve(process.cwd(), "playwright.config.ts");
     const content = readFileSync(configPath, "utf-8");
     assert.ok(content.includes('existsSync(path.resolve(process.cwd(), ".next-validate"))'));
     assert.ok(content.includes('? ".next-validate" : ".next"'));

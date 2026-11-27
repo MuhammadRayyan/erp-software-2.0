@@ -129,6 +129,6 @@ flowchart LR
 | `tests/accounting/` | GL posting, multi-currency FX, VAT/FAF, payroll/WPS, PDC, reports | `npm run test:accounting` |
 | `tests/platform/` | Auth, RBAC, quotas, approvals, activity logs, backups, PDF pool | `npm run test:platform` |
 | `tests/integration/` | Multi-module commercial lifecycles, audits, Manager.io migration | `npm run test:integration` |
-| `tests/e2e/` | Playwright acceptance, pillars, hardening & Sprint 2/3 browser suites | `npm run test:e2e` / `playwright*.config.ts` |
+| `tests/e2e/` | Playwright browser specs: `gate` project (acceptance, pillars, hardening, Sprint 2/3) and `workflows` project (module flows) | `npm run test:e2e` / `playwright.config.ts` |
 
 - `npm test` runs all 4 Node test domains via native glob discovery (`"tests/unit/**/*.test.ts"` … `"tests/integration/**/*.test.ts"`) inside isolated temp directories ([scripts/test-isolation.mjs](../scripts/test-isolation.mjs)) so customer SQLite files in `data/` are never touched.
