@@ -3195,6 +3195,111 @@ export const businessMigrations = [
       },
     },
     {
+      version: 41,
+      name: "41_party_credit_allocations_and_refunds",
+      up: (sqlite) => {
+        // A credit/debit note may exceed what is still open on its source
+        // document (e.g. crediting a fully paid invoice). The excess stays on
+        // the note as party credit that can be applied to another document or
+        // refunded through the bank. settlement_base_amount records how much of
+        // the note's base value an allocation consumed (it differs from the
+        // released document carrying amount only by realized FX).
+        const creditColumns = (sqlite.prepare("PRAGMA table_info(sales_credit_note_allocations)").all() as { name: string }[])
+          .map((column) => column.name);
+        if (!creditColumns.includes("settlement_base_amount")) {
+          sqlite.exec("ALTER TABLE sales_credit_note_allocations ADD COLUMN settlement_base_amount INTEGER");
+        }
+        if (!creditColumns.includes("realized_fx_amount")) {
+          sqlite.exec("ALTER TABLE sales_credit_note_allocations ADD COLUMN realized_fx_amount INTEGER NOT NULL DEFAULT 0");
+        }
+        sqlite.exec(`
+          UPDATE sales_credit_note_allocations
+          SET settlement_base_amount = base_carrying_amount_released
+          WHERE settlement_base_amount IS NULL;
+
+          CREATE TABLE IF NOT EXISTS debit_note_allocations (
+            id TEXT PRIMARY KEY NOT NULL,
+            debit_note_id TEXT NOT NULL REFERENCES debit_notes(id) ON DELETE CASCADE,
+            purchase_invoice_id TEXT NOT NULL REFERENCES purchase_invoices(id),
+            amount_minor INTEGER NOT NULL CHECK (amount_minor > 0),
+            base_carrying_amount_released INTEGER NOT NULL,
+            settlement_base_amount INTEGER NOT NULL,
+            realized_fx_amount INTEGER NOT NULL DEFAULT 0
+          );
+          CREATE UNIQUE INDEX IF NOT EXISTS debit_note_invoice_allocation_idx
+            ON debit_note_allocations(debit_note_id, purchase_invoice_id);
+          CREATE INDEX IF NOT EXISTS debit_note_allocation_invoice_idx
+            ON debit_note_allocations(purchase_invoice_id);
+
+          -- Existing linked debit notes settled their bill in full.
+          INSERT OR IGNORE INTO debit_note_allocations (
+            id, debit_note_id, purchase_invoice_id, amount_minor,
+            base_carrying_amount_released, settlement_base_amount, realized_fx_amount
+          )
+          SELECT lower(hex(randomblob(16))), dn.id, dn.purchase_invoice_id, dn.total_minor,
+            dn.base_total_minor, dn.base_total_minor, 0
+          FROM debit_notes dn
+          WHERE dn.purchase_invoice_id IS NOT NULL
+            AND dn.document_status IN ('posted', 'void')
+            AND dn.total_minor > 0;
+
+          CREATE TABLE IF NOT EXISTS customer_refunds (
+            id TEXT PRIMARY KEY NOT NULL,
+            refund_number TEXT NOT NULL,
+            customer_id TEXT NOT NULL REFERENCES customers(id),
+            credit_note_id TEXT NOT NULL REFERENCES sales_credit_notes(id),
+            date TEXT NOT NULL,
+            bank_account_id TEXT NOT NULL REFERENCES accounts(id),
+            amount_minor INTEGER NOT NULL CHECK (amount_minor > 0),
+            currency_code TEXT NOT NULL REFERENCES currencies(code),
+            exchange_rate_to_base TEXT NOT NULL DEFAULT '1',
+            exchange_rate_date TEXT NOT NULL,
+            exchange_rate_source TEXT NOT NULL DEFAULT 'Base',
+            base_amount_minor INTEGER NOT NULL,
+            released_carrying_amount_minor INTEGER NOT NULL,
+            realized_fx_amount_minor INTEGER NOT NULL DEFAULT 0,
+            reference TEXT,
+            description TEXT,
+            document_status TEXT NOT NULL DEFAULT 'posted' CHECK (document_status IN ('posted', 'void')),
+            created_by TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            posted_at TEXT,
+            voided_at TEXT
+          );
+          CREATE UNIQUE INDEX IF NOT EXISTS customer_refund_number_idx ON customer_refunds(refund_number);
+          CREATE INDEX IF NOT EXISTS customer_refund_customer_idx ON customer_refunds(customer_id);
+          CREATE INDEX IF NOT EXISTS customer_refund_credit_note_idx ON customer_refunds(credit_note_id);
+
+          CREATE TABLE IF NOT EXISTS supplier_refunds (
+            id TEXT PRIMARY KEY NOT NULL,
+            refund_number TEXT NOT NULL,
+            supplier_id TEXT NOT NULL REFERENCES suppliers(id),
+            debit_note_id TEXT NOT NULL REFERENCES debit_notes(id),
+            date TEXT NOT NULL,
+            bank_account_id TEXT NOT NULL REFERENCES accounts(id),
+            amount_minor INTEGER NOT NULL CHECK (amount_minor > 0),
+            currency_code TEXT NOT NULL REFERENCES currencies(code),
+            exchange_rate_to_base TEXT NOT NULL DEFAULT '1',
+            exchange_rate_date TEXT NOT NULL,
+            exchange_rate_source TEXT NOT NULL DEFAULT 'Base',
+            base_amount_minor INTEGER NOT NULL,
+            released_carrying_amount_minor INTEGER NOT NULL,
+            realized_fx_amount_minor INTEGER NOT NULL DEFAULT 0,
+            reference TEXT,
+            description TEXT,
+            document_status TEXT NOT NULL DEFAULT 'posted' CHECK (document_status IN ('posted', 'void')),
+            created_by TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            posted_at TEXT,
+            voided_at TEXT
+          );
+          CREATE UNIQUE INDEX IF NOT EXISTS supplier_refund_number_idx ON supplier_refunds(refund_number);
+          CREATE INDEX IF NOT EXISTS supplier_refund_supplier_idx ON supplier_refunds(supplier_id);
+          CREATE INDEX IF NOT EXISTS supplier_refund_debit_note_idx ON supplier_refunds(debit_note_id);
+        `);
+      },
+    },
+    {
       version: 42,
       name: "gratuity_accruals",
       up: (sqlite) => {

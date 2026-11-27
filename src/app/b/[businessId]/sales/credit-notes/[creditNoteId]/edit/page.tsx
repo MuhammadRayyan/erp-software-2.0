@@ -6,7 +6,7 @@ import { getActiveTaxCodes } from "@/modules/accounting/services/tax-code-servic
 import { listCustomers } from "@/modules/customers/customer-service";
 import { listProjectOptions } from "@/modules/projects/project-service";
 import { CreditNoteForm } from "@/modules/sales-credit-notes/credit-note-form";
-import { getCreditNote, getRemainingInvoiceBalance } from "@/modules/sales-credit-notes/credit-note-service";
+import { getCreditNote, getCreditableInvoiceAmount } from "@/modules/sales-credit-notes/credit-note-service";
 import { listInvoices } from "@/modules/sales-invoices/invoice-service";
 import { minorToCurrencyInput } from "@/modules/currency/conversion";
 import { getCurrencySettings } from "@/modules/currency/exchange-rate";
@@ -19,8 +19,9 @@ export default async function EditCreditNotePage({ params }: { params: Promise<{
   if (!record || record.note.documentStatus === "void") notFound();
   const customers = listCustomers(businessId, user.id);
   const invoices = listInvoices(businessId, user.id)
-    .filter((invoice) => invoice.documentStatus === "posted" && (invoice.balanceMinor > 0 || invoice.id === record.note.sourceInvoiceId))
-    .map((invoice) => ({ ...invoice, balanceMinor: invoice.id === record.note.sourceInvoiceId ? getRemainingInvoiceBalance(businessId, user.id, invoice.id, creditNoteId) : invoice.balanceMinor }));
+    .filter((invoice) => invoice.documentStatus === "posted")
+    .map((invoice) => ({ ...invoice, balanceMinor: getCreditableInvoiceAmount(businessId, user.id, invoice.id, invoice.id === record.note.sourceInvoiceId ? creditNoteId : undefined) }))
+    .filter((invoice) => invoice.balanceMinor > 0 || invoice.id === record.note.sourceInvoiceId);
   const accounts = getSalesAccountOptions(businessId, user.id);
   const taxes = getActiveTaxCodes(businessId, user.id).filter((code) => code.vatCategory && ["sales", "both"].includes(code.direction));
   const projects = listProjectOptions(businessId, user.id);

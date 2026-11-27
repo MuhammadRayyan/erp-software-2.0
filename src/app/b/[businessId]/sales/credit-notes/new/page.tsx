@@ -8,6 +8,7 @@ import { listCustomers } from "@/modules/customers/customer-service";
 import { listProjectOptions } from "@/modules/projects/project-service";
 import { CreditNoteForm } from "@/modules/sales-credit-notes/credit-note-form";
 import { getInvoice, listInvoices } from "@/modules/sales-invoices/invoice-service";
+import { getCreditableInvoiceAmount } from "@/modules/sales-credit-notes/credit-note-service";
 import { minorToCurrencyInput } from "@/modules/currency/conversion";
 import { getCurrencySettings } from "@/modules/currency/exchange-rate";
 import { getFormDefaults } from "@/modules/form-defaults/form-defaults-service";
@@ -19,9 +20,13 @@ export default async function NewCreditNotePage({ params, searchParams }: { para
   const { user, access } = await requireModule(businessId, "sales");
   const formDefaults = getFormDefaults(businessId, user.id, "sales-credit-note");
   const customers = listCustomers(businessId, user.id);
-  const invoices = listInvoices(businessId, user.id).filter((invoice) => invoice.documentStatus === "posted" && invoice.balanceMinor > 0);
+  // Paid invoices can be credited too: the part above the open balance becomes customer credit.
+  const invoices = listInvoices(businessId, user.id)
+    .filter((invoice) => invoice.documentStatus === "posted")
+    .map((invoice) => ({ ...invoice, balanceMinor: getCreditableInvoiceAmount(businessId, user.id, invoice.id) }))
+    .filter((invoice) => invoice.balanceMinor > 0);
   const source = query.invoiceId ? getInvoice(businessId, user.id, query.invoiceId) : null;
-  const selected = source && source.invoice.documentStatus === "posted" && source.balanceMinor > 0 ? source : null;
+  const selected = source && source.invoice.documentStatus === "posted" && getCreditableInvoiceAmount(businessId, user.id, source.invoice.id) > 0 ? source : null;
   const accounts = getSalesAccountOptions(businessId, user.id);
   const taxes = getActiveTaxCodes(businessId, user.id).filter((code) => code.vatCategory && ["sales", "both"].includes(code.direction));
   const projects = listProjectOptions(businessId, user.id);

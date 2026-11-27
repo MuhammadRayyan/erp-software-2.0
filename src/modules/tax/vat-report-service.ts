@@ -132,12 +132,13 @@ export function getVatTransactionDetail(
       AND (? = '' OR te.direction = ?)
       AND (? = '' OR te.supply_emirate = ?)
       AND (? = '' OR te.tax_code_id = ?)
-      AND (? = '' OR te.source_type = ? OR te.source_type = ? || '_void')
+      AND (? = '' OR te.source_type = ? OR te.source_type IN (? || '_void', ? || '_superseded', ? || '_amendment'))
       AND (? = '' OR lower(COALESCE(te.party_name, '')) LIKE '%' || lower(?) || '%')
     ORDER BY te.tax_date, te.source_number, te.source_line_id
   `).all(dateFrom, dateTo, filters.category ?? "", filters.category ?? "",
     filters.direction ?? "", filters.direction ?? "", filters.emirate ?? "", filters.emirate ?? "",
     filters.taxCodeId ?? "", filters.taxCodeId ?? "", filters.sourceType ?? "", filters.sourceType ?? "", filters.sourceType ?? "",
+    filters.sourceType ?? "", filters.sourceType ?? "",
     filters.party ?? "", filters.party ?? "") as VatDetailRow[];
   return filters.bucket ? rows.filter((row) => matchesBucket(row, filters.bucket!)) : rows;
 }

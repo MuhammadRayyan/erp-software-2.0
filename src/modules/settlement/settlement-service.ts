@@ -481,7 +481,7 @@ export function deleteDraftSettlement(
   return sqlite.transaction(execute)();
 }
 
-function creditAllocationSourceType(config: SettlementConfig) {
+function creditAllocationSourceType(config: Pick<SettlementConfig, "partyType">) {
   return config.partyType === "customer" ? "receipt_credit_allocation" : "supplier_payment_credit_allocation";
 }
 
@@ -493,10 +493,11 @@ function creditAllocationSourceType(config: SettlementConfig) {
  * subledger. Customer: positive = gain (Dr AR / Cr gain). Supplier: positive =
  * loss (Dr loss / Cr AP).
  */
-function postCreditAllocationFx(
+export function postCreditAllocationFx(
   sqlite: any,
-  config: SettlementConfig,
+  config: Pick<SettlementConfig, "partyType">,
   input: { allocationId: string; paymentNumber: string; partyId: string; documentNumber: string; date: string; realizedFxMinor: number },
+  sourceType?: string,
 ) {
   if (input.realizedFxMinor === 0) return;
   const settings = sqlite.prepare(`
@@ -524,7 +525,7 @@ function postCreditAllocationFx(
   const party = config.partyType === "customer" ? { customerId: input.partyId } : { supplierId: input.partyId };
   const controlIsDebit = config.partyType === "customer" ? isGain : !isGain;
   postTransaction(sqlite, {
-    sourceType: creditAllocationSourceType(config),
+    sourceType: sourceType ?? creditAllocationSourceType(config),
     sourceId: input.allocationId,
     date: input.date,
     description,

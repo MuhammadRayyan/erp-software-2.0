@@ -24,9 +24,15 @@ let cachedLimit: number | null | undefined;
 export function getContainerMemoryLimitBytes(): number | null {
   if (cachedLimit !== undefined) return cachedLimit;
   cachedLimit = null;
-  for (const file of ["/sys/fs/cgroup/memory.max", "/sys/fs/cgroup/memory/memory.limit_in_bytes"]) {
+  // Literal paths (not a loop variable): a dynamic fs path makes Turbopack's
+  // output tracing copy the whole project into the standalone build.
+  const readers = [
+    () => readFileSync("/sys/fs/cgroup/memory.max", "utf8"),
+    () => readFileSync("/sys/fs/cgroup/memory/memory.limit_in_bytes", "utf8"),
+  ];
+  for (const read of readers) {
     try {
-      const raw = readFileSync(file, "utf8").trim();
+      const raw = read().trim();
       const value = Number(raw);
       // cgroup v1 reports "unlimited" as a value near 2^63.
       if (raw !== "max" && Number.isFinite(value) && value > 0 && value < 2 ** 60) cachedLimit = value;
