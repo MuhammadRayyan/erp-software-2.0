@@ -10,6 +10,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { SelectNative } from "@/components/ui/select-native";
 import { FormError } from "@/components/form-error";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { StatusBadge } from "@/components/status-badge";
 import { DialogClose, DialogContent, DialogDescription, DialogRoot, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { useActionPermission } from "@/components/permissions-provider";
@@ -73,6 +74,8 @@ export function NoteCreditPanel(props: NoteCreditPanelProps) {
   const canPost = useActionPermission("post", text.module);
   const canVoid = useActionPermission("delete", text.module);
   const [pendingVoid, startVoid] = useTransition();
+  const [voidTarget, setVoidTarget] = useState<{ id: string; refundNumber: string } | null>(null);
+  const [voidError, setVoidError] = useState("");
   const money = (amountMinor: number) => formatMoney(amountMinor, currencyCode, minorUnit);
 
   if (unallocatedMinor <= 0 && props.refunds.length === 0 && !props.applications.some((row) => !row.isSource)) return null;
@@ -127,20 +130,7 @@ export function NoteCreditPanel(props: NoteCreditPanelProps) {
                         size="sm"
                         variant="ghost"
                         disabled={pendingVoid}
-                        onClick={() => {
-                          if (!window.confirm(`Void refund ${row.refundNumber}? A reversing journal entry is posted today.`)) return;
-                          startVoid(async () => {
-                            const result = side === "customer"
-                              ? await voidCustomerRefundAction(businessId, row.id, noteId)
-                              : await voidSupplierRefundAction(businessId, row.id, noteId);
-                            if (result.error) {
-                              toast.error(result.error);
-                              return;
-                            }
-                            toast.success("Refund voided.");
-                            router.refresh();
-                          });
-                        }}
+                        onClick={() => { setVoidError(""); setVoidTarget({ id: row.id, refundNumber: row.refundNumber }); }}
                       >
                         Void
                       </Button>
@@ -152,6 +142,32 @@ export function NoteCreditPanel(props: NoteCreditPanelProps) {
           </table>
         </div>
       )}
+      <ConfirmDialog
+        open={voidTarget !== null}
+        onOpenChange={(next) => { if (!next) setVoidTarget(null); }}
+        title={`Void refund ${voidTarget?.refundNumber ?? ""}?`}
+        description="A reversing journal entry is posted today and the amount returns to the unallocated credit."
+        confirmLabel="Void refund"
+        tone="danger"
+        pending={pendingVoid}
+        error={voidError}
+        onConfirm={() => {
+          const target = voidTarget;
+          if (!target) return;
+          startVoid(async () => {
+            const result = side === "customer"
+              ? await voidCustomerRefundAction(businessId, target.id, noteId)
+              : await voidSupplierRefundAction(businessId, target.id, noteId);
+            if (result.error) {
+              setVoidError(result.error);
+              return;
+            }
+            setVoidTarget(null);
+            toast.success("Refund voided.");
+            router.refresh();
+          });
+        }}
+      />
     </section>
   );
 }
