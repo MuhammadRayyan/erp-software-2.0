@@ -15,7 +15,7 @@ flowchart LR
   NextApp --> Proxy["Request Proxy (src/proxy.ts)"]
   NextApp --> SysDB[("System SQLite\ndata/system/system.sqlite\nSchema v7 · 10 tables")]
   NextApp --> Pool["Business DB LRU Pool (MAX_CONNECTIONS=12)"]
-  Pool --> BizDB[("Per-Business SQLite WAL\ndata/businesses/<key>/business.sqlite\nSchema v39 · 90 tables")]
+  Pool --> BizDB[("Per-Business SQLite WAL\ndata/businesses/<key>/business.sqlite\nSchema v43 · 97 tables")]
   NextApp --> PdfPool["Pooled Headless Chrome\n(incognito, no-JS, offline interceptor)"]
   NextApp --> ZipStream["yazl Streaming ZIP\n(Backups & Batch PDFs)"]
 ```
@@ -33,7 +33,7 @@ flowchart LR
 | Store | Location | Schema Version | Verified Drizzle Footprint | Migration Source |
 | :--- | :--- | :---: | :--- | :--- |
 | **System DB** | `data/system/system.sqlite` | **7** | 10 tables, 79 columns, 10 indexes | [system.ts](../src/core/db/migrations/system.ts) |
-| **Business DB** (per workspace) | `data/businesses/<directoryKey>/business.sqlite` | **40** | 90 tables, 1343 columns, 194 indexes | [business-migrations.ts](../src/core/db/business-migrations.ts) |
+| **Business DB** (per workspace) | `data/businesses/<directoryKey>/business.sqlite` | **43** | 97 tables, 1452 columns, 211 indexes | [business-migrations.ts](../src/core/db/business-migrations.ts) |
 
 - **Migrations are hand-written TypeScript** (no `drizzle-kit`): the migrated database is the source of truth and the Drizzle schema files mirror it for typed queries.
 - **Schema verification**: `npm run check:schema` (CI static job) migrates a fresh temporary data directory, seeds a business, and fails if the Drizzle definitions differ from SQLite in tables, columns, indexes (name, column order, unique, partial) or inline UNIQUE constraints, or if foreign keys are violated. `npm run db:verify-schema` runs the same comparison against `ERP_DATA_DIR`.
@@ -49,6 +49,10 @@ flowchart LR
   - **System v7** (`membership_approval_controls`): adds per-membership `requires_approval` Maker-Checker enforcement toggle.
   - **Business v37** (`roadmap_pillars_1_2_3`): adds `show_on_pdf` on custom field definitions, UAE WPS employee/company fields (`mol_person_id`, `bank_routing_code`, `iban`, `mol_establishment_id`, `wps_bank_routing_code`), PDC clearing accounts & numbering settings, `saved_reports`, and `post_dated_cheques`.
   - **Business v38** (`38_settlement_date_indexes`): composite indexes on `receipts`, `supplier_payments`, and `sales_credit_notes` date/status columns for server-paginated queries.
+  - **Business v40** (`document_status_date_indexes`): `(document_status, date)` indexes on quotes, orders, delivery notes, goods receipts and debit notes; drops two journal indexes that were prefixes of composite ones.
+  - **Business v41** (`41_party_credit_allocations_and_refunds`): FX columns on credit-note allocations, `debit_note_allocations`, `customer_refunds`, `supplier_refunds`.
+  - **Business v42** (`gratuity_accruals`): monthly EOSB accrual runs and per-employee lines.
+  - **Business v43** (`foreign_currency_banking_and_fx_revaluation`): bank-currency amounts on journal lines, rates on bank transactions/transfers, `fx_revaluations` and lines.
   - **Business v39** (`statement_match_items`): `bank_statement_match_items`, one row per book entry matched to a statement line, so one bank deposit can clear several receipts (and vice versa).
 
 ---
@@ -78,9 +82,16 @@ flowchart LR
   - Quantities are stored in `*_micros` columns at the app quantity scale of 10,000 (4 decimal places, `QUANTITY_SCALE` in `src/modules/accounting/calculations/money.ts`; despite the column name this is not `1e-6`), paired with `decimal.js` (`decimal.js` `10.6.0`) primitives for exchange conversion, tax splitting, and proportional allocations.
 - **Double-Entry Integrity & Lock Dates**: All posted financial documents emit balanced journal entries ($\sum \text{Debits} = \sum \text{Credits}$), verified against GL reconciliation (`src/core/db/reconciliation.ts`). Financial and VAT lock dates guard backdated posting/voiding/edits.
 - **Multi-Currency FX**: Unified base-per-foreign conversion model with immutable posted snapshots and base currency fallback via `resolveBaseCurrencyCode()` ([currency-fallback.ts](../src/modules/reports/currency-fallback.ts)).
+  - **Foreign-currency bank accounts**: a bank account has a currency (fixed once used). Lines on a foreign bank ledger carry `currency_amount_minor` and `postTransaction` rejects them without it; the GL stays in base. Receipts/payments settle only their own currency from a foreign bank; cross-currency transfers take both amounts and post the difference to realized FX.
+  - **Unrealized FX revaluation** ([fx-revaluation-service.ts](../src/modules/accounting/services/fx-revaluation-service.ts), page `accounting/fx-revaluation`): revalues open foreign AR/AP documents, unapplied receipts/payments and foreign bank balances at chosen rates; one journal to Unrealized FX Gain/Loss with an automatic next-day reversal, so realized FX at settlement stays complete.
+- **Amending posted invoices** ([posting-amendment-service.ts](../src/modules/accounting/services/posting-amendment-service.ts)): editing a posted sales or purchase invoice marks the old journal and VAT rows `_superseded`, posts an `_amendment` reversal on the old date and reposts the new version; the activity log records before/after totals and line changes. Notes-only edits leave the ledger untouched. A total below the settled amount is refused.
+- **Reversals never predate the original**: `reverseTransaction` and `reverseTaxEntries` date a void on the later of today and the original date, so voiding a future-dated document stays in its own period.
+- **Credits and refunds** ([party-credit-service.ts](../src/modules/settlement/party-credit-service.ts)): a credit note can go up to the invoice total (also when fully paid); the excess stays as customer credit that can be applied to another invoice or refunded (`CRF-`/`SRF-` refunds, voidable). Debit notes settle bills through `debit_note_allocations`.
+- **Aging** ([aging-service.ts](../src/modules/reports/aging-service.ts)): AR/AP aging as of any date, with a tie-out row against the AR/AP control account balance at that date.
 - **UAE Regulatory & Compliance Features**:
   - **UAE VAT 201 & TRN Validation**: 15-digit UAE TRN checksum validation ([trn-validation.ts](../src/modules/tax/trn-validation.ts)), supply emirate attribution, reverse charge handling, VAT periods/adjustments/snapshots/audit trail, and FTA Audit File (**FAF**) export (`src/modules/tax/faf-service.ts`).
-  - **Payroll & WPS**: UAE EOSB gratuity computation, pay runs, payslips + GL posting, and MOHRE **WPS `.SIF`** file generation (`src/modules/payroll/services/wps-service.ts`).
+  - **Import VAT**: purchase lines with an import code are self-assessed like reverse charge (supplier owed the net; output VAT in VAT201 Box 6, recoverable input in Box 10). The VAT period page shows the VAT201 box view.
+  - **Payroll & WPS**: UAE EOSB gratuity computation, monthly gratuity accrual to an EOSB provision (`payroll/gratuity`; idempotent per month, drawn down by gratuity payslip lines), pay runs, payslips + GL posting, and MOHRE **WPS `.SIF`** file generation (`src/modules/payroll/services/wps-service.ts`).
   - **Treasury & Banking**: Bank rules auto-categorization, statement reconciliation, and Post-Dated Cheques (**PDC**) lifecycle (`held -> deposited -> cleared | bounced | cancelled`) with clearing GL accounts (`acct-pdc-receivable-1120`, `acct-pdc-payable-2020`).
   - **Migration**: Universal Manager.io `.manager` backup inspector and business importer (`src/modules/migration/manager-importer.ts`).
 
@@ -99,6 +110,8 @@ flowchart LR
   - Maintains a warm `puppeteer-core` browser singleton (defaults: 4 concurrent renders, overridden to 2 in production by `HTML_PDF_CONCURRENCY`; idle close after 60 s via an `.unref()` timer; recycle after 100 renders). The executable comes from `PUPPETEER_EXECUTABLE_PATH` or a system Chromium path; there is no bundled browser. In tests, [test-isolation.mjs](../scripts/test-isolation.mjs) falls back to Playwright's Chromium.
   - Each render opens an isolated incognito browser context with `page.setJavaScriptEnabled(false)`, aborts non-local network requests (`data:`/`about:`/`blob:` only), and enforces a `15_000ms` timeout.
 
+- **Worker threads** ([src/core/workers/](../src/core/workers/)): Manager.io import, backup snapshot/inspect/restore checks and batch PDF rendering run in worker threads (bundled by `scripts/build-workers.mjs` into `dist-workers/`, traced into the standalone output), so the main event loop stays responsive. Concurrency 1 by default (`ERP_WORKER_CONCURRENCY`), bounded queue (`ERP_WORKER_MAX_QUEUE`, 503 when full), timeouts and abort.
+- **Document engine** ([src/modules/documents/engine/](../src/modules/documents/engine/)): sales/purchase quotes and orders share `trade-document-engine.ts`; delivery notes and goods receipts share `stock-document-engine.ts` with per-document hooks for stock and COGS. Invoices, credit/debit notes, receipts and payments stay bespoke. A characterization snapshot test pins every DB write.
 - **Memory monitoring** ([memory-monitor.ts](../src/core/memory-monitor.ts), [instrumentation.ts](../src/instrumentation.ts)): reads the cgroup memory limit, samples RSS every 60 s and warns (log + Sentry) above 75%; `/api/health` includes the snapshot only for requests from inside the container.
 
 ---

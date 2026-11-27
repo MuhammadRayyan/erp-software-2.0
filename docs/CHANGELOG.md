@@ -4,6 +4,18 @@ All notable changes since the original `erp-software-2.0-antigravity-edits` uplo
 
 Full historical task detail is retained in [history/WORKLOG.md](history/WORKLOG.md) and the remaining point-in-time archive index in [history/README.md](history/README.md).
 
+## 2026-11-27 (Accounting gaps and architecture — schema v40–v43)
+
+- **Amending posted invoices**: edits reverse the original journal and VAT rows and repost (superseded/amendment entries), with before/after totals and line changes in the activity log; refused below the settled amount or in a locked period.
+- **Crediting paid documents and refunds**: credit/debit notes up to the document total; excess becomes party credit that can be applied to another invoice/bill or refunded (customer/supplier refunds, voidable). Debit notes settle bills via `debit_note_allocations`, which also fixes overpaying a bill already reduced by a debit note.
+- **Gratuity accrual**: monthly EOSB provision per employee (`Payroll → Gratuity Accruals`), idempotent per month, reversible, drawn down by gratuity payslip lines.
+- **Import VAT**: self-assessed (VAT201 Box 6 output, Box 10 input); supplier owed the net only. VAT201 box view on the VAT period page. Import invoices posted before this keep their old journals.
+- **Aging**: AR/AP aging as of a date with a tie-out against the GL control account.
+- **Foreign-currency bank accounts** and **unrealized FX revaluation** (`Accounting → FX Revaluation`, auto-reversing next day).
+- **Reversal dates**: a void never predates the original entry (voiding a future-dated document stays in its period).
+- **Architecture**: worker threads for Manager.io import, backup checks and batch PDFs; shared document engine for quotes, orders, delivery notes and goods receipts (characterization-tested); `server-only` on `src/core/db`; `drizzle-kit` and `drizzle/` removed; `(document_status, date)` indexes; `npm run check:schema` (tables, columns, indexes, UNIQUE) in CI; puppeteer-core preloaded after startup; literal cgroup paths so the standalone build no longer traces the whole project.
+- **Tests**: `phase-6` and `phase-9` now run all their tests (a top-level `await` after the first `test()` had cut them short); new tie-out, gratuity, import VAT, aging, FX banking/revaluation, worker offload and schema-sync suites (581 tests).
+
 ## 2026-11-26 (Platform, CI and security hardening — #40 to #46)
 
 - **Node 24 LTS and strict dependencies** (#42): Node `24.x` in `engines`, `.nvmrc`, CI and the `node:24-bookworm-slim` image (pinned by digest); `.npmrc` `legacy-peer-deps` removed. `puppeteer` replaced by `puppeteer-core` with Debian's `/usr/bin/chromium` (no browser download at install); `resolveBrowserExecutablePath()` fails with a clear error when no Chromium is found. Image size 1.74 → 1.54 GB (`COPY --chown` instead of a recursive `chown` layer; `APP_REVISION` declared after `npm ci` so the dependency layer stays cached).
