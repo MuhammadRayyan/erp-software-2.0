@@ -1,17 +1,24 @@
 "use server";
 
-import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { requirePermission, requireSavePermission } from "@/core/permissions/require-module";
 import { salesQuoteInputSchema } from "./quote-input";
-import { cancelSalesQuote, closeSalesQuote, deleteSalesQuote, getSalesQuote, issueSalesQuote, saveSalesQuote, type SalesQuoteIntent } from "./quote-service";
+import { cancelSalesQuote, closeSalesQuote, createSalesQuoteRevision, deleteSalesQuote, getSalesQuote, issueSalesQuote, saveSalesQuote, type SalesQuoteIntent } from "./quote-service";
 import { saveSalesOrder } from "@/modules/sales-orders/sales-order-service";
-
 import { getBusinessDb } from "@/core/db/business";
-import { getCurrency } from "@/modules/currency/currency";
+import { getBusinessTodayIso } from "@/core/format";
 import { formatZodFieldErrors } from "@/lib/zod-errors";
+import {
+  actionErrorMessage,
+  documentCurrencyMinorUnit,
+  exchangeRateToInput,
+  pricedLinesToInput,
+  revalidateDocumentPaths,
+} from "@/modules/documents/engine/document-action-helpers";
 
 export type SalesQuoteActionResult = { error?: string; fieldErrors?: Record<string, string[]> };
+
+const quotesPath = (businessId: string) => `/b/${businessId}/sales/quotes`;
 
 export async function saveSalesQuoteAction(
   businessId: string,
@@ -25,18 +32,16 @@ export async function saveSalesQuoteAction(
   if (!parsed.success) return { error: "Check the sales quote fields and lines.", fieldErrors: formatZodFieldErrors(parsed.error) };
   let id: string;
   try { id = saveSalesQuote(businessId, user.id, parsed.data, intent, quoteId ?? undefined); }
-  catch (error) { return { error: error instanceof Error ? error.message : "The sales quote could not be saved." }; }
+  catch (error) { return { error: actionErrorMessage(error, "The sales quote could not be saved.") }; }
   const notice = intent === "issue" ? "Sales quote issued" : "Draft saved";
-  revalidatePath(`/b/${businessId}/sales/quotes`);
-  if (quoteId) revalidatePath(`/b/${businessId}/sales/quotes/${quoteId}`);
-  revalidatePath(`/b/${businessId}/sales/quotes/${id}`);
+  revalidateDocumentPaths(quotesPath(businessId), quoteId, id);
   if (!quoteId && afterSave === "new") {
-    redirect(`/b/${businessId}/sales/quotes/new?notice=${encodeURIComponent(notice)}&fresh=${Date.now()}`);
+    redirect(`${quotesPath(businessId)}/new?notice=${encodeURIComponent(notice)}&fresh=${Date.now()}`);
   }
   if (afterSave === "email") {
-    redirect(`/b/${businessId}/sales/quotes/${id}?composeEmail=1&notice=${encodeURIComponent(notice)}`);
+    redirect(`${quotesPath(businessId)}/${id}?composeEmail=1&notice=${encodeURIComponent(notice)}`);
   }
-  redirect(`/b/${businessId}/sales/quotes/${id}?notice=${encodeURIComponent(notice)}`);
+  redirect(`${quotesPath(businessId)}/${id}?notice=${encodeURIComponent(notice)}`);
 }
 
 async function runStatusAction(businessId: string, quoteId: string, action: "close" | "cancel" | "delete") {
@@ -45,21 +50,19 @@ async function runStatusAction(businessId: string, quoteId: string, action: "clo
     if (action === "close") closeSalesQuote(businessId, user.id, quoteId);
     else if (action === "cancel") cancelSalesQuote(businessId, user.id, quoteId);
     else deleteSalesQuote(businessId, user.id, quoteId);
-    revalidatePath(`/b/${businessId}/sales/quotes`);
-    revalidatePath(`/b/${businessId}/sales/quotes/${quoteId}`);
+    revalidateDocumentPaths(quotesPath(businessId), quoteId);
     return {};
-  } catch (error) { return { error: error instanceof Error ? error.message : "The sales quote could not be updated." }; }
+  } catch (error) { return { error: actionErrorMessage(error, "The sales quote could not be updated.") }; }
 }
 
 export async function issueSalesQuoteAction(businessId: string, quoteId: string) {
   try {
     const { user } = await requirePermission(businessId, "sales", "approve");
     issueSalesQuote(businessId, user.id, quoteId);
-    revalidatePath(`/b/${businessId}/sales/quotes`);
-    revalidatePath(`/b/${businessId}/sales/quotes/${quoteId}`);
+    revalidateDocumentPaths(quotesPath(businessId), quoteId);
     return {};
   } catch (error) {
-    return { error: error instanceof Error ? error.message : "The sales quote could not be issued." };
+    return { error: actionErrorMessage(error, "The sales quote could not be issued.") };
   }
 }
 
@@ -76,12 +79,9 @@ export async function deleteSalesQuoteAction(businessId: string, quoteId: string
     await requirePermission(businessId, "sales", "delete");
     return runStatusAction(businessId, quoteId, "delete");
   } catch (error) {
-    return { error: error instanceof Error ? error.message : "The sales quote could not be deleted." };
+    return { error: actionErrorMessage(error, "The sales quote could not be deleted.") };
   }
 }
-
-import { quantityMicrosToInput } from "@/modules/accounting/calculations/money";
-import { getBusinessTodayIso, getCurrencyMinorUnit, minorToDecimalString } from "@/core/format";
 
 export async function convertSalesQuoteToOrderAction(businessId: string, quoteId: string) {
   const { user } = await requirePermission(businessId, "sales", "create");
@@ -95,69 +95,40 @@ export async function convertSalesQuoteToOrderAction(businessId: string, quoteId
       return { error: "This sales quote has already been converted to an order." };
     }
 
-    const input = {
-      customerId: quoteData.quote.customerId,
-      projectId: quoteData.quote.projectId || "",
-      amountsIncludeTax: quoteData.quote.amountsIncludeTax,
+    const { quote } = quoteData;
+    const orderId = saveSalesOrder(businessId, user.id, {
+      customerId: quote.customerId,
+      projectId: quote.projectId || "",
+      amountsIncludeTax: quote.amountsIncludeTax,
       date: getBusinessTodayIso(),
       expectedDate: "",
-      reference: quoteData.quote.quoteNumber,
+      reference: quote.quoteNumber,
       salesQuoteId: quoteId,
-      notes: quoteData.quote.notes || "",
-      terms: quoteData.quote.terms || "",
-      currencyCode: quoteData.quote.currencyCode,
-      exchangeRateToBase: String(quoteData.quote.exchangeRateToBase),
-      exchangeRateDate: quoteData.quote.exchangeRateDate || "",
-      exchangeRateSource: quoteData.quote.exchangeRateSource as "Manual" | "CBUAE" | "Base" || "Manual",
-      lines: quoteData.lines.map((l: any) => ({
-        itemId: l.itemId || "",
-        description: l.description,
-        quantity: quantityMicrosToInput(l.quantityMicros),
-        discountType: l.discountType || "none",
-        discountValue: l.discountValue || "0",
-        unitPrice: minorToDecimalString(l.unitPriceMinor, quoteData.quote.currencyCode),
-        salesAccountId: l.salesAccountId || "",
-        taxCodeId: l.taxCodeId || "",
-        projectId: l.projectId || "",
-      })),
-    };
-    
-    // Create draft order
-    const orderId = saveSalesOrder(businessId, user.id, input, "draft");
-    
-    // Automated Status Trigger: Mark quote as accepted
-    if (quoteData.quote.documentStatus === "sent") {
-      const { getBusinessDb } = await import("@/core/db/business");
-      const { salesQuotes } = await import("@/core/db/business-schema");
-      const { eq } = await import("drizzle-orm");
-      const context = getBusinessDb(businessId, user.id);
-      context.db.update(salesQuotes)
-        .set({ documentStatus: "accepted" })
-        .where(eq(salesQuotes.id, quoteId))
-        .run();
-    }
-    
-    revalidatePath(`/b/${businessId}/sales/quotes`);
-    revalidatePath(`/b/${businessId}/sales/quotes/${quoteId}`);
-    revalidatePath(`/b/${businessId}/sales/orders`);
-    revalidatePath(`/b/${businessId}/sales/orders/${orderId}`);
+      notes: quote.notes || "",
+      terms: quote.terms || "",
+      ...exchangeRateToInput(quote, "Manual"),
+      lines: pricedLinesToInput(quoteData.lines, quote.currencyCode, "salesAccountId"),
+    }, "draft");
+
+    // Automated status trigger: the converted quote is accepted.
+    getBusinessDb(businessId, user.id).sqlite.prepare("UPDATE sales_quotes SET document_status = ? WHERE id = ?").run("accepted", quoteId);
+
+    revalidateDocumentPaths(quotesPath(businessId), quoteId);
+    revalidateDocumentPaths(`/b/${businessId}/sales/orders`, orderId);
     return { orderId };
   } catch (error) {
-    return { error: error instanceof Error ? error.message : "Failed to convert quote." };
+    return { error: actionErrorMessage(error, "Failed to convert quote.") };
   }
 }
 
 export async function createSalesQuoteRevisionAction(businessId: string, quoteId: string) {
   const { user } = await requirePermission(businessId, "sales", "create");
   try {
-    const { createSalesQuoteRevision } = await import("./quote-service");
     const newQuoteId = createSalesQuoteRevision(businessId, user.id, quoteId);
-    revalidatePath(`/b/${businessId}/sales/quotes`);
-    revalidatePath(`/b/${businessId}/sales/quotes/${quoteId}`);
-    revalidatePath(`/b/${businessId}/sales/quotes/${newQuoteId}`);
+    revalidateDocumentPaths(quotesPath(businessId), quoteId, newQuoteId);
     return { quoteId: newQuoteId };
   } catch (error) {
-    return { error: error instanceof Error ? error.message : "Failed to create quote revision." };
+    return { error: actionErrorMessage(error, "Failed to create quote revision.") };
   }
 }
 
@@ -167,45 +138,23 @@ export async function duplicateSalesQuoteAction(businessId: string, quoteId: str
   try {
     const quoteData = getSalesQuote(businessId, user.id, quoteId);
     if (!quoteData) return { error: "Sales quote not found." };
-    const { sqlite } = getBusinessDb(businessId, user.id);
-    let minorUnit = getCurrencyMinorUnit(quoteData.quote.currencyCode);
-    try {
-      minorUnit = getCurrency(sqlite, quoteData.quote.currencyCode, false).minor_unit;
-    } catch {
-      // fallback to knownMinorUnits
-    }
-    const today = getBusinessTodayIso();
-    const input = {
-      customerId: quoteData.quote.customerId,
-      projectId: quoteData.quote.projectId || "",
-      amountsIncludeTax: Boolean(quoteData.quote.amountsIncludeTax),
-      date: today,
+    const { quote } = quoteData;
+    const minorUnit = documentCurrencyMinorUnit(getBusinessDb(businessId, user.id).sqlite, quote.currencyCode);
+    newQuoteId = saveSalesQuote(businessId, user.id, {
+      customerId: quote.customerId,
+      projectId: quote.projectId || "",
+      amountsIncludeTax: Boolean(quote.amountsIncludeTax),
+      date: getBusinessTodayIso(),
       expectedDate: "",
-      reference: quoteData.quote.reference || "",
-      notes: quoteData.quote.notes || "",
-      terms: quoteData.quote.terms || "",
-      currencyCode: quoteData.quote.currencyCode,
-      exchangeRateToBase: String(quoteData.quote.exchangeRateToBase),
-      exchangeRateDate: quoteData.quote.exchangeRateDate || "",
-      exchangeRateSource: (quoteData.quote.exchangeRateSource as "Manual" | "CBUAE" | "Base") || "Base",
-      lines: quoteData.lines.map((l: any) => ({
-        itemId: l.itemId || "",
-        description: l.description,
-        quantity: quantityMicrosToInput(l.quantityMicros),
-        discountType: l.discountType || "none",
-        discountValue: l.discountValue || "0",
-        unitPrice: minorToDecimalString(l.unitPriceMinor, quoteData.quote.currencyCode, minorUnit),
-        salesAccountId: l.salesAccountId || "",
-        taxCodeId: l.taxCodeId || "",
-        projectId: l.projectId || "",
-        customFields: l.customFields ?? {},
-      })),
-    };
-    newQuoteId = saveSalesQuote(businessId, user.id, input, "draft");
+      reference: quote.reference || "",
+      notes: quote.notes || "",
+      terms: quote.terms || "",
+      ...exchangeRateToInput(quote, "Base"),
+      lines: pricedLinesToInput(quoteData.lines, quote.currencyCode, "salesAccountId", { minorUnit, customFields: true }),
+    }, "draft");
   } catch (error) {
-    return { error: error instanceof Error ? error.message : "The sales quote could not be duplicated." };
+    return { error: actionErrorMessage(error, "The sales quote could not be duplicated.") };
   }
-  revalidatePath(`/b/${businessId}/sales/quotes`);
-  revalidatePath(`/b/${businessId}/sales/quotes/${newQuoteId}`);
-  redirect(`/b/${businessId}/sales/quotes/${newQuoteId}?notice=Sales quote duplicated as draft`);
+  revalidateDocumentPaths(quotesPath(businessId), newQuoteId);
+  redirect(`${quotesPath(businessId)}/${newQuoteId}?notice=Sales quote duplicated as draft`);
 }

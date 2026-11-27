@@ -4,13 +4,23 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { requireSavePermission, requirePermission } from "@/core/permissions/require-module";
 import { purchaseOrderInputSchema } from "./purchase-order-input";
-import { cancelPurchaseOrder, closePurchaseOrder, deletePurchaseOrder, getPurchaseOrder, issuePurchaseOrder, savePurchaseOrder, type PurchaseOrderIntent } from "./purchase-order-service";
-
+import { cancelPurchaseOrder, closePurchaseOrder, createPurchaseOrderRevision, deletePurchaseOrder, getPurchaseOrder, issuePurchaseOrder, savePurchaseOrder, type PurchaseOrderIntent } from "./purchase-order-service";
+import { savePurchaseInvoice } from "@/modules/purchase-invoices/purchase-invoice-service";
 import { getBusinessDb } from "@/core/db/business";
-import { getCurrency } from "@/modules/currency/currency";
+import { getBusinessTodayIso } from "@/core/format";
 import { formatZodFieldErrors } from "@/lib/zod-errors";
+import { addDaysIso } from "@/modules/tax/uae-vat-config";
+import {
+  actionErrorMessage,
+  documentCurrencyMinorUnit,
+  exchangeRateToInput,
+  pricedLinesToInput,
+  revalidateDocumentPaths,
+} from "@/modules/documents/engine/document-action-helpers";
 
 export type PurchaseOrderActionResult = { error?: string; fieldErrors?: Record<string, string[]> };
+
+const ordersPath = (businessId: string) => `/b/${businessId}/purchases/orders`;
 
 export async function savePurchaseOrderAction(businessId: string, orderId: string | null, input: unknown, intent: PurchaseOrderIntent): Promise<PurchaseOrderActionResult> {
   const { user } = await requireSavePermission(businessId, "purchases", orderId, intent);
@@ -18,7 +28,7 @@ export async function savePurchaseOrderAction(businessId: string, orderId: strin
   if (!parsed.success) return { error: "Check the purchase order fields and lines.", fieldErrors: formatZodFieldErrors(parsed.error) };
   let id: string;
   try { id = savePurchaseOrder(businessId, user.id, parsed.data, intent, orderId ?? undefined); }
-  catch (error) { return { error: error instanceof Error ? error.message : "The purchase order could not be saved." }; }
+  catch (error) { return { error: actionErrorMessage(error, "The purchase order could not be saved.") }; }
   const saved = getPurchaseOrder(businessId, user.id, id);
   const status = saved?.order.status;
   const notice =
@@ -27,12 +37,10 @@ export async function savePurchaseOrderAction(businessId: string, orderId: strin
       : status === "issued"
         ? "Purchase order issued"
         : "Draft saved";
-  revalidatePath(`/b/${businessId}/purchases/orders`);
-  if (orderId) revalidatePath(`/b/${businessId}/purchases/orders/${orderId}`);
-  revalidatePath(`/b/${businessId}/purchases/orders/${id}`);
+  revalidateDocumentPaths(ordersPath(businessId), orderId, id);
   revalidatePath(`/b/${businessId}/approvals`);
   revalidatePath(`/b/${businessId}/overview`);
-  redirect(`/b/${businessId}/purchases/orders/${id}?notice=${encodeURIComponent(notice)}`);
+  redirect(`${ordersPath(businessId)}/${id}?notice=${encodeURIComponent(notice)}`);
 }
 
 async function runStatusAction(businessId: string, orderId: string, action: "close" | "cancel" | "delete") {
@@ -41,10 +49,9 @@ async function runStatusAction(businessId: string, orderId: string, action: "clo
     if (action === "close") closePurchaseOrder(businessId, user.id, orderId);
     else if (action === "cancel") cancelPurchaseOrder(businessId, user.id, orderId);
     else deletePurchaseOrder(businessId, user.id, orderId);
-    revalidatePath(`/b/${businessId}/purchases/orders`);
-    revalidatePath(`/b/${businessId}/purchases/orders/${orderId}`);
+    revalidateDocumentPaths(ordersPath(businessId), orderId);
     return {};
-  } catch (error) { return { error: error instanceof Error ? error.message : "The purchase order could not be updated." }; }
+  } catch (error) { return { error: actionErrorMessage(error, "The purchase order could not be updated.") }; }
 }
 
 export async function issuePurchaseOrderAction(
@@ -58,13 +65,12 @@ export async function issuePurchaseOrderAction(
   }
   try {
     const status = issuePurchaseOrder(businessId, user.id, orderId, intent);
-    revalidatePath(`/b/${businessId}/purchases/orders`);
-    revalidatePath(`/b/${businessId}/purchases/orders/${orderId}`);
+    revalidateDocumentPaths(ordersPath(businessId), orderId);
     revalidatePath(`/b/${businessId}/approvals`);
     revalidatePath(`/b/${businessId}/overview`);
     return { status };
   } catch (error) {
-    return { error: error instanceof Error ? error.message : "The purchase order could not be issued." };
+    return { error: actionErrorMessage(error, "The purchase order could not be issued.") };
   }
 }
 
@@ -80,12 +86,6 @@ export async function deletePurchaseOrderAction(businessId: string, orderId: str
   return runStatusAction(businessId, orderId, "delete");
 }
 
-import { savePurchaseInvoice } from "@/modules/purchase-invoices/purchase-invoice-service";
-
-import { quantityMicrosToInput } from "@/modules/accounting/calculations/money";
-import { getBusinessTodayIso, getCurrencyMinorUnit, minorToDecimalString } from "@/core/format";
-import { addDaysIso } from "@/modules/tax/uae-vat-config";
-
 export async function convertPurchaseOrderToInvoiceAction(businessId: string, orderId: string) {
   const { user } = await requirePermission(businessId, "purchases", "create");
   try {
@@ -98,74 +98,47 @@ export async function convertPurchaseOrderToInvoiceAction(businessId: string, or
       return { error: "This purchase order has already been converted to an invoice." };
     }
 
+    const { order } = orderData;
     const today = getBusinessTodayIso();
     const rawTerms = orderData.supplier?.paymentTermsDays;
     const daysToAdd = (rawTerms !== null && rawTerms !== undefined) ? Number(rawTerms) : 30;
     const dueDate = addDaysIso(getBusinessTodayIso(), daysToAdd);
 
-    const input = {
-      supplierId: orderData.order.supplierId,
-      projectId: orderData.order.projectId || "",
-      amountsIncludeTax: orderData.order.amountsIncludeTax,
-      supplierInvoiceNumber: `INV-${orderData.order.orderNumber}`,
+    const invoiceId = savePurchaseInvoice(businessId, user.id, {
+      supplierId: order.supplierId,
+      projectId: order.projectId || "",
+      amountsIncludeTax: order.amountsIncludeTax,
+      supplierInvoiceNumber: `INV-${order.orderNumber}`,
       invoiceDate: today,
       taxDate: today,
-      dueDate, 
-      reference: orderData.order.orderNumber,
+      dueDate,
+      reference: order.orderNumber,
       purchaseOrderId: orderId,
-      notes: orderData.order.notes || "",
-      terms: orderData.order.terms || "",
-      currencyCode: orderData.order.currencyCode,
-      exchangeRateToBase: String(orderData.order.exchangeRateToBase),
-      exchangeRateDate: orderData.order.exchangeRateDate || "",
-      exchangeRateSource: (orderData.order.exchangeRateSource || "Manual") as "Base" | "Manual" | "CBUAE",
-      lines: orderData.lines.map((l: any) => ({
-        itemId: l.itemId || "",
-        description: l.description,
-        quantity: quantityMicrosToInput(l.quantityMicros),
-        discountType: l.discountType || "none",
-        discountValue: l.discountValue || "0",
-        unitPrice: minorToDecimalString(l.unitPriceMinor, orderData.order.currencyCode),
-        expenseAccountId: l.expenseAccountId || "",
-        taxCodeId: l.taxCodeId || "",
-        projectId: l.projectId || "",
-      })),
-    };
-    
-    const invoiceId = savePurchaseInvoice(businessId, user.id, input, "draft");
+      notes: order.notes || "",
+      terms: order.terms || "",
+      ...exchangeRateToInput(order, "Manual"),
+      lines: pricedLinesToInput(orderData.lines, order.currencyCode, "expenseAccountId"),
+    }, "draft");
 
-    // Automated Status Trigger: Mark purchase order as closed
-    const { getBusinessDb } = await import("@/core/db/business");
-    const { purchaseOrders } = await import("@/core/db/business-schema");
-    const { eq } = await import("drizzle-orm");
-    const context = getBusinessDb(businessId, user.id);
-    context.db.update(purchaseOrders)
-      .set({ status: "closed" })
-      .where(eq(purchaseOrders.id, orderId))
-      .run();
+    // Automated status trigger: the invoiced purchase order is closed.
+    getBusinessDb(businessId, user.id).sqlite.prepare("UPDATE purchase_orders SET status = ? WHERE id = ?").run("closed", orderId);
 
-    revalidatePath(`/b/${businessId}/purchases/orders`);
-    revalidatePath(`/b/${businessId}/purchases/orders/${orderId}`);
-    revalidatePath(`/b/${businessId}/purchases/invoices`);
-    revalidatePath(`/b/${businessId}/purchases/invoices/${invoiceId}`);
+    revalidateDocumentPaths(ordersPath(businessId), orderId);
+    revalidateDocumentPaths(`/b/${businessId}/purchases/invoices`, invoiceId);
     return { invoiceId };
   } catch (error) {
-    return { error: error instanceof Error ? error.message : "Failed to convert purchase order." };
+    return { error: actionErrorMessage(error, "Failed to convert purchase order.") };
   }
-
-
 }
 
 export async function createPurchaseOrderRevisionAction(businessId: string, orderId: string) {
   const { user } = await requirePermission(businessId, "purchases", "create");
   try {
-    const { createPurchaseOrderRevision } = await import("./purchase-order-service");
     const newOrderId = createPurchaseOrderRevision(businessId, user.id, orderId);
-    revalidatePath(`/b/${businessId}/purchases/orders`);
-    revalidatePath(`/b/${businessId}/purchases/orders/${orderId}`);
+    revalidateDocumentPaths(ordersPath(businessId), orderId);
     return { orderId: newOrderId };
   } catch (error) {
-    return { error: error instanceof Error ? error.message : "Failed to create order revision." };
+    return { error: actionErrorMessage(error, "Failed to create order revision.") };
   }
 }
 
@@ -175,46 +148,24 @@ export async function duplicatePurchaseOrderAction(businessId: string, orderId: 
   try {
     const orderData = getPurchaseOrder(businessId, user.id, orderId);
     if (!orderData) return { error: "Purchase order not found." };
-    const { sqlite } = getBusinessDb(businessId, user.id);
-    let minorUnit = getCurrencyMinorUnit(orderData.order.currencyCode);
-    try {
-      minorUnit = getCurrency(sqlite, orderData.order.currencyCode, false).minor_unit;
-    } catch {
-      // fallback to knownMinorUnits
-    }
-    const today = getBusinessTodayIso();
-    const input = {
-      supplierId: orderData.order.supplierId,
-      projectId: orderData.order.projectId || "",
-      amountsIncludeTax: Boolean(orderData.order.amountsIncludeTax),
-      date: today,
+    const { order } = orderData;
+    const minorUnit = documentCurrencyMinorUnit(getBusinessDb(businessId, user.id).sqlite, order.currencyCode);
+    newOrderId = savePurchaseOrder(businessId, user.id, {
+      supplierId: order.supplierId,
+      projectId: order.projectId || "",
+      amountsIncludeTax: Boolean(order.amountsIncludeTax),
+      date: getBusinessTodayIso(),
       expectedDate: "",
-      reference: orderData.order.purchaseQuoteId ? "" : (orderData.order.reference || ""),
+      reference: order.purchaseQuoteId ? "" : (order.reference || ""),
       purchaseQuoteId: "",
-      notes: orderData.order.notes || "",
-      terms: orderData.order.terms || "",
-      currencyCode: orderData.order.currencyCode,
-      exchangeRateToBase: String(orderData.order.exchangeRateToBase),
-      exchangeRateDate: orderData.order.exchangeRateDate || "",
-      exchangeRateSource: (orderData.order.exchangeRateSource as "Manual" | "CBUAE" | "Base") || "Base",
-      lines: orderData.lines.map((l: any) => ({
-        itemId: l.itemId || "",
-        description: l.description,
-        quantity: quantityMicrosToInput(l.quantityMicros),
-        discountType: l.discountType || "none",
-        discountValue: l.discountValue || "0",
-        unitPrice: minorToDecimalString(l.unitPriceMinor, orderData.order.currencyCode, minorUnit),
-        expenseAccountId: l.expenseAccountId || "",
-        taxCodeId: l.taxCodeId || "",
-        projectId: l.projectId || "",
-        customFields: l.customFields ?? {},
-      })),
-    };
-    newOrderId = savePurchaseOrder(businessId, user.id, input, "draft");
+      notes: order.notes || "",
+      terms: order.terms || "",
+      ...exchangeRateToInput(order, "Base"),
+      lines: pricedLinesToInput(orderData.lines, order.currencyCode, "expenseAccountId", { minorUnit, customFields: true }),
+    }, "draft");
   } catch (error) {
-    return { error: error instanceof Error ? error.message : "The purchase order could not be duplicated." };
+    return { error: actionErrorMessage(error, "The purchase order could not be duplicated.") };
   }
-  revalidatePath(`/b/${businessId}/purchases/orders`);
-  revalidatePath(`/b/${businessId}/purchases/orders/${newOrderId}`);
-  redirect(`/b/${businessId}/purchases/orders/${newOrderId}?notice=Purchase order duplicated as draft`);
+  revalidateDocumentPaths(ordersPath(businessId), newOrderId);
+  redirect(`${ordersPath(businessId)}/${newOrderId}?notice=Purchase order duplicated as draft`);
 }
