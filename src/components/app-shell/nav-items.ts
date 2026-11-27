@@ -20,6 +20,7 @@ import {
   SlidersHorizontal,
   Users,
   Calculator,
+  Coins,
   ListChecks,
   ShieldCheck,
 } from "lucide-react";
@@ -91,6 +92,7 @@ export const primaryNav: { label?: string; items: NavItem[] }[] = [
       { label: "Chart of Accounts", path: "/accounting/chart-of-accounts", icon: BookOpenText, module: "accounting" },
       { label: "Journal", path: "/accounting/journal", icon: Scale, module: "accounting" },
       { label: "Find & Recode", path: "/accounting/find-and-recode", icon: SlidersHorizontal, module: "accounting" },
+      { label: "FX Revaluation", path: "/accounting/fx-revaluation", icon: Coins, module: "accounting" },
     ],
   },
   {

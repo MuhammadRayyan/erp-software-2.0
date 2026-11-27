@@ -34,7 +34,8 @@ import {
 import { FieldError } from "@/components/ui/field-error";
 import { fieldErrorProps, fieldErrorId, focusFirstInvalidField } from "@/lib/form-errors";
 
-export type SettlementOption = { id: string; name: string };
+/** `currencyCode` is set for foreign-currency bank accounts, which only settle their own currency. */
+export type SettlementOption = { id: string; name: string; currencyCode?: string | null };
 
 export type SettlementFormValues = {
   counterpartyId: string;
@@ -294,10 +295,19 @@ export function SettlementAllocationForm({
     [counterpartyList],
   );
 
+  // Base-currency accounts settle any currency; a foreign-currency account only its own.
   const bankOptions = useMemo<ComboboxOption[]>(
-    () => bankAccounts.map((a) => ({ value: a.id, label: a.name })),
-    [bankAccounts],
+    () => bankAccounts
+      .filter((a) => !a.currencyCode || a.currencyCode === currencyCode)
+      .map((a) => ({ value: a.id, label: a.currencyCode ? `${a.name} · ${a.currencyCode}` : a.name })),
+    [bankAccounts, currencyCode],
   );
+  const selectedBankAccountId = useWatch({ control, name: "bankAccountId" });
+  useEffect(() => {
+    if (selectedBankAccountId && !bankOptions.some((option) => option.value === selectedBankAccountId)) {
+      setValue("bankAccountId", bankOptions[0]?.value ?? "", { shouldDirty: true });
+    }
+  }, [bankOptions, selectedBankAccountId, setValue]);
 
   const filteredDocuments = useMemo(
     () =>

@@ -84,9 +84,9 @@ export function getAllBankTransactionsReport(
     ? [filters.bankAccountId]
     : (sqlite.prepare("SELECT id FROM bank_accounts ORDER BY name").all() as { id: string }[]).map((row) => row.id);
   return accounts.flatMap((accountId) => {
-    const account = sqlite.prepare("SELECT name FROM bank_accounts WHERE id = ?").get(accountId) as { name: string } | undefined;
+    const account = sqlite.prepare("SELECT name, currency_code FROM bank_accounts WHERE id = ?").get(accountId) as { name: string; currency_code: string } | undefined;
     return getBankTransactionHistory(businessId, userId, accountId, filters)
-      .map((row) => ({ ...row, bank_account_id: accountId, bank_account_name: account?.name ?? "" }));
+      .map((row) => ({ ...row, bank_account_id: accountId, bank_account_name: account?.name ?? "", currency_code: account?.currency_code ?? "" }));
   }).sort((a, b) => b.date.localeCompare(a.date) || b.entry_number.localeCompare(a.entry_number));
 }
 

@@ -70,7 +70,7 @@ export default async function NewReceiptPage({
           currencyCode: invoice.currencyCode,
           minorUnit: currencyMinorUnits.get(invoice.currencyCode) ?? 2,
         }))}
-        bankAccounts={bankAccounts.map(({ id, name }) => ({ id, name }))}
+        bankAccounts={bankAccounts.map(({ id, name, currencyCode }) => ({ id, name, currencyCode: currencyCode === access.business.currency ? null : currencyCode }))}
         initial={{
           customerId,
           invoiceId,

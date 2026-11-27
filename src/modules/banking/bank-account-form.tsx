@@ -18,10 +18,15 @@ import { FieldError } from "@/components/ui/field-error";
 import { fieldErrorProps, fieldErrorId, applyServerFieldErrors, focusFirstInvalidField } from "@/lib/form-errors";
 
 
-export function BankAccountForm({ businessId, accountId, ledgerAccounts, initial }: {
+export function BankAccountForm({ businessId, accountId, ledgerAccounts, initial, currencies, baseCurrency, currencyLocked = false }: {
   businessId: string; accountId?: string;
   ledgerAccounts: { id: string;  name: string; subtype: "bank" | "cash"; available: number }[];
   initial: BankAccountInput;
+  /** Enabled currencies the account can be kept in. */
+  currencies: { code: string; name: string }[];
+  baseCurrency: string;
+  /** The currency is fixed once the account has transactions. */
+  currencyLocked?: boolean;
 }) {
   const [serverError, setServerError] = useState("");
   const form = useForm<BankAccountInput>({
@@ -35,6 +40,11 @@ export function BankAccountForm({ businessId, accountId, ledgerAccounts, initial
   const { register, control, handleSubmit, setValue, setError, formState: { errors, isSubmitting, isDirty, isSubmitSuccessful } } = form;
   useUnsavedChanges(isDirty && !isSubmitSuccessful);
   const isCash = useWatch({ control, name: "isCashAccount" });
+  const currencyCode = useWatch({ control, name: "currencyCode" });
+  const currencyOptions = currencies.map((currency) => ({
+    value: currency.code,
+    label: `${currency.code} · ${currency.name}${currency.code === baseCurrency ? " (base)" : ""}`,
+  }));
   const mappedLedgerOptions = ledgerAccounts
     .filter((ledger) => ledger.available && (isCash ? ledger.subtype === "cash" : ledger.subtype === "bank"))
     .map((ledger) => ({ value: ledger.id, label: ledger.name }));
@@ -55,7 +65,15 @@ export function BankAccountForm({ businessId, accountId, ledgerAccounts, initial
           <div className="space-y-1.5"><Label htmlFor="accountNumberMasked">Masked account number <span className="font-normal text-muted-foreground">(optional)</span></Label><Input id="accountNumberMasked" placeholder="•••• 1234" {...register("accountNumberMasked")} /></div>
         </>
       )}
-      <div className="space-y-1.5"><Label htmlFor="currencyCode">Currency</Label><Input id="currencyCode" readOnly className="bg-surface-muted" {...register("currencyCode")} /></div>
+      <div className="space-y-1.5"><Label htmlFor="currencyCode">Currency</Label>{currencyLocked
+        ? <Input id="currencyCode" readOnly className="bg-surface-muted" {...register("currencyCode")} />
+        : <Controller control={control} name="currencyCode" render={({ field }) => <Combobox ref={field.ref} id="currencyCode" ariaLabel="Currency" options={currencyOptions} value={field.value ?? ""} onValueChange={field.onChange} placeholder="Choose currency" searchPlaceholder="Search currency..." />} />}
+        <p className="text-xs text-muted-foreground">{currencyLocked
+          ? "The currency cannot change once the account has transactions."
+          : currencyCode && currencyCode !== baseCurrency
+            ? `Amounts are kept in ${currencyCode}; the ledger stays in ${baseCurrency}. Map it to a Bank ledger with no entries.`
+            : "Fixed once the account has transactions."}</p>
+        <FieldError name="currencyCode" message={errors.currencyCode?.message} /></div>
       <div className="space-y-1.5"><Label htmlFor="ledgerAccountId">Mapped GL account</Label><Controller control={control} name="ledgerAccountId" render={({ field }) => <Combobox ref={field.ref} id="ledgerAccountId" ariaLabel="Mapped GL account" ariaInvalid={!!errors.ledgerAccountId} ariaDescribedBy={errors.ledgerAccountId ? fieldErrorId("ledgerAccountId") : undefined} options={mappedLedgerOptions} value={field.value ?? ""} onValueChange={field.onChange} placeholder="Choose account" searchPlaceholder="Search ledger account..." />} /><FieldError name="ledgerAccountId" message={errors.ledgerAccountId?.message} /></div>
     </div></section>
     <div className="flex flex-wrap gap-5"><label className="flex items-center gap-2 text-sm cursor-pointer select-none"><Controller control={control} name="isCashAccount" render={({ field }) => <Checkbox checked={Boolean(field.value)} onCheckedChange={(c) => { const next = Boolean(c); field.onChange(next); if (next) { setValue("bankName", "", { shouldDirty: true }); setValue("accountNumberMasked", "", { shouldDirty: true }); } }} aria-label="Cash account" />} /> Cash account</label><label className="flex items-center gap-2 text-sm cursor-pointer select-none"><Controller control={control} name="isActive" render={({ field }) => <Checkbox checked={Boolean(field.value)} onCheckedChange={(c) => field.onChange(Boolean(c))} aria-label="Active" />} /> Active</label></div>

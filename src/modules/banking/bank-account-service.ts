@@ -175,6 +175,19 @@ export function saveBankAccount(
   return id;
 }
 
+/** True once the account (or its ledger) has entries, after which its currency is fixed. */
+export function isBankAccountCurrencyLocked(businessId: string, userId: string, bankAccountId: string) {
+  const { sqlite } = getBusinessDb(businessId, userId);
+  return Boolean(sqlite.prepare(`
+    SELECT 1 FROM bank_accounts ba WHERE ba.id = ? AND (
+      EXISTS (SELECT 1 FROM journal_lines jl WHERE jl.account_id = ba.ledger_account_id)
+      OR EXISTS (SELECT 1 FROM bank_transactions bt WHERE bt.bank_account_id = ba.id)
+      OR EXISTS (SELECT 1 FROM bank_statement_imports bsi WHERE bsi.bank_account_id = ba.id)
+      OR EXISTS (SELECT 1 FROM post_dated_cheques p WHERE p.bank_account_id = ba.id)
+    )
+  `).get(bankAccountId));
+}
+
 export function bankAccountToInput(account: BankAccountRow): BankAccountInput {
   return {
     name: account.name,
