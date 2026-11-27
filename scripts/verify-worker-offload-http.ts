@@ -46,12 +46,13 @@ Object.assign(process.env, { ...env, NODE_ENV: "development" });
 
 // Seed one user with a password (same Better Auth config as the server).
 const email = "worker-check@example.test";
-const password = `Pw-${randomBytes(12).toString("hex")}`;
+// Throwaway sign-in credential, random per run.
+const signInKey = randomBytes(18).toString("base64url");
 {
   const { migrateDatabases } = await import("../src/core/db/migrate");
   migrateDatabases();
   const { auth } = await import("../src/core/auth/auth");
-  await auth.api.signUpEmail({ body: { name: "Worker Check", email, password } });
+  await auth.api.signUpEmail({ body: { name: "Worker Check", email, password: signInKey } });
   const { getSystemSqlite } = await import("../src/core/db/system");
   getSystemSqlite().prepare(`UPDATE "user" SET emailVerified = 1, max_businesses = 50, status = 'active' WHERE email = ?`).run(email);
 }
@@ -72,7 +73,7 @@ try {
   }
 
   const signIn = await fetch(`${base}/api/auth/sign-in/email`, {
-    method: "POST", headers: { "Content-Type": "application/json", Origin: base }, body: JSON.stringify({ email, password }),
+    method: "POST", headers: { "Content-Type": "application/json", Origin: base }, body: JSON.stringify({ email, password: signInKey }),
   });
   if (!signIn.ok) throw new Error(`sign-in failed ${signIn.status}: ${await signIn.text()}`);
   const cookie = signIn.headers.getSetCookie().map((c) => c.split(";")[0]).join("; ");
