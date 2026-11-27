@@ -10,7 +10,7 @@ type PostedDebitNoteLine = { expenseAccountId: string; taxCodeId: string; projec
 
 export function buildJournalForDebitNote(sqlite: Database.Database, note: PostedDebitNote, noteLines: PostedDebitNoteLine[]) {
   const convertedLines = convertDocumentLinesToBase(noteLines, note.rate).lines;
-  const settings = sqlite.prepare(`SELECT accounts_payable_account_id, input_vat_account_id FROM business_accounting_settings WHERE id = 'default'`).get() as { accounts_payable_account_id: string; input_vat_account_id: string } | undefined;
+  const settings = sqlite.prepare(`SELECT accounts_payable_account_id, input_vat_account_id, vat_output_account_id FROM business_accounting_settings WHERE id = 'default'`).get() as { accounts_payable_account_id: string; input_vat_account_id: string; vat_output_account_id: string | null } | undefined;
   if (!settings?.accounts_payable_account_id) throw new Error("Accounts Payable account is not configured.");
   if (!settings.input_vat_account_id) throw new Error("Input VAT account is not configured.");
   const taxRows = sqlite.prepare("SELECT id, vat_category, is_recoverable, sales_tax_account_id, purchase_tax_account_id FROM tax_codes").all() as { id: string; vat_category: string | null; is_recoverable: number; sales_tax_account_id: string | null; purchase_tax_account_id: string | null }[];
@@ -18,6 +18,7 @@ export function buildJournalForDebitNote(sqlite: Database.Database, note: Posted
   const expenseCredits = new Map<string, ProjectAmount>();
   const taxCredits = new Map<string, number>();
   const taxDebits = new Map<string, number>(); // For reverse-charge
+  const importDebits = new Map<string, number>(); // Self-assessed Import VAT reversed
   for (const line of convertedLines) {
     if (!line.expenseAccountId) throw new Error("Debit note line has no expense account.");
     const taxCode = taxById.get(line.taxCodeId);
@@ -33,6 +34,11 @@ export function buildJournalForDebitNote(sqlite: Database.Database, note: Posted
         if (!taxCode.sales_tax_account_id) throw new Error("Output VAT account is not configured for Reverse Charge.");
         addAmount(taxDebits, taxCode.sales_tax_account_id, line.baseTaxAmountMinor);
       }
+      if (taxCode?.vat_category === "import") {
+        const outputAccountId = taxCode.sales_tax_account_id ?? settings.vat_output_account_id;
+        if (!outputAccountId) throw new Error("Output VAT account is not configured for Import VAT.");
+        addAmount(importDebits, outputAccountId, line.baseTaxAmountMinor);
+      }
     }
   }
   const lines: JournalLineInput[] = [];
@@ -42,6 +48,7 @@ export function buildJournalForDebitNote(sqlite: Database.Database, note: Posted
   for (const { accountId, projectId, amountMinor: creditMinor } of expenseCredits.values()) if (creditMinor > 0) lines.push({ accountId, description: `Refund/Return for ${note.debitNoteNumber}`, creditMinor, supplierId: note.supplierId, projectId, reference: note.debitNoteNumber });
   for (const [accountId, creditMinor] of taxCredits) if (creditMinor > 0) lines.push({ accountId, description: `Input VAT Reversed for ${note.debitNoteNumber}`, creditMinor, supplierId: note.supplierId, reference: note.debitNoteNumber });
   for (const [accountId, debitMinor] of taxDebits) if (debitMinor > 0) lines.push({ accountId, description: `Reverse-Charge Output VAT Reversed for ${note.debitNoteNumber}`, debitMinor, supplierId: note.supplierId, reference: note.debitNoteNumber });
+  for (const [accountId, debitMinor] of importDebits) if (debitMinor > 0) lines.push({ accountId, description: `Import VAT Reversed for ${note.debitNoteNumber}`, debitMinor, supplierId: note.supplierId, reference: note.debitNoteNumber });
   
   return lines;
 }

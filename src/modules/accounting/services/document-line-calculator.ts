@@ -2,6 +2,7 @@ import type { BaseStoredLine } from "@/modules/documents/document-types";
 
 import { addMinor, calculateTax, multiplyMoneyByQuantity, parseQuantityToMicros, splitTaxInclusive, calculateDiscount } from "@/modules/accounting/calculations/money";
 import { parseCurrencyAmountToMinor } from "@/modules/currency/conversion";
+import { isSelfAssessedVatCategory } from "@/modules/tax/uae-vat-config";
 import { randomUUID } from "node:crypto";
 
 export type StoredLine = BaseStoredLine & {
@@ -81,12 +82,16 @@ export function calculateLines(
     let netAmountMinor = 0;
     let taxAmountMinor = 0;
     let grossAmountMinor = 0;
+    // Reverse charge and (on purchases) imported goods: VAT is self-assessed,
+    // so the supplier is owed the net only.
+    const selfAssessed = taxCode.vat_category === "reverse_charge"
+      || (config.taxDirection === "purchases" && isSelfAssessedVatCategory(taxCode.vat_category));
 
     if (config.amountsIncludeTax) {
       // The discounted total is the GROSS amount
       grossAmountMinor = discountedTotalMinor;
-      if (taxCode.vat_category === "reverse_charge") {
-        // The supplier charges no VAT under reverse charge, so the entered
+      if (selfAssessed) {
+        // The supplier charges no VAT under reverse charge or on imports, so the entered
         // price is the net. VAT is still self-assessed on it (VAT201 output
         // and recoverable input), exactly as on tax-exclusive documents.
         netAmountMinor = grossAmountMinor;
@@ -100,7 +105,7 @@ export function calculateLines(
       // The discounted total is the NET amount
       netAmountMinor = discountedTotalMinor;
       taxAmountMinor = calculateTax(netAmountMinor, taxCode.rate_basis_points);
-      grossAmountMinor = taxCode.vat_category === "reverse_charge" ? netAmountMinor : addMinor([netAmountMinor, taxAmountMinor]);
+      grossAmountMinor = selfAssessed ? netAmountMinor : addMinor([netAmountMinor, taxAmountMinor]);
     }
 
     return {

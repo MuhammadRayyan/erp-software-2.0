@@ -1,6 +1,6 @@
 import { getBusinessDb } from "@/core/db/business";
 import { addMinor } from "@/modules/accounting/calculations/money";
-import { emirates, type Emirate, type VatReportBucket } from "./uae-vat-config";
+import { emirateLabels, emirates, type Emirate, type VatReportBucket } from "./uae-vat-config";
 
 export type VatDetailRow = {
   id: string;
@@ -24,10 +24,73 @@ function matchesBucket(row: VatDetailRow, bucket: string) {
   if (bucket === "zero_rated_sales") return row.direction === "sales" && row.vat_category === "zero_rated";
   if (bucket === "exempt_sales") return row.direction === "sales" && row.vat_category === "exempt";
   if (bucket === "reverse_charge_output") return row.vat_category === "reverse_charge" && row.output_vat_minor !== 0;
+  if (bucket === "import_output") return row.vat_category === "import" && row.output_vat_minor !== 0;
   if (bucket === "standard_purchases") return row.direction === "purchases" && row.vat_category === "standard";
   if (bucket === "import_purchases") return row.direction === "purchases" && row.vat_category === "import";
   if (bucket === "reverse_charge_purchases") return row.direction === "purchases" && row.vat_category === "reverse_charge";
   return false;
+}
+
+export type Vat201Box = { box: string; label: string; amountMinor: number; vatMinor: number; adjustmentMinor?: number };
+
+/**
+ * FTA VAT201 return boxes derived from tax entries. Self-assessed purchases
+ * appear twice: their output VAT in Box 3 (reverse charge) or Box 6 (imported
+ * goods), and the recoverable part again as input in Box 10. Manual working-paper
+ * adjustments are carried into the Box 8 / Box 11 totals.
+ */
+export function buildVat201Boxes(
+  details: VatDetailRow[],
+  emirateBreakdown: { emirate: Emirate; netMinor: number; vatMinor: number }[],
+  outputAdjustmentMinor: number,
+  inputAdjustmentMinor: number,
+) {
+  const sum = (rows: VatDetailRow[], pick: (row: VatDetailRow) => number) => addMinor(rows.map(pick));
+  const purchases = (category: string) => details.filter((row) => row.direction === "purchases" && row.vat_category === category);
+  const sales = (category: string) => details.filter((row) => row.direction === "sales" && row.vat_category === category);
+  const box1Prefix = ["1a", "1b", "1c", "1d", "1e", "1f", "1g"];
+  const box1: Vat201Box[] = emirateBreakdown.map((row, index) => ({
+    box: box1Prefix[index] ?? "1",
+    label: `Standard rated supplies in ${emirateLabels[row.emirate]}`,
+    amountMinor: row.netMinor,
+    vatMinor: row.vatMinor,
+  }));
+  const standardSales = sales("standard");
+  const unassigned = standardSales.filter((row) => !row.supply_emirate);
+  if (unassigned.length) {
+    box1.push({ box: "1", label: "Standard rated supplies with no Emirate (review)", amountMinor: sum(unassigned, (row) => row.net_amount_minor), vatMinor: sum(unassigned, (row) => row.output_vat_minor) });
+  }
+  const reverseCharge = purchases("reverse_charge");
+  const imports = purchases("import");
+  const box3: Vat201Box = { box: "3", label: "Supplies subject to the reverse charge provisions", amountMinor: sum(reverseCharge, (row) => row.net_amount_minor), vatMinor: sum(reverseCharge, (row) => row.output_vat_minor) };
+  const box4: Vat201Box = { box: "4", label: "Zero rated supplies", amountMinor: sum(sales("zero_rated"), (row) => row.net_amount_minor), vatMinor: 0 };
+  const box5: Vat201Box = { box: "5", label: "Supplies of goods and services which are exempt", amountMinor: sum(sales("exempt"), (row) => row.net_amount_minor), vatMinor: 0 };
+  const box6: Vat201Box = { box: "6", label: "Goods imported into the UAE", amountMinor: sum(imports, (row) => row.net_amount_minor), vatMinor: sum(imports, (row) => row.output_vat_minor) };
+  const box7: Vat201Box = { box: "7", label: "Adjustments to goods imported into the UAE", amountMinor: 0, vatMinor: 0 };
+  const outputBoxes = [...box1, box3, box4, box5, box6, box7];
+  const box8: Vat201Box = {
+    box: "8", label: "Totals (output)",
+    amountMinor: addMinor(outputBoxes.map((box) => box.amountMinor)),
+    vatMinor: addMinor([...outputBoxes.map((box) => box.vatMinor), outputAdjustmentMinor]),
+    adjustmentMinor: outputAdjustmentMinor,
+  };
+  const recoverableStandard = purchases("standard").filter((row) => row.recoverable_vat_minor !== 0);
+  const recoverableSelfAssessed = [...reverseCharge, ...imports].filter((row) => row.recoverable_vat_minor !== 0);
+  const box9: Vat201Box = { box: "9", label: "Standard rated expenses", amountMinor: sum(recoverableStandard, (row) => row.net_amount_minor), vatMinor: sum(recoverableStandard, (row) => row.recoverable_vat_minor) };
+  const box10: Vat201Box = { box: "10", label: "Supplies subject to the reverse charge provisions (incl. imports)", amountMinor: sum(recoverableSelfAssessed, (row) => row.net_amount_minor), vatMinor: sum(recoverableSelfAssessed, (row) => row.recoverable_vat_minor) };
+  const box11: Vat201Box = {
+    box: "11", label: "Totals (input)",
+    amountMinor: addMinor([box9.amountMinor, box10.amountMinor]),
+    vatMinor: addMinor([box9.vatMinor, box10.vatMinor, inputAdjustmentMinor]),
+    adjustmentMinor: inputAdjustmentMinor,
+  };
+  return {
+    outputs: [...outputBoxes, box8],
+    inputs: [box9, box10, box11],
+    box12TotalDueMinor: box8.vatMinor,
+    box13RecoverableMinor: box11.vatMinor,
+    box14PayableMinor: box8.vatMinor - box11.vatMinor,
+  };
 }
 
 function periodRow(sqlite: ReturnType<typeof getBusinessDb>["sqlite"], periodId: string) {
@@ -98,7 +161,7 @@ export function getVatWorkingPaper(businessId: string, userId: string, periodId:
   const period = periodRow(sqlite, periodId);
   if (!period) throw new Error("VAT period not found.");
   const details = getVatTransactionDetail(businessId, userId, { periodId });
-  const bucketIds: VatReportBucket[] = ["standard_sales", "zero_rated_sales", "exempt_sales", "reverse_charge_output", "standard_purchases", "import_purchases", "reverse_charge_purchases"];
+  const bucketIds: VatReportBucket[] = ["standard_sales", "zero_rated_sales", "exempt_sales", "reverse_charge_output", "import_output", "standard_purchases", "import_purchases", "reverse_charge_purchases"];
   const buckets = Object.fromEntries(bucketIds.map((id) => {
     const rows = details.filter((row) => matchesBucket(row, id));
     return [id, {
@@ -141,6 +204,7 @@ export function getVatWorkingPaper(businessId: string, userId: string, periodId:
     `).get(normal, accountId, period.start_date, period.end_date) as { amount: number };
     return row.amount;
   };
+  const vat201 = buildVat201Boxes(details, emirateBreakdown, outputAdjustmentMinor, inputAdjustmentMinor);
   const outputGlMinor = movement(settings.vat_output_account_id, "credit");
   const inputGlMinor = movement(settings.input_vat_account_id, "debit");
   return {
@@ -148,6 +212,7 @@ export function getVatWorkingPaper(businessId: string, userId: string, periodId:
     details,
     buckets,
     emirateBreakdown,
+    vat201,
     adjustments,
     reviewCount,
     calculatedOutputVatMinor,
@@ -174,6 +239,7 @@ export function buildVatSnapshot(businessId: string, userId: string, periodId: s
     period: report.period,
     buckets: report.buckets,
     emirateBreakdown: report.emirateBreakdown,
+    vat201: report.vat201,
     adjustments: report.adjustments,
     totals: {
       calculatedOutputVatMinor: report.calculatedOutputVatMinor,
