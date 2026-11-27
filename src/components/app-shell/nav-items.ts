@@ -22,6 +22,7 @@ import {
   Calculator,
   ListChecks,
   ShieldCheck,
+  Landmark,
 } from "lucide-react";
 import type { ModuleKey } from "@/core/permissions/permissions";
 
@@ -100,6 +101,7 @@ export const primaryNav: { label?: string; items: NavItem[] }[] = [
       { label: "Payslips", path: "/payroll/payslips", icon: ReceiptText, module: "payroll" },
       { label: "Payslip Items", path: "/payroll/items", icon: ListChecks, module: "payroll" },
       { label: "EOSB Calculator", path: "/payroll/eosb-calculator", icon: Calculator, module: "payroll" },
+      { label: "Gratuity Accruals", path: "/payroll/gratuity", icon: Landmark, module: "payroll" },
     ],
   },
   {

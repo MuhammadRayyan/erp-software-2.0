@@ -14,6 +14,7 @@ import {
   generateBatchPayslips,
 } from "../services/payroll-service";
 import { runBatch, type BatchActionResult } from "@/modules/shared/batch";
+import { postGratuityAccrual, reverseGratuityAccrual } from "../services/gratuity-accrual-service";
 import { getBusinessDb } from "@/core/db/business";
 
 export type ActionResult<T = unknown> = {
@@ -243,4 +244,35 @@ export async function batchVoidPayslipsAction(businessId: string, ids: string[])
   const result = runBatch(ids, (id) => voidPayslip(businessId, user.id, id), payslipNumber(businessId, user.id));
   revalidatePath(`/b/${businessId}/payroll/payslips`);
   return result;
+}
+
+const gratuityPeriodSchema = z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/, "Choose a month.");
+
+export async function postGratuityAccrualAction(
+  businessId: string,
+  period: string,
+): Promise<ActionResult<{ totalAmountMinor: number; employeeCount: number; replaced: boolean }>> {
+  const { user } = await requirePermission(businessId, "payroll", "post");
+  const parsed = gratuityPeriodSchema.safeParse(period);
+  if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Choose a month." };
+  try {
+    const result = postGratuityAccrual(businessId, user.id, parsed.data);
+    revalidatePath(`/b/${businessId}/payroll/gratuity`);
+    return { success: true, data: { totalAmountMinor: result.totalAmountMinor, employeeCount: result.employeeCount, replaced: result.replaced } };
+  } catch (err: unknown) {
+    return { error: err instanceof Error ? err.message : "Failed to post the gratuity accrual." };
+  }
+}
+
+export async function reverseGratuityAccrualAction(businessId: string, period: string): Promise<ActionResult> {
+  const { user } = await requirePermission(businessId, "payroll", "delete");
+  const parsed = gratuityPeriodSchema.safeParse(period);
+  if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Choose a month." };
+  try {
+    reverseGratuityAccrual(businessId, user.id, parsed.data);
+    revalidatePath(`/b/${businessId}/payroll/gratuity`);
+    return { success: true };
+  } catch (err: unknown) {
+    return { error: err instanceof Error ? err.message : "Failed to reverse the gratuity accrual." };
+  }
 }
