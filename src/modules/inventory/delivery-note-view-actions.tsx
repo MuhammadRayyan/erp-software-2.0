@@ -1,4 +1,25 @@
 "use client";
-import Link from "next/link"; import { useState } from "react"; import { Ban, Download, MoreHorizontal, Pencil, Trash2 } from "lucide-react"; import { useRouter } from "next/navigation"; import { toast } from "sonner"; import { Button } from "@/components/ui/button"; import { DialogContent, DialogDescription, DialogRoot, DialogTitle } from "@/components/ui/dialog"; import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"; import { useActionPermission } from "@/components/permissions-provider"; import { deleteDeliveryNoteAction, voidDeliveryNoteAction } from "./delivery-note-actions"; import type { InventoryDocumentStatus } from "./inventory-document";
-import { FormError } from "@/components/form-error";
-export function DeliveryNoteViewActions({ businessId, deliveryId, number, status }: { businessId: string; deliveryId: string; number: string; status: InventoryDocumentStatus; journalId?: string | null }) { const [confirm, setConfirm] = useState<"void" | "delete" | null>(null); const [pending, setPending] = useState(false); const [error, setError] = useState(""); const router = useRouter(); const canDelete = useActionPermission("delete"); const hasMoreActions = status !== "void" && canDelete; async function run() { setPending(true); setError(""); const result = confirm === "void" ? await voidDeliveryNoteAction(businessId, deliveryId) : await deleteDeliveryNoteAction(businessId, deliveryId); setPending(false); if (result.error) return setError(result.error); if (confirm === "delete") router.push(`/b/${businessId}/sales/delivery-notes`); else router.refresh(); setConfirm(null); toast.success(confirm === "delete" ? "Draft Delivery Note deleted." : "Delivery Note voided and COGS reversed."); } return <><div className="flex flex-wrap gap-2">{status !== "void" && <Button permission={status === "posted" ? ["edit", "post"] : "edit"} asChild><Link href={`/b/${businessId}/sales/delivery-notes/${deliveryId}/edit`}><Pencil className="size-4" /> Edit</Link></Button>}<Button permission={"export"} asChild variant="secondary"><a href={`/api/businesses/${businessId}/documents/delivery-note/${deliveryId}/pdf`} target="_blank" rel="noreferrer"><Download className="size-4" /> Print / PDF</a></Button>{hasMoreActions && <DropdownMenu><DropdownMenuTrigger asChild><Button variant="secondary" aria-label="More actions">More <MoreHorizontal className="size-4" /></Button></DropdownMenuTrigger><DropdownMenuContent align="end">{status === "posted" && <DropdownMenuItem permission="delete" className="text-danger focus:text-danger" onSelect={() => setConfirm("void")}><Ban className="size-4" /> Void</DropdownMenuItem>}{status === "draft" && <DropdownMenuItem permission="delete" className="text-danger focus:text-danger" onSelect={() => setConfirm("delete")}><Trash2 className="size-4" /> Delete draft</DropdownMenuItem>}</DropdownMenuContent></DropdownMenu>}</div><DialogRoot open={!!confirm} onOpenChange={(open) => !open && setConfirm(null)}><DialogContent><DialogTitle>{confirm === "void" ? `Void ${number}?` : `Delete ${number}?`}</DialogTitle><DialogDescription>{confirm === "void" ? "Stock will return and the Cost of Sales journal will be reversed." : "This permanently removes the non-posting draft."}</DialogDescription>{error && <FormError message={error} />}<div className="mt-5 flex justify-end gap-2"><Button variant="secondary" onClick={() => setConfirm(null)}>Cancel</Button><Button permission={"delete"} variant="danger" disabled={pending} onClick={run}>{confirm === "void" ? "Void delivery" : "Delete draft"}</Button></div></DialogContent></DialogRoot></>; }
+
+import { deleteDeliveryNoteAction, voidDeliveryNoteAction } from "./delivery-note-actions";
+import type { InventoryDocumentStatus } from "./inventory-document";
+import { StockDocumentViewActions } from "./stock-document-actions-ui";
+
+export function DeliveryNoteViewActions({ businessId, deliveryId, number, status }: { businessId: string; deliveryId: string; number: string; status: InventoryDocumentStatus; journalId?: string | null }) {
+  return (
+    <StockDocumentViewActions
+      number={number}
+      status={status}
+      basePath={`/b/${businessId}/sales/delivery-notes`}
+      documentId={deliveryId}
+      pdfHref={`/api/businesses/${businessId}/documents/delivery-note/${deliveryId}/pdf`}
+      voidAction={() => voidDeliveryNoteAction(businessId, deliveryId)}
+      deleteAction={() => deleteDeliveryNoteAction(businessId, deliveryId)}
+      text={{
+        deleted: "Draft Delivery Note deleted.",
+        voided: "Delivery Note voided and COGS reversed.",
+        voidDescription: "Stock will return and the Cost of Sales journal will be reversed.",
+        voidButton: "Void delivery",
+      }}
+    />
+  );
+}

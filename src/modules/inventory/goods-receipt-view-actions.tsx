@@ -1,5 +1,25 @@
 "use client";
-import Link from "next/link"; import { useState } from "react"; import { Ban, Download, MoreHorizontal, Pencil, Trash2 } from "lucide-react"; import { useRouter } from "next/navigation"; import { toast } from "sonner";
-import { Button } from "@/components/ui/button"; import { DialogContent, DialogDescription, DialogRoot, DialogTitle } from "@/components/ui/dialog"; import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"; import { useActionPermission } from "@/components/permissions-provider"; import { deleteGoodsReceiptAction, voidGoodsReceiptAction } from "./goods-receipt-actions"; import type { InventoryDocumentStatus } from "./inventory-document";
-import { FormError } from "@/components/form-error";
-export function GoodsReceiptViewActions({ businessId, receiptId, number, status }: { businessId: string; receiptId: string; number: string; status: InventoryDocumentStatus }) { const [confirm, setConfirm] = useState<"void" | "delete" | null>(null); const [pending, setPending] = useState(false); const [error, setError] = useState(""); const router = useRouter(); const canDelete = useActionPermission("delete"); const hasMoreActions = status !== "void" && canDelete; async function run() { setPending(true); setError(""); const result = confirm === "void" ? await voidGoodsReceiptAction(businessId, receiptId) : await deleteGoodsReceiptAction(businessId, receiptId); setPending(false); if (result.error) return setError(result.error); if (confirm === "delete") router.push(`/b/${businessId}/purchases/goods-receipts`); else router.refresh(); setConfirm(null); toast.success(confirm === "delete" ? "Draft Goods Receipt deleted." : "Goods Receipt voided."); } return <><div className="flex flex-wrap gap-2">{status !== "void" && <Button permission={status === "posted" ? ["edit", "post"] : "edit"} asChild><Link href={`/b/${businessId}/purchases/goods-receipts/${receiptId}/edit`}><Pencil className="size-4" /> Edit</Link></Button>}<Button permission={"export"} asChild variant="secondary"><a href={`/api/businesses/${businessId}/documents/goods-receipt/${receiptId}/pdf`} target="_blank" rel="noreferrer"><Download className="size-4" /> Print / PDF</a></Button>{hasMoreActions && <DropdownMenu><DropdownMenuTrigger asChild><Button variant="secondary" aria-label="More actions">More <MoreHorizontal className="size-4" /></Button></DropdownMenuTrigger><DropdownMenuContent align="end">{status === "posted" && <DropdownMenuItem permission="delete" className="text-danger focus:text-danger" onSelect={() => setConfirm("void")}><Ban className="size-4" /> Void</DropdownMenuItem>}{status === "draft" && <DropdownMenuItem permission="delete" className="text-danger focus:text-danger" onSelect={() => setConfirm("delete")}><Trash2 className="size-4" /> Delete draft</DropdownMenuItem>}</DropdownMenuContent></DropdownMenu>}</div><DialogRoot open={!!confirm} onOpenChange={(open) => !open && setConfirm(null)}><DialogContent><DialogTitle>{confirm === "void" ? `Void ${number}?` : `Delete ${number}?`}</DialogTitle><DialogDescription>{confirm === "void" ? "The receipt stays in history and stock is reversed. This is blocked if the stock has already been consumed." : "This permanently removes the non-posting draft."}</DialogDescription>{error && <FormError message={error} />}<div className="mt-5 flex justify-end gap-2"><Button variant="secondary" onClick={() => setConfirm(null)}>Cancel</Button><Button permission={"delete"} variant="danger" disabled={pending} onClick={run}>{confirm === "void" ? "Void receipt" : "Delete draft"}</Button></div></DialogContent></DialogRoot></>; }
+
+import { deleteGoodsReceiptAction, voidGoodsReceiptAction } from "./goods-receipt-actions";
+import type { InventoryDocumentStatus } from "./inventory-document";
+import { StockDocumentViewActions } from "./stock-document-actions-ui";
+
+export function GoodsReceiptViewActions({ businessId, receiptId, number, status }: { businessId: string; receiptId: string; number: string; status: InventoryDocumentStatus }) {
+  return (
+    <StockDocumentViewActions
+      number={number}
+      status={status}
+      basePath={`/b/${businessId}/purchases/goods-receipts`}
+      documentId={receiptId}
+      pdfHref={`/api/businesses/${businessId}/documents/goods-receipt/${receiptId}/pdf`}
+      voidAction={() => voidGoodsReceiptAction(businessId, receiptId)}
+      deleteAction={() => deleteGoodsReceiptAction(businessId, receiptId)}
+      text={{
+        deleted: "Draft Goods Receipt deleted.",
+        voided: "Goods Receipt voided.",
+        voidDescription: "The receipt stays in history and stock is reversed. This is blocked if the stock has already been consumed.",
+        voidButton: "Void receipt",
+      }}
+    />
+  );
+}
