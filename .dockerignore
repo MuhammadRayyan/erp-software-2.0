@@ -36,3 +36,4 @@ public/downloads/*.zip
 runtime.env
 .release.env
 releases
+dist-workers

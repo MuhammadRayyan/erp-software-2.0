@@ -1,9 +1,9 @@
 import { NextResponse } from "next/server";
 import { requireApiAuth } from "@/core/auth/api-auth";
 import { getDocumentPdfModule } from "@/core/permissions/document-pdf-access";
-import { generateDocumentPdf } from "@/modules/document-templates/pdf-service";
 import { createStreamingZipStream, deduplicateArchiveFilename } from "@/lib/streaming-zip";
 import { getBusinessTodayIso } from "@/core/format";
+import { generateDocumentPdfsInWorker } from "@/core/workers/jobs";
 
 export const runtime = "nodejs";
 
@@ -35,27 +35,33 @@ export async function POST(
     const today = getBusinessTodayIso();
     const zipFilename = `${documentType}-batch-${today}.zip`;
 
+    // Document data extraction and React-PDF layout run on a worker thread;
+    // aborting the request (or cancelling the stream) terminates it.
+    const cancel = new AbortController();
     const stream = createStreamingZipStream({
       signal: request.signal,
+      onCleanup: () => cancel.abort(),
       populate: async (zip, helpers) => {
         const seenNames = new Set<string>();
-        for (const docId of safeIds) {
+        const documents = generateDocumentPdfsInWorker(
+          {
+            businessId,
+            userId: session.user.id,
+            businessName: access.business.name,
+            baseCurrency: access.business.currency,
+            documentType,
+            documentIds: safeIds,
+          },
+          { signal: cancel.signal },
+        );
+        for await (const item of documents) {
           if (helpers.isCancelled()) break;
-          try {
-            const { pdf, filename } = await generateDocumentPdf(
-              businessId,
-              session.user.id,
-              access.business.name,
-              access.business.currency,
-              documentType,
-              docId
-            );
-            if (helpers.isCancelled()) break;
-            const archiveName = deduplicateArchiveFilename(filename, seenNames);
-            zip.addBuffer(pdf, archiveName, { compress: true, compressionLevel: 6 });
-          } catch (err) {
-            console.warn(`Failed to generate PDF for ${docId}:`, err);
+          if (!item.ok) {
+            console.warn(`Failed to generate PDF for ${item.documentId}:`, item.error);
+            continue;
           }
+          const archiveName = deduplicateArchiveFilename(item.filename, seenNames);
+          zip.addBuffer(item.pdf, archiveName, { compress: true, compressionLevel: 6 });
         }
       },
     });

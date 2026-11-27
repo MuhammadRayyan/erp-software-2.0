@@ -90,3 +90,6 @@ public/downloads/*.zip
 # Local review build output
 /.next-review/
 tests/integration/fixtures/*.actual.txt
+
+# worker-thread bundles (scripts/build-workers.mjs)
+/dist-workers/
