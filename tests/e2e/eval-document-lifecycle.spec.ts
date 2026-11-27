@@ -1,11 +1,10 @@
 import { test, expect } from '@playwright/test';
+import { openDemoBusiness } from './helpers/session';
 import { selectComboboxOption } from './helpers/combobox';
 
 test.describe('Evaluation Suite D: Document Lifecycle Transitions', () => {
   test.beforeEach(async ({ page }) => {
-    await page.goto('/');
-    await page.locator('article a').first().click();
-    await expect(page.getByRole('heading', { name: 'Overview' })).toBeVisible();
+    await openDemoBusiness(page);
   });
 
   test('D2: Delivery Note Locks Invoice Editing', async ({ page }) => {

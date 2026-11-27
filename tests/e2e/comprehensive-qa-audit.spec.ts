@@ -1,4 +1,5 @@
 import { test, expect, type Page } from '@playwright/test';
+import { openDemoBusiness } from './helpers/session';
 import Database from 'better-sqlite3';
 import { getBusinessPaths, SYSTEM_DB_PATH } from '../../src/core/db/paths';
 import { selectComboboxByIndex, selectComboboxOption } from './helpers/combobox';
@@ -39,12 +40,7 @@ test.describe('Full End-to-End QA & Architecture Verification Audit', () => {
   }
 
   test.beforeEach(async ({ page }) => {
-    await page.goto('/');
-    const demoArticle = page.locator('article').filter({ hasText: /Northstar Technical Services/i }).first();
-    const businessCard = (await demoArticle.count()) > 0 ? demoArticle.locator('a').first() : page.locator('article a').first();
-    await expect(businessCard).toBeVisible({ timeout: 15000 });
-    await businessCard.click();
-    await expect(page.getByRole('heading', { name: 'Overview' })).toBeVisible({ timeout: 15000 });
+    await openDemoBusiness(page);
 
     const url = page.url();
     const match = url.match(/\/b\/([^/]+)/);
@@ -218,7 +214,9 @@ test.describe('Full End-to-End QA & Architecture Verification Audit', () => {
     expect(journalSum.total_debit_minor).toBe(105000);
 
     // 3. Record Customer Receipt to settle
-    await page.getByRole('link', { name: 'Record Receipt' }).click();
+    // "Record Receipt" opens the quick side sheet; continue on the full form.
+    await page.getByRole('button', { name: 'Record Receipt' }).click();
+    await page.getByRole('link', { name: 'Open full form' }).click();
     await expect(page.getByRole('heading', { name: 'Record Receipt' })).toBeVisible({ timeout: 15000 });
     await page.getByRole('button', { name: /post receipt/i }).click();
     await page.waitForURL((url) => !url.pathname.includes('/receipts/new'), { timeout: 15000 });
@@ -286,7 +284,9 @@ test.describe('Full End-to-End QA & Architecture Verification Audit', () => {
     expect(apJournalSum.total_debit_minor).toBe(42000);
 
     // 3. Record Supplier Payment
-    await page.getByRole('link', { name: 'Record Payment' }).click();
+    // "Record Payment" opens the quick side sheet; continue on the full form.
+    await page.getByRole('button', { name: 'Record Payment' }).click();
+    await page.getByRole('link', { name: 'Open full form' }).click();
     await expect(page.getByRole('heading', { name: 'Record Supplier Payment' })).toBeVisible({ timeout: 15000 });
     await page.getByRole('button', { name: /post payment/i }).click();
     await page.waitForURL((url) => !url.pathname.includes('/payments/new'), { timeout: 15000 });
@@ -330,20 +330,22 @@ test.describe('Full End-to-End QA & Architecture Verification Audit', () => {
     await selectComboboxByIndex(page, toAccount, 2);
     await amountField.fill('-50.00');
     await page.getByRole('button', { name: /post transfer/i }).click();
-    await expect(page.locator('text=Enter an amount with up to 2 decimals')).toBeVisible({ timeout: 5000 });
+    await expect(page.locator('text=Enter a valid positive amount')).toBeVisible({ timeout: 5000 });
 
     // Happy Path: Valid positive amount
     await amountField.fill('250.00');
     await page.getByRole('button', { name: /post transfer/i }).click();
 
     // Should redirect to bank transfer view page
-    await expect(page.getByRole('heading', { name: 'Bank Transfer' })).toBeVisible({ timeout: 15000 });
+    await page.waitForURL((url) => /\/banking\/transfers\/(?!new)[^/]+$/.test(url.pathname), { timeout: 15000 });
+    await expect(page.getByRole('heading', { name: 'Generated journal' })).toBeVisible({ timeout: 15000 });
+    const transferId = page.url().split('/').pop()!.split('?')[0];
 
     // Verify Bank Transfer in SQLite DB creates balanced journal
     const transferDb = getFreshDb();
     const transferJournal = transferDb.prepare(
-      "SELECT id FROM journal_entries WHERE source_type = 'bank_transfer' ORDER BY created_at DESC LIMIT 1"
-    ).get() as { id: string };
+      "SELECT id FROM journal_entries WHERE source_type = 'bank_transfer' AND source_id = ?"
+    ).get(transferId) as { id: string };
     expect(transferJournal).toBeDefined();
 
     const transferSum = transferDb.prepare(
@@ -356,23 +358,18 @@ test.describe('Full End-to-End QA & Architecture Verification Audit', () => {
     // 2. Test Customer form validation edge cases: empty name & invalid email
     await page.goto(`/b/${businessId}/customers/new`);
 
-    // Blur empty name field
+    // The form validates on submit, then live as fields are corrected.
     const nameField = page.getByLabel(/customer name/i).first();
-    await nameField.focus();
-    await nameField.fill('a');
-    await nameField.fill('');
-    await nameField.blur();
-    await expect(page.locator('text=Enter a customer name')).toBeVisible();
-
-    // Enter invalid email and blur
     const emailField = page.getByLabel(/email/i).first();
     await emailField.fill('not-an-email');
-    await emailField.blur();
+    await page.getByRole('button', { name: 'Save customer' }).click();
+    await expect(page.locator('text=Enter a customer name')).toBeVisible();
     await expect(page.locator('text=Enter a valid email')).toBeVisible();
 
-    // Clear invalid email
+    // Correcting the fields clears their errors without another submit.
+    await nameField.fill('Validation Customer');
+    await expect(page.locator('text=Enter a customer name')).not.toBeVisible();
     await emailField.fill('');
-    await emailField.blur();
     await expect(page.locator('text=Enter a valid email')).not.toBeVisible();
 
     // Zero unexpected client/network errors

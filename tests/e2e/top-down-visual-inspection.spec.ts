@@ -1,16 +1,12 @@
 import { test, expect } from '@playwright/test';
+import { openDemoBusiness } from './helpers/session';
 import { selectComboboxOption } from './helpers/combobox';
 
 test.describe('Top-Down Visual and Architecture Flow Verification', () => {
   let businessId = '';
 
   test.beforeEach(async ({ page }) => {
-    await page.goto('/');
-    const demoArticle = page.locator('article').filter({ hasText: /Northstar Technical Services/i }).first();
-    const businessCard = (await demoArticle.count()) > 0 ? demoArticle.locator('a').first() : page.locator('article a').first();
-    await expect(businessCard).toBeVisible({ timeout: 15000 });
-    await businessCard.click();
-    await expect(page.getByRole('heading', { name: 'Overview' })).toBeVisible({ timeout: 15000 });
+    await openDemoBusiness(page);
 
     const url = page.url();
     const match = url.match(/\/b\/([^/]+)/);
@@ -19,7 +15,7 @@ test.describe('Top-Down Visual and Architecture Flow Verification', () => {
     }
   });
 
-  test('1. Visual Paper Document View: Sales Invoice, Zoom, Print CSS, Tabs & PDF Download', async ({ page, request }) => {
+  test('1. Visual Paper Document View: Sales Invoice, Zoom, Print CSS, Tabs & PDF Download', async ({ page }) => {
     test.setTimeout(60000);
     // Navigate to Sales Invoices
     await page.goto(`/b/${businessId}/sales/invoices`);
@@ -103,43 +99,34 @@ test.describe('Top-Down Visual and Architecture Flow Verification', () => {
     expect(pdfHref).toBeTruthy();
     expect(pdfHref).toContain('/pdf');
 
-    const pdfResponse = await request.get(pdfHref!);
+    const pdfResponse = await page.request.get(pdfHref!);
     expect(pdfResponse.status()).toBe(200);
     expect(pdfResponse.headers()['content-type']).toBe('application/pdf');
     const pdfBody = await pdfResponse.body();
     expect(pdfBody.length).toBeGreaterThan(1000); // Valid PDF binary
   });
 
-  test('2. Customer Form Validation: onTouched inline field feedback & red border', async ({ page }) => {
+  test('2. Customer Form Validation: inline field feedback on submit, cleared live on correction', async ({ page }) => {
     test.setTimeout(45000);
     await page.goto(`/b/${businessId}/customers/new`);
     await expect(page.getByRole('heading', { name: 'New Customer' })).toBeVisible();
 
-    // Fill valid name
-    const nameInput = page.locator('#name');
-    await nameInput.fill('Visual Audit Customer');
-
-    // Enter bad email
+    await page.locator('#name').fill('Visual Audit Customer');
     const emailInput = page.locator('#email');
     await emailInput.fill('not-a-valid-email');
 
-    // Trigger blur by clicking outside (e.g. phone field)
-    const phoneInput = page.locator('#phone');
-    await phoneInput.click();
-
-    // Expect red highlight (aria-invalid=true) and inline error message directly below the field
+    // The form validates on submit (blur validation shifted the Save button mid-click).
+    await page.getByRole('button', { name: 'Save customer' }).click();
     await expect(emailInput).toHaveAttribute('aria-invalid', 'true');
     const emailError = page.locator('p.field-error:has-text("email")');
     await expect(emailError).toBeVisible();
+    await expect(page).toHaveURL(/\/customers\/new/);
 
     await page.screenshot({ path: 'test-results/visual/03-customer-email-validation-error.png' });
 
-    // Now fix the email
+    // After a failed submit, fields re-validate as the user types.
     await emailInput.fill('valid.customer@example.com');
-    await phoneInput.click();
-
-    // Expect error to disappear immediately
-    await expect(emailInput).toHaveAttribute('aria-invalid', 'false');
+    await expect(emailInput).not.toHaveAttribute('aria-invalid', 'true');
     await expect(page.locator('p.field-error:has-text("email")')).toHaveCount(0);
 
     await page.screenshot({ path: 'test-results/visual/04-customer-email-validation-resolved.png' });

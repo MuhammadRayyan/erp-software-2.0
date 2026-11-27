@@ -1,13 +1,10 @@
 import { test, expect } from '@playwright/test';
+import { openDemoBusiness } from './helpers/session';
 import { selectComboboxOption } from './helpers/combobox';
 
 test.describe('Evaluation Suite E: Currency & Multi-Currency', () => {
   test.beforeEach(async ({ page }) => {
-    await page.goto('/');
-    const demoArticle = page.locator('article').filter({ hasText: /Northstar Technical Services/i }).first();
-    const businessCard = (await demoArticle.count()) > 0 ? demoArticle.locator('a').first() : page.locator('article a').first();
-    await businessCard.click();
-    await expect(page.getByRole('heading', { name: 'Overview' })).toBeVisible();
+    await openDemoBusiness(page);
   });
 
     test('E3: Currency Mismatch in Receipt', async ({ page }) => {

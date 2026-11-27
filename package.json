@@ -23,12 +23,11 @@
     "test:platform": "node --import tsx --import ./scripts/server-only-node.mjs --import ./scripts/test-isolation.mjs --test-force-exit --test \"tests/platform/**/*.test.ts\"",
     "test:integration": "node --import tsx --import ./scripts/server-only-node.mjs --import ./scripts/test-isolation.mjs --test-force-exit --test \"tests/integration/**/*.test.ts\"",
     "test:e2e": "playwright test",
-    "test:e2e:sprint3": "playwright test --config playwright.sprint3.config.ts",
+    "test:e2e:gate": "playwright test --project gate",
     "build:ops": "node scripts/build-ops.mjs",
     "test:hardening": "tsx --import ./scripts/server-only-node.mjs --test-force-exit --test tests/platform/production-hardening.test.ts",
     "check:permissions": "node scripts/check-permissions.mjs",
-    "check:schema": "node --import tsx --import ./scripts/server-only-node.mjs scripts/check-schema.ts",
-    "test:browser:hardening": "playwright test --config playwright.hardening.config.ts"
+    "check:schema": "node --import tsx --import ./scripts/server-only-node.mjs scripts/check-schema.ts"
   },
   "dependencies": {
     "@hookform/resolvers": "5.7.1",
