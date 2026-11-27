@@ -243,7 +243,7 @@ test("Remediation 7: Settlement service prevents non-positive and over-allocatio
   const taxCodes = getActiveTaxCodes(businessId, adminId);
 
   const supplier = suppliers[0];
-  const standardTax = taxCodes.find((code) => code.rateBasisPoints === 500 && ["purchases", "both"].includes(code.direction))!;
+  const standardTax = taxCodes.find((code) => code.rateBasisPoints === 500 && code.vatCategory === "standard" && ["purchases", "both"].includes(code.direction))!;
 
   const piId = savePurchaseInvoice(
     businessId,
