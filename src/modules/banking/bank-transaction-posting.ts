@@ -1,5 +1,8 @@
 import type Database from "better-sqlite3";
-import { postTransaction } from "@/modules/accounting/services/posting-service";
+import { postTransaction, type JournalLineInput } from "@/modules/accounting/services/posting-service";
+import { convertDocumentLinesToBase } from "@/modules/currency/conversion";
+import { storedRateSnapshot, type RateSnapshot } from "@/modules/currency/validation";
+import { getBaseCurrency } from "@/modules/currency/currency";
 
 type PostingLine = {
   accountId: string;
@@ -10,6 +13,34 @@ type PostingLine = {
   taxAmountMinor: number;
 };
 
+/**
+ * Rate snapshot stored on a bank transaction kept in a foreign-currency bank
+ * account, or null for a base-currency account (amounts are already base).
+ */
+export function bankTransactionRate(sqlite: Database.Database, transactionId: string): RateSnapshot | null {
+  const row = sqlite.prepare(`
+    SELECT ba.currency_code, bt.exchange_rate_to_base, bt.exchange_rate_date, bt.exchange_rate_source, bt.date
+    FROM bank_transactions bt INNER JOIN bank_accounts ba ON ba.id = bt.bank_account_id
+    WHERE bt.id = ?
+  `).get(transactionId) as {
+    currency_code: string; exchange_rate_to_base: string; exchange_rate_date: string | null;
+    exchange_rate_source: string; date: string;
+  } | undefined;
+  if (!row || row.currency_code === getBaseCurrency(sqlite).code) return null;
+  return storedRateSnapshot(sqlite, {
+    currencyCode: row.currency_code,
+    exchangeRateToBase: row.exchange_rate_to_base,
+    exchangeRateDate: row.exchange_rate_date ?? row.date,
+    exchangeRateSource: row.exchange_rate_source,
+  });
+}
+
+/**
+ * Posts a bank transaction. Amounts are in the bank account's currency; for a
+ * foreign-currency account each line is converted at the transaction's stored
+ * rate, the bank line carries the base total plus the bank-currency amount,
+ * and the transaction's base_total_minor is kept in step with the journal.
+ */
 export function postBankTransaction(
   sqlite: Database.Database,
   transaction: {
@@ -31,15 +62,34 @@ export function postBankTransaction(
     id: string; sales_tax_account_id: string | null; purchase_tax_account_id: string | null; is_recoverable: number;
   }[];
   const taxById = new Map(taxRows.map((row) => [row.id, row]));
-  const journalLines = [];
+
+  const rate = bankTransactionRate(sqlite, transaction.id);
+  const converted = rate
+    ? convertDocumentLinesToBase(lines.map((line) => ({
+      ...line,
+      grossAmountMinor: line.netAmountMinor + line.taxAmountMinor,
+    })), rate)
+    : null;
+  const baseLines = converted
+    ? converted.lines.map((line) => ({ ...line, netAmountMinor: line.baseNetAmountMinor, taxAmountMinor: line.baseTaxAmountMinor }))
+    : lines;
+  const baseTotalMinor = converted ? converted.baseTotalMinor : transaction.totalMinor;
+  if (converted) {
+    if (baseTotalMinor <= 0) throw new Error("The base-currency equivalent of this transaction is zero.");
+    sqlite.prepare("UPDATE bank_transactions SET base_total_minor = ? WHERE id = ?").run(baseTotalMinor, transaction.id);
+  }
+  const bankCurrencyAmount = rate ? transaction.totalMinor : null;
+
+  const journalLines: JournalLineInput[] = [];
   if (transaction.type === "money_in") {
     journalLines.push({
       accountId: transaction.bankLedgerAccountId,
       description: transaction.description,
-      debitMinor: transaction.totalMinor,
+      debitMinor: baseTotalMinor,
       reference: transaction.transactionNumber,
+      currencyAmountMinor: bankCurrencyAmount,
     });
-    for (const line of lines) {
+    for (const line of baseLines) {
       journalLines.push({
         accountId: line.accountId,
         description: line.description,
@@ -59,7 +109,7 @@ export function postBankTransaction(
       }
     }
   } else {
-    for (const line of lines) {
+    for (const line of baseLines) {
       const taxCode = taxById.get(line.taxCodeId);
       journalLines.push({
         accountId: line.accountId,
@@ -82,8 +132,9 @@ export function postBankTransaction(
     journalLines.push({
       accountId: transaction.bankLedgerAccountId,
       description: transaction.description,
-      creditMinor: transaction.totalMinor,
+      creditMinor: baseTotalMinor,
       reference: transaction.transactionNumber,
+      currencyAmountMinor: bankCurrencyAmount === null ? null : -bankCurrencyAmount,
     });
   }
   return postTransaction(sqlite, {

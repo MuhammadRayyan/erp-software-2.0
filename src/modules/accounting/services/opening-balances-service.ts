@@ -3,6 +3,7 @@ import { getBusinessDb } from "@/core/db/business";
 import { randomUUID } from "node:crypto";
 import { listAccounts } from "./account-service";
 import { assertDateNotLocked } from "./financial-lock-service";
+import { foreignBankLedgers } from "./posting-service";
 
 export type OpeningBalanceLine = {
   accountId: string;
@@ -102,6 +103,13 @@ export function saveOpeningBalances(
     const existing = sqlite
       .prepare("SELECT id FROM journal_entries WHERE source_type = 'opening_balance' AND source_id = 'default'")
       .get() as { id: string } | undefined;
+
+    const foreignBanks = foreignBankLedgers(sqlite, balances.map((line) => line.accountId));
+    for (const line of balances) {
+      if (foreignBanks.has(line.accountId) && ((line.debitMinor ?? 0) !== 0 || (line.creditMinor ?? 0) !== 0)) {
+        throw new Error(`Record the opening balance of a ${foreignBanks.get(line.accountId)} bank account as a Bank Transaction in ${foreignBanks.get(line.accountId)}.`);
+      }
+    }
 
     for (const line of balances) {
       const debit = line.debitMinor ?? 0;

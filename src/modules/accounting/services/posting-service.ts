@@ -13,6 +13,12 @@ export type JournalLineInput = {
   supplierId?: string | null;
   projectId?: string | null;
   reference?: string | null;
+  /**
+   * Signed (debit-positive) amount in the account's own currency. Required on
+   * every line that posts to a foreign-currency bank ledger and ignored
+   * elsewhere: the bank register and reconciliation read it, the GL stays in base.
+   */
+  currencyAmountMinor?: number | null;
 };
 
 type PostTransactionInput = {
@@ -54,10 +60,64 @@ function validateLines(sqlite: Database.Database, lines: JournalLineInput[]) {
     }
   }
 
+  validateForeignBankLines(sqlite, lines, accountIds);
+
   const debitTotal = addMinor(lines.map((line) => line.debitMinor ?? 0));
   const creditTotal = addMinor(lines.map((line) => line.creditMinor ?? 0));
   if (debitTotal !== creditTotal) throw new Error("Journal entry is not balanced.");
   if (debitTotal <= 0) throw new Error("Journal entry total must be greater than zero.");
+}
+
+/** Ledger account id → currency for every bank account kept in a foreign currency. */
+export function foreignBankLedgers(sqlite: Database.Database, accountIds?: readonly string[]) {
+  const ids = accountIds ? [...new Set(accountIds)] : null;
+  if (ids && ids.length === 0) return new Map<string, string>();
+  const rows = sqlite.prepare(`
+    SELECT ba.ledger_account_id, ba.currency_code FROM bank_accounts ba
+    WHERE ba.currency_code <> (SELECT base_currency_code FROM business_currency_settings WHERE id = 'default')
+      ${ids ? `AND ba.ledger_account_id IN (${ids.map(() => "?").join(", ")})` : ""}
+  `).all(...(ids ?? [])) as { ledger_account_id: string; currency_code: string }[];
+  return new Map(rows.map((row) => [row.ledger_account_id, row.currency_code]));
+}
+
+function validateForeignBankLines(sqlite: Database.Database, lines: JournalLineInput[], accountIds: string[]) {
+  const foreign = foreignBankLedgers(sqlite, accountIds);
+  for (const line of lines) {
+    const currency = foreign.get(line.accountId);
+    if (!currency) continue;
+    const amount = line.currencyAmountMinor;
+    if (amount === undefined || amount === null) {
+      throw new Error(`This ${currency} bank account can only be posted through Banking, Receipts or Supplier Payments in ${currency}.`);
+    }
+    if (!Number.isSafeInteger(amount)) throw new Error("Bank currency amount is invalid.");
+    const direction = (line.debitMinor ?? 0) > 0 ? 1 : -1;
+    if (amount !== 0 && Math.sign(amount) !== direction) {
+      throw new Error("Bank currency amount must move in the same direction as the ledger line.");
+    }
+  }
+}
+
+/**
+ * The bank line of a receipt or supplier payment in the bank account's own
+ * currency: the settlement amount itself when the bank is kept in a foreign
+ * currency (which must then be the settlement currency), otherwise null.
+ */
+export function settlementBankCurrencyAmount(
+  sqlite: Database.Database,
+  table: "receipts" | "supplier_payments",
+  settlementId: string,
+  bankLedgerAccountId: string,
+  sign: 1 | -1,
+) {
+  const bankCurrency = foreignBankLedgers(sqlite, [bankLedgerAccountId]).get(bankLedgerAccountId);
+  if (!bankCurrency) return null;
+  const row = sqlite.prepare(`SELECT amount_minor, currency_code FROM ${table} WHERE id = ?`)
+    .get(settlementId) as { amount_minor: number; currency_code: string } | undefined;
+  if (!row) throw new Error("Settlement record not found.");
+  if (row.currency_code !== bankCurrency) {
+    throw new Error(`A ${bankCurrency} bank account can only settle ${bankCurrency} documents.`);
+  }
+  return sign * row.amount_minor;
 }
 
 export function postTransaction(sqlite: Database.Database, input: PostTransactionInput) {
@@ -105,8 +165,8 @@ export function postTransaction(sqlite: Database.Database, input: PostTransactio
     const insertLine = sqlite.prepare(`
       INSERT INTO journal_lines (
         id, journal_entry_id, account_id, description, debit_minor, credit_minor,
-        customer_id, supplier_id, project_id, reference, position
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        customer_id, supplier_id, project_id, reference, position, currency_amount_minor
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
     input.lines.forEach((line, position) => {
       insertLine.run(
@@ -121,6 +181,7 @@ export function postTransaction(sqlite: Database.Database, input: PostTransactio
         line.projectId ?? null,
         line.reference ?? null,
         position,
+        line.currencyAmountMinor ?? null,
       );
     });
     return { id: journalEntryId, entryNumber };
@@ -150,7 +211,7 @@ export function reverseTransaction(
   const lines = sqlite
     .prepare(`
       SELECT account_id, description, debit_minor, credit_minor, customer_id, supplier_id,
-             project_id, reference
+             project_id, reference, currency_amount_minor
       FROM journal_lines WHERE journal_entry_id = ? ORDER BY position
     `)
     .all(original.id) as {
@@ -162,6 +223,7 @@ export function reverseTransaction(
       supplier_id: string | null;
       project_id: string | null;
       reference: string | null;
+      currency_amount_minor: number | null;
     }[];
   return postTransaction(sqlite, {
     sourceType: input.reversalSourceType,
@@ -177,6 +239,7 @@ export function reverseTransaction(
       supplierId: line.supplier_id,
       projectId: line.project_id,
       reference: line.reference,
+      currencyAmountMinor: line.currency_amount_minor === null ? null : -line.currency_amount_minor,
     })),
   });
 }

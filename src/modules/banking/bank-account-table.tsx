@@ -30,6 +30,8 @@ export type BankAccountRow = {
   ledger_name: string;
   currency_code: string;
   book_balance_minor: number;
+  /** GL value in base currency. */
+  base_balance_minor?: number;
   statement_balance_minor: number | null;
   unreconciled_count: number;
   is_active: number | boolean;
@@ -132,7 +134,7 @@ export function BankAccountTable({
         header: "Book Balance",
         meta: { numeric: true },
         cell: ({ row }: { row: { original: BankAccountRow } }) => (
-          <span className="money font-medium">{formatMoney(row.original.book_balance_minor, baseCurrency)}</span>
+          <span className="money font-medium">{formatMoney(row.original.book_balance_minor, row.original.currency_code || baseCurrency)}</span>
         ),
       },
       {
@@ -143,7 +145,7 @@ export function BankAccountTable({
           <span className="money">
             {row.original.statement_balance_minor === null
               ? "Not reconciled"
-              : formatMoney(row.original.statement_balance_minor, baseCurrency)}
+              : formatMoney(row.original.statement_balance_minor, row.original.currency_code || baseCurrency)}
           </span>
         ),
       },
@@ -196,7 +198,8 @@ export function BankAccountTable({
   const clearFilters = resetFilters;
   const hasActiveFilter = Boolean(query || kindFilter || statusFilter);
 
-  const totalBookBalance = useMemo(() => rows.reduce((sum, r) => sum + Number(r.book_balance_minor || 0), 0), [rows]);
+  // Accounts may be kept in different currencies: the total is their GL value in base.
+  const totalBookBalance = useMemo(() => rows.reduce((sum, r) => sum + Number(r.base_balance_minor ?? r.book_balance_minor ?? 0), 0), [rows]);
 
   return (
     <>

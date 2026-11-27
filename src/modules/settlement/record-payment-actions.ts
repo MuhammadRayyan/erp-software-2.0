@@ -66,7 +66,12 @@ export async function getRecordPaymentContextAction(
 
   const settings = getCurrencySettings(businessId, user.id);
   const currency = settings.currencies.find((row) => row.code === document.currencyCode);
-  const bankAccounts = getBankAccountOptions(businessId, user.id).map(({ id, name }) => ({ id, name }));
+  // A foreign-currency bank account can only settle documents in its own currency.
+  const bankAccounts = getBankAccountOptions(businessId, user.id)
+    .filter((row) => !row.currencyCode || row.currencyCode === settings.base.code || row.currencyCode === document.currencyCode)
+    .map(({ id, name, currencyCode }) => ({
+      id, name: currencyCode && currencyCode !== settings.base.code ? `${name} · ${currencyCode}` : name,
+    }));
   const { sqlite } = getBusinessDb(businessId, user.id);
   const configured = sqlite
     .prepare("SELECT default_bank_account_id FROM business_accounting_settings WHERE id = 'default'")

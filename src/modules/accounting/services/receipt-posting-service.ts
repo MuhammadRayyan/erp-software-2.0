@@ -1,5 +1,5 @@
 import type Database from "better-sqlite3";
-import { postTransaction, type JournalLineInput } from "./posting-service";
+import { postTransaction, settlementBankCurrencyAmount, type JournalLineInput } from "./posting-service";
 
 export function postReceipt(
   sqlite: Database.Database,
@@ -40,6 +40,7 @@ export function postReceipt(
       description: `Receipt ${receipt.receiptNumber}`,
       debitMinor: receipt.baseAmountMinor,
       reference: receipt.receiptNumber,
+      currencyAmountMinor: settlementBankCurrencyAmount(sqlite, "receipts", receipt.id, receipt.bankAccountId, 1),
     },
     {
       accountId: settings.accounts_receivable_account_id,

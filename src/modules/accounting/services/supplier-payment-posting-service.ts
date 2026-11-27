@@ -1,5 +1,5 @@
 import type Database from "better-sqlite3";
-import { postTransaction, type JournalLineInput } from "./posting-service";
+import { postTransaction, settlementBankCurrencyAmount, type JournalLineInput } from "./posting-service";
 
 export function postSupplierPayment(
   sqlite: Database.Database,
@@ -46,6 +46,7 @@ export function postSupplierPayment(
       creditMinor: payment.baseAmountMinor,
       supplierId: payment.supplierId,
       reference: payment.paymentNumber,
+      currencyAmountMinor: settlementBankCurrencyAmount(sqlite, "supplier_payments", payment.id, payment.bankAccountId, -1),
     },
   ];
   if (payment.realizedFxAmountMinor > 0) {

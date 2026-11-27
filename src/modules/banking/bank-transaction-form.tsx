@@ -21,9 +21,11 @@ import { FieldError } from "@/components/ui/field-error";
 import { fieldErrorProps, fieldErrorId, applyServerFieldErrors, focusFirstInvalidField } from "@/lib/form-errors";
 
 
-export function BankTransactionForm({ businessId, transactionId, bankAccounts, counterAccounts, taxCodes, projects, initial, currency }: {
-  businessId: string; transactionId?: string; currency: string;
-  bankAccounts: { id: string; name: string; is_cash_account: number }[];
+export function BankTransactionForm({ businessId, transactionId, bankAccounts, counterAccounts, taxCodes, projects, initial, currency: baseCurrency }: {
+  businessId: string; transactionId?: string;
+  /** Base currency; amounts are entered in the selected bank account's currency. */
+  currency: string;
+  bankAccounts: { id: string; name: string; is_cash_account: number; currency_code?: string }[];
   counterAccounts: { id: string; name: string; type: string; subtype: string }[];
   taxCodes: { id: string; name: string; rateBasisPoints: number; direction: string; vatCategory: string | null }[];
   projects: { id: string; name: string }[];
@@ -37,6 +39,8 @@ export function BankTransactionForm({ businessId, transactionId, bankAccounts, c
   const { fields, append, remove } = useFieldArray({ control, name: "lines" });
   const type = useWatch({ control, name: "type" });
   const watchedLines = useWatch({ control, name: "lines" });
+  const selectedBankAccountId = useWatch({ control, name: "bankAccountId" });
+  const currency = bankAccounts.find((account) => account.id === selectedBankAccountId)?.currency_code ?? baseCurrency;
   const minorUnit = getCurrencyMinorUnit(currency);
   const totalMinor = watchedLines.reduce((sum, line) => {
     try {
@@ -71,7 +75,7 @@ export function BankTransactionForm({ businessId, transactionId, bankAccounts, c
           render={({ field }) => (
             <Combobox ref={field.ref}
               id="bankAccountId"
-              options={bankAccounts.map((account) => ({ value: account.id, label: account.name }))}
+              options={bankAccounts.map((account) => ({ value: account.id, label: account.currency_code && account.currency_code !== baseCurrency ? `${account.name} · ${account.currency_code}` : account.name }))}
               value={field.value ?? ""}
               onValueChange={field.onChange}
               placeholder="Choose account…"
@@ -157,7 +161,7 @@ export function BankTransactionForm({ businessId, transactionId, bankAccounts, c
         <div className="flex items-end gap-1"><div className="space-y-1"><Label className="text-xs">Amount incl. tax</Label><Input className="w-32 text-right tabular" inputMode="decimal" {...register(`lines.${index}.amount`)} aria-invalid={!!errors.lines?.[index]?.amount} />{errors.lines?.[index]?.amount && <p className="field-error">{errors.lines[index].amount?.message}</p>}</div><Button type="button" variant="ghost" size="icon" aria-label={`Remove line ${index + 1}`} disabled={fields.length === 1} onClick={() => remove(index)}><Trash2 className="size-4" /></Button></div>
       </div>)}</div>
       {errors.lines?.root?.message && <p className="field-error">{errors.lines.root.message}</p>}
-      <div className="mt-4 flex justify-end"><div className="min-w-64 border-t border-border pt-3 text-sm"><div className="flex justify-between gap-6"><span className="text-muted-foreground">Transaction total</span><span className="money font-semibold">{formatMoney(totalMinor, currency)}</span></div></div></div>
+      <div className="mt-4 flex justify-end"><div className="min-w-64 border-t border-border pt-3 text-sm"><div className="flex justify-between gap-6"><span className="text-muted-foreground">Transaction total{currency !== baseCurrency ? ` (${currency}, converted to ${baseCurrency} at the stored rate)` : ""}</span><span className="money font-semibold">{formatMoney(totalMinor, currency)}</span></div></div></div>
     </section>
     <div className="sticky bottom-0 z-20 -mx-4 flex justify-between border-t border-border bg-surface/95 px-4 py-3 backdrop-blur-sm sm:mx-0 sm:rounded-t-lg sm:border-x"><Button asChild variant="ghost"><Link href={transactionId ? `/b/${businessId}/banking/transactions/${transactionId}` : `/b/${businessId}/banking/accounts/${initial.bankAccountId}`}>Cancel</Link></Button><div className="flex gap-2"><Button permission={"save"} type="submit" variant="secondary" disabled={isSubmitting || !!initial.statementLineId} onClick={() => setIntent("draft")}>Save Draft</Button><Button permission={["save", "post"]} type="submit" disabled={isSubmitting} onClick={() => setIntent("post")}>{isSubmitting && <LoaderCircle className="size-4 animate-spin" />} Post Transaction</Button></div></div>
   </form>;

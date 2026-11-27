@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useState } from "react";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { ArrowRight, LoaderCircle } from "lucide-react";
-import { Controller, useForm } from "react-hook-form";
+import { Controller, useForm, useWatch } from "react-hook-form";
 import { Button } from "@/components/ui/button";
 import { Combobox } from "@/components/ui/combobox";
 import { Input } from "@/components/ui/input";
@@ -22,6 +22,11 @@ export function BankTransferForm({ businessId, accounts, initial }: { businessId
   const { register, control, handleSubmit, setError, formState: { errors, isSubmitting, isDirty, isSubmitSuccessful } } = form;
   useUnsavedChanges(isDirty && !isSubmitSuccessful);
   const accountOptions = accounts.map((a) => ({ value: a.id, label: `${a.name} · ${a.currency_code}` }));
+  const fromId = useWatch({ control, name: "fromBankAccountId" });
+  const toId = useWatch({ control, name: "toBankAccountId" });
+  const fromCurrency = accounts.find((a) => a.id === fromId)?.currency_code ?? "";
+  const toCurrency = accounts.find((a) => a.id === toId)?.currency_code ?? "";
+  const crossCurrency = Boolean(fromCurrency && toCurrency && fromCurrency !== toCurrency);
   async function save(values: BankTransferInput) {
     setServerError(""); const result = await createBankTransferAction(businessId, values);
     if (result.fieldErrors) applyServerFieldErrors(setError, result.fieldErrors);
@@ -38,10 +43,18 @@ export function BankTransferForm({ businessId, accounts, initial }: { businessId
         <FieldError name="date" message={errors.date?.message} />
       </div>
       <div className="space-y-1.5">
-        <Label htmlFor="amount">Amount</Label>
+        <Label htmlFor="amount">{crossCurrency ? `Amount sent (${fromCurrency})` : `Amount${fromCurrency ? ` (${fromCurrency})` : ""}`}</Label>
         <Input id="amount" inputMode="decimal" {...register("amount")} {...fieldErrorProps("amount", errors.amount)} />
         <FieldError name="amount" message={errors.amount?.message} />
       </div>
+      {crossCurrency && (
+        <div className="space-y-1.5">
+          <Label htmlFor="toAmount">Amount received ({toCurrency})</Label>
+          <Input id="toAmount" inputMode="decimal" {...register("toAmount")} {...fieldErrorProps("toAmount", errors.toAmount)} />
+          <FieldError name="toAmount" message={errors.toAmount?.message} />
+          <p className="text-xs text-muted-foreground">The two amounts set the conversion rate; any difference from the stored rates posts to realized FX.</p>
+        </div>
+      )}
       <div className="space-y-1.5">
         <Label htmlFor="reference">Reference <span className="font-normal text-muted-foreground">(optional)</span></Label>
         <Input id="reference" {...register("reference")} {...fieldErrorProps("reference", errors.reference)} />

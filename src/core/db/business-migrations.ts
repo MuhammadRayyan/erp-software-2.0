@@ -3194,6 +3194,90 @@ export const businessMigrations = [
         `);
       },
     },
+    {
+      version: 43,
+      name: "foreign_currency_banking_and_fx_revaluation",
+      up: (sqlite) => {
+        const addColumn = (table: string, column: string, definition: string) => {
+          const existing = (sqlite.prepare(`PRAGMA table_info(${table})`).all() as { name: string }[]).map((c) => c.name);
+          if (!existing.includes(column)) sqlite.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition};`);
+        };
+        // Signed (debit-positive) amount in the bank account's own currency, set on
+        // journal lines that post to a foreign-currency bank ledger. NULL elsewhere:
+        // a base-currency bank's account-currency amount is its debit minus credit.
+        addColumn("journal_lines", "currency_amount_minor", "INTEGER");
+
+        // Bank transactions keep their entered amounts in the bank account's currency
+        // plus the rate snapshot and base equivalent used for the ledger.
+        addColumn("bank_transactions", "exchange_rate_to_base", "TEXT NOT NULL DEFAULT '1'");
+        addColumn("bank_transactions", "exchange_rate_date", "TEXT");
+        addColumn("bank_transactions", "exchange_rate_source", "TEXT NOT NULL DEFAULT 'Base'");
+        addColumn("bank_transactions", "base_total_minor", "INTEGER NOT NULL DEFAULT 0");
+        sqlite.exec(`
+          UPDATE bank_transactions SET base_total_minor = total_minor WHERE base_total_minor = 0;
+          UPDATE bank_transactions SET exchange_rate_date = date WHERE exchange_rate_date IS NULL;
+        `);
+
+        // Transfers: amount_minor is in the source account's currency, to_amount_minor
+        // in the destination's. Each side's base value and rate are kept; any
+        // difference between them is realized FX on the conversion.
+        addColumn("bank_transfers", "to_amount_minor", "INTEGER NOT NULL DEFAULT 0");
+        addColumn("bank_transfers", "from_rate_to_base", "TEXT NOT NULL DEFAULT '1'");
+        addColumn("bank_transfers", "to_rate_to_base", "TEXT NOT NULL DEFAULT '1'");
+        addColumn("bank_transfers", "from_base_amount_minor", "INTEGER NOT NULL DEFAULT 0");
+        addColumn("bank_transfers", "to_base_amount_minor", "INTEGER NOT NULL DEFAULT 0");
+        addColumn("bank_transfers", "realized_fx_amount_minor", "INTEGER NOT NULL DEFAULT 0");
+        sqlite.exec(`
+          UPDATE bank_transfers SET to_amount_minor = amount_minor WHERE to_amount_minor = 0;
+          UPDATE bank_transfers SET from_base_amount_minor = amount_minor WHERE from_base_amount_minor = 0;
+          UPDATE bank_transfers SET to_base_amount_minor = amount_minor WHERE to_base_amount_minor = 0;
+        `);
+
+        addColumn("business_accounting_settings", "unrealized_fx_account_id", "TEXT REFERENCES accounts(id)");
+
+        sqlite.exec(`
+          CREATE TABLE IF NOT EXISTS fx_revaluations (
+            id TEXT PRIMARY KEY NOT NULL,
+            revaluation_number TEXT NOT NULL,
+            date TEXT NOT NULL,
+            reversal_date TEXT NOT NULL,
+            rates_json TEXT NOT NULL,
+            net_adjustment_minor INTEGER NOT NULL,
+            status TEXT NOT NULL DEFAULT 'posted' CHECK (status IN ('posted', 'void')),
+            notes TEXT,
+            created_by TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            voided_by TEXT,
+            voided_at TEXT
+          );
+          CREATE UNIQUE INDEX IF NOT EXISTS fx_revaluation_number_idx ON fx_revaluations(revaluation_number);
+          CREATE INDEX IF NOT EXISTS fx_revaluation_date_idx ON fx_revaluations(date, status);
+          CREATE UNIQUE INDEX IF NOT EXISTS fx_revaluation_active_date_idx
+            ON fx_revaluations(date) WHERE status = 'posted';
+
+          CREATE TABLE IF NOT EXISTS fx_revaluation_lines (
+            id TEXT PRIMARY KEY NOT NULL,
+            revaluation_id TEXT NOT NULL REFERENCES fx_revaluations(id) ON DELETE CASCADE,
+            kind TEXT NOT NULL CHECK (kind IN ('receivable', 'customer_credit', 'payable', 'supplier_credit', 'bank')),
+            source_type TEXT NOT NULL,
+            source_id TEXT NOT NULL,
+            source_number TEXT NOT NULL,
+            party_id TEXT,
+            party_name TEXT,
+            account_id TEXT NOT NULL REFERENCES accounts(id),
+            currency_code TEXT NOT NULL,
+            foreign_open_minor INTEGER NOT NULL,
+            carrying_base_minor INTEGER NOT NULL,
+            rate_to_base TEXT NOT NULL,
+            revalued_base_minor INTEGER NOT NULL,
+            adjustment_minor INTEGER NOT NULL,
+            position INTEGER NOT NULL
+          );
+          CREATE INDEX IF NOT EXISTS fx_revaluation_line_run_idx ON fx_revaluation_lines(revaluation_id);
+          CREATE INDEX IF NOT EXISTS fx_revaluation_line_source_idx ON fx_revaluation_lines(source_type, source_id);
+        `);
+      },
+    },
   ] satisfies readonly SqliteMigration[];
 
 
