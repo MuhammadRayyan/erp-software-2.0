@@ -1,3 +1,5 @@
+import "server-only";
+
 import type Database from "better-sqlite3";
 
 function getImportTimestamp(sqlite: Database.Database): string | null {

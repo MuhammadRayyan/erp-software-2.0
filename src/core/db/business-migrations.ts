@@ -1,3 +1,5 @@
+import "server-only";
+
 import type Database from "better-sqlite3";
 import { runMigrations, type SqliteMigration } from "./migrations/runner";
 import { detectAndValidateBusinessBaseline } from "./migrations/business-baseline";
@@ -3167,6 +3169,28 @@ export const businessMigrations = [
             ON bank_reconciliation_items(statement_line_id, journal_entry_id);
           CREATE INDEX IF NOT EXISTS bank_reconciliation_statement_line_idx2
             ON bank_reconciliation_items(statement_line_id);
+        `);
+      },
+    },
+    {
+      version: 40,
+      name: "document_status_date_indexes",
+      up: (sqlite) => {
+        // List pages filter by status and sort/filter by document date. Purchase
+        // orders keep their workflow state in `status` (no document_status).
+        // The two journal indexes dropped here are leading-column prefixes of
+        // journal_entries_date_status_idx and journal_lines_account_entry_idx,
+        // which serve every query they did.
+        sqlite.exec(`
+          CREATE INDEX IF NOT EXISTS sales_quote_status_date_idx ON sales_quotes(document_status, quote_date);
+          CREATE INDEX IF NOT EXISTS sales_order_status_date_idx ON sales_orders(document_status, order_date);
+          CREATE INDEX IF NOT EXISTS delivery_note_status_date_idx ON delivery_notes(document_status, date);
+          CREATE INDEX IF NOT EXISTS purchase_quote_status_date_idx ON purchase_quotes(document_status, quote_date);
+          CREATE INDEX IF NOT EXISTS purchase_order_status_date_idx ON purchase_orders(status, date);
+          CREATE INDEX IF NOT EXISTS goods_receipt_status_date_idx ON goods_receipts(document_status, date);
+          CREATE INDEX IF NOT EXISTS debit_note_status_date_idx ON debit_notes(document_status, debit_note_date);
+          DROP INDEX IF EXISTS journal_date_idx;
+          DROP INDEX IF EXISTS journal_lines_account_idx;
         `);
       },
     },

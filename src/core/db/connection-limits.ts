@@ -1,3 +1,5 @@
+import "server-only";
+
 /**
  * Statements created (cache misses) after which a long-lived connection is
  * replaced. Each retained statement costs ~3 KB of native memory that is only

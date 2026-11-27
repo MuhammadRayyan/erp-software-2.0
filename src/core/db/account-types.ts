@@ -1,3 +1,5 @@
+// Plain constants shared with client components (account-manager.tsx renders the
+// type picker), so unlike the rest of src/core/db this file is not server-only.
 export const accountTypes = ["asset", "liability", "equity", "income", "expense"] as const;
 
 export const accountSubtypes = [

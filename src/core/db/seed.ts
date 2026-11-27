@@ -1,3 +1,5 @@
+import "server-only";
+
 import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
 import { auth } from "@/core/auth/auth";

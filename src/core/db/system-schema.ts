@@ -1,3 +1,5 @@
+import "server-only";
+
 import { index, integer, primaryKey, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core";
 
 export const schemaMigrations = sqliteTable("schema_migrations", {
@@ -20,7 +22,7 @@ export const users = sqliteTable("user", {
   maxUsers: integer("max_users").notNull().default(5),
   isTenantAdmin: integer("is_tenant_admin", { mode: "boolean" }).notNull().default(false),
   createdByUserId: text("created_by_user_id"),
-});
+}, (table) => [index("user_created_by_user_idx").on(table.createdByUserId)]);
 
 export const userSettings = sqliteTable("user_settings", {
   userId: text("user_id")
@@ -95,7 +97,7 @@ export const businesses = sqliteTable("businesses", {
   createdAt: text("created_at").notNull(),
   updatedAt: text("updated_at").notNull(),
   lastOpenedAt: text("last_opened_at"),
-});
+}, (table) => [index("businesses_owner_user_idx").on(table.ownerUserId)]);
 
 export const memberships = sqliteTable(
   "business_memberships",

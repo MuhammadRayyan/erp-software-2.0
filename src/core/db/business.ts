@@ -1,3 +1,5 @@
+import "server-only";
+
 import { mkdirSync } from "node:fs";
 import { cache } from "react";
 import Database from "better-sqlite3";
