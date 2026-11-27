@@ -15,6 +15,7 @@ import { getBusinessPaths, makeScratchDirectory } from "@/core/db/paths";
 import { enforceReferenceSchemaObjects } from "@/core/db/schema-objects";
 import { businesses, memberships } from "@/core/db/system-schema";
 import { getSystemDb } from "@/core/db/system";
+import { runInWorker } from "@/core/workers/run-in-worker";
 import { getBusinessForUser } from "./business-service";
 import {
   BACKUP_ZIP_LIMITS,
@@ -86,6 +87,38 @@ function collectAttachmentFiles(
   return entries;
 }
 
+type SnapshotCurrency = {
+  code: string;
+  name: string;
+  symbol: string | null;
+  minor_unit: number;
+  is_base: number;
+  is_active: number;
+};
+
+export type DatabaseSnapshot = { databaseSha256: string; currencies: SnapshotCurrency[] };
+
+/**
+ * Copies a live business database to `targetPath` through the SQLite online
+ * backup API and returns the copy's SHA-256 and currency configuration. Runs
+ * inside the migration worker (it opens its own read-only connection).
+ */
+export async function snapshotBusinessDatabase(databasePath: string, targetPath: string): Promise<DatabaseSnapshot> {
+  const source = new Database(databasePath, { readonly: true, fileMustExist: true, timeout: 5000 });
+  let currencies: SnapshotCurrency[];
+  try {
+    await source.backup(targetPath);
+    // Read from the source, not the copy: opening the copy (a WAL-mode file)
+    // would leave -wal/-shm siblings next to it.
+    currencies = source
+      .prepare(`SELECT code, name, symbol, minor_unit, is_base, is_active FROM currencies ORDER BY code`)
+      .all() as SnapshotCurrency[];
+  } finally {
+    source.close();
+  }
+  return { databaseSha256: await checksumFile(targetPath), currencies };
+}
+
 /**
  * Build a true streaming backup archive (`Web ReadableStream<Uint8Array>`) using
  * `yazl` so `business.sqlite` and attachment files stream straight from disk
@@ -103,23 +136,17 @@ export async function createBusinessBackupStream(
   const temporaryDatabase = path.join(context.paths.directory, `.backup-${randomUUID()}.sqlite`);
 
   try {
-    await context.sqlite.backup(temporaryDatabase);
-    const [databaseSha256, currencyConfiguration, attachmentFiles] = await Promise.all([
-      checksumFile(temporaryDatabase),
-      Promise.resolve(
-        context.sqlite
-          .prepare(`SELECT code, name, symbol, minor_unit, is_base, is_active FROM currencies ORDER BY code`)
-          .all() as Array<{
-          code: string;
-          name: string;
-          symbol: string | null;
-          minor_unit: number;
-          is_base: number;
-          is_active: number;
-        }>,
-      ),
-      Promise.resolve(collectAttachmentFiles(context.paths.attachments)),
-    ]);
+    // The page copy and SHA-256 of a multi-megabyte database run on a worker
+    // thread (its own read-only connection; WAL gives it a consistent
+    // snapshot) so the main event loop keeps serving requests.
+    const snapshot = await runInWorker<DatabaseSnapshot>(
+      "migration.worker",
+      "backup.snapshot",
+      { databasePath: context.paths.database, targetPath: temporaryDatabase },
+      { signal, timeoutMs: 10 * 60_000 },
+    );
+    const { databaseSha256, currencies: currencyConfiguration } = snapshot;
+    const attachmentFiles = collectAttachmentFiles(context.paths.attachments);
 
     const manifest = {
       formatVersion: 2 as const,
@@ -169,6 +196,19 @@ export async function createBusinessBackupStream(
 export async function exportBusinessBackup(businessId: string, userId: string) {
   const { stream } = await createBusinessBackupStream(businessId, userId);
   return collectStreamToBuffer(stream);
+}
+
+/**
+ * Reads only the manifest of a native .erpbackup archive (with the same
+ * decompression limits as a restore) for the import preview.
+ */
+export async function inspectBusinessBackupArchive(buffer: ArrayBuffer | Buffer): Promise<unknown> {
+  const zip = await JSZip.loadAsync(buffer);
+  assertZipWithinDeclaredLimits(zip);
+  const manifestFile = zip.file("manifest.json");
+  if (!manifestFile) throw new Error("Missing manifest.json in backup.");
+  const manifestBuffer = await readZipEntryLimited(manifestFile, BACKUP_ZIP_LIMITS.maxManifestBytes);
+  return JSON.parse(manifestBuffer.toString("utf8"));
 }
 
 export async function importBusinessBackup(buffer: ArrayBuffer | Buffer, userId: string) {

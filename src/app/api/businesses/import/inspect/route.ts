@@ -1,8 +1,7 @@
 import { NextResponse } from "next/server";
 import { requireApiAuth } from "@/core/auth/api-auth";
-import { inspectManagerBackup } from "@/modules/migration/manager-importer";
-import JSZip from "jszip";
-import { BACKUP_ZIP_LIMITS, assertZipWithinDeclaredLimits, readZipEntryLimited } from "@/core/businesses/zip-limits";
+import { inspectBackupArchiveInWorker, inspectManagerBackupInWorker } from "@/core/workers/jobs";
+import { isWorkerBusyError } from "@/core/workers/run-in-worker";
 
 export const runtime = "nodejs";
 
@@ -29,14 +28,16 @@ export async function POST(request: Request) {
   const buf = Buffer.from(arrayBuffer);
   const SQLITE_HEADER = Buffer.from("SQLite format 3\0", "utf8");
 
+  // Parsing runs on a worker thread; the upload's memory is moved into it.
   if (buf.length >= 16 && Buffer.compare(buf.subarray(0, 16), SQLITE_HEADER) === 0) {
     try {
-      const summary = inspectManagerBackup(buf);
+      const summary = await inspectManagerBackupInWorker(buf, { transfer: true, signal: request.signal });
       return NextResponse.json({
         type: "manager",
         summary,
       });
     } catch (err) {
+      if (isWorkerBusyError(err)) return NextResponse.json({ error: err.message }, { status: 503, headers: { "Retry-After": "30" } });
       return NextResponse.json(
         { error: err instanceof Error ? err.message : "Invalid Manager.io backup file." },
         { status: 400 },
@@ -46,19 +47,16 @@ export async function POST(request: Request) {
 
   // Check if it's a native .erpbackup (ZIP)
   try {
-    const zip = await JSZip.loadAsync(arrayBuffer);
-    assertZipWithinDeclaredLimits(zip);
-    const manifestFile = zip.file("manifest.json");
-    if (!manifestFile) {
-      return NextResponse.json({ error: "Missing manifest.json in backup." }, { status: 400 });
-    }
-    const manifestBuffer = await readZipEntryLimited(manifestFile, BACKUP_ZIP_LIMITS.maxManifestBytes);
-    const manifest = JSON.parse(manifestBuffer.toString("utf8"));
+    const manifest = await inspectBackupArchiveInWorker(buf, { transfer: true, signal: request.signal });
     return NextResponse.json({
       type: "uaemanager",
       manifest,
     });
-  } catch {
+  } catch (err) {
+    if (isWorkerBusyError(err)) return NextResponse.json({ error: err.message }, { status: 503, headers: { "Retry-After": "30" } });
+    if (err instanceof Error && err.message === "Missing manifest.json in backup.") {
+      return NextResponse.json({ error: err.message }, { status: 400 });
+    }
     return NextResponse.json(
       { error: "Unrecognized backup file format. Expected a .erpbackup (ZIP) or .manager (SQLite 3) file." },
       { status: 400 },
