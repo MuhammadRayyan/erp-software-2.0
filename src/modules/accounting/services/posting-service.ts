@@ -205,9 +205,12 @@ export function reverseTransaction(
   },
 ) {
   const original = sqlite
-    .prepare("SELECT id FROM journal_entries WHERE source_type = ? AND source_id = ?")
-    .get(input.originalSourceType, input.originalSourceId) as { id: string } | undefined;
+    .prepare("SELECT id, date FROM journal_entries WHERE source_type = ? AND source_id = ?")
+    .get(input.originalSourceType, input.originalSourceId) as { id: string; date: string } | undefined;
   if (!original) throw new Error("The original journal entry could not be found.");
+  // A reversal never predates what it reverses: voiding a future-dated document
+  // reverses it on its own date, so both land in the same period.
+  const reversalDate = input.date < original.date ? original.date : input.date;
   const lines = sqlite
     .prepare(`
       SELECT account_id, description, debit_minor, credit_minor, customer_id, supplier_id,
@@ -228,7 +231,7 @@ export function reverseTransaction(
   return postTransaction(sqlite, {
     sourceType: input.reversalSourceType,
     sourceId: input.reversalSourceId,
-    date: input.date,
+    date: reversalDate,
     description: input.description,
     lines: lines.map((line) => ({
       accountId: line.account_id,

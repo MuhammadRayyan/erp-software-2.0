@@ -232,7 +232,8 @@ export function reverseTaxEntries(
   `);
   const now = new Date().toISOString();
   for (const row of rows) {
-    insert.run(randomUUID(), input.taxDate, input.reversalSourceType, input.sourceId,
+    // Never before the original tax date (see reverseTransaction).
+    insert.run(randomUUID(), input.taxDate < row.tax_date ? row.tax_date : input.taxDate, input.reversalSourceType, input.sourceId,
       String(row.source_line_id), String(row.source_number), row.party_name ?? null,
       String(row.tax_code_id), String(row.tax_code_name), Number(row.rate_basis_points),
       String(row.vat_category), String(row.direction), -Number(row.net_amount_minor),
