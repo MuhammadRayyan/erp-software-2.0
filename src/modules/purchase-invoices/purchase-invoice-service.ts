@@ -8,6 +8,13 @@ import { purchaseInvoiceLines, purchaseInvoices, suppliers } from "@/core/db/bus
 import {     quantityMicrosToInput } from "@/modules/accounting/calculations/money";
 import { allocateNumber } from "@/modules/accounting/services/numbering-service";
 import { postPurchaseInvoice } from "@/modules/accounting/services/purchase-invoice-posting-service";
+import {
+  describeAmendment,
+  formatMinorAmount,
+  postingFingerprint,
+  supersedePosting,
+  type DocumentSnapshot,
+} from "@/modules/accounting/services/posting-amendment-service";
 import { reverseTransaction } from "@/modules/accounting/services/posting-service";
 import { effectiveProjectId, validateProjectReferences } from "@/modules/projects/project-validation";
 import { replaceTaxEntries, reverseTaxEntries } from "@/modules/tax/tax-entry-service";
@@ -481,7 +488,7 @@ export function savePurchaseInvoice(
     assertDateNotLocked(context.sqlite, currentHeader.invoiceDate, "Purchase invoice");
   }
   const taxDate = data.taxDate || data.invoiceDate;
-  const rate = resolveRateSnapshot(context.sqlite, {
+  const resolvedRate = resolveRateSnapshot(context.sqlite, {
     currencyCode: input.currencyCode ?? supplier.defaultCurrencyCode ?? data.currencyCode,
     exchangeRateToBase: data.exchangeRateToBase,
     exchangeRateDate: data.exchangeRateDate,
@@ -490,6 +497,12 @@ export function savePurchaseInvoice(
     taxCodeIds: data.lines.map((line) => line.taxCodeId),
     enforceVatPolicy: true,
   });
+  // Base-currency documents carry their tax date as the (meaningless) rate
+  // date. Keep the posted snapshot so a posted document's date can be amended.
+  const rate = currentHeader?.documentStatus === "posted" && resolvedRate.exchangeRateSource === "Base"
+    && currentHeader.currencyCode === resolvedRate.currencyCode && currentHeader.exchangeRateSource === "Base"
+    ? { ...resolvedRate, exchangeRateDate: currentHeader.exchangeRateDate }
+    : resolvedRate;
   if (currentHeader?.documentStatus === "posted" && (
     currentHeader.currencyCode !== rate.currencyCode
     || currentHeader.exchangeRateToBase !== rate.exchangeRateToBase
@@ -508,6 +521,62 @@ export function savePurchaseInvoice(
   const now = new Date().toISOString();
   const id = invoiceId ?? randomUUID();
   let recordedNumber = "";
+  // A posted bill is amended by reversing its journal/VAT rows and posting the
+  // new version, unless nothing that drives the ledger has changed.
+  const isPostedAmendment = currentHeader?.documentStatus === "posted";
+  const previousLines = isPostedAmendment && invoiceId
+    ? context.db.select().from(purchaseInvoiceLines).where(eq(purchaseInvoiceLines.purchaseInvoiceId, invoiceId)).orderBy(asc(purchaseInvoiceLines.position)).all()
+    : [];
+  const beforeSnapshot: DocumentSnapshot | null = isPostedAmendment && currentHeader
+    ? {
+        date: currentHeader.invoiceDate,
+        taxDate: currentHeader.taxDate,
+        partyId: currentHeader.supplierId,
+        currencyCode: currentHeader.currencyCode,
+        exchangeRateToBase: currentHeader.exchangeRateToBase,
+        subtotalMinor: currentHeader.subtotalMinor,
+        taxMinor: currentHeader.taxMinor,
+        totalMinor: currentHeader.totalMinor,
+        baseTotalMinor: currentHeader.baseTotalMinor,
+        lines: previousLines.map((line) => ({
+          description: line.description,
+          quantityMicros: line.quantityMicros,
+          unitPriceMinor: line.unitPriceMinor,
+          accountId: line.expenseAccountId,
+          taxCodeId: line.taxCodeId,
+          netAmountMinor: line.netAmountMinor,
+          taxAmountMinor: line.taxAmountMinor,
+          grossAmountMinor: line.grossAmountMinor,
+        })),
+      }
+    : null;
+  const postingChanged = Boolean(isPostedAmendment && currentHeader) && postingFingerprint({
+    partyId: currentHeader!.supplierId,
+    date: currentHeader!.invoiceDate,
+    taxDate: currentHeader!.taxDate,
+    lines: previousLines.map((line) => ({
+      accountId: line.expenseAccountId,
+      taxCodeId: line.taxCodeId,
+      projectId: effectiveProjectId(line.projectId, currentHeader!.projectId),
+      itemId: line.itemId,
+      netAmountMinor: line.netAmountMinor,
+      taxAmountMinor: line.taxAmountMinor,
+    })),
+  }) !== postingFingerprint({
+    partyId: data.supplierId,
+    date: data.invoiceDate,
+    taxDate,
+    lines: lines.map((line) => ({
+      accountId: line.expenseAccountId,
+      taxCodeId: line.taxCodeId,
+      projectId: effectiveProjectId(line.projectId, data.projectId),
+      itemId: line.itemId,
+      netAmountMinor: line.netAmountMinor,
+      taxAmountMinor: line.taxAmountMinor,
+    })),
+  });
+  let amendment: ReturnType<typeof supersedePosting> | null = null;
+  let repostedEntryNumber: string | null = null;
   const approvalEval =
     currentHeader?.documentStatus === "posted" || intent === "draft" || options?.bypassApprovalPolicy
       ? { requiresApproval: false }
@@ -537,7 +606,11 @@ export function savePurchaseInvoice(
       if (context.sqlite.prepare("SELECT 1 FROM goods_receipts WHERE purchase_invoice_id = ? LIMIT 1").get(invoiceId)) throw new Error("A Purchase Invoice cannot be edited after a Goods Receipt has been created from it.");
       const paidMinor = paidForPurchaseInvoice(context.sqlite, invoiceId);
       if (paidMinor > 0 && current.supplierId !== data.supplierId) throw new Error("Cannot change the supplier after payments have been allocated.");
-      if (amounts.totalMinor < paidMinor) throw new Error("Purchase invoice total cannot be lower than amount already paid.");
+      if (amounts.totalMinor < paidMinor) {
+        throw new Error(
+          `Cannot reduce purchase invoice ${current.internalNumber} to ${rate.currencyCode} ${formatMinorAmount(amounts.totalMinor, rate.currencyMinorUnit)}: ${rate.currencyCode} ${formatMinorAmount(paidMinor, rate.currencyMinorUnit)} is already settled by payments or debit notes. Remove those allocations first or issue a debit note instead.`,
+        );
+      }
       internalNumber = current.internalNumber;
       recordedNumber = internalNumber;
       if (current.documentStatus === "posted") {
@@ -609,7 +682,18 @@ export function savePurchaseInvoice(
       assertDateNotLocked(context.sqlite, data.invoiceDate, "Purchase invoice");
       assertVatDateUnlocked(context.sqlite, taxDate, lines.map((line) => line.taxCodeId));
       const postingLines = lines.map((line) => ({ ...line, projectId: effectiveProjectId(line.projectId, data.projectId) }));
-      postPurchaseInvoice(context.sqlite, { id, internalNumber, supplierId: data.supplierId, invoiceDate: data.invoiceDate, totalMinor: amounts.totalMinor, rate }, postingLines, replace);
+      if (replace && postingChanged) {
+        amendment = supersedePosting(context.sqlite, {
+          sourceType: "purchase_invoice",
+          documentId: id,
+          documentLabel: "Purchase Invoice",
+          documentNumber: internalNumber,
+          taxDate: currentHeader!.taxDate,
+        });
+      }
+      if (!replace || postingChanged) {
+        repostedEntryNumber = postPurchaseInvoice(context.sqlite, { id, internalNumber, supplierId: data.supplierId, invoiceDate: data.invoiceDate, totalMinor: amounts.totalMinor, rate }, postingLines).entryNumber;
+      }
       replaceTaxEntries(context.sqlite, {
         sourceType: "purchase_invoice", sourceId: id, sourceNumber: internalNumber,
         partyName: supplier.name, taxDate, direction: "purchases", rate,
@@ -660,6 +744,55 @@ export function savePurchaseInvoice(
   });
 
   const formattedTotal = (amounts.totalMinor / (10 ** rate.currencyMinorUnit)).toFixed(2);
+  if (beforeSnapshot) {
+    const change = describeAmendment(beforeSnapshot, {
+      date: data.invoiceDate,
+      taxDate,
+      partyId: data.supplierId,
+      currencyCode: rate.currencyCode,
+      exchangeRateToBase: rate.exchangeRateToBase,
+      subtotalMinor: amounts.subtotalMinor,
+      taxMinor: amounts.taxMinor,
+      totalMinor: amounts.totalMinor,
+      baseTotalMinor: base.baseTotalMinor,
+      lines: lines.map((line) => ({
+        description: line.description,
+        quantityMicros: line.quantityMicros,
+        unitPriceMinor: line.unitPriceMinor,
+        accountId: line.expenseAccountId,
+        taxCodeId: line.taxCodeId,
+        netAmountMinor: line.netAmountMinor,
+        taxAmountMinor: line.taxAmountMinor,
+        grossAmountMinor: line.grossAmountMinor,
+      })),
+    });
+    const minorUnit = rate.currencyMinorUnit;
+    // Assigned inside the transaction callback; TypeScript cannot see that.
+    const amendmentResult = amendment as ReturnType<typeof supersedePosting> | null;
+    const journalNote = amendmentResult
+      ? `; journal ${amendmentResult.supersededEntryNumber} reversed by ${amendmentResult.reversalEntryNumber} and reposted as ${repostedEntryNumber}`
+      : "; ledger unchanged";
+    recordActivity(businessId, {
+      userId,
+      action: "updated",
+      entityType: "purchase_invoice",
+      entityId: id,
+      entityNumber: recordedNumber || data.supplierInvoiceNumber,
+      summary: `Amended posted purchase invoice ${recordedNumber}: total ${beforeSnapshot.currencyCode} ${formatMinorAmount(beforeSnapshot.totalMinor, minorUnit)} → ${rate.currencyCode} ${formatMinorAmount(amounts.totalMinor, minorUnit)} (${change.lineChangeSummary})${journalNote}`,
+      details: {
+        supplierId: data.supplierId,
+        totalMinor: amounts.totalMinor,
+        currency: rate.currencyCode,
+        supplierInvoiceNumber: data.supplierInvoiceNumber,
+        status: "posted",
+        amendment: amendmentResult
+          ? { revision: amendmentResult.revision, supersededEntry: amendmentResult.supersededEntryNumber, reversalEntry: amendmentResult.reversalEntryNumber, newEntry: repostedEntryNumber }
+          : null,
+        ...change,
+      },
+    });
+    return id;
+  }
   const action = finalStatus === "posted" ? "posted" : !invoiceId ? "created" : "updated";
   recordActivity(businessId, {
     userId,

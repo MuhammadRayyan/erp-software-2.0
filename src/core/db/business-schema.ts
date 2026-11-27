@@ -916,6 +916,8 @@ export const salesCreditNoteAllocations = sqliteTable(
     amountMinor: integer("amount_minor").notNull(),
     foreignAmountAllocated: integer("foreign_amount_allocated").notNull(),
     baseCarryingAmountReleased: integer("base_carrying_amount_released").notNull(),
+    settlementBaseAmount: integer("settlement_base_amount"),
+    realizedFxAmount: integer("realized_fx_amount").notNull().default(0),
   },
   (table) => [
     uniqueIndex("sales_credit_note_invoice_allocation_idx").on(table.creditNoteId, table.salesInvoiceId),
@@ -1995,6 +1997,78 @@ export const debitNotes = sqliteTable(
     uniqueIndex("debit_note_number_idx").on(table.debitNoteNumber),
     index("debit_note_supplier_idx").on(table.supplierId),
     index("debit_note_project_idx").on(table.projectId),
+  ],
+);
+
+export const debitNoteAllocations = sqliteTable(
+  "debit_note_allocations",
+  {
+    id: text("id").primaryKey(),
+    debitNoteId: text("debit_note_id").notNull().references(() => debitNotes.id, { onDelete: "cascade" }),
+    purchaseInvoiceId: text("purchase_invoice_id").notNull().references(() => purchaseInvoices.id),
+    amountMinor: integer("amount_minor").notNull(),
+    baseCarryingAmountReleased: integer("base_carrying_amount_released").notNull(),
+    settlementBaseAmount: integer("settlement_base_amount").notNull(),
+    realizedFxAmount: integer("realized_fx_amount").notNull().default(0),
+  },
+  (table) => [
+    uniqueIndex("debit_note_invoice_allocation_idx").on(table.debitNoteId, table.purchaseInvoiceId),
+    index("debit_note_allocation_invoice_idx").on(table.purchaseInvoiceId),
+    check("debit_note_allocation_positive", sql`${table.amountMinor} > 0`),
+  ],
+);
+
+function refundColumns() {
+  return {
+    id: text("id").primaryKey(),
+    refundNumber: text("refund_number").notNull(),
+    date: text("date").notNull(),
+    bankAccountId: text("bank_account_id").notNull().references(() => accounts.id),
+    amountMinor: integer("amount_minor").notNull(),
+    currencyCode: text("currency_code").notNull().references(() => currencies.code),
+    exchangeRateToBase: text("exchange_rate_to_base").notNull().default("1"),
+    exchangeRateDate: text("exchange_rate_date").notNull(),
+    exchangeRateSource: text("exchange_rate_source").notNull().default("Base"),
+    baseAmountMinor: integer("base_amount_minor").notNull(),
+    releasedCarryingAmountMinor: integer("released_carrying_amount_minor").notNull(),
+    realizedFxAmountMinor: integer("realized_fx_amount_minor").notNull().default(0),
+    reference: text("reference"),
+    description: text("description"),
+    documentStatus: text("document_status", { enum: ["posted", "void"] }).notNull().default("posted"),
+    createdBy: text("created_by").notNull(),
+    createdAt: text("created_at").notNull(),
+    postedAt: text("posted_at"),
+    voidedAt: text("voided_at"),
+  };
+}
+
+/** Customer credit (from a credit note) paid back out of a bank account. */
+export const customerRefunds = sqliteTable(
+  "customer_refunds",
+  {
+    ...refundColumns(),
+    customerId: text("customer_id").notNull().references(() => customers.id),
+    creditNoteId: text("credit_note_id").notNull().references(() => salesCreditNotes.id),
+  },
+  (table) => [
+    uniqueIndex("customer_refund_number_idx").on(table.refundNumber),
+    index("customer_refund_customer_idx").on(table.customerId),
+    index("customer_refund_credit_note_idx").on(table.creditNoteId),
+  ],
+);
+
+/** Supplier credit (from a debit note) received back into a bank account. */
+export const supplierRefunds = sqliteTable(
+  "supplier_refunds",
+  {
+    ...refundColumns(),
+    supplierId: text("supplier_id").notNull().references(() => suppliers.id),
+    debitNoteId: text("debit_note_id").notNull().references(() => debitNotes.id),
+  },
+  (table) => [
+    uniqueIndex("supplier_refund_number_idx").on(table.refundNumber),
+    index("supplier_refund_supplier_idx").on(table.supplierId),
+    index("supplier_refund_debit_note_idx").on(table.debitNoteId),
   ],
 );
 

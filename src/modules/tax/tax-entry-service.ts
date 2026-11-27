@@ -166,6 +166,49 @@ export function replaceTaxEntries(
   }
 }
 
+/**
+ * Amending a posted document keeps its VAT history: the current tax rows are
+ * re-labelled `<type>_superseded` and an equal-and-opposite set is added as
+ * `<type>_amendment` on the original tax date, so the VAT report nets the old
+ * version to zero before the new version is posted under the live source type.
+ * Both carry `revisionSourceId` (`<documentId>:<revision>`), matching the
+ * journal entries of the same revision so VAT still reconciles to the GL.
+ */
+export function supersedeTaxEntries(
+  sqlite: Database.Database,
+  input: { sourceType: string; sourceId: string; revisionSourceId: string; taxDate: string },
+) {
+  if (!sqlite.inTransaction) throw new Error("Tax-detail amendment must run inside a database transaction.");
+  const supersededType = `${input.sourceType}_superseded`;
+  const amendmentType = `${input.sourceType}_amendment`;
+  const ids = (sqlite.prepare("SELECT id FROM tax_entries WHERE source_type = ? AND source_id = ?")
+    .all(input.sourceType, input.sourceId) as { id: string }[]).map((row) => row.id);
+  if (ids.length === 0) return 0;
+  sqlite.prepare("UPDATE tax_entries SET source_type = ?, source_id = ? WHERE source_type = ? AND source_id = ?")
+    .run(supersededType, input.revisionSourceId, input.sourceType, input.sourceId);
+  const now = new Date().toISOString();
+  sqlite.prepare(`
+    INSERT INTO tax_entries (
+      id, tax_date, source_type, source_id, source_line_id, source_number, party_name,
+      tax_code_id, tax_code_name, rate_basis_points, vat_category, direction,
+      net_amount_minor, vat_amount_minor, document_currency, foreign_net_minor,
+      foreign_vat_minor, exchange_rate_to_base, base_net_minor, base_vat_minor,
+      rate_date, rate_source, output_vat_minor, recoverable_vat_minor,
+      supply_emirate, project_id, created_at
+    )
+    SELECT lower(hex(randomblob(16))), ?, ?, source_id, source_line_id, source_number, party_name,
+      tax_code_id, tax_code_name, rate_basis_points, vat_category, direction,
+      -net_amount_minor, -vat_amount_minor, document_currency, -foreign_net_minor,
+      -foreign_vat_minor, exchange_rate_to_base, -base_net_minor, -base_vat_minor,
+      rate_date, rate_source, -output_vat_minor, -recoverable_vat_minor,
+      supply_emirate, project_id, ?
+    FROM tax_entries WHERE id IN (${ids.map(() => "?").join(", ")})
+  `).run(input.taxDate, amendmentType, now, ...ids);
+  sqlite.prepare("DELETE FROM vat_data_review WHERE source_type = ? AND source_id = ?")
+    .run(input.sourceType, input.sourceId);
+  return ids.length;
+}
+
 export function reverseTaxEntries(
   sqlite: Database.Database,
   input: { originalSourceType: string; sourceId: string; reversalSourceType: string; taxDate: string },

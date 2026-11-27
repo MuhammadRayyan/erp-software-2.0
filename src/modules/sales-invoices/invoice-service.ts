@@ -11,6 +11,13 @@ import {
 } from "@/core/db/business-schema";
 import { quantityMicrosToInput } from "@/modules/accounting/calculations/money";
 import { postSalesInvoice } from "@/modules/accounting/services/invoice-posting-service";
+import {
+  describeAmendment,
+  formatMinorAmount,
+  postingFingerprint,
+  supersedePosting,
+  type DocumentSnapshot,
+} from "@/modules/accounting/services/posting-amendment-service";
 import { allocateNumber } from "@/modules/accounting/services/numbering-service";
 import { reverseTransaction } from "@/modules/accounting/services/posting-service";
 import { effectiveProjectId, validateProjectReferences } from "@/modules/projects/project-validation";
@@ -981,7 +988,7 @@ export function updateInvoice(
   const customer = context.db.select().from(customers).where(eq(customers.id, data.customerId)).get();
   if (!customer) throw new Error("Customer not found.");
   const taxDate = data.taxDate || data.invoiceDate;
-  const rate = resolveRateSnapshot(context.sqlite, {
+  const resolvedRate = resolveRateSnapshot(context.sqlite, {
     currencyCode: data.currencyCode,
     exchangeRateToBase: data.exchangeRateToBase,
     exchangeRateDate: data.exchangeRateDate,
@@ -990,6 +997,12 @@ export function updateInvoice(
     taxCodeIds: data.lines.map((line) => line.taxCodeId),
     enforceVatPolicy: true,
   });
+  // Base-currency documents carry their tax date as the (meaningless) rate
+  // date. Keep the posted snapshot so a posted document's date can be amended.
+  const rate = current?.documentStatus === "posted" && resolvedRate.exchangeRateSource === "Base"
+    && current.currencyCode === resolvedRate.currencyCode && current.exchangeRateSource === "Base"
+    ? { ...resolvedRate, exchangeRateDate: current.exchangeRateDate }
+    : resolvedRate;
   if (current.documentStatus === "posted" && (
     current.currencyCode !== rate.currencyCode
     || current.exchangeRateToBase !== rate.exchangeRateToBase
@@ -1005,8 +1018,68 @@ export function updateInvoice(
   const totals = totalsForLines(lines);
   const base = convertDocumentLinesToBase(lines, rate);
   if (totals.totalMinor < allocatedMinor) {
-    throw new Error("Cannot reduce invoice total below amount already received.");
+    throw new Error(
+      `Cannot reduce invoice ${current.invoiceNumber} to ${rate.currencyCode} ${formatMinorAmount(totals.totalMinor, rate.currencyMinorUnit)}: ${rate.currencyCode} ${formatMinorAmount(allocatedMinor, rate.currencyMinorUnit)} is already settled by receipts or credit notes. Remove those allocations first or issue a credit note instead.`,
+    );
   }
+  // A posted invoice is amended by reversing its journal/VAT rows and posting
+  // the new version, unless nothing that drives the ledger has changed.
+  const isPostedAmendment = current.documentStatus === "posted";
+  const previousLines = isPostedAmendment
+    ? context.db.select().from(salesInvoiceLines).where(eq(salesInvoiceLines.invoiceId, invoiceId)).orderBy(asc(salesInvoiceLines.position)).all()
+    : [];
+  const beforeSnapshot: DocumentSnapshot | null = isPostedAmendment
+    ? {
+        date: current.invoiceDate,
+        taxDate: current.taxDate,
+        partyId: current.customerId,
+        currencyCode: current.currencyCode,
+        exchangeRateToBase: current.exchangeRateToBase,
+        subtotalMinor: current.subtotalMinor,
+        taxMinor: current.taxMinor,
+        totalMinor: current.totalMinor,
+        baseTotalMinor: current.baseTotalMinor,
+        lines: previousLines.map((line) => ({
+          description: line.description,
+          quantityMicros: line.quantityMicros,
+          unitPriceMinor: line.unitPriceMinor,
+          accountId: line.salesAccountId,
+          taxCodeId: line.taxCodeId,
+          netAmountMinor: line.netAmountMinor,
+          taxAmountMinor: line.taxAmountMinor,
+          grossAmountMinor: line.grossAmountMinor,
+        })),
+      }
+    : null;
+  const postingChanged = isPostedAmendment && postingFingerprint({
+    partyId: current.customerId,
+    date: current.invoiceDate,
+    taxDate: current.taxDate,
+    supplyEmirate: current.supplyEmirate,
+    lines: previousLines.map((line) => ({
+      accountId: line.salesAccountId,
+      taxCodeId: line.taxCodeId,
+      projectId: effectiveProjectId(line.projectId, current.projectId),
+      itemId: line.itemId,
+      netAmountMinor: line.netAmountMinor,
+      taxAmountMinor: line.taxAmountMinor,
+    })),
+  }) !== postingFingerprint({
+    partyId: data.customerId,
+    date: data.invoiceDate,
+    taxDate,
+    supplyEmirate: data.supplyEmirate || null,
+    lines: lines.map((line) => ({
+      accountId: line.salesAccountId!,
+      taxCodeId: line.taxCodeId,
+      projectId: effectiveProjectId(line.projectId, data.projectId),
+      itemId: line.itemId,
+      netAmountMinor: line.netAmountMinor,
+      taxAmountMinor: line.taxAmountMinor,
+    })),
+  });
+  let amendment: ReturnType<typeof supersedePosting> | null = null;
+  let repostedEntryNumber: string | null = null;
   const now = new Date().toISOString();
   const approvalEval =
     current.documentStatus === "posted" || intent === "draft" || options?.bypassApprovalPolicy
@@ -1141,19 +1214,29 @@ export function updateInvoice(
       });
     }
     if (shouldPost) {
-      postSalesInvoice(
-        context.sqlite,
-        {
-          id: invoiceId,
-          invoiceNumber: current.invoiceNumber,
-          customerId: data.customerId,
-          invoiceDate: data.invoiceDate,
-          totalMinor: totals.totalMinor,
-          rate,
-        },
-        lines.map((line) => ({ ...line, projectId: effectiveProjectId(line.projectId, data.projectId) })),
-        current.documentStatus === "posted",
-      );
+      if (postingChanged) {
+        amendment = supersedePosting(context.sqlite, {
+          sourceType: "sales_invoice",
+          documentId: invoiceId,
+          documentLabel: "Sales Invoice",
+          documentNumber: current.invoiceNumber,
+          taxDate: current.taxDate,
+        });
+      }
+      if (!isPostedAmendment || postingChanged) {
+        repostedEntryNumber = postSalesInvoice(
+          context.sqlite,
+          {
+            id: invoiceId,
+            invoiceNumber: current.invoiceNumber,
+            customerId: data.customerId,
+            invoiceDate: data.invoiceDate,
+            totalMinor: totals.totalMinor,
+            rate,
+          },
+          lines.map((line) => ({ ...line, projectId: effectiveProjectId(line.projectId, data.projectId) })),
+        ).entryNumber;
+      }
       replaceTaxEntries(context.sqlite, {
         sourceType: "sales_invoice", sourceId: invoiceId, sourceNumber: current.invoiceNumber,
         partyName: customer.name, taxDate, direction: "sales",
@@ -1171,6 +1254,54 @@ export function updateInvoice(
   });
 
   const formattedTotal = (totals.totalMinor / (10 ** rate.currencyMinorUnit)).toFixed(2);
+  if (beforeSnapshot) {
+    const change = describeAmendment(beforeSnapshot, {
+      date: data.invoiceDate,
+      taxDate,
+      partyId: data.customerId,
+      currencyCode: rate.currencyCode,
+      exchangeRateToBase: rate.exchangeRateToBase,
+      subtotalMinor: totals.subtotalMinor,
+      taxMinor: totals.taxMinor,
+      totalMinor: totals.totalMinor,
+      baseTotalMinor: base.baseTotalMinor,
+      lines: lines.map((line) => ({
+        description: line.description,
+        quantityMicros: line.quantityMicros,
+        unitPriceMinor: line.unitPriceMinor,
+        accountId: line.salesAccountId!,
+        taxCodeId: line.taxCodeId,
+        netAmountMinor: line.netAmountMinor,
+        taxAmountMinor: line.taxAmountMinor,
+        grossAmountMinor: line.grossAmountMinor,
+      })),
+    });
+    const minorUnit = rate.currencyMinorUnit;
+    // Assigned inside the transaction callback; TypeScript cannot see that.
+    const amendmentResult = amendment as ReturnType<typeof supersedePosting> | null;
+    const journalNote = amendmentResult
+      ? `; journal ${amendmentResult.supersededEntryNumber} reversed by ${amendmentResult.reversalEntryNumber} and reposted as ${repostedEntryNumber}`
+      : "; ledger unchanged";
+    recordActivity(businessId, {
+      userId,
+      action: "updated",
+      entityType: "sales_invoice",
+      entityId: invoiceId,
+      entityNumber: current.invoiceNumber,
+      summary: `Amended posted sales invoice ${current.invoiceNumber}: total ${beforeSnapshot.currencyCode} ${formatMinorAmount(beforeSnapshot.totalMinor, minorUnit)} → ${rate.currencyCode} ${formatMinorAmount(totals.totalMinor, minorUnit)} (${change.lineChangeSummary})${journalNote}`,
+      details: {
+        customerId: data.customerId,
+        totalMinor: totals.totalMinor,
+        currency: rate.currencyCode,
+        status: "posted",
+        amendment: amendmentResult
+          ? { revision: amendmentResult.revision, supersededEntry: amendmentResult.supersededEntryNumber, reversalEntry: amendmentResult.reversalEntryNumber, newEntry: repostedEntryNumber }
+          : null,
+        ...change,
+      },
+    });
+    return;
+  }
   const action = shouldPost && current.documentStatus !== "posted" ? "posted" : "updated";
   const finalStatus = shouldPost ? "posted" : shouldSubmitApproval ? "pending_approval" : current.documentStatus;
   recordActivity(businessId, {

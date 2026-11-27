@@ -13,13 +13,15 @@ Object.assign(process.env, {
 const { seedDemoData } = await import("../../src/core/db/seed");
 const { getBusinessDb } = await import("../../src/core/db/business");
 const { saveExchangeRate } = await import("../../src/modules/currency/exchange-rate");
-const { createInvoice } = await import("../../src/modules/sales-invoices/invoice-service");
+const { createInvoice, updateInvoice } = await import("../../src/modules/sales-invoices/invoice-service");
 const { createReceipt, applyReceiptCredit } = await import("../../src/modules/receipts/receipt-service");
 const { savePurchaseInvoice } = await import("../../src/modules/purchase-invoices/purchase-invoice-service");
 const { saveGoodsReceipt } = await import("../../src/modules/inventory/goods-receipt-service");
 const { createPdc, clearPdc } = await import("../../src/modules/banking/pdc-service");
 const { saveOpeningBalances, OPENING_BALANCE_EQUITY_ACCOUNT_ID } = await import("../../src/modules/accounting/services/opening-balances-service");
 const { getBusinessDateIso, getBusinessTodayIso } = await import("../../src/core/format");
+const { setFinancialLockDate } = await import("../../src/modules/accounting/services/financial-lock-service");
+const { createSupplierPayment } = await import("../../src/modules/supplier-payments/supplier-payment-service");
 
 const seeded = await seedDemoData();
 const businessId = seeded.business.id;
@@ -176,4 +178,192 @@ test("an unbalanced opening balance lands in a dedicated Opening Balance Equity 
 test("ledger dates use the UAE business day, not the UTC day", () => {
   assert.equal(getBusinessDateIso(new Date("2026-11-25T21:30:00Z")), "2026-11-26");
   assert.equal(getBusinessDateIso(new Date("2026-11-25T19:59:00Z")), "2026-11-25");
+});
+
+/** Supplier subledger in base currency: open bill carrying value minus unapplied payment and debit-note credit, plus refunds received. */
+function apSubledger() {
+  const bills = sqlite.prepare(`
+    SELECT COALESCE(SUM(pi.base_total_minor
+      - COALESCE((SELECT SUM(spa.base_carrying_amount_released) FROM supplier_payment_allocations spa
+          INNER JOIN supplier_payments sp ON sp.id = spa.payment_id AND sp.document_status = 'posted'
+          WHERE spa.purchase_invoice_id = pi.id), 0)
+      - COALESCE((SELECT SUM(dna.base_carrying_amount_released) FROM debit_note_allocations dna
+          INNER JOIN debit_notes dn ON dn.id = dna.debit_note_id AND dn.document_status = 'posted'
+          WHERE dna.purchase_invoice_id = pi.id), 0)), 0) AS open_base
+    FROM purchase_invoices pi WHERE pi.document_status = 'posted'
+  `).get() as { open_base: number };
+  const unapplied = sqlite.prepare(`
+    SELECT COALESCE(SUM(sp.base_amount_minor
+      - COALESCE((SELECT SUM(spa.settlement_base_amount) FROM supplier_payment_allocations spa WHERE spa.payment_id = sp.id), 0)), 0) AS credit_base
+    FROM supplier_payments sp WHERE sp.document_status = 'posted'
+  `).get() as { credit_base: number };
+  const debitCredit = sqlite.prepare(`
+    SELECT COALESCE(SUM(dn.base_total_minor
+      - COALESCE((SELECT SUM(dna.settlement_base_amount) FROM debit_note_allocations dna WHERE dna.debit_note_id = dn.id), 0)
+      - COALESCE((SELECT SUM(r.released_carrying_amount_minor) FROM supplier_refunds r
+          WHERE r.debit_note_id = dn.id AND r.document_status = 'posted'), 0)), 0) AS credit_base
+    FROM debit_notes dn WHERE dn.document_status = 'posted'
+  `).get() as { credit_base: number };
+  return bills.open_base - unapplied.credit_base - debitCredit.credit_base;
+}
+
+/** AP is credit-normal: its credit balance minus the subledger must not move. */
+const apGap = () => -glBalance(settings.ap) - apSubledger();
+
+/** VAT per tax rows vs. the GL movement on the same journals, across a document's whole history. */
+function vatTieOut(sourceType: "sales_invoice" | "purchase_invoice", documentId: string, accountId: string) {
+  const revisions = sqlite.prepare(`
+    SELECT DISTINCT source_id FROM journal_entries WHERE source_type IN (?, ?) AND source_id LIKE ? || ':%'
+  `).all(`${sourceType}_superseded`, `${sourceType}_amendment`, documentId) as { source_id: string }[];
+  const sourceIds = [documentId, ...revisions.map((row) => row.source_id)];
+  const placeholders = sourceIds.map(() => "?").join(", ");
+  const tax = sqlite.prepare(`
+    SELECT COALESCE(SUM(output_vat_minor), 0) AS output, COALESCE(SUM(recoverable_vat_minor), 0) AS recoverable
+    FROM tax_entries WHERE source_id IN (${placeholders})
+  `).get(...sourceIds) as { output: number; recoverable: number };
+  const gl = sqlite.prepare(`
+    SELECT COALESCE(SUM(jl.credit_minor - jl.debit_minor), 0) AS amount
+    FROM journal_lines jl INNER JOIN journal_entries je ON je.id = jl.journal_entry_id
+    WHERE je.source_id IN (${placeholders}) AND jl.account_id = ?
+  `).get(...sourceIds, accountId) as { amount: number };
+  return { tax, gl: gl.amount };
+}
+
+const vatAccounts = sqlite.prepare(`
+  SELECT vat_output_account_id AS output, input_vat_account_id AS input, default_purchase_expense_account_id AS expense
+  FROM business_accounting_settings WHERE id = 'default'
+`).get() as { output: string; input: string; expense: string };
+const aedSupplier = sqlite.prepare("SELECT id FROM suppliers WHERE default_currency_code = 'AED' AND is_active = 1 ORDER BY name LIMIT 1").get() as { id: string };
+const countJournals = () => (sqlite.prepare("SELECT COUNT(*) AS count FROM journal_entries").get() as { count: number }).count;
+const lastActivity = (entityId: string) => sqlite.prepare(`
+  SELECT summary, details_json FROM activity_logs WHERE entity_id = ? ORDER BY created_at DESC, rowid DESC LIMIT 1
+`).get(entityId) as { summary: string; details_json: string };
+
+test("editing a posted sales invoice reverses and reposts, keeping AR and VAT tied to the GL", () => {
+  const gapBefore = arGap();
+  const invoiceInput = {
+    customerId: aedCustomer.id, invoiceDate: "2034-05-10", taxDate: "2034-05-10", dueDate: "2034-06-10", reference: "TIEOUT-AMEND",
+    supplyEmirate: "dubai" as const,
+    lines: [{ description: "Consulting", quantity: "1", unitPrice: "1000.00", salesAccountId: settings.sales, taxCodeId: "tax-uae-vat-5-sales" }],
+  };
+  const twoLines = [
+    { description: "Consulting", quantity: "1", unitPrice: "1200.00", salesAccountId: settings.sales, taxCodeId: "tax-uae-vat-5-sales" },
+    { description: "Travel", quantity: "2", unitPrice: "50.00", salesAccountId: settings.sales, taxCodeId: "tax-uae-vat-5-sales" },
+  ];
+  const invoiceId = createInvoice(businessId, adminId, invoiceInput, "post");
+  createReceipt(businessId, adminId, {
+    customerId: aedCustomer.id, invoiceId, date: "2034-05-12", bankAccountId: settings.bank, amount: "300.00",
+  });
+  const original = sqlite.prepare("SELECT entry_number FROM journal_entries WHERE source_type = 'sales_invoice' AND source_id = ?").get(invoiceId) as { entry_number: string };
+
+  updateInvoice(businessId, adminId, invoiceId, { ...invoiceInput, lines: twoLines }, "post");
+
+  // The old version survives as its own entry and is reversed, not rewritten.
+  const history = sqlite.prepare(`
+    SELECT entry_number, source_type FROM journal_entries WHERE source_id = ? OR source_id LIKE ? || ':%'
+  `).all(invoiceId, invoiceId) as { entry_number: string; source_type: string }[];
+  assert.deepEqual(history.map((row) => row.source_type).sort(), ["sales_invoice", "sales_invoice_amendment", "sales_invoice_superseded"]);
+  assert.equal(history.find((row) => row.source_type === "sales_invoice_superseded")?.entry_number, original.entry_number);
+  assert.notEqual(history.find((row) => row.source_type === "sales_invoice")?.entry_number, original.entry_number);
+  const live = sqlite.prepare(`
+    SELECT SUM(jl.debit_minor) AS debit FROM journal_lines jl INNER JOIN journal_entries je ON je.id = jl.journal_entry_id
+    WHERE je.source_type = 'sales_invoice' AND je.source_id = ? AND jl.account_id = ?
+  `).get(invoiceId, settings.ar) as { debit: number };
+  assert.equal(live.debit, 136_500, "1,300 + 5% VAT");
+
+  assert.equal(arGap(), gapBefore, "AR control still equals the customer subledger");
+  const vat = vatTieOut("sales_invoice", invoiceId, vatAccounts.output);
+  assert.equal(vat.tax.output, 6_500);
+  assert.equal(vat.gl, vat.tax.output, "output VAT rows tie to the VAT ledger");
+
+  const log = lastActivity(invoiceId);
+  const details = JSON.parse(log.details_json);
+  assert.deepEqual([details.before.totalMinor, details.after.totalMinor], [105_000, 136_500]);
+  assert.deepEqual([details.before.vatMinor, details.after.vatMinor], [5_000, 6_500]);
+  assert.equal(details.lineChangeSummary, "1 line added, 1 line changed");
+  assert.match(log.summary, /1050\.00 → AED 1365\.00/);
+  assert.equal(details.amendment.supersededEntry, original.entry_number);
+
+  assert.throws(
+    () => updateInvoice(businessId, adminId, invoiceId, {
+      ...invoiceInput,
+      lines: [{ description: "Consulting", quantity: "1", unitPrice: "100.00", salesAccountId: settings.sales, taxCodeId: "tax-uae-vat-5-sales" }],
+    }, "post"),
+    /300\.00 is already settled/,
+  );
+
+  // A notes-only edit leaves the ledger alone.
+  const journalsBefore = countJournals();
+  updateInvoice(businessId, adminId, invoiceId, { ...invoiceInput, notes: "Thank you", lines: twoLines }, "post");
+  assert.equal(countJournals(), journalsBefore);
+  assert.equal(vatTieOut("sales_invoice", invoiceId, vatAccounts.output).tax.output, 6_500);
+  assert.match(lastActivity(invoiceId).summary, /ledger unchanged/);
+
+  // A second amendment stacks another revision and still ties out.
+  updateInvoice(businessId, adminId, invoiceId, {
+    ...invoiceInput, invoiceDate: "2034-05-11", taxDate: "2034-05-11",
+    lines: [{ description: "Consulting", quantity: "1", unitPrice: "800.00", salesAccountId: settings.sales, taxCodeId: "tax-uae-vat-5-sales" }],
+  }, "post");
+  assert.equal(arGap(), gapBefore);
+  const secondVat = vatTieOut("sales_invoice", invoiceId, vatAccounts.output);
+  assert.equal(secondVat.tax.output, 4_000);
+  assert.equal(secondVat.gl, secondVat.tax.output);
+});
+
+test("posted invoice edits are refused when the old or new date is in a locked period", () => {
+  const invoiceInput = {
+    customerId: aedCustomer.id, invoiceDate: "2034-07-10", taxDate: "2034-07-10", dueDate: "2034-08-10",
+    lines: [{ description: "Lock test", quantity: "1", unitPrice: "100.00", salesAccountId: settings.sales, taxCodeId: "tax-out-of-scope" }],
+  };
+  const invoiceId = createInvoice(businessId, adminId, invoiceInput, "post");
+  try {
+    setFinancialLockDate(businessId, adminId, "2034-06-30");
+    assert.throws(
+      () => updateInvoice(businessId, adminId, invoiceId, { ...invoiceInput, invoiceDate: "2034-06-15", taxDate: "2034-06-15" }, "post"),
+      /closed/,
+    );
+    setFinancialLockDate(businessId, adminId, "2034-07-15");
+    assert.throws(
+      () => updateInvoice(businessId, adminId, invoiceId, { ...invoiceInput, invoiceDate: "2034-07-20", taxDate: "2034-07-20" }, "post"),
+      /closed/,
+    );
+  } finally {
+    setFinancialLockDate(businessId, adminId, null);
+  }
+  const amendments = sqlite.prepare("SELECT COUNT(*) AS count FROM journal_entries WHERE source_id LIKE ? || ':%'").get(invoiceId) as { count: number };
+  assert.equal(amendments.count, 0);
+});
+
+test("editing a posted purchase invoice reverses and reposts, keeping AP and input VAT tied to the GL", () => {
+  const gapBefore = apGap();
+  const billInput = {
+    supplierId: aedSupplier.id, supplierInvoiceNumber: "TIEOUT-AMEND-BILL", invoiceDate: "2034-05-10", taxDate: "2034-05-10", dueDate: "2034-06-10",
+    lines: [{ description: "Supplies", quantity: "1", unitPrice: "400.00", expenseAccountId: vatAccounts.expense, taxCodeId: "tax-uae-vat-5-purchases" }],
+  };
+  const billId = savePurchaseInvoice(businessId, adminId, billInput, "post");
+  createSupplierPayment(businessId, adminId, {
+    supplierId: aedSupplier.id, purchaseInvoiceId: billId, date: "2034-05-12", bankAccountId: settings.bank, amount: "100.00",
+  });
+  assert.equal(apGap(), gapBefore);
+
+  savePurchaseInvoice(businessId, adminId, {
+    ...billInput,
+    lines: [{ description: "Supplies", quantity: "2", unitPrice: "400.00", expenseAccountId: vatAccounts.expense, taxCodeId: "tax-uae-vat-5-purchases" }],
+  }, "post", billId);
+  assert.equal(apGap(), gapBefore, "AP control still equals the supplier subledger");
+  const vat = vatTieOut("purchase_invoice", billId, vatAccounts.input);
+  assert.equal(vat.tax.recoverable, 4_000);
+  assert.equal(-vat.gl, vat.tax.recoverable, "input VAT rows tie to the VAT ledger");
+  const superseded = sqlite.prepare("SELECT COUNT(*) AS count FROM journal_entries WHERE source_type = 'purchase_invoice_superseded' AND source_id LIKE ? || ':%'").get(billId) as { count: number };
+  assert.equal(superseded.count, 1);
+
+  assert.throws(
+    () => savePurchaseInvoice(businessId, adminId, {
+      ...billInput,
+      lines: [{ description: "Supplies", quantity: "1", unitPrice: "50.00", expenseAccountId: vatAccounts.expense, taxCodeId: "tax-uae-vat-5-purchases" }],
+    }, "post", billId),
+    /100\.00 is already settled/,
+  );
+  const details = JSON.parse(lastActivity(billId).details_json);
+  assert.deepEqual([details.before.netMinor, details.after.netMinor], [40_000, 80_000]);
 });
