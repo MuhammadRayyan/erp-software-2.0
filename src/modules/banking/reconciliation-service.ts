@@ -1,12 +1,14 @@
 import { assertMutationPermission } from "@/core/permissions/mutation-permissions";
 import { randomUUID } from "node:crypto";
 import { getBusinessDb } from "@/core/db/business";
-import { parseMoneyToMinor } from "@/modules/accounting/calculations/money";
+import { parseCurrencyAmountToMinor } from "@/modules/currency/conversion";
 import { reconciliationInputSchema, type ReconciliationInput } from "./reconciliation-input";
+import { BANK_AMOUNT_SQL, bankAccountCurrency } from "./bank-currency";
 
-function parseSignedMoney(value: string) {
+/** Statement balances are entered in the bank account's own currency. */
+function parseSignedMoney(value: string, minorUnit: number) {
   const sign = value.trim().startsWith("-") ? -1 : 1;
-  return sign * parseMoneyToMinor(value.trim().replace(/^-/, ""), "Statement ending balance");
+  return sign * parseCurrencyAmountToMinor(value.trim().replace(/^-/, ""), minorUnit, "Statement ending balance");
 }
 
 export function startReconciliation(
@@ -29,7 +31,8 @@ export function startReconciliation(
       id, bank_account_id, statement_date, statement_ending_balance_minor,
       status, created_by, created_at, updated_at, completed_at
     ) VALUES (?, ?, ?, ?, 'draft', ?, ?, ?, NULL)
-  `).run(id, bankAccountId, data.statementDate, parseSignedMoney(data.statementEndingBalance),
+  `).run(id, bankAccountId, data.statementDate,
+    parseSignedMoney(data.statementEndingBalance, bankAccountCurrency(sqlite, bankAccountId).minorUnit),
     userId, now, now);
   return id;
 }
@@ -39,7 +42,7 @@ export type ReconciliationSnapshot = {
     id: string; bank_account_id: string; statement_date: string;
     statement_ending_balance_minor: number; status: "draft" | "completed";
     created_at: string; completed_at: string | null; bank_account_name: string;
-    ledger_account_id: string;
+    ledger_account_id: string; currency_code: string;
   };
   bookBalanceMinor: number;
   outstandingNetMinor: number;
@@ -62,7 +65,7 @@ export type ReconciliationSnapshot = {
 
 function reconciliationRow(sqlite: ReturnType<typeof getBusinessDb>["sqlite"], reconciliationId: string, bankAccountId?: string) {
   return sqlite.prepare(`
-    SELECT br.*, ba.name AS bank_account_name, ba.ledger_account_id
+    SELECT br.*, ba.name AS bank_account_name, ba.ledger_account_id, ba.currency_code
     FROM bank_reconciliations br
     INNER JOIN bank_accounts ba ON ba.id = br.bank_account_id
     WHERE br.id = ?${bankAccountId ? " AND br.bank_account_id = ?" : ""}
@@ -79,7 +82,7 @@ export function getReconciliationSnapshot(
   const reconciliation = reconciliationRow(sqlite, reconciliationId, bankAccountId);
   if (!reconciliation) return null;
   const book = sqlite.prepare(`
-    SELECT COALESCE(SUM(jl.debit_minor - jl.credit_minor), 0) AS balance_minor
+    SELECT COALESCE(SUM(${BANK_AMOUNT_SQL}), 0) AS balance_minor
     FROM journal_lines jl
     INNER JOIN journal_entries je ON je.id = jl.journal_entry_id AND je.status = 'posted'
     WHERE jl.account_id = ? AND je.date <= ?
@@ -98,7 +101,7 @@ export function getReconciliationSnapshot(
   `).all(reconciliation.bank_account_id, reconciliation.statement_date) as ReconciliationSnapshot["cleared"];
   const outstanding = sqlite.prepare(`
     SELECT je.id AS journal_entry_id, je.entry_number, je.date, je.source_type,
-      je.source_id, je.description, SUM(jl.debit_minor - jl.credit_minor) AS amount_minor
+      je.source_id, je.description, SUM(${BANK_AMOUNT_SQL}) AS amount_minor
     FROM journal_entries je
     INNER JOIN journal_lines jl ON jl.journal_entry_id = je.id
     WHERE je.status = 'posted' AND je.date <= ? AND jl.account_id = ?

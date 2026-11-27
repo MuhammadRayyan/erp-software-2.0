@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import type Database from "better-sqlite3";
 import {
   directionAllows,
+  isSelfAssessedVatCategory,
   emirates,
   type Emirate,
   type TaxDirection,
@@ -148,8 +149,10 @@ export function replaceTaxEntries(
       line.taxAmountMinor, rate.currencyMinorUnit, rate.baseMinorUnit, rate.exchangeRateToBase,
     );
     const vatAmountMinor = baseVatMinor;
-    const isReverseCharge = code.vat_category === "reverse_charge" && document.direction === "purchases";
-    const outputVatMinor = document.direction === "sales" || isReverseCharge ? vatAmountMinor : 0;
+    // Reverse charge (Box 3) and imported goods (Box 6) are self-assessed:
+    // the buyer reports the output VAT as well as recovering the input.
+    const isSelfAssessed = isSelfAssessedVatCategory(code.vat_category) && document.direction === "purchases";
+    const outputVatMinor = document.direction === "sales" || isSelfAssessed ? vatAmountMinor : 0;
     const recoverableVatMinor = document.direction === "purchases" && code.is_recoverable
       ? vatAmountMinor
       : 0;
@@ -164,6 +167,49 @@ export function replaceTaxEntries(
       line.projectId ?? null, now,
     );
   }
+}
+
+/**
+ * Amending a posted document keeps its VAT history: the current tax rows are
+ * re-labelled `<type>_superseded` and an equal-and-opposite set is added as
+ * `<type>_amendment` on the original tax date, so the VAT report nets the old
+ * version to zero before the new version is posted under the live source type.
+ * Both carry `revisionSourceId` (`<documentId>:<revision>`), matching the
+ * journal entries of the same revision so VAT still reconciles to the GL.
+ */
+export function supersedeTaxEntries(
+  sqlite: Database.Database,
+  input: { sourceType: string; sourceId: string; revisionSourceId: string; taxDate: string },
+) {
+  if (!sqlite.inTransaction) throw new Error("Tax-detail amendment must run inside a database transaction.");
+  const supersededType = `${input.sourceType}_superseded`;
+  const amendmentType = `${input.sourceType}_amendment`;
+  const ids = (sqlite.prepare("SELECT id FROM tax_entries WHERE source_type = ? AND source_id = ?")
+    .all(input.sourceType, input.sourceId) as { id: string }[]).map((row) => row.id);
+  if (ids.length === 0) return 0;
+  sqlite.prepare("UPDATE tax_entries SET source_type = ?, source_id = ? WHERE source_type = ? AND source_id = ?")
+    .run(supersededType, input.revisionSourceId, input.sourceType, input.sourceId);
+  const now = new Date().toISOString();
+  sqlite.prepare(`
+    INSERT INTO tax_entries (
+      id, tax_date, source_type, source_id, source_line_id, source_number, party_name,
+      tax_code_id, tax_code_name, rate_basis_points, vat_category, direction,
+      net_amount_minor, vat_amount_minor, document_currency, foreign_net_minor,
+      foreign_vat_minor, exchange_rate_to_base, base_net_minor, base_vat_minor,
+      rate_date, rate_source, output_vat_minor, recoverable_vat_minor,
+      supply_emirate, project_id, created_at
+    )
+    SELECT lower(hex(randomblob(16))), ?, ?, source_id, source_line_id, source_number, party_name,
+      tax_code_id, tax_code_name, rate_basis_points, vat_category, direction,
+      -net_amount_minor, -vat_amount_minor, document_currency, -foreign_net_minor,
+      -foreign_vat_minor, exchange_rate_to_base, -base_net_minor, -base_vat_minor,
+      rate_date, rate_source, -output_vat_minor, -recoverable_vat_minor,
+      supply_emirate, project_id, ?
+    FROM tax_entries WHERE id IN (${ids.map(() => "?").join(", ")})
+  `).run(input.taxDate, amendmentType, now, ...ids);
+  sqlite.prepare("DELETE FROM vat_data_review WHERE source_type = ? AND source_id = ?")
+    .run(input.sourceType, input.sourceId);
+  return ids.length;
 }
 
 export function reverseTaxEntries(
@@ -186,7 +232,8 @@ export function reverseTaxEntries(
   `);
   const now = new Date().toISOString();
   for (const row of rows) {
-    insert.run(randomUUID(), input.taxDate, input.reversalSourceType, input.sourceId,
+    // Never before the original tax date (see reverseTransaction).
+    insert.run(randomUUID(), input.taxDate < String(row.tax_date) ? String(row.tax_date) : input.taxDate, input.reversalSourceType, input.sourceId,
       String(row.source_line_id), String(row.source_number), row.party_name ?? null,
       String(row.tax_code_id), String(row.tax_code_name), Number(row.rate_basis_points),
       String(row.vat_category), String(row.direction), -Number(row.net_amount_minor),

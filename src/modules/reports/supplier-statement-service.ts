@@ -70,8 +70,16 @@ export function getSupplierStatement(
       dn.base_total_minor AS base_debit_minor, 0 AS base_credit_minor
     FROM debit_notes dn
     WHERE dn.supplier_id = ? AND dn.document_status = 'posted'
+    UNION ALL
+    SELECT sr.date, sr.refund_number AS entry_number,
+      'supplier_refund' AS source_type, sr.id AS source_id,
+      'Supplier Refund ' || sr.refund_number AS description, sr.reference,
+      sr.currency_code, 0 AS debit_minor, sr.amount_minor AS credit_minor,
+      0 AS base_debit_minor, sr.released_carrying_amount_minor AS base_credit_minor
+    FROM supplier_refunds sr
+    WHERE sr.supplier_id = ? AND sr.document_status = 'posted'
     ORDER BY date, entry_number
-  `).all(supplierId, supplierId, supplierId) as Omit<SupplierStatementRow, "balanceMinor">[];
+  `).all(supplierId, supplierId, supplierId, supplierId) as Omit<SupplierStatementRow, "balanceMinor">[];
 
   const filtered = options.currencyCode
     ? rows.filter((row) => row.currency_code === options.currencyCode!.toUpperCase())
@@ -230,10 +238,11 @@ export function getSupplierAging(
 
   // 3. Fetch debit notes linked to purchase invoices on or before targetAsOf
   const debitNotes = sqlite.prepare(`
-    SELECT dn.purchase_invoice_id, COALESCE(SUM(dn.total_minor), 0) AS debited_minor
-    FROM debit_notes dn
-    WHERE dn.supplier_id = ? AND dn.purchase_invoice_id IS NOT NULL AND dn.document_status = 'posted' AND dn.debit_note_date <= ?
-    GROUP BY dn.purchase_invoice_id
+    SELECT dna.purchase_invoice_id, COALESCE(SUM(dna.amount_minor), 0) AS debited_minor
+    FROM debit_note_allocations dna
+    JOIN debit_notes dn ON dn.id = dna.debit_note_id
+    WHERE dn.supplier_id = ? AND dn.document_status = 'posted' AND dn.debit_note_date <= ?
+    GROUP BY dna.purchase_invoice_id
   `).all(supplierId, targetAsOf) as Array<{ purchase_invoice_id: string; debited_minor: number }>;
   const debitNoteMap = new Map(debitNotes.map((d) => [d.purchase_invoice_id, d.debited_minor]));
 
@@ -286,7 +295,13 @@ export function getSupplierAging(
     WHERE supplier_id = ? AND document_status = 'posted' AND debit_note_date <= ? AND currency_code = ?
   `).get(supplierId, targetAsOf, targetCurrency) as { total: number };
 
-  const totalSupplierBalance = totalBills.total - totalPayments.total - totalDebitNotes.total;
+  const totalRefunds = sqlite.prepare(`
+    SELECT COALESCE(SUM(amount_minor), 0) AS total
+    FROM supplier_refunds
+    WHERE supplier_id = ? AND document_status = 'posted' AND date <= ? AND currency_code = ?
+  `).get(supplierId, targetAsOf, targetCurrency) as { total: number };
+
+  const totalSupplierBalance = totalBills.total - totalPayments.total - totalDebitNotes.total + totalRefunds.total;
 
   if (totalSupplierBalance < sumBillRemaining) {
     let unallocated = sumBillRemaining - totalSupplierBalance;
@@ -348,10 +363,15 @@ export function getSupplierAccountingSummary(businessId: string, userId: string,
     SELECT COALESCE(SUM(base_total_minor), 0) AS total FROM debit_notes
     WHERE supplier_id = ? AND document_status = 'posted'
   `).get(supplierId) as { total: number };
+  const refunded = sqlite.prepare(`
+    SELECT COALESCE(SUM(released_carrying_amount_minor), 0) AS total FROM supplier_refunds
+    WHERE supplier_id = ? AND document_status = 'posted'
+  `).get(supplierId) as { total: number };
   return {
     totalPurchasedMinor: purchased.total,
     totalPaidMinor: paid.total,
     totalDebitedMinor: debited.total,
-    outstandingMinor: purchased.total - paid.total - debited.total,
+    totalRefundedMinor: refunded.total,
+    outstandingMinor: purchased.total - paid.total - debited.total + refunded.total,
   };
 }

@@ -1,8 +1,8 @@
 import { NextResponse } from "next/server";
 import { requireApiAuth } from "@/core/auth/api-auth";
-import { importBusinessBackup } from "@/core/businesses/backup-service";
 import { assertBusinessQuota } from "@/core/businesses/business-service";
-import { importManagerBackupToNewBusiness } from "@/modules/migration/manager-importer";
+import { importBusinessBackupInWorker, importManagerBackupInWorker } from "@/core/workers/jobs";
+import { isWorkerBusyError } from "@/core/workers/run-in-worker";
 
 export const runtime = "nodejs";
 
@@ -43,12 +43,16 @@ export async function POST(request: Request) {
   const SQLITE_HEADER = Buffer.from("SQLite format 3\0", "utf8");
   const isManager = buf.length >= 16 && Buffer.compare(buf.subarray(0, 16), SQLITE_HEADER) === 0;
 
+  // Parsing, integrity checks and the bulk SQLite writes run on a worker
+  // thread; the upload's memory is moved (not copied) into it. Imports are not
+  // tied to request.signal: they commit in one transaction and an abort half
+  // way would leave an empty workspace behind.
   try {
     if (isManager) {
-      const result = importManagerBackupToNewBusiness(buf, user.id, {
+      const result = await importManagerBackupInWorker(buf, user.id, {
         overrideBusinessName: businessNameOverride || undefined,
         documentStatus,
-      });
+      }, { transfer: true });
       return NextResponse.json({
         businessId: result.businessId,
         businessName: result.businessName,
@@ -57,9 +61,12 @@ export async function POST(request: Request) {
       });
     }
 
-    const businessId = await importBusinessBackup(arrayBuffer, user.id);
+    const businessId = await importBusinessBackupInWorker(buf, user.id, { transfer: true });
     return NextResponse.json({ businessId, source: "uaemanager" });
   } catch (error) {
+    if (isWorkerBusyError(error)) {
+      return NextResponse.json({ error: error.message }, { status: 503, headers: { "Retry-After": "30" } });
+    }
     return NextResponse.json(
       { error: error instanceof Error ? error.message : "Could not import this backup" },
       { status: 400 },

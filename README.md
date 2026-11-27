@@ -27,6 +27,7 @@ Superseded point-in-time reviews, specs, and sprint planning artifacts are prese
   npm run db:bootstrap
   npm run dev
   ```
+- PDF rendering needs a Chromium binary: install one with `npx playwright install chromium` and set `PUPPETEER_EXECUTABLE_PATH` in `.env` (tests find Playwright's Chromium automatically).
 - Open `http://localhost:3000`. Customer/workspace SQLite databases and attachments live under `data/`.
 
 ## Verification & Test Commands
@@ -45,8 +46,9 @@ Automated service/unit tests run in isolated temporary directories via [scripts/
 | `npm run typecheck` | Generate `.next` route types and check `tsconfig.json` |
 | `npm run typecheck:validate` | Isolated validation typecheck (`tsconfig.validate.json` against `.next-validate`) |
 | `npm run lint` | ESLint across source and test trees |
-| `npm run check:permissions` | Static verification that all 159 business command functions enforce RBAC guards |
-| `npx tsx scripts/verify-schema-sync.ts` | Verify System and Business Drizzle schemas match SQLite tables & foreign keys |
+| `npm run check:permissions` | Static verification that all 164 business command functions enforce RBAC guards |
+| `npm run check:schema` | Migrate a fresh temporary data directory, seed a business, and fail on any drift between the Drizzle schema and SQLite (tables, columns, indexes, UNIQUE constraints, foreign keys); runs in CI |
+| `npm run db:verify-schema` | The same comparison against the databases under `ERP_DATA_DIR` |
 | `NEXT_DIST_DIR=.next-validate npm run build` | Production validation build without overwriting `.next` or mutating `tsconfig.json` |
 
 ## Repository Rules

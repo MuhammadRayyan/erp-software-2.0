@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { BookOpen, SlidersHorizontal } from "lucide-react";
+import { BookOpen, Coins, SlidersHorizontal } from "lucide-react";
 import { EmptyState } from "@/components/empty-state";
 import { PageHeader } from "@/components/page-header";
 import { Button } from "@/components/ui/button";
@@ -26,6 +26,11 @@ export default async function JournalPage({ params }: { params: Promise<{ busine
         <Button asChild variant="secondary">
           <Link href={`/b/${businessId}/accounting/find-and-recode`}>
             <SlidersHorizontal className="size-4" /> Find &amp; Recode
+          </Link>
+        </Button>
+        <Button asChild variant="secondary">
+          <Link href={`/b/${businessId}/accounting/fx-revaluation`}>
+            <Coins className="size-4" /> FX Revaluation
           </Link>
         </Button>
       </PageHeader>

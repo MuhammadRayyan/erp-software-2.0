@@ -1,3 +1,5 @@
+import "server-only";
+
 import type Database from "better-sqlite3";
 import { runMigrations, type SqliteMigration } from "./migrations/runner";
 import { detectAndValidateBusinessBaseline } from "./migrations/business-baseline";
@@ -3167,6 +3169,256 @@ export const businessMigrations = [
             ON bank_reconciliation_items(statement_line_id, journal_entry_id);
           CREATE INDEX IF NOT EXISTS bank_reconciliation_statement_line_idx2
             ON bank_reconciliation_items(statement_line_id);
+        `);
+      },
+    },
+    {
+      version: 40,
+      name: "document_status_date_indexes",
+      up: (sqlite) => {
+        // List pages filter by status and sort/filter by document date. Purchase
+        // orders keep their workflow state in `status` (no document_status).
+        // The two journal indexes dropped here are leading-column prefixes of
+        // journal_entries_date_status_idx and journal_lines_account_entry_idx,
+        // which serve every query they did.
+        sqlite.exec(`
+          CREATE INDEX IF NOT EXISTS sales_quote_status_date_idx ON sales_quotes(document_status, quote_date);
+          CREATE INDEX IF NOT EXISTS sales_order_status_date_idx ON sales_orders(document_status, order_date);
+          CREATE INDEX IF NOT EXISTS delivery_note_status_date_idx ON delivery_notes(document_status, date);
+          CREATE INDEX IF NOT EXISTS purchase_quote_status_date_idx ON purchase_quotes(document_status, quote_date);
+          CREATE INDEX IF NOT EXISTS purchase_order_status_date_idx ON purchase_orders(status, date);
+          CREATE INDEX IF NOT EXISTS goods_receipt_status_date_idx ON goods_receipts(document_status, date);
+          CREATE INDEX IF NOT EXISTS debit_note_status_date_idx ON debit_notes(document_status, debit_note_date);
+          DROP INDEX IF EXISTS journal_date_idx;
+          DROP INDEX IF EXISTS journal_lines_account_idx;
+        `);
+      },
+    },
+    {
+      version: 41,
+      name: "41_party_credit_allocations_and_refunds",
+      up: (sqlite) => {
+        // A credit/debit note may exceed what is still open on its source
+        // document (e.g. crediting a fully paid invoice). The excess stays on
+        // the note as party credit that can be applied to another document or
+        // refunded through the bank. settlement_base_amount records how much of
+        // the note's base value an allocation consumed (it differs from the
+        // released document carrying amount only by realized FX).
+        const creditColumns = (sqlite.prepare("PRAGMA table_info(sales_credit_note_allocations)").all() as { name: string }[])
+          .map((column) => column.name);
+        if (!creditColumns.includes("settlement_base_amount")) {
+          sqlite.exec("ALTER TABLE sales_credit_note_allocations ADD COLUMN settlement_base_amount INTEGER");
+        }
+        if (!creditColumns.includes("realized_fx_amount")) {
+          sqlite.exec("ALTER TABLE sales_credit_note_allocations ADD COLUMN realized_fx_amount INTEGER NOT NULL DEFAULT 0");
+        }
+        sqlite.exec(`
+          UPDATE sales_credit_note_allocations
+          SET settlement_base_amount = base_carrying_amount_released
+          WHERE settlement_base_amount IS NULL;
+
+          CREATE TABLE IF NOT EXISTS debit_note_allocations (
+            id TEXT PRIMARY KEY NOT NULL,
+            debit_note_id TEXT NOT NULL REFERENCES debit_notes(id) ON DELETE CASCADE,
+            purchase_invoice_id TEXT NOT NULL REFERENCES purchase_invoices(id),
+            amount_minor INTEGER NOT NULL CHECK (amount_minor > 0),
+            base_carrying_amount_released INTEGER NOT NULL,
+            settlement_base_amount INTEGER NOT NULL,
+            realized_fx_amount INTEGER NOT NULL DEFAULT 0
+          );
+          CREATE UNIQUE INDEX IF NOT EXISTS debit_note_invoice_allocation_idx
+            ON debit_note_allocations(debit_note_id, purchase_invoice_id);
+          CREATE INDEX IF NOT EXISTS debit_note_allocation_invoice_idx
+            ON debit_note_allocations(purchase_invoice_id);
+
+          -- Existing linked debit notes settled their bill in full.
+          INSERT OR IGNORE INTO debit_note_allocations (
+            id, debit_note_id, purchase_invoice_id, amount_minor,
+            base_carrying_amount_released, settlement_base_amount, realized_fx_amount
+          )
+          SELECT lower(hex(randomblob(16))), dn.id, dn.purchase_invoice_id, dn.total_minor,
+            dn.base_total_minor, dn.base_total_minor, 0
+          FROM debit_notes dn
+          WHERE dn.purchase_invoice_id IS NOT NULL
+            AND dn.document_status IN ('posted', 'void')
+            AND dn.total_minor > 0;
+
+          CREATE TABLE IF NOT EXISTS customer_refunds (
+            id TEXT PRIMARY KEY NOT NULL,
+            refund_number TEXT NOT NULL,
+            customer_id TEXT NOT NULL REFERENCES customers(id),
+            credit_note_id TEXT NOT NULL REFERENCES sales_credit_notes(id),
+            date TEXT NOT NULL,
+            bank_account_id TEXT NOT NULL REFERENCES accounts(id),
+            amount_minor INTEGER NOT NULL CHECK (amount_minor > 0),
+            currency_code TEXT NOT NULL REFERENCES currencies(code),
+            exchange_rate_to_base TEXT NOT NULL DEFAULT '1',
+            exchange_rate_date TEXT NOT NULL,
+            exchange_rate_source TEXT NOT NULL DEFAULT 'Base',
+            base_amount_minor INTEGER NOT NULL,
+            released_carrying_amount_minor INTEGER NOT NULL,
+            realized_fx_amount_minor INTEGER NOT NULL DEFAULT 0,
+            reference TEXT,
+            description TEXT,
+            document_status TEXT NOT NULL DEFAULT 'posted' CHECK (document_status IN ('posted', 'void')),
+            created_by TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            posted_at TEXT,
+            voided_at TEXT
+          );
+          CREATE UNIQUE INDEX IF NOT EXISTS customer_refund_number_idx ON customer_refunds(refund_number);
+          CREATE INDEX IF NOT EXISTS customer_refund_customer_idx ON customer_refunds(customer_id);
+          CREATE INDEX IF NOT EXISTS customer_refund_credit_note_idx ON customer_refunds(credit_note_id);
+
+          CREATE TABLE IF NOT EXISTS supplier_refunds (
+            id TEXT PRIMARY KEY NOT NULL,
+            refund_number TEXT NOT NULL,
+            supplier_id TEXT NOT NULL REFERENCES suppliers(id),
+            debit_note_id TEXT NOT NULL REFERENCES debit_notes(id),
+            date TEXT NOT NULL,
+            bank_account_id TEXT NOT NULL REFERENCES accounts(id),
+            amount_minor INTEGER NOT NULL CHECK (amount_minor > 0),
+            currency_code TEXT NOT NULL REFERENCES currencies(code),
+            exchange_rate_to_base TEXT NOT NULL DEFAULT '1',
+            exchange_rate_date TEXT NOT NULL,
+            exchange_rate_source TEXT NOT NULL DEFAULT 'Base',
+            base_amount_minor INTEGER NOT NULL,
+            released_carrying_amount_minor INTEGER NOT NULL,
+            realized_fx_amount_minor INTEGER NOT NULL DEFAULT 0,
+            reference TEXT,
+            description TEXT,
+            document_status TEXT NOT NULL DEFAULT 'posted' CHECK (document_status IN ('posted', 'void')),
+            created_by TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            posted_at TEXT,
+            voided_at TEXT
+          );
+          CREATE UNIQUE INDEX IF NOT EXISTS supplier_refund_number_idx ON supplier_refunds(refund_number);
+          CREATE INDEX IF NOT EXISTS supplier_refund_supplier_idx ON supplier_refunds(supplier_id);
+          CREATE INDEX IF NOT EXISTS supplier_refund_debit_note_idx ON supplier_refunds(debit_note_id);
+        `);
+      },
+    },
+    {
+      version: 42,
+      name: "gratuity_accruals",
+      up: (sqlite) => {
+        // Monthly end-of-service gratuity (EOSB) accruals. One posted run per
+        // month; each line records the employee's accrued liability at month end
+        // and the provision movement booked (Dr gratuity expense / Cr provision).
+        sqlite.exec(`
+          CREATE TABLE IF NOT EXISTS "gratuity_accruals" (
+            "id" TEXT PRIMARY KEY NOT NULL,
+            "period" TEXT NOT NULL,
+            "accrual_date" TEXT NOT NULL,
+            "status" TEXT NOT NULL CHECK ("status" IN ('posted', 'reversed')),
+            "total_amount_minor" INTEGER NOT NULL,
+            "journal_entry_id" TEXT REFERENCES journal_entries(id),
+            "reversal_journal_entry_id" TEXT REFERENCES journal_entries(id),
+            "created_by" TEXT NOT NULL,
+            "created_at" TEXT NOT NULL,
+            "updated_at" TEXT NOT NULL,
+            "reversed_by" TEXT,
+            "reversed_at" TEXT
+          );
+          CREATE UNIQUE INDEX IF NOT EXISTS gratuity_accrual_posted_period_idx
+            ON gratuity_accruals(period) WHERE status = 'posted';
+          CREATE INDEX IF NOT EXISTS gratuity_accrual_period_idx ON gratuity_accruals(period);
+
+          CREATE TABLE IF NOT EXISTS "gratuity_accrual_lines" (
+            "id" TEXT PRIMARY KEY NOT NULL,
+            "accrual_id" TEXT NOT NULL REFERENCES gratuity_accruals(id) ON DELETE CASCADE,
+            "employee_id" TEXT NOT NULL REFERENCES employees(id),
+            "liability_minor" INTEGER NOT NULL,
+            "opening_provision_minor" INTEGER NOT NULL,
+            "amount_minor" INTEGER NOT NULL
+          );
+          CREATE INDEX IF NOT EXISTS gratuity_accrual_lines_accrual_idx ON gratuity_accrual_lines(accrual_id);
+          CREATE INDEX IF NOT EXISTS gratuity_accrual_lines_employee_idx ON gratuity_accrual_lines(employee_id);
+        `);
+      },
+    },
+    {
+      version: 43,
+      name: "foreign_currency_banking_and_fx_revaluation",
+      up: (sqlite) => {
+        const addColumn = (table: string, column: string, definition: string) => {
+          const existing = (sqlite.prepare(`PRAGMA table_info(${table})`).all() as { name: string }[]).map((c) => c.name);
+          if (!existing.includes(column)) sqlite.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition};`);
+        };
+        // Signed (debit-positive) amount in the bank account's own currency, set on
+        // journal lines that post to a foreign-currency bank ledger. NULL elsewhere:
+        // a base-currency bank's account-currency amount is its debit minus credit.
+        addColumn("journal_lines", "currency_amount_minor", "INTEGER");
+
+        // Bank transactions keep their entered amounts in the bank account's currency
+        // plus the rate snapshot and base equivalent used for the ledger.
+        addColumn("bank_transactions", "exchange_rate_to_base", "TEXT NOT NULL DEFAULT '1'");
+        addColumn("bank_transactions", "exchange_rate_date", "TEXT");
+        addColumn("bank_transactions", "exchange_rate_source", "TEXT NOT NULL DEFAULT 'Base'");
+        addColumn("bank_transactions", "base_total_minor", "INTEGER NOT NULL DEFAULT 0");
+        sqlite.exec(`
+          UPDATE bank_transactions SET base_total_minor = total_minor WHERE base_total_minor = 0;
+          UPDATE bank_transactions SET exchange_rate_date = date WHERE exchange_rate_date IS NULL;
+        `);
+
+        // Transfers: amount_minor is in the source account's currency, to_amount_minor
+        // in the destination's. Each side's base value and rate are kept; any
+        // difference between them is realized FX on the conversion.
+        addColumn("bank_transfers", "to_amount_minor", "INTEGER NOT NULL DEFAULT 0");
+        addColumn("bank_transfers", "from_rate_to_base", "TEXT NOT NULL DEFAULT '1'");
+        addColumn("bank_transfers", "to_rate_to_base", "TEXT NOT NULL DEFAULT '1'");
+        addColumn("bank_transfers", "from_base_amount_minor", "INTEGER NOT NULL DEFAULT 0");
+        addColumn("bank_transfers", "to_base_amount_minor", "INTEGER NOT NULL DEFAULT 0");
+        addColumn("bank_transfers", "realized_fx_amount_minor", "INTEGER NOT NULL DEFAULT 0");
+        sqlite.exec(`
+          UPDATE bank_transfers SET to_amount_minor = amount_minor WHERE to_amount_minor = 0;
+          UPDATE bank_transfers SET from_base_amount_minor = amount_minor WHERE from_base_amount_minor = 0;
+          UPDATE bank_transfers SET to_base_amount_minor = amount_minor WHERE to_base_amount_minor = 0;
+        `);
+
+        addColumn("business_accounting_settings", "unrealized_fx_account_id", "TEXT REFERENCES accounts(id)");
+
+        sqlite.exec(`
+          CREATE TABLE IF NOT EXISTS fx_revaluations (
+            id TEXT PRIMARY KEY NOT NULL,
+            revaluation_number TEXT NOT NULL,
+            date TEXT NOT NULL,
+            reversal_date TEXT NOT NULL,
+            rates_json TEXT NOT NULL,
+            net_adjustment_minor INTEGER NOT NULL,
+            status TEXT NOT NULL DEFAULT 'posted' CHECK (status IN ('posted', 'void')),
+            notes TEXT,
+            created_by TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            voided_by TEXT,
+            voided_at TEXT
+          );
+          CREATE UNIQUE INDEX IF NOT EXISTS fx_revaluation_number_idx ON fx_revaluations(revaluation_number);
+          CREATE INDEX IF NOT EXISTS fx_revaluation_date_idx ON fx_revaluations(date, status);
+          CREATE UNIQUE INDEX IF NOT EXISTS fx_revaluation_active_date_idx
+            ON fx_revaluations(date) WHERE status = 'posted';
+
+          CREATE TABLE IF NOT EXISTS fx_revaluation_lines (
+            id TEXT PRIMARY KEY NOT NULL,
+            revaluation_id TEXT NOT NULL REFERENCES fx_revaluations(id) ON DELETE CASCADE,
+            kind TEXT NOT NULL CHECK (kind IN ('receivable', 'customer_credit', 'payable', 'supplier_credit', 'bank')),
+            source_type TEXT NOT NULL,
+            source_id TEXT NOT NULL,
+            source_number TEXT NOT NULL,
+            party_id TEXT,
+            party_name TEXT,
+            account_id TEXT NOT NULL REFERENCES accounts(id),
+            currency_code TEXT NOT NULL,
+            foreign_open_minor INTEGER NOT NULL,
+            carrying_base_minor INTEGER NOT NULL,
+            rate_to_base TEXT NOT NULL,
+            revalued_base_minor INTEGER NOT NULL,
+            adjustment_minor INTEGER NOT NULL,
+            position INTEGER NOT NULL
+          );
+          CREATE INDEX IF NOT EXISTS fx_revaluation_line_run_idx ON fx_revaluation_lines(revaluation_id);
+          CREATE INDEX IF NOT EXISTS fx_revaluation_line_source_idx ON fx_revaluation_lines(source_type, source_id);
         `);
       },
     },

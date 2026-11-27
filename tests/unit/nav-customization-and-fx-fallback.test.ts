@@ -28,7 +28,7 @@ test("nav customization normalizes, filters groups/items, and resolves landing f
   assert.ok(hrGroup);
   assert.deepEqual(
     hrGroup.items.map((i) => i.path),
-    ["/payroll/employees", "/payroll/payslips", "/payroll/items", "/payroll/eosb-calculator"],
+    ["/payroll/employees", "/payroll/payslips", "/payroll/items", "/payroll/eosb-calculator", "/payroll/gratuity"],
   );
 
   const normalized = normalizeHiddenNavPaths([

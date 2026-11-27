@@ -47,6 +47,12 @@ const nextConfig: NextConfig = {
     ? { typescript: { tsconfigPath: "tsconfig.validate.json" } }
     : {}),
   serverExternalPackages: ["better-sqlite3", "puppeteer-core", "yazl"],
+  // Worker-thread bundles (scripts/build-workers.mjs, run by `npm run build`)
+  // are loaded by path at runtime, so tracing cannot see them. better-sqlite3
+  // and puppeteer-core, which they require, are already traced as externals.
+  outputFileTracingIncludes: {
+    "/api/businesses/**/*": ["./dist-workers/*.cjs"],
+  },
   experimental: {
     cpus: 2,
     serverActions: {

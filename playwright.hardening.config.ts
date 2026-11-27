@@ -3,6 +3,9 @@ import { existsSync } from "node:fs";
 import path from "node:path";
 import { randomBytes } from "node:crypto";
 import { browserDataDir, browserServerTmpDir } from "./tests/e2e/browser-data-dir";
+// Specs import src/core/db modules (server-only); resolve that marker package to its
+// empty server build in the runner and worker processes, which load this config first.
+import "./scripts/server-only-node.mjs";
 
 const root = browserDataDir();
 const defaultDistDir = existsSync(path.resolve(process.cwd(), ".next-validate")) ? ".next-validate" : ".next";
@@ -13,7 +16,7 @@ export default defineConfig({
   reporter: "list", outputDir: "test-results/hardening",
   use: { ...devices["Desktop Chrome"], baseURL: "http://localhost:3310", trace: "retain-on-failure", screenshot: "only-on-failure" },
   webServer: {
-    command: "node --import tsx scripts/prepare-browser-fixture.ts && npm run start -- -p 3310",
+    command: "node --import tsx --import ./scripts/server-only-node.mjs scripts/prepare-browser-fixture.ts && npm run start -- -p 3310",
     url: "http://localhost:3310/api/health", reuseExistingServer: false, timeout: 180_000,
     env: {
       NODE_ENV: "production", ERP_DATA_DIR: root, TMPDIR: browserServerTmpDir(root), ERP_BROWSER_META: path.join(root, "fixture.json"),

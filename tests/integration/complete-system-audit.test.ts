@@ -569,7 +569,7 @@ test("4. Complete Purchases Cycle Audit: RFQ -> PO -> Invoice -> Debit Note -> P
     purchaseInvoiceId: piId,
     date: "2026-10-28",
     bankAccountId: defaultBankAccount,
-    amount: "31500.00",
+    amount: "29400.00", // the debit note already settled 2,100.00 of the bill
     reference: "WT-SUPP-991",
     description: "Full settlement for server hardware",
   });

@@ -7,6 +7,7 @@ import { calculateSettlementAllocation } from "@/modules/currency/settlement";
 import { resolveRateSnapshot } from "@/modules/currency/validation";
 import { getBaseCurrency } from "@/modules/currency/currency";
 import { releaseStatementMatchesForSource } from "@/modules/banking/matching-service";
+import { assertBankAcceptsCurrency, ledgerBankCurrency } from "@/modules/banking/bank-currency";
 import { getBusinessTodayIso } from "@/core/format";
 
 export type SettlementConfig = {
@@ -67,8 +68,13 @@ export function createSettlement(
       ).get(rawAllocations[0].invoiceId) as { currency_code: string } | undefined;
       currencyCode = firstDoc ? firstDoc.currency_code : baseCur.code;
     } else if (!currencyCode) {
-      currencyCode = party.default_currency_code || baseCur.code;
+      const bankCurrency = ledgerBankCurrency(sqlite, data.bankAccountId);
+      currencyCode = bankCurrency.isBase ? party.default_currency_code || baseCur.code : bankCurrency.code;
     }
+    // A foreign-currency bank only moves its own currency (the settlement amount
+    // is then also the bank amount); a base bank may still settle any currency.
+    assertBankAcceptsCurrency(sqlite, data.bankAccountId, currencyCode,
+      config.partyType === "customer" ? "receive payments" : "make payments");
 
     const rate = resolveRateSnapshot(sqlite, {
       currencyCode,
@@ -475,7 +481,7 @@ export function deleteDraftSettlement(
   return sqlite.transaction(execute)();
 }
 
-function creditAllocationSourceType(config: SettlementConfig) {
+function creditAllocationSourceType(config: Pick<SettlementConfig, "partyType">) {
   return config.partyType === "customer" ? "receipt_credit_allocation" : "supplier_payment_credit_allocation";
 }
 
@@ -487,10 +493,11 @@ function creditAllocationSourceType(config: SettlementConfig) {
  * subledger. Customer: positive = gain (Dr AR / Cr gain). Supplier: positive =
  * loss (Dr loss / Cr AP).
  */
-function postCreditAllocationFx(
+export function postCreditAllocationFx(
   sqlite: any,
-  config: SettlementConfig,
+  config: Pick<SettlementConfig, "partyType">,
   input: { allocationId: string; paymentNumber: string; partyId: string; documentNumber: string; date: string; realizedFxMinor: number },
+  sourceType?: string,
 ) {
   if (input.realizedFxMinor === 0) return;
   const settings = sqlite.prepare(`
@@ -518,7 +525,7 @@ function postCreditAllocationFx(
   const party = config.partyType === "customer" ? { customerId: input.partyId } : { supplierId: input.partyId };
   const controlIsDebit = config.partyType === "customer" ? isGain : !isGain;
   postTransaction(sqlite, {
-    sourceType: creditAllocationSourceType(config),
+    sourceType: sourceType ?? creditAllocationSourceType(config),
     sourceId: input.allocationId,
     date: input.date,
     description,

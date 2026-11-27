@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { z } from "zod";
 import { parseMoneyToMinor } from "@/modules/accounting/calculations/money";
+import { parseCurrencyAmountToMinor } from "@/modules/currency/conversion";
 
 export const MAX_STATEMENT_FILE_BYTES = 2 * 1024 * 1024;
 export const MAX_STATEMENT_ROWS = 5_000;
@@ -81,14 +82,14 @@ function parseDate(value: string) {
   return iso;
 }
 
-function parseStatementAmount(value: string, label: string) {
+function parseStatementAmount(value: string, label: string, minorUnit = 2) {
   const normalized = value.trim().replace(/\s/g, "").replace(/,/g, "");
   if (!normalized) return 0;
   const parenthesized = /^\((.*)\)$/.exec(normalized);
   const signed = parenthesized ? `-${parenthesized[1]}` : normalized;
   const sign = signed.startsWith("-") ? -1 : 1;
   const absolute = signed.replace(/^[+-]/, "");
-  return sign * parseMoneyToMinor(absolute, label);
+  return sign * (minorUnit === 2 ? parseMoneyToMinor(absolute, label) : parseCurrencyAmountToMinor(absolute, minorUnit, label));
 }
 
 export type ParsedStatementRow = {
@@ -100,7 +101,8 @@ export type ParsedStatementRow = {
   externalId: string | null;
 };
 
-export function mapCsvRows(table: CsvTable, mappingInput: unknown) {
+/** Amounts are parsed in the bank account currency's minor unit (2 by default). */
+export function mapCsvRows(table: CsvTable, mappingInput: unknown, minorUnit = 2) {
   const mapping = csvMappingSchema.parse(mappingInput);
   const indexes = Object.fromEntries(Object.entries(mapping).map(([key, header]) => [key, header ? table.headers.indexOf(header) : -1])) as Record<keyof CsvMapping, number>;
   for (const required of ["date", "description"] as const) {
@@ -114,10 +116,10 @@ export function mapCsvRows(table: CsvTable, mappingInput: unknown) {
     const description = row[indexes.description].trim();
     if (!description) throw new Error(`Row ${index + 2}: Description is required.`);
     let amountMinor: number;
-    if (indexes.amount >= 0) amountMinor = parseStatementAmount(row[indexes.amount], `Row ${index + 2} amount`);
+    if (indexes.amount >= 0) amountMinor = parseStatementAmount(row[indexes.amount], `Row ${index + 2} amount`, minorUnit);
     else {
-      const debit = Math.abs(parseStatementAmount(row[indexes.debit], `Row ${index + 2} debit`));
-      const credit = Math.abs(parseStatementAmount(row[indexes.credit], `Row ${index + 2} credit`));
+      const debit = Math.abs(parseStatementAmount(row[indexes.debit], `Row ${index + 2} debit`, minorUnit));
+      const credit = Math.abs(parseStatementAmount(row[indexes.credit], `Row ${index + 2} credit`, minorUnit));
       if (debit > 0 && credit > 0) throw new Error(`Row ${index + 2}: Enter either Debit or Credit, not both.`);
       amountMinor = credit - debit;
     }

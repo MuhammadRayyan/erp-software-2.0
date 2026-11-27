@@ -54,6 +54,7 @@ export const vatReportBuckets = [
   { id: "zero_rated_sales", label: "Zero-rated supplies", section: "sales" },
   { id: "exempt_sales", label: "Exempt supplies", section: "sales" },
   { id: "reverse_charge_output", label: "Reverse-charge output VAT", section: "sales" },
+  { id: "import_output", label: "Import VAT (self-assessed output)", section: "sales" },
   { id: "standard_purchases", label: "Standard-rated purchases / expenses", section: "purchases" },
   { id: "import_purchases", label: "Import purchases", section: "purchases" },
   { id: "reverse_charge_purchases", label: "Reverse-charge purchases", section: "purchases" },
@@ -63,6 +64,16 @@ export type VatReportBucket = (typeof vatReportBuckets)[number]["id"];
 
 export const vatAdjustmentBuckets = ["output_vat_adjustment", "input_vat_adjustment"] as const;
 export type VatAdjustmentBucket = (typeof vatAdjustmentBuckets)[number];
+
+/**
+ * Purchases on which the buyer self-assesses VAT: the supplier charges none,
+ * the business accounts for output VAT (VAT201 Box 3 for reverse charge,
+ * Box 6 for imported goods) and recovers it as input VAT (Box 10) when the
+ * tax code is recoverable. The supplier is owed the net price only.
+ */
+export function isSelfAssessedVatCategory(category: string | null | undefined) {
+  return category === "reverse_charge" || category === "import";
+}
 
 export function categoryIsVatAffecting(category: VatCategory | null) {
   return category !== "out_of_scope";

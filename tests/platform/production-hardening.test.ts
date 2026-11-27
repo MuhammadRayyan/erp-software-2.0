@@ -218,6 +218,6 @@ test("failed system initialization never publishes a cached healthy handle", () 
     const db=new Database(process.env.ERP_DATA_DIR+'/system/system.sqlite'); migrateSystemDatabase(db);
     db.prepare('INSERT INTO schema_migrations(version,name,applied_at) VALUES (999,?,?)').run('future','now'); db.close();
     let rejected=0;for(let i=0;i<2;i++){try{getSystemSqlite()}catch{rejected++}}if(rejected!==2)process.exit(1);`;
-  const child = spawnSync(process.execPath, ["--import", "tsx", "--input-type=module", "-e", code], { env: { ...process.env, ERP_DATA_DIR: root }, encoding: "utf8" });
+  const child = spawnSync(process.execPath, ["--import", "tsx", "--import", pathToFileURL(path.resolve("scripts/server-only-node.mjs")).href, "--input-type=module", "-e", code], { env: { ...process.env, ERP_DATA_DIR: root }, encoding: "utf8" });
   assert.equal(child.status, 0, child.stderr);
 });

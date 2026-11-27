@@ -12,6 +12,9 @@ import { Breadcrumbs } from "@/components/breadcrumbs";
 import { DocumentFlowStepper, type FlowStep } from "@/components/documents/document-flow-stepper";
 import { getDocumentViewData } from "@/modules/document-templates/document-data-extractor";
 import { DocumentViewLayout } from "@/modules/document-templates/components/document-view-layout";
+import { getNoteCreditPanelData } from "@/modules/settlement/party-credit-service";
+import { NoteCreditPanel } from "@/modules/settlement/note-credit-panel";
+import { getBusinessTodayIso } from "@/core/format";
 
 export default async function DebitNoteViewPage({
   params,
@@ -28,6 +31,7 @@ export default async function DebitNoteViewPage({
   const { note, lines, journal } = record;
   const currency = note.currencyCode;
   const currencyMinorUnit = getCurrencyMinorUnit(currency);
+  const creditPanel = getNoteCreditPanelData(businessId, user.id, "supplier", debitNoteId);
 
   const flowSteps: FlowStep[] = [
     ...(note.purchaseInvoiceId
@@ -124,6 +128,11 @@ export default async function DebitNoteViewPage({
       </div>
       {(Boolean(note.purchaseInvoiceId) || Boolean(journal)) && (
         <DocumentFlowStepper steps={flowSteps} className="no-print" />
+      )}
+      {creditPanel && (
+        <div className="no-print">
+          <NoteCreditPanel businessId={businessId} side="supplier" noteId={note.id} baseCurrencyCode={access.business.currency} today={getBusinessTodayIso()} {...creditPanel} />
+        </div>
       )}
 
       <DocumentViewLayout

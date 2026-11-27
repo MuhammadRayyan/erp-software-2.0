@@ -170,7 +170,7 @@ export function CreditNoteForm({
       eligibleInvoices.map((invoice) => ({
         value: invoice.id,
         label: invoice.invoiceNumber,
-        badge: `${formatMoney(invoice.balanceMinor, invoice.currencyCode, invoice.minorUnit)} remaining`,
+        badge: `${formatMoney(invoice.balanceMinor, invoice.currencyCode, invoice.minorUnit)} creditable`,
       })),
     [eligibleInvoices],
   );
@@ -287,13 +287,13 @@ export function CreditNoteForm({
                   }}
                   placeholder="Choose a posted invoice…"
                   searchPlaceholder="Search invoice number..."
-                  emptyText={customerId ? "No posted open invoices for customer." : "Select a customer first."}
+                  emptyText={customerId ? "No creditable posted invoices for customer." : "Select a customer first."}
                 />
               )}
             />
             {selected && (
               <p className="text-xs text-muted-foreground">
-                Maximum credit {formatMoney(selected.balanceMinor, selected.currencyCode, selected.minorUnit)}
+                Maximum credit {formatMoney(selected.balanceMinor, selected.currencyCode, selected.minorUnit)}. Any part the invoice no longer owes (e.g. already paid) becomes customer credit you can apply or refund.
               </p>
             )}
             {errors.sourceInvoiceId && (

@@ -15,7 +15,8 @@ const MOVEMENT_UNMATCHED = `NOT EXISTS (
 function movementSql() {
   return `
     SELECT 'receipt' AS source_type, r.id AS source_id, r.receipt_number AS source_number,
-      r.date, r.amount_minor AS amount_minor, c.name AS party, r.description,
+      r.date, CASE WHEN r.currency_code = ba.currency_code THEN r.amount_minor ELSE r.base_amount_minor END AS amount_minor,
+      c.name AS party, r.description,
       r.reference, je.id AS journal_entry_id, ba.id AS bank_account_id
     FROM receipts r
     INNER JOIN customers c ON c.id = r.customer_id
@@ -23,7 +24,8 @@ function movementSql() {
     INNER JOIN journal_entries je ON je.source_type = 'receipt' AND je.source_id = r.id
     WHERE r.document_status = 'posted'
     UNION ALL
-    SELECT 'supplier_payment', sp.id, sp.payment_number, sp.date, -sp.amount_minor,
+    SELECT 'supplier_payment', sp.id, sp.payment_number, sp.date,
+      -(CASE WHEN sp.currency_code = ba.currency_code THEN sp.amount_minor ELSE sp.base_amount_minor END),
       s.name, sp.description, sp.reference, je.id, ba.id
     FROM supplier_payments sp
     INNER JOIN suppliers s ON s.id = sp.supplier_id
@@ -45,7 +47,7 @@ function movementSql() {
     INNER JOIN journal_entries je ON je.source_type = 'bank_transfer' AND je.source_id = bt.id
     WHERE bt.document_status = 'posted'
     UNION ALL
-    SELECT 'bank_transfer', bt.id, bt.transfer_number, bt.date, bt.amount_minor,
+    SELECT 'bank_transfer', bt.id, bt.transfer_number, bt.date, bt.to_amount_minor,
       source.name, bt.description, bt.reference, je.id, bt.to_bank_account_id
     FROM bank_transfers bt
     INNER JOIN bank_accounts source ON source.id = bt.from_bank_account_id

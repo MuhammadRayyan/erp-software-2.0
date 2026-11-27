@@ -89,7 +89,9 @@ function buildCommands(
           ? "vat tax fta form 201 accounting reports return"
           : item.path === "/inventory/adjustments"
             ? "stock adjustment count writeoff opening balance"
-            : "";
+            : item.path === "/accounting/fx-revaluation"
+              ? "foreign exchange currency unrealized gain loss revalue period end closing rate"
+              : "";
       navigation.push({
         group: "Navigation",
         label: item.label,

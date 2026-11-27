@@ -2,12 +2,22 @@ export function journalSourceLabel(sourceType: string) {
   const labels: Record<string, string> = {
     sales_invoice: "Sales Invoice",
     sales_invoice_void: "Sales Invoice Void",
+    sales_invoice_superseded: "Sales Invoice (superseded version)",
+    sales_invoice_amendment: "Sales Invoice Amendment Reversal",
     receipt: "Receipt",
     receipt_void: "Receipt Reversal",
     sales_credit_note: "Sales Credit Note",
     sales_credit_note_void: "Sales Credit Note Void",
     purchase_invoice: "Purchase Invoice",
     purchase_invoice_void: "Purchase Invoice Void",
+    purchase_invoice_superseded: "Purchase Invoice (superseded version)",
+    purchase_invoice_amendment: "Purchase Invoice Amendment Reversal",
+    sales_credit_note_allocation: "Credit Note Applied",
+    debit_note_allocation: "Debit Note Applied",
+    customer_refund: "Customer Refund",
+    customer_refund_void: "Customer Refund Void",
+    supplier_refund: "Supplier Refund",
+    supplier_refund_void: "Supplier Refund Void",
     supplier_payment: "Supplier Payment",
     supplier_payment_void: "Supplier Payment Reversal",
     delivery_note: "Delivery Note",
@@ -22,6 +32,8 @@ export function journalSourceLabel(sourceType: string) {
     bank_transfer_void: "Bank Transfer Void",
     payslip: "Payslip",
     payslip_void: "Payslip Void",
+    gratuity_accrual: "Gratuity Accrual",
+    gratuity_accrual_reversal: "Gratuity Accrual Reversal",
     goods_receipt: "Goods Receipt",
     goods_receipt_void: "Goods Receipt Void",
     pdc_receive: "PDC Received / Issued",
@@ -29,6 +41,10 @@ export function journalSourceLabel(sourceType: string) {
     pdc_bounce: "PDC Bounced",
     pdc_cancel: "PDC Cancelled",
     opening_balance: "Opening Balance",
+    fx_revaluation: "FX Revaluation",
+    fx_revaluation_reversal: "FX Revaluation Reversal",
+    fx_revaluation_void: "FX Revaluation Void",
+    fx_revaluation_reversal_void: "FX Revaluation Reversal Void",
   };
   return labels[sourceType] ?? sourceType.replaceAll("_", " ");
 }
@@ -36,6 +52,13 @@ export function journalSourceLabel(sourceType: string) {
 export function journalSourceHref(businessId: string, sourceType: string, sourceId: string) {
   if (sourceType === "sales_invoice" || sourceType === "sales_invoice_void") {
     return `/b/${businessId}/sales/invoices/${sourceId}`;
+  }
+  // Amendment entries use `<documentId>:<revision>` as their source id.
+  if (sourceType === "sales_invoice_superseded" || sourceType === "sales_invoice_amendment") {
+    return `/b/${businessId}/sales/invoices/${sourceId.split(":")[0]}`;
+  }
+  if (sourceType === "purchase_invoice_superseded" || sourceType === "purchase_invoice_amendment") {
+    return `/b/${businessId}/purchases/invoices/${sourceId.split(":")[0]}`;
   }
   if (sourceType === "receipt" || sourceType === "receipt_void") {
     return `/b/${businessId}/sales/receipts/${sourceId}`;
@@ -69,6 +92,18 @@ export function journalSourceHref(businessId: string, sourceType: string, source
   }
   if (sourceType === "payslip" || sourceType === "payslip_void") {
     return `/b/${businessId}/payroll/payslips/${sourceId}`;
+  }
+  if (sourceType.startsWith("fx_revaluation")) {
+    return `/b/${businessId}/accounting/fx-revaluation?run=${sourceId}`;
+  }
+  if (sourceType === "gratuity_accrual" || sourceType === "gratuity_accrual_reversal") {
+    return `/b/${businessId}/payroll/gratuity`;
+  }
+  if (sourceType === "customer_refund" || sourceType === "customer_refund_void") {
+    return `/b/${businessId}/sales/credit-notes`;
+  }
+  if (sourceType === "supplier_refund" || sourceType === "supplier_refund_void") {
+    return `/b/${businessId}/purchases/debit-notes`;
   }
   if (sourceType.startsWith("pdc_")) {
     return `/b/${businessId}/banking/pdcs`;

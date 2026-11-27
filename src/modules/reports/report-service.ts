@@ -1,5 +1,5 @@
 import { addMinor, sumMinorRatios } from "@/modules/accounting/calculations/money";
-import { purchaseSettlementSql } from "@/modules/purchase-invoices/purchase-balance";
+import { getPayablesAging, getReceivablesAging } from "./aging-service";
 import { getBusinessDb } from "@/core/db/business";
 import { SALES_ALLOCATED_BASE_EXPR, SALES_ALLOCATED_CTE } from "@/modules/shared/list-query-helpers";
 import { getBusinessTodayIso } from "@/core/format";
@@ -162,71 +162,24 @@ export function getTrialBalance(businessId: string, userId: string, throughDate?
   };
 }
 
-export function getAccountsReceivable(businessId: string, userId: string) {
-  const { sqlite } = getBusinessDb(businessId, userId);
-  const today = getBusinessTodayIso();
-  const rows = sqlite.prepare(`
-    SELECT c.id AS customer_id, c.name AS customer_name, i.id AS document_id,
-      i.invoice_number AS document_number, i.due_date, i.currency_code,
-      i.total_minor
-        - COALESCE((SELECT SUM(ra.foreign_amount_allocated) FROM receipt_allocations ra
-            INNER JOIN receipts r ON r.id = ra.receipt_id AND r.document_status = 'posted'
-            WHERE ra.sales_invoice_id = i.id), 0)
-        - COALESCE((SELECT SUM(scna.foreign_amount_allocated) FROM sales_credit_note_allocations scna
-            INNER JOIN sales_credit_notes scn ON scn.id = scna.credit_note_id AND scn.document_status = 'posted'
-            WHERE scna.sales_invoice_id = i.id), 0) AS foreign_open_minor,
-      i.base_total_minor
-        - COALESCE((SELECT SUM(ra.base_carrying_amount_released) FROM receipt_allocations ra
-            INNER JOIN receipts r ON r.id = ra.receipt_id AND r.document_status = 'posted'
-            WHERE ra.sales_invoice_id = i.id), 0)
-        - COALESCE((SELECT SUM(scna.base_carrying_amount_released) FROM sales_credit_note_allocations scna
-            INNER JOIN sales_credit_notes scn ON scn.id = scna.credit_note_id AND scn.document_status = 'posted'
-            WHERE scna.sales_invoice_id = i.id), 0) AS base_carrying_minor
-    FROM sales_invoices i INNER JOIN customers c ON c.id = i.customer_id
-    WHERE i.document_status = 'posted'
-    ORDER BY i.due_date, i.invoice_number
-  `).all() as Array<{
-    customer_id: string; customer_name: string; document_id: string; document_number: string;
-    due_date: string; currency_code: string; foreign_open_minor: number; base_carrying_minor: number;
-  }>;
-  return rows.filter((row) => row.foreign_open_minor > 0).map((row) => {
-    const ageDays = Math.max(0, Math.floor((Date.parse(`${today}T00:00:00Z`) - Date.parse(`${row.due_date}T00:00:00Z`)) / 86_400_000));
-    return {
-      ...row,
-      age_bucket: row.due_date >= today ? "Current" : ageDays <= 30 ? "1–30" : ageDays <= 60 ? "31–60" : ageDays <= 90 ? "61–90" : "90+",
-      unpaid_minor: row.due_date >= today ? row.base_carrying_minor : 0,
-      overdue_minor: row.due_date < today ? row.base_carrying_minor : 0,
-      total_minor: row.base_carrying_minor,
-    };
-  });
+/**
+ * Open sales invoices, aged from `asOfDate`. Without a date every open invoice
+ * is listed (aged from business today). See aging-service for the full report.
+ */
+export function getAccountsReceivable(businessId: string, userId: string, asOfDate?: string) {
+  return getReceivablesAging(businessId, userId, asOfDate, { includeFutureDated: !asOfDate }).rows
+    .filter((row) => row.document_kind === "invoice")
+    .map((row) => ({ ...row, customer_id: row.party_id, customer_name: row.party_name }));
 }
 
-export function getAccountsPayable(businessId: string, userId: string) {
-  const { sqlite } = getBusinessDb(businessId, userId);
-  const today = getBusinessTodayIso();
-  const settled = purchaseSettlementSql();
-  const rows = sqlite.prepare(`
-    SELECT s.id AS supplier_id, s.name AS supplier_name, pi.id AS document_id,
-      pi.internal_number AS document_number, pi.due_date, pi.currency_code,
-      pi.total_minor - (${settled.foreign}) AS foreign_open_minor,
-      pi.base_total_minor - (${settled.base}) AS base_carrying_minor
-    FROM purchase_invoices pi INNER JOIN suppliers s ON s.id = pi.supplier_id
-    WHERE pi.document_status = 'posted'
-    ORDER BY pi.due_date, pi.internal_number
-  `).all() as Array<{
-    supplier_id: string; supplier_name: string; document_id: string; document_number: string;
-    due_date: string; currency_code: string; foreign_open_minor: number; base_carrying_minor: number;
-  }>;
-  return rows.filter((row) => row.foreign_open_minor > 0).map((row) => {
-    const ageDays = Math.max(0, Math.floor((Date.parse(`${today}T00:00:00Z`) - Date.parse(`${row.due_date}T00:00:00Z`)) / 86_400_000));
-    return {
-      ...row,
-      age_bucket: row.due_date >= today ? "Current" : ageDays <= 30 ? "1–30" : ageDays <= 60 ? "31–60" : ageDays <= 90 ? "61–90" : "90+",
-      unpaid_minor: row.due_date >= today ? row.base_carrying_minor : 0,
-      overdue_minor: row.due_date < today ? row.base_carrying_minor : 0,
-      total_minor: row.base_carrying_minor,
-    };
-  });
+/**
+ * Open purchase invoices, aged from `asOfDate`. Without a date every open
+ * invoice is listed (aged from business today). See aging-service for the full report.
+ */
+export function getAccountsPayable(businessId: string, userId: string, asOfDate?: string) {
+  return getPayablesAging(businessId, userId, asOfDate, { includeFutureDated: !asOfDate }).rows
+    .filter((row) => row.document_kind === "invoice")
+    .map((row) => ({ ...row, supplier_id: row.party_id, supplier_name: row.party_name }));
 }
 
 export function getBankBalance(businessId: string, userId: string) {

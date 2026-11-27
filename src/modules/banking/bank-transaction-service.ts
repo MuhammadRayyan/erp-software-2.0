@@ -1,9 +1,11 @@
 import { assertSavePermission, assertMutationPermission } from "@/core/permissions/mutation-permissions";
 import { randomUUID } from "node:crypto";
 import { getBusinessDb } from "@/core/db/business";
-import { getCurrencyMinorUnit, minorToDecimalString, getBusinessTodayIso } from "@/core/format";
+import { minorToDecimalString, getBusinessTodayIso } from "@/core/format";
 import { addMinor, splitTaxInclusive } from "@/modules/accounting/calculations/money";
-import { parseCurrencyAmountToMinor } from "@/modules/currency/conversion";
+import { convertDocumentLinesToBase, parseCurrencyAmountToMinor } from "@/modules/currency/conversion";
+import { resolveRateSnapshot } from "@/modules/currency/validation";
+import { bankAccountCurrency } from "./bank-currency";
 import { allocateNumber } from "@/modules/accounting/services/numbering-service";
 import { reverseTransaction } from "@/modules/accounting/services/posting-service";
 import { assertDateNotLocked } from "@/modules/accounting/services/financial-lock-service";
@@ -20,8 +22,7 @@ type StoredLine = {
   grossAmountMinor: number; position: number;
 };
 
-function prepareLines(sqlite: Sqlite, data: ReturnType<typeof bankTransactionInputSchema.parse>, bankLedgerId: string, bankCurrencyCode: string) {
-  const minorUnit = getCurrencyMinorUnit(bankCurrencyCode);
+function prepareLines(sqlite: Sqlite, data: ReturnType<typeof bankTransactionInputSchema.parse>, bankLedgerId: string, minorUnit: number) {
   const taxRows = sqlite.prepare(`
     SELECT id, rate_basis_points, direction, vat_category, is_recoverable,
       sales_tax_account_id, purchase_tax_account_id
@@ -47,6 +48,7 @@ function prepareLines(sqlite: Sqlite, data: ReturnType<typeof bankTransactionInp
     if (![direction, "both"].includes(tax.direction)) throw new Error(`The selected tax code cannot be used for ${direction}.`);
     if (!tax.vat_category) throw new Error("The selected tax code needs a VAT category before posting.");
     if (tax.vat_category === "reverse_charge") throw new Error("Use a Purchase Invoice for supported Reverse-Charge purchases.");
+    if (tax.vat_category === "import") throw new Error("Use a Purchase Invoice for imported goods so Import VAT is self-assessed.");
     if (tax.rate_basis_points > 0) {
       if (data.type === "money_out" && tax.is_recoverable && !tax.purchase_tax_account_id) {
         throw new Error("Input VAT account is not configured for the selected tax code.");
@@ -128,7 +130,7 @@ export function saveBankTransaction(
       id: string; currency_code: string; ledger_account_id: string; is_active: number; ledger_active: number;
     } | undefined;
     if (!bank || !bank.is_active || !bank.ledger_active) throw new Error("Choose an active Bank Account.");
-    if (bank.currency_code !== context.business.currency) throw new Error("Only base-currency Bank Accounts are supported in Phase 5.");
+    const bankCurrency = bankAccountCurrency(context.sqlite, bank.id);
     const current = transactionId ? context.sqlite.prepare(`
       SELECT transaction_number, document_status, date FROM bank_transactions WHERE id = ?
     `).get(transactionId) as { transaction_number: string; document_status: string; date: string } | undefined : undefined;
@@ -138,8 +140,17 @@ export function saveBankTransaction(
       assertDateNotLocked(context.sqlite, current.date, "Bank transaction");
     }
     assertDateNotLocked(context.sqlite, data.date, "Bank transaction");
-    const lines = prepareLines(context.sqlite, data, bank.ledger_account_id, bank.currency_code);
+    const lines = prepareLines(context.sqlite, data, bank.ledger_account_id, bankCurrency.minorUnit);
     const totalMinor = addMinor(lines.map((line) => line.grossAmountMinor));
+    // Amounts are in the bank account's currency; a foreign account also keeps
+    // the rate (the CBUAE rate for the tax date when VAT applies) and base total.
+    const rate = resolveRateSnapshot(context.sqlite, {
+      currencyCode: bankCurrency.code,
+      relevantDate: taxDate,
+      taxCodeIds: lines.map((line) => line.taxCodeId),
+      enforceVatPolicy: true,
+    });
+    const baseTotalMinor = convertDocumentLinesToBase(lines, rate).baseTotalMinor;
     if (intent === "post") assertVatDateUnlocked(context.sqlite, taxDate, lines.map((line) => line.taxCodeId));
     if (data.statementLineId) validateStatementLine(context.sqlite, data.statementLineId,
       data.bankAccountId, data.type, totalMinor, transactionId);
@@ -148,20 +159,25 @@ export function saveBankTransaction(
       context.sqlite.prepare("DELETE FROM bank_transaction_lines WHERE bank_transaction_id = ?").run(id);
       context.sqlite.prepare(`
         UPDATE bank_transactions SET bank_account_id = ?, date = ?, tax_date = ?, supply_emirate = ?, type = ?, reference = ?,
-          description = ?, total_minor = ?, statement_line_id = ?, document_status = ?,
+          description = ?, total_minor = ?, exchange_rate_to_base = ?, exchange_rate_date = ?, exchange_rate_source = ?,
+          base_total_minor = ?, statement_line_id = ?, document_status = ?,
           updated_at = ?, posted_at = ? WHERE id = ?
       `).run(data.bankAccountId, data.date, taxDate, data.supplyEmirate || null, data.type, data.reference || null, data.description,
-        totalMinor, data.statementLineId || null, intent === "post" ? "posted" : "draft",
+        totalMinor, rate.exchangeRateToBase, rate.exchangeRateDate, rate.exchangeRateSource, baseTotalMinor,
+        data.statementLineId || null, intent === "post" ? "posted" : "draft",
         now, intent === "post" ? now : null, id);
     } else {
       context.sqlite.prepare(`
         INSERT INTO bank_transactions (
           id, transaction_number, bank_account_id, date, tax_date, supply_emirate, type, reference, description,
-          total_minor, statement_line_id, document_status, created_by, created_at,
+          total_minor, exchange_rate_to_base, exchange_rate_date, exchange_rate_source, base_total_minor,
+          statement_line_id, document_status, created_by, created_at,
           updated_at, posted_at, voided_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL)
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL)
       `).run(id, transactionNumber, data.bankAccountId, data.date, taxDate, data.supplyEmirate || null, data.type,
-        data.reference || null, data.description, totalMinor, data.statementLineId || null,
+        data.reference || null, data.description, totalMinor,
+        rate.exchangeRateToBase, rate.exchangeRateDate, rate.exchangeRateSource, baseTotalMinor,
+        data.statementLineId || null,
         intent === "post" ? "posted" : "draft", userId, now, now,
         intent === "post" ? now : null);
     }
@@ -175,6 +191,7 @@ export function saveBankTransaction(
         sourceType: "bank_transaction", sourceId: id, sourceNumber: transactionNumber,
         taxDate, direction: data.type === "money_in" ? "sales" : "purchases",
         supplyEmirate: data.supplyEmirate || null,
+        ...(bankCurrency.isBase ? {} : { rate }),
       }, lines);
       if (data.statementLineId) {
         const linked = context.sqlite.prepare(`

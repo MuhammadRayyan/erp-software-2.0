@@ -51,9 +51,9 @@ export default async function BankTransactionsReportPage({
     source: journalSourceLabel(r.source_type),
     reference: r.reference || r.entry_number || "",
     description: r.description || "",
-    money_in: minorToDecimalString(r.money_in_minor, access.business.currency),
-    money_out: minorToDecimalString(r.money_out_minor, access.business.currency),
-    balance: minorToDecimalString(r.balance_minor, access.business.currency),
+    money_in: minorToDecimalString(r.money_in_minor, r.currency_code || access.business.currency),
+    money_out: minorToDecimalString(r.money_out_minor, r.currency_code || access.business.currency),
+    balance: minorToDecimalString(r.balance_minor, r.currency_code || access.business.currency),
     reconciled: r.reconciled ? "Yes" : "No",
   }));
 
@@ -163,9 +163,9 @@ export default async function BankTransactionsReportPage({
                       </td>
                       <td className="tabular text-muted-foreground">{row.reference || row.entry_number}</td>
                       <td className="max-w-64 truncate">{row.description}</td>
-                      <td className="money text-right">{row.money_in_minor ? formatMoney(row.money_in_minor, access.business.currency) : "—"}</td>
-                      <td className="money text-right">{row.money_out_minor ? formatMoney(row.money_out_minor, access.business.currency) : "—"}</td>
-                      <td className="money text-right">{formatMoney(row.balance_minor, access.business.currency)}</td>
+                      <td className="money text-right">{row.money_in_minor ? formatMoney(row.money_in_minor, row.currency_code || access.business.currency) : "—"}</td>
+                      <td className="money text-right">{row.money_out_minor ? formatMoney(row.money_out_minor, row.currency_code || access.business.currency) : "—"}</td>
+                      <td className="money text-right">{formatMoney(row.balance_minor, row.currency_code || access.business.currency)}</td>
                       <td>{row.reconciled ? "Yes" : "No"}</td>
                     </tr>
                   );

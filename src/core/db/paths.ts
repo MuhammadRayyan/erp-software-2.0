@@ -1,3 +1,5 @@
+import "server-only";
+
 import { mkdirSync, mkdtempSync, readdirSync, rmSync, statSync } from "node:fs";
 import path from "node:path";
 

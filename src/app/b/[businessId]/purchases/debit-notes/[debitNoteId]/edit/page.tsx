@@ -6,6 +6,7 @@ import { getExpenseAccountOptions } from "@/modules/accounting/services/account-
 import { getActiveTaxCodes } from "@/modules/accounting/services/tax-code-service";
 import { listActiveSuppliers } from "@/modules/suppliers/supplier-service";
 import { listPurchaseInvoices } from "@/modules/purchase-invoices/purchase-invoice-service";
+import { getDebitableBillAmount } from "@/modules/debit-notes/debit-note-service";
 import { listProjectOptions } from "@/modules/projects/project-service";
 import { DebitNoteForm } from "@/modules/debit-notes/debit-note-form";
 import { getDebitNote } from "@/modules/debit-notes/debit-note-service";
@@ -74,10 +75,7 @@ export default async function EditDebitNotePage({
           id: inv.id,
           invoiceNumber: inv.internal_number,
           supplierId: inv.supplier_id,
-          balanceMinor:
-            inv.id === record.note.purchaseInvoiceId && record.note.documentStatus === "posted"
-              ? inv.balanceMinor + record.note.totalMinor
-              : inv.balanceMinor,
+          balanceMinor: getDebitableBillAmount(businessId, user.id, inv.id, inv.id === record.note.purchaseInvoiceId ? debitNoteId : undefined),
           currencyCode: inv.currency_code,
           minorUnit: inv.currency_minor_unit ?? 2,
           exchangeRateToBase: String(inv.exchange_rate_to_base ?? "1"),

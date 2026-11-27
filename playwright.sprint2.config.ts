@@ -23,7 +23,7 @@ export default defineConfig({
     screenshot: "only-on-failure",
   },
   webServer: {
-    command: "node --import tsx scripts/prepare-browser-fixture.ts && npm run start -- -p 3311",
+    command: "node --import tsx --import ./scripts/server-only-node.mjs scripts/prepare-browser-fixture.ts && npm run start -- -p 3311",
     url: "http://localhost:3311/api/health",
     reuseExistingServer: false,
     timeout: 180_000,
