@@ -31,6 +31,12 @@ export async function GET(request: Request, { params }: { params: Promise<{ busi
         return [bucket.label, value.netMinor, value.vatMinor, value.outputVatMinor, value.recoverableVatMinor, value.count];
       }),
       [],
+      ["VAT201 Box", "Description", "Amount minor", "VAT minor"],
+      ...[...report.vat201.outputs, ...report.vat201.inputs].map((box) => [box.box, box.label, box.amountMinor, box.vatMinor]),
+      ["12", "Total value of due tax for the period", "", report.vat201.box12TotalDueMinor],
+      ["13", "Total value of recoverable tax for the period", "", report.vat201.box13RecoverableMinor],
+      ["14", "Payable tax for the period", "", report.vat201.box14PayableMinor],
+      [],
       ["Standard-rated Sales by Emirate", "Net minor", "Output VAT minor", "Transactions"],
       ...report.emirateBreakdown.map((row) => [emirateLabels[row.emirate as Emirate], row.netMinor, row.vatMinor, row.count]),
       [],

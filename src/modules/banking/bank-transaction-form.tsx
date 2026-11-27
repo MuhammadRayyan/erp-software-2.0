@@ -14,7 +14,7 @@ import { formatMoney, getCurrencyMinorUnit, minorToDecimalString } from "@/core/
 import { parseCurrencyAmountToMinor } from "@/modules/currency/conversion";
 import { saveBankTransactionAction } from "./actions";
 import { bankTransactionInputSchema, type BankTransactionInput } from "./bank-transaction-input";
-import { emirateLabels, emirates } from "@/modules/tax/uae-vat-config";
+import { emirateLabels, emirates, isSelfAssessedVatCategory } from "@/modules/tax/uae-vat-config";
 import { SelectNative } from "@/components/ui/select-native";
 import { useUnsavedChanges } from "@/hooks/use-unsaved-changes";
 import { FieldError } from "@/components/ui/field-error";
@@ -61,7 +61,7 @@ export function BankTransactionForm({ businessId, transactionId, bankAccounts, c
   }
   const accountOptions = counterAccounts.filter((account) => !["bank", "cash", "accounts_receivable", "accounts_payable"].includes(account.subtype));
   const defaultTax = taxCodes.find((tax) => tax.vatCategory === "out_of_scope")?.id ?? taxCodes[0]?.id ?? "";
-  const availableTaxCodes = taxCodes.filter((tax) => [type === "money_in" ? "sales" : "purchases", "both"].includes(tax.direction) && tax.vatCategory !== "reverse_charge");
+  const availableTaxCodes = taxCodes.filter((tax) => [type === "money_in" ? "sales" : "purchases", "both"].includes(tax.direction) && !isSelfAssessedVatCategory(tax.vatCategory));
   return <form onSubmit={handleSubmit(save, focusFirstInvalidField)} className="space-y-7" noValidate>
     {initial.statementLineId && <div className="rounded-md border border-info/25 bg-info/10 px-3 py-2.5 text-sm">This transaction is linked to an imported statement line. Its direction and total must remain an exact match.</div>}
     {serverError && <FormError message={serverError} />}

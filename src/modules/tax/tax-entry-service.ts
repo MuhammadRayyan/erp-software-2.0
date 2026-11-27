@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import type Database from "better-sqlite3";
 import {
   directionAllows,
+  isSelfAssessedVatCategory,
   emirates,
   type Emirate,
   type TaxDirection,
@@ -148,8 +149,10 @@ export function replaceTaxEntries(
       line.taxAmountMinor, rate.currencyMinorUnit, rate.baseMinorUnit, rate.exchangeRateToBase,
     );
     const vatAmountMinor = baseVatMinor;
-    const isReverseCharge = code.vat_category === "reverse_charge" && document.direction === "purchases";
-    const outputVatMinor = document.direction === "sales" || isReverseCharge ? vatAmountMinor : 0;
+    // Reverse charge (Box 3) and imported goods (Box 6) are self-assessed:
+    // the buyer reports the output VAT as well as recovering the input.
+    const isSelfAssessed = isSelfAssessedVatCategory(code.vat_category) && document.direction === "purchases";
+    const outputVatMinor = document.direction === "sales" || isSelfAssessed ? vatAmountMinor : 0;
     const recoverableVatMinor = document.direction === "purchases" && code.is_recoverable
       ? vatAmountMinor
       : 0;

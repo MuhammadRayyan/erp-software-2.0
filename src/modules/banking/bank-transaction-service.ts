@@ -48,6 +48,7 @@ function prepareLines(sqlite: Sqlite, data: ReturnType<typeof bankTransactionInp
     if (![direction, "both"].includes(tax.direction)) throw new Error(`The selected tax code cannot be used for ${direction}.`);
     if (!tax.vat_category) throw new Error("The selected tax code needs a VAT category before posting.");
     if (tax.vat_category === "reverse_charge") throw new Error("Use a Purchase Invoice for supported Reverse-Charge purchases.");
+    if (tax.vat_category === "import") throw new Error("Use a Purchase Invoice for imported goods so Import VAT is self-assessed.");
     if (tax.rate_basis_points > 0) {
       if (data.type === "money_out" && tax.is_recoverable && !tax.purchase_tax_account_id) {
         throw new Error("Input VAT account is not configured for the selected tax code.");

@@ -22,6 +22,8 @@ export function journalSourceLabel(sourceType: string) {
     bank_transfer_void: "Bank Transfer Void",
     payslip: "Payslip",
     payslip_void: "Payslip Void",
+    gratuity_accrual: "Gratuity Accrual",
+    gratuity_accrual_reversal: "Gratuity Accrual Reversal",
     goods_receipt: "Goods Receipt",
     goods_receipt_void: "Goods Receipt Void",
     pdc_receive: "PDC Received / Issued",
@@ -76,6 +78,9 @@ export function journalSourceHref(businessId: string, sourceType: string, source
   }
   if (sourceType.startsWith("fx_revaluation")) {
     return `/b/${businessId}/accounting/fx-revaluation?run=${sourceId}`;
+  }
+  if (sourceType === "gratuity_accrual" || sourceType === "gratuity_accrual_reversal") {
+    return `/b/${businessId}/payroll/gratuity`;
   }
   if (sourceType.startsWith("pdc_")) {
     return `/b/${businessId}/banking/pdcs`;

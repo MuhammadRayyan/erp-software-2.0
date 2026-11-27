@@ -3,7 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { FileSpreadsheet, Play, Plus } from "lucide-react";
+import { BookCheck, FileSpreadsheet, Play, Plus } from "lucide-react";
 import { PageHeader } from "@/components/page-header";
 import { Button } from "@/components/ui/button";
 import { type PayslipRecord, type EmployeeRecord } from "@/modules/payroll/services/payroll-service";
@@ -34,6 +34,11 @@ export function PayslipsClient({ businessId, payslips, employees, currency }: Pa
         </Button>
         <Button permission="create" variant="secondary" onClick={() => setPayRunOpen(true)}>
           <Play className="size-4 text-primary" /> Generate Pay Run
+        </Button>
+        <Button permission="post" variant="secondary" asChild>
+          <Link href={`/b/${businessId}/payroll/gratuity`}>
+            <BookCheck className="size-4 text-primary" /> Post Gratuity Accrual
+          </Link>
         </Button>
         <Button permission="create" asChild>
           <Link href={`/b/${businessId}/payroll/payslips/new`}>

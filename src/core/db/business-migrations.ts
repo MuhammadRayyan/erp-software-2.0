@@ -3195,6 +3195,45 @@ export const businessMigrations = [
       },
     },
     {
+      version: 42,
+      name: "gratuity_accruals",
+      up: (sqlite) => {
+        // Monthly end-of-service gratuity (EOSB) accruals. One posted run per
+        // month; each line records the employee's accrued liability at month end
+        // and the provision movement booked (Dr gratuity expense / Cr provision).
+        sqlite.exec(`
+          CREATE TABLE IF NOT EXISTS "gratuity_accruals" (
+            "id" TEXT PRIMARY KEY NOT NULL,
+            "period" TEXT NOT NULL,
+            "accrual_date" TEXT NOT NULL,
+            "status" TEXT NOT NULL CHECK ("status" IN ('posted', 'reversed')),
+            "total_amount_minor" INTEGER NOT NULL,
+            "journal_entry_id" TEXT REFERENCES journal_entries(id),
+            "reversal_journal_entry_id" TEXT REFERENCES journal_entries(id),
+            "created_by" TEXT NOT NULL,
+            "created_at" TEXT NOT NULL,
+            "updated_at" TEXT NOT NULL,
+            "reversed_by" TEXT,
+            "reversed_at" TEXT
+          );
+          CREATE UNIQUE INDEX IF NOT EXISTS gratuity_accrual_posted_period_idx
+            ON gratuity_accruals(period) WHERE status = 'posted';
+          CREATE INDEX IF NOT EXISTS gratuity_accrual_period_idx ON gratuity_accruals(period);
+
+          CREATE TABLE IF NOT EXISTS "gratuity_accrual_lines" (
+            "id" TEXT PRIMARY KEY NOT NULL,
+            "accrual_id" TEXT NOT NULL REFERENCES gratuity_accruals(id) ON DELETE CASCADE,
+            "employee_id" TEXT NOT NULL REFERENCES employees(id),
+            "liability_minor" INTEGER NOT NULL,
+            "opening_provision_minor" INTEGER NOT NULL,
+            "amount_minor" INTEGER NOT NULL
+          );
+          CREATE INDEX IF NOT EXISTS gratuity_accrual_lines_accrual_idx ON gratuity_accrual_lines(accrual_id);
+          CREATE INDEX IF NOT EXISTS gratuity_accrual_lines_employee_idx ON gratuity_accrual_lines(employee_id);
+        `);
+      },
+    },
+    {
       version: 43,
       name: "foreign_currency_banking_and_fx_revaluation",
       up: (sqlite) => {

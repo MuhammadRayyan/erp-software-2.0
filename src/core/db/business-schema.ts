@@ -2319,6 +2319,49 @@ export const payslipLines = sqliteTable(
   ],
 );
 
+export const gratuityAccruals = sqliteTable(
+  "gratuity_accruals",
+  {
+    id: text("id").primaryKey(),
+    period: text("period").notNull(),
+    accrualDate: text("accrual_date").notNull(),
+    status: text("status", { enum: ["posted", "reversed"] }).notNull(),
+    totalAmountMinor: integer("total_amount_minor").notNull(),
+    journalEntryId: text("journal_entry_id").references(() => journalEntries.id),
+    reversalJournalEntryId: text("reversal_journal_entry_id").references(() => journalEntries.id),
+    createdBy: text("created_by").notNull(),
+    createdAt: text("created_at").notNull(),
+    updatedAt: text("updated_at").notNull(),
+    reversedBy: text("reversed_by"),
+    reversedAt: text("reversed_at"),
+  },
+  (table) => [
+    uniqueIndex("gratuity_accrual_posted_period_idx").on(table.period).where(sql`status = 'posted'`),
+    index("gratuity_accrual_period_idx").on(table.period),
+    check("gratuity_accrual_status", sql`${table.status} IN ('posted', 'reversed')`),
+  ],
+);
+
+export const gratuityAccrualLines = sqliteTable(
+  "gratuity_accrual_lines",
+  {
+    id: text("id").primaryKey(),
+    accrualId: text("accrual_id")
+      .notNull()
+      .references(() => gratuityAccruals.id, { onDelete: "cascade" }),
+    employeeId: text("employee_id")
+      .notNull()
+      .references(() => employees.id),
+    liabilityMinor: integer("liability_minor").notNull(),
+    openingProvisionMinor: integer("opening_provision_minor").notNull(),
+    amountMinor: integer("amount_minor").notNull(),
+  },
+  (table) => [
+    index("gratuity_accrual_lines_accrual_idx").on(table.accrualId),
+    index("gratuity_accrual_lines_employee_idx").on(table.employeeId),
+  ],
+);
+
 export const savedReports = sqliteTable(
   "saved_reports",
   {

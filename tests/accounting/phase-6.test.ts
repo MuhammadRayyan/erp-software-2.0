@@ -260,7 +260,7 @@ test("Phase 6 UAE VAT working papers and explicit period controls", async (suite
     assert.deepEqual({ net: abuDhabi.netMinor, vat: abuDhabi.vatMinor }, { net: 50000, vat: 2500 });
     const drillDown = getVatTransactionDetail(businessId, adminId, { periodId, bucket: "standard_sales" });
     assert.equal(drillDown.reduce((sum, row) => sum + row.net_amount_minor, 0), report.buckets.standard_sales.netMinor);
-    assert.deepEqual(report.reconciliation, { outputGlMinor: 8000, inputGlMinor: 8000, outputDifferenceMinor: 0, inputDifferenceMinor: 0 });
+    assert.deepEqual(report.reconciliation, { outputGlMinor: 9000, inputGlMinor: 8000, outputDifferenceMinor: 0, inputDifferenceMinor: 0 });
 
     const outputLine = sqlite.prepare(`
       SELECT jl.id, jl.credit_minor FROM journal_lines jl
