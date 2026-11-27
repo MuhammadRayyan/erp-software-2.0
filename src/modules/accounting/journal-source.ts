@@ -29,6 +29,10 @@ export function journalSourceLabel(sourceType: string) {
     pdc_bounce: "PDC Bounced",
     pdc_cancel: "PDC Cancelled",
     opening_balance: "Opening Balance",
+    fx_revaluation: "FX Revaluation",
+    fx_revaluation_reversal: "FX Revaluation Reversal",
+    fx_revaluation_void: "FX Revaluation Void",
+    fx_revaluation_reversal_void: "FX Revaluation Reversal Void",
   };
   return labels[sourceType] ?? sourceType.replaceAll("_", " ");
 }
@@ -69,6 +73,9 @@ export function journalSourceHref(businessId: string, sourceType: string, source
   }
   if (sourceType === "payslip" || sourceType === "payslip_void") {
     return `/b/${businessId}/payroll/payslips/${sourceId}`;
+  }
+  if (sourceType.startsWith("fx_revaluation")) {
+    return `/b/${businessId}/accounting/fx-revaluation?run=${sourceId}`;
   }
   if (sourceType.startsWith("pdc_")) {
     return `/b/${businessId}/banking/pdcs`;

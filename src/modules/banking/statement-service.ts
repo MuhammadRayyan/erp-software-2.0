@@ -2,6 +2,7 @@ import { assertMutationPermission } from "@/core/permissions/mutation-permission
 import { randomUUID } from "node:crypto";
 import { getBusinessDb } from "@/core/db/business";
 import { mapCsvRows, parseCsv, statementFingerprint, type CsvMapping } from "./csv-import";
+import { bankAccountCurrency } from "./bank-currency";
 
 export function importBankStatement(
   businessId: string,
@@ -14,14 +15,14 @@ export function importBankStatement(
   assertMutationPermission(businessId, userId, "banking", "create");
   if (!/\.csv$/i.test(fileName)) throw new Error("Choose a CSV statement file.");
   const table = parseCsv(csvText);
-  const mapped = mapCsvRows(table, mapping);
   const context = getBusinessDb(businessId, userId);
   const bank = context.sqlite.prepare(`
     SELECT id, currency_code, is_cash_account, is_active FROM bank_accounts WHERE id = ?
   `).get(bankAccountId) as { id: string; currency_code: string; is_cash_account: number; is_active: number } | undefined;
   if (!bank || !bank.is_active) throw new Error("Bank Account not found or inactive.");
   if (bank.is_cash_account) throw new Error("Statement import is not available for Cash accounts.");
-  if (bank.currency_code !== context.business.currency) throw new Error("Only base-currency statements are supported in Phase 5.");
+  // Statement amounts are in the account's own currency.
+  const mapped = mapCsvRows(table, mapping, bankAccountCurrency(context.sqlite, bank.id).minorUnit);
   const importId = randomUUID();
   const now = new Date().toISOString();
   let importedCount = 0;

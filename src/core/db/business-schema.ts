@@ -220,6 +220,7 @@ export const accountingSettings = sqliteTable("business_accounting_settings", {
     .references(() => accounts.id),
   realizedFxGainAccountId: text("realized_fx_gain_account_id").references(() => accounts.id),
   realizedFxLossAccountId: text("realized_fx_loss_account_id").references(() => accounts.id),
+  unrealizedFxAccountId: text("unrealized_fx_account_id").references(() => accounts.id),
   journalPrefix: text("journal_prefix").notNull(),
   journalNextNumber: integer("journal_next_number").notNull(),
   journalPadding: integer("journal_padding").notNull().default(4),
@@ -555,6 +556,8 @@ export const journalLines = sqliteTable(
     projectId: text("project_id").references(() => projects.id),
     reference: text("reference"),
     position: integer("position").notNull(),
+    /** Signed amount in a foreign-currency bank ledger's own currency (NULL on other lines). */
+    currencyAmountMinor: integer("currency_amount_minor"),
   },
   (table) => [
     index("journal_lines_entry_idx").on(table.journalEntryId),
@@ -1171,6 +1174,10 @@ export const bankTransactions = sqliteTable(
     reference: text("reference"),
     description: text("description").notNull(),
     totalMinor: integer("total_minor").notNull(),
+    exchangeRateToBase: text("exchange_rate_to_base").notNull().default("1"),
+    exchangeRateDate: text("exchange_rate_date"),
+    exchangeRateSource: text("exchange_rate_source").notNull().default("Base"),
+    baseTotalMinor: integer("base_total_minor").notNull().default(0),
     statementLineId: text("statement_line_id").references(() => bankStatementLines.id),
     documentStatus: text("document_status", { enum: ["draft", "pending_approval", "posted", "void"] })
       .notNull()
@@ -1224,6 +1231,12 @@ export const bankTransfers = sqliteTable(
     toBankAccountId: text("to_bank_account_id").notNull().references(() => bankAccounts.id),
     date: text("date").notNull(),
     amountMinor: integer("amount_minor").notNull(),
+    toAmountMinor: integer("to_amount_minor").notNull().default(0),
+    fromRateToBase: text("from_rate_to_base").notNull().default("1"),
+    toRateToBase: text("to_rate_to_base").notNull().default("1"),
+    fromBaseAmountMinor: integer("from_base_amount_minor").notNull().default(0),
+    toBaseAmountMinor: integer("to_base_amount_minor").notNull().default(0),
+    realizedFxAmountMinor: integer("realized_fx_amount_minor").notNull().default(0),
     reference: text("reference"),
     description: text("description"),
     documentStatus: text("document_status", { enum: ["draft", "pending_approval", "posted", "void"] }).notNull().default("posted"),
@@ -2404,3 +2417,54 @@ export const notifications = sqliteTable(
 
 
 
+
+export const fxRevaluations = sqliteTable(
+  "fx_revaluations",
+  {
+    id: text("id").primaryKey(),
+    revaluationNumber: text("revaluation_number").notNull(),
+    date: text("date").notNull(),
+    reversalDate: text("reversal_date").notNull(),
+    ratesJson: text("rates_json").notNull(),
+    netAdjustmentMinor: integer("net_adjustment_minor").notNull(),
+    status: text("status", { enum: ["posted", "void"] }).notNull().default("posted"),
+    notes: text("notes"),
+    createdBy: text("created_by").notNull(),
+    createdAt: text("created_at").notNull(),
+    voidedBy: text("voided_by"),
+    voidedAt: text("voided_at"),
+  },
+  (table) => [
+    uniqueIndex("fx_revaluation_number_idx").on(table.revaluationNumber),
+    index("fx_revaluation_date_idx").on(table.date, table.status),
+    uniqueIndex("fx_revaluation_active_date_idx").on(table.date).where(sql`${table.status} = 'posted'`),
+    check("fx_revaluation_status", sql`${table.status} IN ('posted', 'void')`),
+  ],
+);
+
+export const fxRevaluationLines = sqliteTable(
+  "fx_revaluation_lines",
+  {
+    id: text("id").primaryKey(),
+    revaluationId: text("revaluation_id").notNull().references(() => fxRevaluations.id, { onDelete: "cascade" }),
+    kind: text("kind", { enum: ["receivable", "customer_credit", "payable", "supplier_credit", "bank"] }).notNull(),
+    sourceType: text("source_type").notNull(),
+    sourceId: text("source_id").notNull(),
+    sourceNumber: text("source_number").notNull(),
+    partyId: text("party_id"),
+    partyName: text("party_name"),
+    accountId: text("account_id").notNull().references(() => accounts.id),
+    currencyCode: text("currency_code").notNull(),
+    foreignOpenMinor: integer("foreign_open_minor").notNull(),
+    carryingBaseMinor: integer("carrying_base_minor").notNull(),
+    rateToBase: text("rate_to_base").notNull(),
+    revaluedBaseMinor: integer("revalued_base_minor").notNull(),
+    adjustmentMinor: integer("adjustment_minor").notNull(),
+    position: integer("position").notNull(),
+  },
+  (table) => [
+    index("fx_revaluation_line_run_idx").on(table.revaluationId),
+    index("fx_revaluation_line_source_idx").on(table.sourceType, table.sourceId),
+    check("fx_revaluation_line_kind", sql`${table.kind} IN ('receivable', 'customer_credit', 'payable', 'supplier_credit', 'bank')`),
+  ],
+);

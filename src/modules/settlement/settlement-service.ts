@@ -7,6 +7,7 @@ import { calculateSettlementAllocation } from "@/modules/currency/settlement";
 import { resolveRateSnapshot } from "@/modules/currency/validation";
 import { getBaseCurrency } from "@/modules/currency/currency";
 import { releaseStatementMatchesForSource } from "@/modules/banking/matching-service";
+import { assertBankAcceptsCurrency, ledgerBankCurrency } from "@/modules/banking/bank-currency";
 import { getBusinessTodayIso } from "@/core/format";
 
 export type SettlementConfig = {
@@ -67,8 +68,13 @@ export function createSettlement(
       ).get(rawAllocations[0].invoiceId) as { currency_code: string } | undefined;
       currencyCode = firstDoc ? firstDoc.currency_code : baseCur.code;
     } else if (!currencyCode) {
-      currencyCode = party.default_currency_code || baseCur.code;
+      const bankCurrency = ledgerBankCurrency(sqlite, data.bankAccountId);
+      currencyCode = bankCurrency.isBase ? party.default_currency_code || baseCur.code : bankCurrency.code;
     }
+    // A foreign-currency bank only moves its own currency (the settlement amount
+    // is then also the bank amount); a base bank may still settle any currency.
+    assertBankAcceptsCurrency(sqlite, data.bankAccountId, currencyCode,
+      config.partyType === "customer" ? "receive payments" : "make payments");
 
     const rate = resolveRateSnapshot(sqlite, {
       currencyCode,

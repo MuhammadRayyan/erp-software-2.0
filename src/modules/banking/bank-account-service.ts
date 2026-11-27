@@ -2,7 +2,9 @@ import { assertSavePermission, assertMutationPermission } from "@/core/permissio
 import { cache } from "react";
 import { randomUUID } from "node:crypto";
 import { getBusinessDb } from "@/core/db/business";
+import { getBaseCurrency, getCurrency } from "@/modules/currency/currency";
 import { bankAccountInputSchema, type BankAccountInput } from "./bank-account-input";
+import { BANK_AMOUNT_SQL } from "./bank-currency";
 
 export type BankAccountRow = {
   id: string;
@@ -15,7 +17,10 @@ export type BankAccountRow = {
   ledger_name: string;
   is_cash_account: number;
   is_active: number;
+  /** Balance in the account's own currency. */
   book_balance_minor: number;
+  /** Mapped GL balance in the base currency (differs from book_balance_minor for foreign accounts). */
+  base_balance_minor: number;
   statement_balance_minor: number | null;
   unreconciled_count: number;
 };
@@ -27,11 +32,17 @@ const ACCOUNT_SELECT = `
       ba.currency_code, ba.ledger_account_id, ba.is_cash_account, ba.is_active,
       a.name AS ledger_name,
       COALESCE((
-        SELECT SUM(jl.debit_minor - jl.credit_minor)
+        SELECT SUM(${BANK_AMOUNT_SQL})
         FROM journal_lines jl
         INNER JOIN journal_entries je ON je.id = jl.journal_entry_id AND je.status = 'posted'
         WHERE jl.account_id = ba.ledger_account_id
       ), 0) AS book_balance_minor,
+      COALESCE((
+        SELECT SUM(jl.debit_minor - jl.credit_minor)
+        FROM journal_lines jl
+        INNER JOIN journal_entries je ON je.id = jl.journal_entry_id AND je.status = 'posted'
+        WHERE jl.account_id = ba.ledger_account_id
+      ), 0) AS base_balance_minor,
       (
         SELECT br.statement_ending_balance_minor FROM bank_reconciliations br
         WHERE br.bank_account_id = ba.id AND br.status = 'completed'
@@ -100,26 +111,49 @@ export function saveBankAccount(
   assertSavePermission(businessId, userId, "banking", bankAccountId, "draft");
   const data = bankAccountInputSchema.parse(input);
   const context = getBusinessDb(businessId, userId);
-  if (data.currencyCode !== context.business.currency.toUpperCase()) {
-    throw new Error(`Phase 5 Bank Accounts must use the business base currency (${context.business.currency}).`);
-  }
+  const base = getBaseCurrency(context.sqlite);
+  if (data.currencyCode !== base.code) getCurrency(context.sqlite, data.currencyCode, true);
   validateLedger(context.sqlite, data.ledgerAccountId, data.isCashAccount, bankAccountId);
   const now = new Date().toISOString();
   const id = bankAccountId ?? randomUUID();
-  if (bankAccountId) {
-    const current = context.sqlite.prepare("SELECT id, ledger_account_id FROM bank_accounts WHERE id = ?").get(bankAccountId) as { id: string; ledger_account_id: string } | undefined;
-    if (!current) throw new Error("Bank Account not found.");
-    if (current.ledger_account_id !== data.ledgerAccountId) {
-      const activity = context.sqlite.prepare(`
-        SELECT 1 FROM (
-          SELECT bank_account_id FROM bank_statement_imports WHERE bank_account_id = ?
-          UNION ALL SELECT bank_account_id FROM bank_transactions WHERE bank_account_id = ?
-          UNION ALL SELECT from_bank_account_id FROM bank_transfers WHERE from_bank_account_id = ?
-          UNION ALL SELECT to_bank_account_id FROM bank_transfers WHERE to_bank_account_id = ?
-          UNION ALL SELECT bank_account_id FROM bank_reconciliations WHERE bank_account_id = ?
-        ) LIMIT 1
-      `).get(bankAccountId, bankAccountId, bankAccountId, bankAccountId, bankAccountId);
-      if (activity) throw new Error("The mapped GL account cannot change after banking activity exists.");
+  const current = bankAccountId
+    ? context.sqlite.prepare("SELECT id, ledger_account_id, currency_code FROM bank_accounts WHERE id = ?").get(bankAccountId) as { id: string; ledger_account_id: string; currency_code: string } | undefined
+    : undefined;
+  if (bankAccountId && !current) throw new Error("Bank Account not found.");
+  const hasBankingActivity = () => Boolean(bankAccountId && context.sqlite.prepare(`
+    SELECT 1 FROM (
+      SELECT bank_account_id FROM bank_statement_imports WHERE bank_account_id = ?
+      UNION ALL SELECT bank_account_id FROM bank_transactions WHERE bank_account_id = ?
+      UNION ALL SELECT from_bank_account_id FROM bank_transfers WHERE from_bank_account_id = ?
+      UNION ALL SELECT to_bank_account_id FROM bank_transfers WHERE to_bank_account_id = ?
+      UNION ALL SELECT bank_account_id FROM bank_reconciliations WHERE bank_account_id = ?
+      UNION ALL SELECT bank_account_id FROM post_dated_cheques WHERE bank_account_id = ?
+    ) LIMIT 1
+  `).get(bankAccountId, bankAccountId, bankAccountId, bankAccountId, bankAccountId, bankAccountId));
+  const ledgerHasEntries = (ledgerId: string) => Boolean(context.sqlite.prepare(
+    "SELECT 1 FROM journal_lines WHERE account_id = ? LIMIT 1",
+  ).get(ledgerId));
+  if (current && current.currency_code !== data.currencyCode
+    && (hasBankingActivity() || ledgerHasEntries(current.ledger_account_id))) {
+    throw new Error("The currency cannot change once the Bank Account has transactions.");
+  }
+  if (data.currencyCode !== base.code) {
+    // Every entry on a foreign-currency bank ledger must carry its bank-currency
+    // amount, so the account must start from an unused ledger.
+    const settings = context.sqlite.prepare(`
+      SELECT default_bank_account_id FROM business_accounting_settings WHERE id = 'default'
+    `).get() as { default_bank_account_id: string | null } | undefined;
+    if (settings?.default_bank_account_id === data.ledgerAccountId) {
+      throw new Error(`The default bank ledger must stay in ${base.code}. Map the ${data.currencyCode} account to its own Bank ledger.`);
+    }
+    const ledgerIsNew = !current || current.ledger_account_id !== data.ledgerAccountId || current.currency_code !== data.currencyCode;
+    if (ledgerIsNew && ledgerHasEntries(data.ledgerAccountId)) {
+      throw new Error(`A ${data.currencyCode} Bank Account needs a GL account with no existing entries.`);
+    }
+  }
+  if (current) {
+    if (current.ledger_account_id !== data.ledgerAccountId && hasBankingActivity()) {
+      throw new Error("The mapped GL account cannot change after banking activity exists.");
     }
     context.sqlite.prepare(`
       UPDATE bank_accounts SET name = ?, account_code = ?, bank_name = ?,
