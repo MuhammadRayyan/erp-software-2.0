@@ -9,7 +9,8 @@ import { DebitNoteInput } from "./debit-note-input";
 import { allocateNumber } from "@/modules/accounting/services/numbering-service";
 import { calculateLines, totalsForLines } from "@/modules/accounting/services/document-line-calculator";
 import { resolveRateSnapshot, storedRateSnapshot } from "@/modules/currency/validation";
-import { convertDocumentLinesToBase } from "@/modules/currency/conversion";
+import { convertDocumentLinesToBase, proportionalCarryingRelease } from "@/modules/currency/conversion";
+import { noteCreditInUse } from "@/modules/settlement/party-credit-service";
 import {
   replaceTaxEntries,
   reverseTaxEntries
@@ -44,6 +45,40 @@ type StoredLine = {
 };
 
 export type DebitNoteStatus = "draft" | "posted" | "void";
+
+/**
+ * How much of a purchase invoice can still be debited: its total less earlier
+ * posted debit notes against it. Payment does not reduce this, so a fully paid
+ * bill can still receive a debit note; the excess becomes supplier credit.
+ */
+export function debitableBillAmount(sqlite: ReturnType<typeof getBusinessDb>["sqlite"], purchaseInvoiceId: string, excludeNoteId?: string) {
+  const bill = sqlite.prepare("SELECT total_minor FROM purchase_invoices WHERE id = ? AND document_status = 'posted'").get(purchaseInvoiceId) as { total_minor: number } | undefined;
+  if (!bill) return 0;
+  const debited = (sqlite.prepare(`
+    SELECT COALESCE(SUM(total_minor), 0) AS amount FROM debit_notes
+    WHERE purchase_invoice_id = ? AND document_status = 'posted' AND (? IS NULL OR id <> ?)
+  `).get(purchaseInvoiceId, excludeNoteId ?? null, excludeNoteId ?? null) as { amount: number }).amount;
+  return Math.max(0, bill.total_minor - debited);
+}
+
+/** Open balance of a bill ignoring one debit note's own allocation (for re-posting that note). */
+function billOpenExcludingNote(sqlite: ReturnType<typeof getBusinessDb>["sqlite"], purchaseInvoiceId: string, excludeNoteId?: string) {
+  const row = sqlite.prepare(`
+    SELECT pi.total_minor
+      - COALESCE((SELECT SUM(spa.foreign_amount_allocated) FROM supplier_payment_allocations spa
+          INNER JOIN supplier_payments sp ON sp.id = spa.payment_id AND sp.document_status = 'posted'
+          WHERE spa.purchase_invoice_id = pi.id), 0)
+      - COALESCE((SELECT SUM(dna.amount_minor) FROM debit_note_allocations dna
+          INNER JOIN debit_notes dn ON dn.id = dna.debit_note_id AND dn.document_status = 'posted'
+          WHERE dna.purchase_invoice_id = pi.id AND (? IS NULL OR dn.id <> ?)), 0) AS open_minor
+    FROM purchase_invoices pi WHERE pi.id = ?
+  `).get(excludeNoteId ?? null, excludeNoteId ?? null, purchaseInvoiceId) as { open_minor: number } | undefined;
+  return Math.max(0, row?.open_minor ?? 0);
+}
+
+export function getDebitableBillAmount(businessId: string, userId: string, purchaseInvoiceId: string, excludeNoteId?: string) {
+  return debitableBillAmount(getBusinessDb(businessId, userId).sqlite, purchaseInvoiceId, excludeNoteId);
+}
 export type DebitNoteIntent = "draft" | "post";
 
 /** List all debit notes for a business, newest first, with optional date range. */
@@ -174,6 +209,28 @@ export function saveDebitNote(businessId: string, userId: string, data: DebitNot
   const supplier = context.sqlite.prepare("SELECT name FROM suppliers WHERE id = ?").get(data.supplierId) as { name: string } | undefined;
   if (!supplier) throw new Error("Supplier not found.");
 
+  // A linked debit note first settles what is still open on its bill; any
+  // excess (e.g. the bill is already paid) stays on the note as supplier credit.
+  let appliedMinor = 0;
+  if (data.purchaseInvoiceId) {
+    const bill = context.sqlite.prepare("SELECT supplier_id, currency_code, document_status, internal_number FROM purchase_invoices WHERE id = ?")
+      .get(data.purchaseInvoiceId) as { supplier_id: string; currency_code: string; document_status: string; internal_number: string } | undefined;
+    if (!bill || bill.document_status !== "posted" || bill.supplier_id !== data.supplierId) {
+      throw new Error("Choose a posted purchase invoice belonging to this supplier.");
+    }
+    if (bill.currency_code !== rate.currencyCode) {
+      throw new Error(`This Debit Note must use the linked ${bill.currency_code} purchase invoice currency.`);
+    }
+    const debitable = debitableBillAmount(context.sqlite, data.purchaseInvoiceId, noteId);
+    if (amounts.totalMinor > debitable) {
+      throw new Error(`Debit note cannot exceed ${bill.currency_code} ${(debitable / 10 ** rate.currencyMinorUnit).toFixed(rate.currencyMinorUnit)}, the purchase invoice total less earlier debit notes.`);
+    }
+    appliedMinor = Math.min(amounts.totalMinor, billOpenExcludingNote(context.sqlite, data.purchaseInvoiceId, noteId));
+  }
+  const appliedBaseMinor = appliedMinor > 0
+    ? proportionalCarryingRelease(appliedMinor, amounts.totalMinor, base.baseTotalMinor)
+    : 0;
+
   context.sqlite.transaction(() => {
     let number: string;
     let shouldPost = intent === "post";
@@ -189,6 +246,9 @@ export function saveDebitNote(businessId: string, userId: string, data: DebitNot
       }
       if ((current.purchaseInvoiceId ?? null) !== (data.purchaseInvoiceId || null) && current.documentStatus === "posted") {
         throw new Error("Cannot change the source invoice after posting.");
+      }
+      if (current.documentStatus === "posted" && noteCreditInUse(context.sqlite, "supplier", noteId, current.purchaseInvoiceId ?? null)) {
+        throw new Error("This debit note's credit has been applied to another purchase invoice or refunded. Void the refund or remove that application before editing it.");
       }
       
       number = current.debitNoteNumber;
@@ -229,6 +289,15 @@ export function saveDebitNote(businessId: string, userId: string, data: DebitNot
         partyName: supplier.name, taxDate, direction: "purchases",
         supplyEmirate: null, sign: -1, rate,
       }, postingLines);
+      context.sqlite.prepare("DELETE FROM debit_note_allocations WHERE debit_note_id = ? AND purchase_invoice_id = ?").run(id, data.purchaseInvoiceId || "");
+      if (data.purchaseInvoiceId && appliedMinor > 0) {
+        context.sqlite.prepare(`
+          INSERT INTO debit_note_allocations (
+            id, debit_note_id, purchase_invoice_id, amount_minor,
+            base_carrying_amount_released, settlement_base_amount, realized_fx_amount
+          ) VALUES (?, ?, ?, ?, ?, ?, 0)
+        `).run(randomUUID(), id, data.purchaseInvoiceId, appliedMinor, appliedBaseMinor, appliedBaseMinor);
+      }
       context.sqlite.prepare("UPDATE debit_notes SET document_status = 'posted', posted_at = COALESCE(posted_at, ?) WHERE id = ?").run(now, id);
     }
 
@@ -240,7 +309,7 @@ export function saveDebitNote(businessId: string, userId: string, data: DebitNot
         entityId: id,
         entityNumber: number,
         summary: `${shouldPost ? "Issued" : (noteId ? "Updated" : "Created")} debit note ${number}`,
-        details: { debitNoteNumber: number, totalMinor: amounts.totalMinor, currency: rate.currencyCode, supplierId: data.supplierId, purchaseInvoiceId: data.purchaseInvoiceId },
+        details: { debitNoteNumber: number, totalMinor: amounts.totalMinor, currency: rate.currencyCode, supplierId: data.supplierId, purchaseInvoiceId: data.purchaseInvoiceId, ...(shouldPost ? { appliedToInvoiceMinor: appliedMinor, unallocatedCreditMinor: amounts.totalMinor - appliedMinor } : {}) },
         sqlite: context.sqlite,
       });
     } catch (e) {
@@ -311,6 +380,9 @@ export function voidDebitNote(businessId: string, userId: string, noteId: string
   const note = context.db.select().from(debitNotes).where(eq(debitNotes.id, noteId)).get();
   if (!note) throw new Error("Debit note not found."); 
   if (note.documentStatus !== "posted") throw new Error("Only posted debit notes can be voided.");
+  if (noteCreditInUse(context.sqlite, "supplier", noteId, note.purchaseInvoiceId ?? null)) {
+    throw new Error("This debit note's credit has been applied to another purchase invoice or refunded. Void the refund or remove that application first.");
+  }
   
   const now = new Date().toISOString();
   context.sqlite.transaction(() => { 

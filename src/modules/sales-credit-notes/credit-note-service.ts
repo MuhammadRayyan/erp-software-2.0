@@ -12,7 +12,8 @@ import { replaceTaxEntries, reverseTaxEntries } from "@/modules/tax/tax-entry-se
 import { assertVatDateUnlocked, assertVatSourceUnlocked } from "@/modules/tax/tax-lock-service";
 import { assertDateNotLocked } from "@/modules/accounting/services/financial-lock-service";
 import { creditNoteInputSchema, type CreditNoteInput } from "./credit-note-input";
-import { convertDocumentLinesToBase, minorToCurrencyInput,  proportionalCarryingRelease } from "@/modules/currency/conversion";
+import { convertDocumentLinesToBase, convertToBase, minorToCurrencyInput,  proportionalCarryingRelease } from "@/modules/currency/conversion";
+import { noteCreditInUse } from "@/modules/settlement/party-credit-service";
 import { storedRateSnapshot } from "@/modules/currency/validation";
 import { calculateLines, totalsForLines, type StoredLine } from "@/modules/accounting/services/document-line-calculator";
 import { recordActivity } from "@/modules/activity-log/activity-log-service";
@@ -54,6 +55,27 @@ export function remainingInvoiceBalance(sqlite: ReturnType<typeof getBusinessDb>
 
 export function getRemainingInvoiceBalance(businessId: string, userId: string, invoiceId: string, excludeNoteId?: string) {
   return remainingInvoiceBalance(getBusinessDb(businessId, userId).sqlite, invoiceId, excludeNoteId);
+}
+
+/**
+ * How much of an invoice can still be credited: its total less earlier posted
+ * credit notes raised against it. Unlike the open balance this does not shrink
+ * when the invoice is paid, so a fully paid invoice can still be credited and
+ * the excess becomes customer credit (applied elsewhere or refunded).
+ */
+export function creditableInvoiceAmount(sqlite: ReturnType<typeof getBusinessDb>["sqlite"], invoiceId: string, excludeNoteId?: string) {
+  const invoice = sqlite.prepare("SELECT total_minor FROM sales_invoices WHERE id = ? AND document_status = 'posted'").get(invoiceId) as { total_minor: number } | undefined;
+  if (!invoice) return 0;
+  const values = excludeNoteId ? [invoiceId, excludeNoteId] : [invoiceId];
+  const credited = (sqlite.prepare(`
+    SELECT COALESCE(SUM(total_minor), 0) AS amount FROM sales_credit_notes
+    WHERE source_invoice_id = ? AND document_status = 'posted'${excludeNoteId ? " AND id <> ?" : ""}
+  `).get(...values) as { amount: number }).amount;
+  return Math.max(0, invoice.total_minor - credited);
+}
+
+export function getCreditableInvoiceAmount(businessId: string, userId: string, invoiceId: string, excludeNoteId?: string) {
+  return creditableInvoiceAmount(getBusinessDb(businessId, userId).sqlite, invoiceId, excludeNoteId);
 }
 
 
@@ -168,14 +190,23 @@ export function saveCreditNote(businessId: string, userId: string, input: Credit
   validateProjectReferences(context.sqlite, { headerProjectId: data.projectId, lineProjectIds: data.lines.map((line) => line.projectId), customerId: data.customerId, customerFacing: true });
   const lines = calculateLines(context.sqlite, data.lines, rate.currencyMinorUnit, { accountTypeFilter: "income", taxDirection: "sales", supportItems: false, accountFieldOnLine: "salesAccountId", amountsIncludeTax: data.amountsIncludeTax });
   const amounts = totalsForLines(lines);
+  const creditable = creditableInvoiceAmount(context.sqlite, invoice.id, noteId);
+  if (amounts.totalMinor > creditable) {
+    throw new Error(`Credit note cannot exceed ${invoice.currencyCode} ${(creditable / 10 ** rate.currencyMinorUnit).toFixed(rate.currencyMinorUnit)}, the invoice total less earlier credit notes.`);
+  }
+  // The note first settles what is still open on the invoice; any excess (e.g.
+  // the invoice is already paid) stays on the note as unallocated customer credit.
   const available = remainingInvoiceBalance(context.sqlite, invoice.id, noteId);
-  if (amounts.totalMinor > available) throw new Error("Credit note cannot exceed the remaining invoice balance.");
+  const appliedMinor = Math.min(amounts.totalMinor, available);
+  const excessMinor = amounts.totalMinor - appliedMinor;
   const base = convertDocumentLinesToBase(lines, rate);
-  const baseCarryingAmountReleased = proportionalCarryingRelease(
-    amounts.totalMinor,
-    available,
-    remainingBaseCarrying(context.sqlite, invoice.id, noteId),
-  );
+  const appliedCarryingMinor = appliedMinor > 0
+    ? proportionalCarryingRelease(appliedMinor, available, remainingBaseCarrying(context.sqlite, invoice.id, noteId))
+    : 0;
+  const excessBaseMinor = excessMinor > 0
+    ? convertToBase(excessMinor, rate.currencyMinorUnit, rate.baseMinorUnit, rate.exchangeRateToBase)
+    : 0;
+  const baseCarryingAmountReleased = appliedCarryingMinor + excessBaseMinor;
   const now = new Date().toISOString();
   const id = noteId ?? randomUUID();
   const taxDate = data.taxDate || data.date;
@@ -210,6 +241,9 @@ export function saveCreditNote(businessId: string, userId: string, input: Credit
         assertVatSourceUnlocked(context.sqlite, "sales_credit_note", noteId, current.taxDate);
       }
       if (current.sourceInvoiceId !== data.sourceInvoiceId && current.documentStatus === "posted") throw new Error("Cannot change the source invoice after posting.");
+      if (current.documentStatus === "posted" && noteCreditInUse(context.sqlite, "customer", noteId, current.sourceInvoiceId)) {
+        throw new Error("This credit note's credit has been applied to another invoice or refunded. Void the refund or remove that application before editing it.");
+      }
       number = current.creditNoteNumber; shouldPost = current.documentStatus === "posted" || intent === "post"; replace = current.documentStatus === "posted";
       context.sqlite.prepare(`
         UPDATE sales_credit_notes
@@ -279,7 +313,11 @@ export function saveCreditNote(businessId: string, userId: string, input: Credit
         partyName: customer.name, taxDate, direction: "sales",
         supplyEmirate: data.supplyEmirate || null, sign: -1, rate,
       }, postingLines);
-      context.sqlite.prepare(`INSERT INTO sales_credit_note_allocations (id, credit_note_id, sales_invoice_id, amount_minor, foreign_amount_allocated, base_carrying_amount_released) VALUES (?, ?, ?, ?, ?, ?) ON CONFLICT(credit_note_id, sales_invoice_id) DO UPDATE SET amount_minor = excluded.amount_minor, foreign_amount_allocated = excluded.foreign_amount_allocated, base_carrying_amount_released = excluded.base_carrying_amount_released`).run(randomUUID(), id, data.sourceInvoiceId, amounts.totalMinor, amounts.totalMinor, baseCarryingAmountReleased);
+      if (appliedMinor > 0) {
+        context.sqlite.prepare(`INSERT INTO sales_credit_note_allocations (id, credit_note_id, sales_invoice_id, amount_minor, foreign_amount_allocated, base_carrying_amount_released, settlement_base_amount, realized_fx_amount) VALUES (?, ?, ?, ?, ?, ?, ?, 0) ON CONFLICT(credit_note_id, sales_invoice_id) DO UPDATE SET amount_minor = excluded.amount_minor, foreign_amount_allocated = excluded.foreign_amount_allocated, base_carrying_amount_released = excluded.base_carrying_amount_released, settlement_base_amount = excluded.settlement_base_amount, realized_fx_amount = 0`).run(randomUUID(), id, data.sourceInvoiceId, appliedMinor, appliedMinor, appliedCarryingMinor, appliedCarryingMinor);
+      } else {
+        context.sqlite.prepare("DELETE FROM sales_credit_note_allocations WHERE credit_note_id = ? AND sales_invoice_id = ?").run(id, data.sourceInvoiceId);
+      }
       context.sqlite.prepare("UPDATE sales_credit_notes SET document_status = 'posted', posted_at = COALESCE(posted_at, ?) WHERE id = ?").run(now, id);
     }
 
@@ -291,7 +329,7 @@ export function saveCreditNote(businessId: string, userId: string, input: Credit
         entityId: id,
         entityNumber: number,
         summary: `${shouldPost ? "Issued" : (noteId ? "Updated" : "Created")} sales credit note ${number}`,
-        details: { creditNoteNumber: number, totalMinor: amounts.totalMinor, currency: rate.currencyCode, customerId: data.customerId, sourceInvoiceId: data.sourceInvoiceId },
+        details: { creditNoteNumber: number, totalMinor: amounts.totalMinor, currency: rate.currencyCode, customerId: data.customerId, sourceInvoiceId: data.sourceInvoiceId, ...(shouldPost ? { appliedToInvoiceMinor: appliedMinor, unallocatedCreditMinor: excessMinor } : {}) },
         sqlite: context.sqlite,
       });
     } catch (e) {
@@ -359,6 +397,9 @@ export function voidCreditNote(businessId: string, userId: string, noteId: strin
   assertMutationPermission(businessId, userId, "sales", "delete");
   const context = getBusinessDb(businessId, userId); const note = context.db.select().from(salesCreditNotes).where(eq(salesCreditNotes.id, noteId)).get();
   if (!note) throw new Error("Credit note not found."); if (note.documentStatus !== "posted") throw new Error("Only posted credit notes can be voided.");
+  if (noteCreditInUse(context.sqlite, "customer", noteId, note.sourceInvoiceId)) {
+    throw new Error("This credit note's credit has been applied to another invoice or refunded. Void the refund or remove that application first.");
+  }
   const now = new Date().toISOString();
   context.sqlite.transaction(() => {
     assertDateNotLocked(context.sqlite, note.date, "Sales credit note void");

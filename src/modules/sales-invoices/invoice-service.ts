@@ -14,6 +14,7 @@ import { postSalesInvoice } from "@/modules/accounting/services/invoice-posting-
 import {
   describeAmendment,
   formatMinorAmount,
+  listAmendmentJournals,
   postingFingerprint,
   supersedePosting,
   type DocumentSnapshot,
@@ -679,6 +680,10 @@ export function getInvoice(businessId: string, userId: string, invoiceId: string
     })),
     journal: journal ? { id: journal.id, entryNumber: journal.entry_number } : null,
     reversalJournal: reversalJournal ? { id: reversalJournal.id, entryNumber: reversalJournal.entry_number } : null,
+    /** Superseded versions and their reversals, oldest first (posted-invoice amendments). */
+    amendmentJournals: listAmendmentJournals(context.sqlite, "sales_invoice", invoiceId).map((row) => ({
+      id: row.id, entryNumber: row.entry_number, kind: row.source_type.endsWith("_superseded") ? "superseded" as const : "reversal" as const, postedAt: row.posted_at,
+    })),
     deliveryNotes: context.sqlite.prepare("SELECT id, delivery_number, date, document_status FROM delivery_notes WHERE sales_invoice_id = ? ORDER BY date DESC, created_at DESC").all(invoiceId) as { id: string; delivery_number: string; date: string; document_status: string }[],
     linkedOrder: header.invoice.salesOrderId
       ? (context.sqlite.prepare("SELECT id, order_number, document_status, sales_quote_id FROM sales_orders WHERE id = ?").get(header.invoice.salesOrderId) as { id: string; order_number: string; document_status: string; sales_quote_id: string | null } | undefined)

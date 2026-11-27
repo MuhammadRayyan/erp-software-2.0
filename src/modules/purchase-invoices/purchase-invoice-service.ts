@@ -11,6 +11,7 @@ import { postPurchaseInvoice } from "@/modules/accounting/services/purchase-invo
 import {
   describeAmendment,
   formatMinorAmount,
+  listAmendmentJournals,
   postingFingerprint,
   supersedePosting,
   type DocumentSnapshot,
@@ -121,11 +122,11 @@ const PURCHASE_SETTLEMENT_CTE = `
     GROUP BY spa.purchase_invoice_id
   ),
   debit_alloc AS (
-    SELECT dn.purchase_invoice_id AS invoice_id,
-      SUM(dn.total_minor) AS foreign_minor
-    FROM debit_notes dn
-    WHERE dn.purchase_invoice_id IS NOT NULL AND dn.document_status = 'posted'
-    GROUP BY dn.purchase_invoice_id
+    SELECT dna.purchase_invoice_id AS invoice_id,
+      SUM(dna.amount_minor) AS foreign_minor
+    FROM debit_note_allocations dna
+    INNER JOIN debit_notes dn ON dn.id = dna.debit_note_id AND dn.document_status = 'posted'
+    GROUP BY dna.purchase_invoice_id
   )
 `;
 
@@ -443,6 +444,10 @@ export function getPurchaseInvoice(businessId: string, userId: string, invoiceId
     payments: payments.map((row) => ({ id: row.id, paymentNumber: row.payment_number, date: row.date, reference: row.reference, allocatedMinor: row.allocated_minor })),
     journal: journal ? { id: journal.id, entryNumber: journal.entry_number } : null,
     reversalJournal: reversalJournal ? { id: reversalJournal.id, entryNumber: reversalJournal.entry_number } : null,
+    /** Superseded versions and their reversals, oldest first (posted-invoice amendments). */
+    amendmentJournals: listAmendmentJournals(context.sqlite, "purchase_invoice", invoiceId).map((row) => ({
+      id: row.id, entryNumber: row.entry_number, kind: row.source_type.endsWith("_superseded") ? "superseded" as const : "reversal" as const, postedAt: row.posted_at,
+    })),
     order: order ? { id: order.id, orderNumber: order.order_number } : null,
     linkedQuote: header.invoice.purchaseOrderId
       ? (context.sqlite.prepare("SELECT pq.id, pq.quote_number, pq.document_status FROM purchase_quotes pq INNER JOIN purchase_orders po ON po.purchase_quote_id = pq.id WHERE po.id = ?").get(header.invoice.purchaseOrderId) as { id: string; quote_number: string; document_status: string } | undefined)

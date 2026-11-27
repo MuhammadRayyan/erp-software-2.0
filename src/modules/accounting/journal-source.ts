@@ -87,6 +87,12 @@ export function journalSourceHref(businessId: string, sourceType: string, source
   if (sourceType === "payslip" || sourceType === "payslip_void") {
     return `/b/${businessId}/payroll/payslips/${sourceId}`;
   }
+  if (sourceType === "customer_refund" || sourceType === "customer_refund_void") {
+    return `/b/${businessId}/sales/credit-notes`;
+  }
+  if (sourceType === "supplier_refund" || sourceType === "supplier_refund_void") {
+    return `/b/${businessId}/purchases/debit-notes`;
+  }
   if (sourceType.startsWith("pdc_")) {
     return `/b/${businessId}/banking/pdcs`;
   }

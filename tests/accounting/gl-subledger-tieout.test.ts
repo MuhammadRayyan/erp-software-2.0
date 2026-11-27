@@ -22,6 +22,12 @@ const { saveOpeningBalances, OPENING_BALANCE_EQUITY_ACCOUNT_ID } = await import(
 const { getBusinessDateIso, getBusinessTodayIso } = await import("../../src/core/format");
 const { setFinancialLockDate } = await import("../../src/modules/accounting/services/financial-lock-service");
 const { createSupplierPayment } = await import("../../src/modules/supplier-payments/supplier-payment-service");
+const { saveCreditNote, voidCreditNote, getRemainingInvoiceBalance } = await import("../../src/modules/sales-credit-notes/credit-note-service");
+const { saveDebitNote, voidDebitNote } = await import("../../src/modules/debit-notes/debit-note-service");
+const {
+  applyCreditNoteToInvoice, applyDebitNoteToPurchaseInvoice, createCustomerRefund, createSupplierRefund,
+  listPartyNoteCredits, voidCustomerRefund, voidSupplierRefund,
+} = await import("../../src/modules/settlement/party-credit-service");
 
 const seeded = await seedDemoData();
 const businessId = seeded.business.id;
@@ -62,7 +68,16 @@ function arSubledger() {
       - COALESCE((SELECT SUM(ra.settlement_base_amount) FROM receipt_allocations ra WHERE ra.receipt_id = r.id), 0)), 0) AS credit_base
     FROM receipts r WHERE r.document_status = 'posted'
   `).get() as { credit_base: number };
-  return invoices.open_base - unapplied.credit_base;
+  // Credit-note value not used against an invoice is customer credit until refunded.
+  const noteCredit = sqlite.prepare(`
+    SELECT COALESCE(SUM(scn.base_total_minor
+      - COALESCE((SELECT SUM(COALESCE(scna.settlement_base_amount, scna.base_carrying_amount_released))
+          FROM sales_credit_note_allocations scna WHERE scna.credit_note_id = scn.id), 0)
+      - COALESCE((SELECT SUM(cr.released_carrying_amount_minor) FROM customer_refunds cr
+          WHERE cr.credit_note_id = scn.id AND cr.document_status = 'posted'), 0)), 0) AS credit_base
+    FROM sales_credit_notes scn WHERE scn.document_status = 'posted'
+  `).get() as { credit_base: number };
+  return invoices.open_base - unapplied.credit_base - noteCredit.credit_base;
 }
 
 /** GL minus subledger; each scenario must leave this difference unchanged. */
@@ -366,4 +381,111 @@ test("editing a posted purchase invoice reverses and reposts, keeping AP and inp
   );
   const details = JSON.parse(lastActivity(billId).details_json);
   assert.deepEqual([details.before.netMinor, details.after.netMinor], [40_000, 80_000]);
+});
+
+test("crediting a fully paid invoice leaves customer credit that can be applied and refunded, with AR tied out", () => {
+  const gapBefore = arGap();
+  const bankBefore = glBalance(settings.bank);
+  const line = (unitPrice: string) => [{ description: "Refund case", quantity: "1", unitPrice, salesAccountId: settings.sales, taxCodeId: "tax-out-of-scope" }];
+  const paidInvoiceId = createInvoice(businessId, adminId, {
+    customerId: aedCustomer.id, invoiceDate: "2034-08-01", taxDate: "2034-08-01", dueDate: "2034-08-31", lines: line("1000.00"),
+  }, "post");
+  createReceipt(businessId, adminId, { customerId: aedCustomer.id, invoiceId: paidInvoiceId, date: "2034-08-02", bankAccountId: settings.bank, amount: "1000.00" });
+
+  const noteInput = {
+    customerId: aedCustomer.id, sourceInvoiceId: paidInvoiceId, date: "2034-08-05", taxDate: "2034-08-05", reason: "Returned", lines: line("400.00"),
+  };
+  assert.throws(() => saveCreditNote(businessId, adminId, { ...noteInput, lines: line("1000.01") }, "post"), /cannot exceed AED 1000\.00/);
+  const noteId = saveCreditNote(businessId, adminId, noteInput, "post");
+  assert.equal(arGap(), gapBefore, "the excess credit sits in AR as a customer credit balance");
+  const credit = listPartyNoteCredits(businessId, adminId, "customer", aedCustomer.id).find((row) => row.noteId === noteId);
+  assert.equal(credit?.unallocatedMinor, 40_000);
+
+  // Apply part of the credit to another invoice.
+  const nextInvoiceId = createInvoice(businessId, adminId, {
+    customerId: aedCustomer.id, invoiceDate: "2034-08-06", taxDate: "2034-08-06", dueDate: "2034-09-06", lines: line("150.00"),
+  }, "post");
+  applyCreditNoteToInvoice(businessId, adminId, { noteId, documentId: nextInvoiceId, amount: "100.00" });
+  assert.equal(getRemainingInvoiceBalance(businessId, adminId, nextInvoiceId), 5_000);
+  assert.equal(arGap(), gapBefore);
+
+  // Refund the rest from the bank.
+  assert.throws(
+    () => createCustomerRefund(businessId, adminId, { noteId, date: "2034-08-07", bankAccountId: settings.bank, amount: "300.01" }),
+    /available to refund/,
+  );
+  const refund = createCustomerRefund(businessId, adminId, { noteId, date: "2034-08-07", bankAccountId: settings.bank, amount: "300.00", reference: "REF-1" });
+  assert.match(refund.refundNumber, /^CRF-\d{4}$/);
+  assert.equal(arGap(), gapBefore, "AR control equals the subledger after the refund");
+  assert.equal(glBalance(settings.bank) - bankBefore, 100_000 - 30_000);
+  assert.equal(listPartyNoteCredits(businessId, adminId, "customer", aedCustomer.id).some((row) => row.noteId === noteId), false);
+  assert.throws(() => voidCreditNote(businessId, adminId, noteId), /applied to another invoice or refunded/);
+  assert.match(lastActivity(noteId).summary, /Refunded AED 300\.00 to customer/);
+
+  voidCustomerRefund(businessId, adminId, refund.id);
+  assert.equal(arGap(), gapBefore);
+  assert.equal(listPartyNoteCredits(businessId, adminId, "customer", aedCustomer.id).find((row) => row.noteId === noteId)?.unallocatedMinor, 30_000);
+});
+
+test("a foreign-currency customer refund books realized FX and keeps AR tied out", () => {
+  saveExchangeRate(businessId, adminId, { currencyCode: "USD", rateDate: "2034-09-01", rateToBase: "3.600000", source: "Manual", sourceReference: "refund invoice" });
+  saveExchangeRate(businessId, adminId, { currencyCode: "USD", rateDate: "2034-09-10", rateToBase: "3.700000", source: "Manual", sourceReference: "refund paid" });
+  const gapBefore = arGap();
+  const fxLossBefore = glBalance(settings.fx_loss);
+  const usd = { currencyCode: "USD", exchangeRateToBase: "3.600000", exchangeRateDate: "2034-09-01", exchangeRateSource: "Manual" as const };
+  const invoiceId = createInvoice(businessId, adminId, {
+    ...usd, customerId: usdCustomer.id, invoiceDate: "2034-09-01", taxDate: "2034-09-01", dueDate: "2034-10-01",
+    lines: [{ description: "USD refund", quantity: "1", unitPrice: "100.00", salesAccountId: settings.sales, taxCodeId: "tax-out-of-scope" }],
+  }, "post");
+  createReceipt(businessId, adminId, { ...usd, customerId: usdCustomer.id, invoiceId, date: "2034-09-01", bankAccountId: settings.bank, amount: "100.00" });
+  const noteId = saveCreditNote(businessId, adminId, {
+    ...usd, customerId: usdCustomer.id, sourceInvoiceId: invoiceId, date: "2034-09-02", taxDate: "2034-09-02",
+    lines: [{ description: "USD refund", quantity: "1", unitPrice: "100.00", salesAccountId: settings.sales, taxCodeId: "tax-out-of-scope" }],
+  }, "post");
+  assert.equal(arGap(), gapBefore);
+  createCustomerRefund(businessId, adminId, {
+    noteId, date: "2034-09-10", bankAccountId: settings.bank, amount: "100.00",
+    exchangeRateToBase: "3.700000", exchangeRateDate: "2034-09-10", exchangeRateSource: "Manual",
+  });
+  assert.equal(arGap(), gapBefore);
+  // 100 USD carried at 3.60 but paid out at 3.70: 10.00 AED loss.
+  assert.equal(glBalance(settings.fx_loss) - fxLossBefore, 1_000);
+});
+
+test("debiting a fully paid purchase invoice leaves supplier credit that can be applied and refunded, with AP tied out", () => {
+  const gapBefore = apGap();
+  const bankBefore = glBalance(settings.bank);
+  const line = (unitPrice: string) => [{ description: "Supplier refund case", quantity: "1", unitPrice, expenseAccountId: vatAccounts.expense, taxCodeId: "tax-out-of-scope" }];
+  const billId = savePurchaseInvoice(businessId, adminId, {
+    supplierId: aedSupplier.id, supplierInvoiceNumber: "TIEOUT-DN-PAID", invoiceDate: "2034-08-01", taxDate: "2034-08-01", dueDate: "2034-08-31", lines: line("500.00"),
+  }, "post");
+  createSupplierPayment(businessId, adminId, { supplierId: aedSupplier.id, purchaseInvoiceId: billId, date: "2034-08-02", bankAccountId: settings.bank, amount: "500.00" });
+  assert.equal(apGap(), gapBefore);
+
+  const noteInput = { supplierId: aedSupplier.id, purchaseInvoiceId: billId, date: "2034-08-05", taxDate: "2034-08-05", lines: line("200.00") };
+  assert.throws(() => saveDebitNote(businessId, adminId, { ...noteInput, lines: line("500.01") }, "post"), /cannot exceed AED 500\.00/);
+  const noteId = saveDebitNote(businessId, adminId, noteInput, "post");
+  assert.equal(apGap(), gapBefore, "the excess sits in AP as a supplier debit balance");
+  assert.equal(listPartyNoteCredits(businessId, adminId, "supplier", aedSupplier.id).find((row) => row.noteId === noteId)?.unallocatedMinor, 20_000);
+  const paidBill = sqlite.prepare("SELECT total_minor FROM purchase_invoices WHERE id = ?").get(billId) as { total_minor: number };
+  assert.equal(paidBill.total_minor, 50_000);
+
+  const nextBillId = savePurchaseInvoice(businessId, adminId, {
+    supplierId: aedSupplier.id, supplierInvoiceNumber: "TIEOUT-DN-NEXT", invoiceDate: "2034-08-06", taxDate: "2034-08-06", dueDate: "2034-09-06", lines: line("80.00"),
+  }, "post");
+  applyDebitNoteToPurchaseInvoice(businessId, adminId, { noteId, documentId: nextBillId, amount: "50.00" });
+  assert.equal(apGap(), gapBefore);
+  assert.throws(
+    () => createSupplierPayment(businessId, adminId, { supplierId: aedSupplier.id, purchaseInvoiceId: nextBillId, date: "2034-08-07", bankAccountId: settings.bank, amount: "80.00" }),
+    /exceeds/,
+    "a payment cannot exceed what the applied debit note left open",
+  );
+
+  const refund = createSupplierRefund(businessId, adminId, { noteId, date: "2034-08-08", bankAccountId: settings.bank, amount: "150.00" });
+  assert.match(refund.refundNumber, /^SRF-\d{4}$/);
+  assert.equal(apGap(), gapBefore, "AP control equals the subledger after the refund");
+  assert.equal(glBalance(settings.bank) - bankBefore, -50_000 + 15_000);
+  assert.throws(() => voidDebitNote(businessId, adminId, noteId), /applied to another purchase invoice or refunded/);
+  voidSupplierRefund(businessId, adminId, refund.id);
+  assert.equal(apGap(), gapBefore);
 });

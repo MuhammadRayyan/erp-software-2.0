@@ -27,9 +27,19 @@ export const supplierPaymentConfig: SettlementConfig = {
   openAmountExpr: `
     SELECT pi.total_minor - COALESCE(SUM(
       CASE WHEN sp.document_status = 'posted' THEN spa.foreign_amount_allocated ELSE 0 END
+    ), 0) - COALESCE((
+      SELECT SUM(dna.amount_minor)
+      FROM debit_note_allocations dna
+      INNER JOIN debit_notes dn ON dn.id = dna.debit_note_id AND dn.document_status = 'posted'
+      WHERE dna.purchase_invoice_id = pi.id
     ), 0) AS foreign_open_minor,
     pi.base_total_minor - COALESCE(SUM(
       CASE WHEN sp.document_status = 'posted' THEN spa.base_carrying_amount_released ELSE 0 END
+    ), 0) - COALESCE((
+      SELECT SUM(dna.base_carrying_amount_released)
+      FROM debit_note_allocations dna
+      INNER JOIN debit_notes dn ON dn.id = dna.debit_note_id AND dn.document_status = 'posted'
+      WHERE dna.purchase_invoice_id = pi.id
     ), 0) AS base_carrying_minor
     FROM purchase_invoices pi
     LEFT JOIN supplier_payment_allocations spa ON spa.purchase_invoice_id = pi.id
